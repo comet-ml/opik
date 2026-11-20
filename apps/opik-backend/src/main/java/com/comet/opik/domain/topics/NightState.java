@@ -1,36 +1,38 @@
 package com.comet.opik.domain.topics;
 
-import lombok.AccessLevel;
+import com.comet.opik.infrastructure.db.HasValue;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
+import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 /**
  * A project's topic list during one nightly update: read at the start, changed by steps a to g, written at the end.
- * {@link #topics()} holds the topics live at the start in list order (born, then creation), then the ones born tonight in
- * birth order; a topic retired tonight stays in it, marked. Labels in a night are indices into this list, so a topic
- * keeps its index all night. Topics retired before tonight are not read.
+ * {@link #getTopics()} holds the topics live at the start in list order (born, then creation), then the ones born
+ * tonight in birth order. Labels in a night are indices into this list, so a topic keeps its index all night: a topic
+ * retired tonight stays in it, marked with its reason, and the save deletes its row (the reason goes to the log and
+ * the retired-topics metric).
  */
-@Getter
-public class NightState {
+class NightState {
 
-    private final List<Topic> topics;
+    private final List<NightTopic> topics;
     private List<float[]> otherPrototypes;
+    @Getter
     private final int rebuilds;
+    @Getter
     private final LocalDate night;
-    @Getter(AccessLevel.NONE)
     private final Supplier<UUID> ids;
 
     @Builder
-    private NightState(@NonNull List<Topic> topics, @NonNull List<float[]> otherPrototypes, int rebuilds,
+    private NightState(@NonNull List<NightTopic> topics, @NonNull List<float[]> otherPrototypes, int rebuilds,
             @NonNull LocalDate night, @NonNull Supplier<UUID> ids) {
         this.topics = new ArrayList<>(topics);
         this.otherPrototypes = new ArrayList<>(otherPrototypes);
@@ -39,97 +41,89 @@ public class NightState {
         this.ids = ids;
     }
 
+    List<NightTopic> getTopics() {
+        return Collections.unmodifiableList(topics);
+    }
+
+    List<float[]> getOtherPrototypes() {
+        return Collections.unmodifiableList(otherPrototypes);
+    }
+
+    void setOtherPrototypes(@NonNull List<float[]> prototypes) {
+        this.otherPrototypes = new ArrayList<>(prototypes);
+    }
+
     /** The live topics' indices, in list order. */
-    public List<Integer> live() {
-        var out = new ArrayList<Integer>();
-        for (int t = 0; t < topics.size(); t++) {
-            if (topics.get(t).isLive()) {
-                out.add(t);
-            }
-        }
-        return out;
+    int[] live() {
+        return IntStream.range(0, topics.size()).filter(t -> topics.get(t).isLive()).toArray();
     }
 
-    public int liveCount() {
-        return (int) topics.stream().filter(Topic::isLive).count();
+    int liveCount() {
+        return (int) topics.stream().filter(NightTopic::isLive).count();
     }
 
-    public Topic topic(int index) {
+    NightTopic topic(int index) {
         return topics.get(index);
     }
 
     /** A topic born tonight, appended to the list; returns its index. */
-    public int born(@NonNull String name, @NonNull String definition) {
-        topics.add(Topic.builder().id(ids.get()).name(name).definition(definition).born(night)
-                .prototypes(new ArrayList<>()).build());
+    int born(@NonNull String name, @NonNull String definition) {
+        topics.add(NightTopic.builder().id(ids.get()).name(name).definition(definition).born(night)
+                .prototypes(List.of()).build());
         return topics.size() - 1;
     }
 
     /** Retires a live topic tonight: it leaves the list's live part, so its prototypes no longer assign anything. */
-    public void retire(int index, @NonNull RetiredReason reason) {
-        var topic = topics.get(index);
-        topic.setRetiredAt(night);
-        topic.setRetiredReason(reason);
-    }
-
-    public void setOtherPrototypes(@NonNull List<float[]> prototypes) {
-        this.otherPrototypes = new ArrayList<>(prototypes);
-    }
-
-    /** Why a topic was retired; stored in {@code topics.retired_reason}. */
-    public enum RetiredReason {
-        /** No trace in the window, or under 0.5% of it on 3 saved nights in a row. */
-        LOW_SHARE,
-        /** Replaced by a forced new topic on a full list. */
-        REPLACED;
-
-        public String value() {
-            return name().toLowerCase(Locale.ROOT);
-        }
-
-        public static RetiredReason of(@NonNull String value) {
-            return valueOf(value.toUpperCase(Locale.ROOT));
-        }
+    void retire(int index, @NonNull RetiredReason reason) {
+        topics.get(index).retire(reason);
     }
 
     /**
-     * A topic of the night. {@code prototypes} are unit vectors in assignment order; {@code lowNights} is the lifecycle
-     * streak; {@code size} its count in the window after the night.
+     * Step f, after the final assignment. A topic's share is its count over the window's traces; a topic born after
+     * the first build is measured as any other. A live topic that holds no trace retires tonight. Otherwise its streak
+     * grows on a night with a share below {@code retireShare} and goes back to 0 on any other; at {@code retireNights}
+     * it retires. No cap rule is needed: a birth on a full list replaces a topic, so the live list never grows past the
+     * maximum.
+     *
+     * @param labels per window trace, a topic index or {@link TopicAlgorithm#OTHER}
      */
+    void retireLowShare(@NonNull int[] labels, double retireShare, int retireNights) {
+        var counts = counts(labels);
+        for (int t : live()) {
+            var topic = topics.get(t);
+            if (counts[t] == 0 || topic.recordNight((double) counts[t] / labels.length < retireShare) >= retireNights) {
+                topic.retire(RetiredReason.LOW_SHARE);
+            }
+        }
+    }
+
+    /** Each live topic's size: its count in the labels after the retire reassignment. */
+    void recordSizes(@NonNull int[] labels) {
+        var counts = counts(labels);
+        for (int t : live()) {
+            topics.get(t).recordSize(counts[t]);
+        }
+    }
+
+    private int[] counts(int[] labels) {
+        var counts = new int[topics.size()];
+        for (int label : labels) {
+            if (label != TopicAlgorithm.OTHER) {
+                counts[label]++;
+            }
+        }
+        return counts;
+    }
+
+    /** Why a topic was retired: the log line's and the retired-topics metric's reason. */
     @Getter
-    @Setter
-    public static class Topic {
-        private final UUID id;
-        private final String name;
-        private final String definition;
-        private final LocalDate born;
-        private List<float[]> prototypes;
-        private int lowNights;
-        private LocalDate retiredAt;
-        private RetiredReason retiredReason;
-        private int size;
+    @RequiredArgsConstructor
+    enum RetiredReason implements HasValue {
+        /** No trace in the window, or a share under {@code retireShare} on {@code retireNights} nights in a row. */
+        LOW_SHARE("low_share"),
+        /** Replaced by a forced new topic on a full list. */
+        REPLACED("replaced");
 
-        @Builder(toBuilder = true)
-        private Topic(@NonNull UUID id, @NonNull String name, @NonNull String definition, @NonNull LocalDate born,
-                @NonNull List<float[]> prototypes, int lowNights, LocalDate retiredAt, RetiredReason retiredReason,
-                int size) {
-            this.id = id;
-            this.name = name;
-            this.definition = definition;
-            this.born = born;
-            this.prototypes = new ArrayList<>(prototypes);
-            this.lowNights = lowNights;
-            this.retiredAt = retiredAt;
-            this.retiredReason = retiredReason;
-            this.size = size;
-        }
-
-        public boolean isLive() {
-            return retiredAt == null;
-        }
-
-        public void setPrototypes(@NonNull List<float[]> prototypes) {
-            this.prototypes = new ArrayList<>(prototypes);
-        }
+        private final String value;
     }
 }

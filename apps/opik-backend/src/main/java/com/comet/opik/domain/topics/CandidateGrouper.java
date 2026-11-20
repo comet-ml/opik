@@ -7,35 +7,31 @@ import lombok.experimental.UtilityClass;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Step b of the nightly update: the traces no prototype took are grouped when they number at least
- * {@value #MIN_CANDIDATE}: k = min({@value #MAX_GROUPS}, max(2, n / {@value #TRACES_PER_GROUP})), at most the unique
- * texts, seeded with the night's {@code rebuilds}. Per group a {@link GroupSummaries} summary: size, tightness and
- * examples, with the share of the whole window and the share of the window's last 7 days. A candidate is a group of
- * at least {@value #MIN_CANDIDATE} traces.
+ * {@code nightlyMinCandidate}: k = unique texts / {@code nightlyTextsPerGroup} within {@code nightlyMinGroups} and
+ * {@code nightlyMaxGroups} (the first build's rule), seeded with the night's {@code rebuilds}. Per group a
+ * {@link NightGroup}: size, tightness and examples, with the share of the whole window and the share of the window's
+ * last {@code recentDays} days. A candidate is a group of at least {@code nightlyMinCandidate} traces.
  */
 @UtilityClass
-public class CandidateGrouper {
-
-    static final int MIN_CANDIDATE = 20;
-    static final int MAX_GROUPS = 20;
-    static final int TRACES_PER_GROUP = 40;
+class CandidateGrouper {
 
     /**
      * @param unassigned the window's traces without an owner, in window order
      */
-    public static Grouping group(@NonNull NightWindow window, @NonNull int[] unassigned, long seed,
+    static Grouping group(@NonNull NightWindow window, @NonNull int[] unassigned, long seed,
             @NonNull AlgorithmConfig config) {
-        if (unassigned.length < MIN_CANDIDATE) {
+        if (unassigned.length < config.getNightlyMinCandidate()) {
             return Grouping.builder().unassigned(unassigned).labels(new int[0]).centres(new float[0])
                     .groups(List.of()).candidates(List.of()).build();
         }
         int d = window.dimensions();
-        var texts = window.texts(unassigned);
-        var vectors = window.rows(unassigned);
-        var merged = IntentMerger.merge(texts, vectors, d);
-        int k = Math.min(Math.min(MAX_GROUPS, Math.max(2, unassigned.length / TRACES_PER_GROUP)), merged.size());
+        var merged = IntentMerger.merge(window.texts(unassigned), window.rows(unassigned), d);
+        int k = KMeans.groupCount(merged.size(), config.getNightlyTextsPerGroup(), config.getNightlyMinGroups(),
+                config.getNightlyMaxGroups(), merged.size());
         var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
         var result = KMeans.fit(merged.vectors(), weights, d, k, seed, config.getKmeansMaxIterations(),
                 config.getKmeansRestarts());
@@ -43,24 +39,21 @@ public class CandidateGrouper {
         for (int r = 0; r < labels.length; r++) {
             labels[r] = result.labels()[merged.textOfTrace()[r]];
         }
-        var windowRecent = window.recent();
-        var recent = new boolean[unassigned.length];
+        var windowRecent = window.recent(config.getRecentDays());
         int recentTotal = 0;
-        for (boolean r : windowRecent) {
-            recentTotal += r ? 1 : 0;
-        }
-        for (int r = 0; r < unassigned.length; r++) {
-            recent[r] = windowRecent[unassigned[r]];
+        for (boolean recent : windowRecent) {
+            recentTotal += recent ? 1 : 0;
         }
         var recentPerGroup = new int[k];
-        for (int r = 0; r < labels.length; r++) {
-            if (recent[r]) {
+        for (int r = 0; r < unassigned.length; r++) {
+            if (windowRecent[unassigned[r]]) {
                 recentPerGroup[labels[r]]++;
             }
         }
         int n = window.size();
         int recentDenominator = Math.max(1, recentTotal);
-        var groups = GroupSummaries.summarize(merged, result.labels(), result.centres()).stream()
+        var groups = GroupSummaries.summarize(merged, result.labels(), result.centres(), config.getNightlyFrequent(),
+                config.getNightlyExamples()).stream()
                 .map(group -> group.toBuilder()
                         .share((double) group.size() / n)
                         .recentShare((double) recentPerGroup[group.group()] / recentDenominator)
@@ -71,22 +64,66 @@ public class CandidateGrouper {
                 .labels(labels)
                 .centres(result.centres())
                 .groups(groups)
-                .candidates(groups.stream().filter(group -> group.size() >= MIN_CANDIDATE).toList())
+                .candidates(groups.stream().filter(group -> group.size() >= config.getNightlyMinCandidate()).toList())
                 .build();
     }
 
     /**
      * The grouping of the unassigned traces: per unassigned trace its group, the groups' unit centres
-     * ({@code k * dimensions}), every group's summary and the candidates among them, in group order.
+     * ({@code k * dimensions}), every group's summary and the candidates among them, in group order. The arrays are
+     * copied in and out.
      */
     @Builder(toBuilder = true)
-    public record Grouping(@NonNull int[] unassigned, @NonNull int[] labels, @NonNull float[] centres,
-            @NonNull List<GroupSummary> groups, @NonNull List<GroupSummary> candidates) {
+    record Grouping(@NonNull int[] unassigned, @NonNull int[] labels, @NonNull float[] centres,
+            @NonNull List<NightGroup> groups, @NonNull List<NightGroup> candidates) {
 
-        public float[] centre(int group, int dimensions) {
-            var out = new float[dimensions];
-            System.arraycopy(centres, group * dimensions, out, 0, dimensions);
-            return out;
+        Grouping {
+            unassigned = unassigned.clone();
+            labels = labels.clone();
+            centres = centres.clone();
+            groups = List.copyOf(groups);
+            candidates = List.copyOf(candidates);
+        }
+
+        @Override
+        public int[] unassigned() {
+            return unassigned.clone();
+        }
+
+        @Override
+        public int[] labels() {
+            return labels.clone();
+        }
+
+        @Override
+        public float[] centres() {
+            return centres.clone();
+        }
+
+        float[] centre(int group, int dimensions) {
+            return Arrays.copyOfRange(centres, group * dimensions, (group + 1) * dimensions);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Grouping other
+                    && Arrays.equals(unassigned, other.unassigned)
+                    && Arrays.equals(labels, other.labels)
+                    && Arrays.equals(centres, other.centres)
+                    && groups.equals(other.groups)
+                    && candidates.equals(other.candidates);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(Arrays.hashCode(unassigned), Arrays.hashCode(labels), Arrays.hashCode(centres),
+                    groups, candidates);
+        }
+
+        @Override
+        public String toString() {
+            return "Grouping[unassigned=%s, groups=%s, candidates=%s]".formatted(unassigned.length, groups.size(),
+                    candidates.size());
         }
     }
 }

@@ -124,7 +124,7 @@ class TopicsAlgorithmFixtureTest {
         // The fixture's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
         var labels = TopicsFixture.ints(fixture.expected.get("sklearn").get("labels"));
         var standExamples = GroupSummaries.authorExamples(merged, labels, fixture.centres, 3, 2);
-        var nightSummaries = GroupSummaries.summarize(merged, labels, fixture.centres);
+        var nightSummaries = GroupSummaries.summarize(merged, labels, fixture.centres, 3, 5);
         assertThat(summaries).hasSize(expected.size());
         for (int j = 0; j < summaries.size(); j++) {
             var actual = summaries.get(j);
