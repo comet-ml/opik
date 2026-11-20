@@ -62,13 +62,13 @@ public class TopicsMetrics {
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
         this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
-                .setDescription("A saved run's trace_topics insert after its commit, by outcome: ok, failed (after "
-                        + "its retries; the labelling pass gives the traces their topics)")
+                .setDescription("trace_topics inserts of a saved run, by outcome: ok, failed (after its retries). "
+                        + "The run inserts once after its commit, the labelling pass once per page")
                 .build();
         this.labelPasses = meter.counterBuilder("topics.label.passes")
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
                         + "resume: the first-build job going on with a pass that did not finish) and outcome "
-                        + "(complete, or incomplete when the pass was cut or failed)")
+                        + "(complete; cut by its deadline or its caller; failed)")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -101,9 +101,10 @@ public class TopicsMetrics {
         traceTopicsInserts.add(1, attributes(workspace).put(OUTCOME, outcome).build());
     }
 
-    void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger, boolean complete) {
-        labelPasses.add(1, attributes(workspace).put(TRIGGER, trigger.getValue())
-                .put(OUTCOME, complete ? "complete" : "incomplete").build());
+    void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger,
+            @NonNull TopicWindowLabelService.PassOutcome outcome) {
+        labelPasses.add(1, attributes(workspace).put(TRIGGER, trigger.getValue()).put(OUTCOME, outcome.getValue())
+                .build());
     }
 
     void otherShare(@NonNull Workspace workspace, double share) {
