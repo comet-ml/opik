@@ -1595,6 +1595,53 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    specs: []
+    # Guardrail POLICIES — the workspace-level surface behind the Guardrails
+    # sidebar entry (getMenuItems.ts, `canViewGuardrails`). NOT the guardrail
+    # RESULTS a trace shows: those are traces.set-guardrail and
+    # traces.guardrail-results, which sit behind the older guardrails_enabled
+    # toggle. This area is behind guardrails_validations_enabled instead, which
+    # is a different key in FeatureToggleKeys.
+    #
+    # Not cloud-only, despite a PluginsStore entry being involved. Both the nav
+    # entry and the page ask useGuardrailsEnabled, which consults the plugin's
+    # `getGuardrailsEnabled` organization check only when a plugin supplies one
+    # — without it the backend toggle alone decides, so a self-hosted
+    # deployment with the toggle on gets the whole page.
+    #
+    # The guardrails ENFORCEMENT service (apps/opik-guardrails-backend/) stays
+    # in release_surface.untracked: this area is the policy surface, not the
+    # service that runs the checks.
+    #
+    # The read-only variant (without canConfigureWorkspaceSettings: no Create,
+    # no select column, no row menu, the panel titled "Policy" with Close only)
+    # is deliberately NOT a key here — workspace-roles owns "does the role gate
+    # the right thing", and a key here would double-count it.
+    capabilities:
+      list-policies:          { covered: false, note: "GuardrailsPage — the Policies table: name, description, Rules, Execution scope, created / created-by / last-updated columns, sortable and paginated" }
+      search-policies:        { covered: false, note: "SearchInput over policy name" }
+      create-policy:          { covered: false, note: "GuardrailPolicyPanel mode=create — name, optional description, execution scope and the rules it runs. There is no detail page: the panel is the whole policy" }
+      edit-policy:            { covered: false, note: "the same panel at mode=edit, reached by a row click or the row menu's Edit; also the rename warning ('applications reference a policy by name') and the created-by / last-updated lines only this mode shows" }
+      duplicate-policy:       { covered: false, note: "row menu Duplicate — panel mode=duplicate, opening under a name de-duplicated against the names on the page" }
+      delete-policy:          { covered: false, note: "row menu Delete and the selection toolbar's bulk delete; both go through useGuardrailPolicyBatchDeleteMutation behind a ConfirmDialog. One key for two entry points onto the same behaviour" }
+      execution-scope:        { covered: false, note: "On request (the default) vs Global — a global policy applies to applications that do not name it — and the Execution scope tag column that reports it" }
+      pii-rule:               { covered: false, note: "RuleConfig.PIIEntities — which categories of personal data the check blocks" }
+      topic-rule:             { covered: false, note: "RuleConfig.TopicsList — the restricted list (fails when the text is about any of them) and the allowed list (fails when it is about none)" }
+      prompt-injection-rule:  { covered: false, note: "RuleConfig for PROMPT_INJECTION — on or off, nothing to configure" }
+      policy-form-validation: { covered: false, note: "GuardrailPolicyFormSchema refusals: name required and unique in the workspace, at least one rule (NO_RULE_MESSAGE), PII switched on with no category, Topic with no topic in either list" }
+      copy-code-snippet:      { covered: false, note: "'Use in your code' — buildPolicySnippet writes Guardrail.from_stored_policies for the name being typed, escaped as a Python string literal" }
+      use-policy-from-sdk:    { covered: false, note: "Guardrail.from_stored_policies (sdks/python/src/opik/guardrails/stored_policies.py): the named policies plus every global one, read once at build time, a name that does not exist refused rather than quietly not running. Validating needs the guardrails backend service reachable, so this key is not exercisable on every environment the suite runs against" }
+      page-enablement:        { covered: false, note: "guardrails_validations_enabled off leaves no sidebar entry and a 'Guardrails are not enabled for this workspace' page (GuardrailsPageGuard); a check that FAILS offers Try again rather than reading as off" }
+
+    visual:
+      guardrails-list:  { covered: false, state: default }
+      guardrails-empty: { covered: false, state: empty, note: "'No policies yet'" }
+      policy-panel:     { covered: false, state: default }
+
   configuration:
     label: Configuration
     nav_group: Workspace
