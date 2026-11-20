@@ -450,9 +450,6 @@ class TraceDAOImpl implements TraceDAO {
             FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
-    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
-    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
-
     /**
      * Reads the latest row per id rather than matching on any row. An out-of-order create leaves an earlier row
      * holding 'unknown' until the real source arrives (see the merge in the batch insert), and matching on any
@@ -5470,7 +5467,7 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(UUID[]::new))
                     .bind("ids", traceIds.toArray(UUID[]::new))
-                    .bind("sources", LOGGING_SOURCES);
+                    .bind("sources", Source.loggingSourceDbValues());
 
             idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 

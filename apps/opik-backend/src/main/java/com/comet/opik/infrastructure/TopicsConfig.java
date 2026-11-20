@@ -32,6 +32,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private AlgorithmConfig algorithm;
 
+    @Valid @NotNull @JsonProperty
+    private BuildConfig build;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -108,6 +111,13 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
             return nightlyFrequent <= nightlyExamples;
         }
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A first build over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
 
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
@@ -134,23 +144,12 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    @Valid @NotNull @JsonProperty
-    private BuildConfig build;
-
-    /**
-     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
-     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
-     * would keep an empty list for the life of the process.
-     */
-    public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
+    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
     @Data
     public static class BuildConfig {
+
+        @Valid @NotNull @JsonProperty
+        private BuildReadConfig read;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
@@ -173,11 +172,11 @@ public class TopicsConfig {
         @JsonProperty
         @Min(100) @Max(100_000) private int maxVectors;
 
-        /** The deadline of the Qwen call that names the groups. */
+        /** The deadline of the LLM call that names the groups. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
-        private Duration qwenDeadline;
+        private Duration llmDeadline;
 
         /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
         @NotNull @JsonProperty
@@ -185,15 +184,35 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration namingDeadline;
 
+        /** The deadline of a nightly update's verify call ({@code verify_naming}). */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration verifyDeadline;
 
+        /**
+         * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
+         * of its {@code trace_topics} insert.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration readTimeout;
+
+        /** Retries of the {@code trace_topics} insert after the save's commit. */
+        @JsonProperty
+        @Min(0) @Max(10) private int insertRetries;
+
+        /** The first backoff before an insert retry; it doubles each time. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration insertBackoff;
+
         @JsonIgnore
-        @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
-            return qwenDeadline == null || projectTimeout == null
-                    || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
+            return llmDeadline == null || projectTimeout == null
+                    || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         @JsonIgnore
@@ -213,6 +232,49 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
+    }
+
+    /**
+     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     */
+    @Data
+    public static class BuildReadConfig {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse query priority; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** The topic counts read the window in slices of this much creation time, one query each. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration countSlice;
+    }
+
+    /**
+     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
+     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
+     * would keep an empty list for the life of the process.
+     */
+    public Set<String> enabledWorkspaceIds() {
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
+                .map(String::strip)
+                .filter(workspaceId -> !workspaceId.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Data
