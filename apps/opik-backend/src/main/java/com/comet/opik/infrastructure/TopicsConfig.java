@@ -46,6 +46,7 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
 
+    @Valid @NotNull @JsonProperty
     private AlgorithmConfig algorithm;
 
     /**
