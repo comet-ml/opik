@@ -53,6 +53,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
@@ -1515,6 +1516,156 @@ class ChatCompletionsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(request));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Bedrock Converse and Anthropic Messages — provider text and redirects")
+    class BedrockRoutes {
+
+        private static final String PROVIDER_PATHS = "/(model|anthropic)/.*";
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        private Stream<Arguments> providerTextIsReturnedOnlyAsADocumentedErrorAndNeverLogged() {
+            var marker = "upstream-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            var html = "<html><body>%s</body></html>".formatted(marker);
+            var converseMessage = JsonUtils.writeValueAsString(Map.of("message", marker));
+            var generic = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+            return withAndWithoutStreaming(
+                    arguments(BedrockRoute.CONVERSE, aResponse().withStatus(HttpStatus.SC_NOT_FOUND)
+                            .withHeader("Content-Type", "text/html").withBody(html), marker, HttpStatus.SC_NOT_FOUND,
+                            generic),
+                    arguments(BedrockRoute.CONVERSE, aResponse().withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withHeader("x-amzn-ErrorType", "InternalCaptureException:http://internal.amazon.com/")
+                            .withBody(converseMessage), marker, HttpStatus.SC_BAD_REQUEST, generic),
+                    arguments(BedrockRoute.CONVERSE, aResponse().withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withHeader("x-amzn-ErrorType", "ValidationException:http://internal.amazon.com/")
+                            .withBody(converseMessage), marker, HttpStatus.SC_BAD_REQUEST, marker),
+                    arguments(BedrockRoute.ANTHROPIC_MESSAGES, aResponse().withStatus(HttpStatus.SC_NOT_FOUND)
+                            .withHeader("Content-Type", "text/html").withBody(html), marker, HttpStatus.SC_NOT_FOUND,
+                            generic),
+                    arguments(BedrockRoute.ANTHROPIC_MESSAGES, aResponse().withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(anthropicError("internal_capture_error", marker)), marker,
+                            HttpStatus.SC_BAD_REQUEST,
+                            generic),
+                    arguments(BedrockRoute.ANTHROPIC_MESSAGES, aResponse().withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(anthropicError("invalid_request_error", marker)), marker,
+                            HttpStatus.SC_BAD_REQUEST,
+                            marker));
+        }
+
+        private Stream<Arguments> withAndWithoutStreaming(Arguments... cases) {
+            return Stream.of(cases).flatMap(arguments -> Stream.of(false, true)
+                    .map(stream -> arguments(ArrayUtils.add(arguments.get(), stream))));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a Bedrock provider's text reaches the caller only as a documented error, and never the logs")
+        void providerTextIsReturnedOnlyAsADocumentedErrorAndNeverLogged(BedrockRoute route,
+                ResponseDefinitionBuilder reply, String marker, int expectedStatus, String expectedMessage,
+                boolean stream) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createBedrockProvider(workspaceName, route);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(PROVIDER_PATHS)).willReturn(reply));
+            var request = ChatCompletionRequest.builder().stream(stream).model(route.model()).addUserMessage("ping")
+                    .build();
+            var actualErrors = new ArrayList<ErrorMessage>();
+
+            var actualEvents = LogCaptureUtils.logEventsOf(
+                    () -> actualErrors.addAll(errorsOf(workspaceName, request, expectedStatus)));
+
+            assertThat(actualErrors).singleElement().satisfies(error -> {
+                assertThat(error.getCode()).isEqualTo(expectedStatus);
+                assertThat(error.getMessage()).isEqualTo(expectedMessage);
+            });
+            assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        private Stream<Arguments> redirectIsNotFollowed() {
+            return withAndWithoutStreaming(arguments(BedrockRoute.CONVERSE),
+                    arguments(BedrockRoute.ANTHROPIC_MESSAGES));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a Bedrock provider's redirect isn't followed, streamed or not")
+        void redirectIsNotFollowed(BedrockRoute route, boolean stream) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createBedrockProvider(workspaceName, route);
+            var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(PROVIDER_PATHS))
+                    .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget)).willReturn(okJson("{}")));
+            var request = ChatCompletionRequest.builder().stream(stream).model(route.model()).addUserMessage("ping")
+                    .build();
+
+            var actualErrors = errorsOf(workspaceName, request, HttpStatus.SC_INTERNAL_SERVER_ERROR);
+
+            assertThat(actualErrors).extracting(ErrorMessage::getMessage)
+                    .containsExactly(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            WIRE_MOCK.server().verify(1, postRequestedFor(urlPathMatching(PROVIDER_PATHS)));
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
+        }
+
+        private List<ErrorMessage> errorsOf(String workspaceName, ChatCompletionRequest request,
+                int expectedStatus) {
+            return Boolean.TRUE.equals(request.stream())
+                    ? chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, request)
+                    : List.of(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus));
+        }
+
+        private void createBedrockProvider(String workspaceName, BedrockRoute route) {
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.BEDROCK)
+                    .providerName(route.providerName)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + route.path)
+                    .configuration(Map.of(
+                            "provider_name", route.providerName,
+                            "models", route.model(),
+                            "bedrock_api", route.bedrockApi))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+        }
+
+        private static String anthropicError(String type, String message) {
+            return JsonUtils.writeValueAsString(
+                    Map.of("type", "error", "error", Map.of("type", type, "message", message)));
+        }
+    }
+
+    private enum BedrockRoute {
+        CONVERSE("converse", "bedrock-nova", "us.amazon.nova-pro-v1:0", ""),
+        ANTHROPIC_MESSAGES("anthropic_messages", "bedrock-claude", "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "/anthropic");
+
+        private final String bedrockApi;
+        private final String providerName;
+        private final String modelId;
+        private final String path;
+
+        BedrockRoute(String bedrockApi, String providerName, String modelId, String path) {
+            this.bedrockApi = bedrockApi;
+            this.providerName = providerName;
+            this.modelId = modelId;
+            this.path = path;
+        }
+
+        String model() {
+            return "custom-llm/%s/%s".formatted(providerName, modelId);
         }
     }
 
