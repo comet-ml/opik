@@ -189,6 +189,7 @@ public class TopicWindowDAO {
                     AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
                     AND source = 'run'
                     AND run_id = :run_id
+                    AND is_deleted = 0
                 )
                 GROUP BY trace_id
                 ORDER BY trace_id

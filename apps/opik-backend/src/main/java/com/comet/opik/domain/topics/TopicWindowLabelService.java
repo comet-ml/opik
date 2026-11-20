@@ -74,8 +74,10 @@ public class TopicWindowLabelService {
 
     /**
      * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the
-     * window's exact count. {@code complete} is true when no trace of the window is left without a row of the run; false when the
-     * pass was cut, and a later call finishes it.
+     * window's exact count. {@code complete} is true when every trace of the window with a usable vector has a row of
+     * the run; false when the pass was cut or stopped, and a later call finishes it. {@code skipped} are the traces
+     * whose vector is not {@link TopicsRebuildService#DIMENSIONS} long, as the run leaves them out of its window: they
+     * get no row, and every later pass of a new run reads and skips them again.
      */
     @Builder(toBuilder = true)
     public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete) {
