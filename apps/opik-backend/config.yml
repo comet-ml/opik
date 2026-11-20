@@ -2539,6 +2539,11 @@ inference:
   #  aiLabels.loadConcurrency (when ai-labels is on) and topics.vectors.embedConcurrency (when Topics is on) must be
   #  below jerseyClient.maxConnectionsPerRoute
   maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
+  #  Default: 4
+  #  Description: Most synchronous generate calls (Topics builds) in flight from one backend instance, each on a thread
+  #  of its own while the model answers. They share the jerseyClient connection pool with the other calls to
+  #  opik-inference
+  maxConcurrentGenerates: ${OPIK_INFERENCE_MAX_CONCURRENT_GENERATES:-4}
   #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
   #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
   #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
@@ -2554,6 +2559,13 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 60s
+    #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
+    maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
+    #  Default: 300s
+    #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
+    #  topics.build.llmDeadline, namingDeadline and verifyDeadline must not be above it
+    maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
     maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
@@ -2758,6 +2770,163 @@ topics:
     #  Default: 3
     #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
     retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
+    #  Default: 10
+    #  Description: Most topics in a project's list. At most 100
+    maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}
+    #  Default: 1000
+    #  Description: A first build over fewer traces is marked provisional in its stats
+    provisionalBelow: ${TOPICS_ALGORITHM_PROVISIONAL_BELOW:-1000}
+  #  A topic list build's settings: a first build, a nightly update and their labelling pass
+  build:
+    #  Default: 15m
+    #  Description: One project's build is stopped and failed with timeout after this. At most 2h
+    projectTimeout: ${TOPICS_BUILD_PROJECT_TIMEOUT:-15m}
+    #  Default: 100
+    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
+    minVectors: ${TOPICS_BUILD_MIN_VECTORS:-100}
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the day it ends on. The first-build job's window ends at
+    #  tomorrow's start, so it holds today's traces so far. At most 90
+    windowDays: ${TOPICS_BUILD_WINDOW_DAYS:-30}
+    #  Default: 100000
+    #  Description: A larger window is sampled: the build finds topics on this many of its traces, spread evenly by a
+    #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
+    maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
+    #  Default: 120s
+    #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
+    llmDeadline: ${TOPICS_BUILD_LLM_DEADLINE:-120s}
+    #  Default: 30s
+    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
+    #  projectTimeout
+    namingDeadline: ${TOPICS_BUILD_NAMING_DEADLINE:-30s}
+    #  Default: 60s
+    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
+    verifyDeadline: ${TOPICS_BUILD_VERIFY_DEADLINE:-60s}
+    #  Default: 120s
+    #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
+    #  attempt of its trace_topics insert. At most 30m
+    readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 60s
+    #  Description: A ClickHouse count of a window stops after this: the labelling pass's, with its slice bounds (or
+    #  the pass's deadline, when sooner), and the planner's count of each workspace's first-build candidates. At most
+    #  30m
+    countTimeout: ${TOPICS_BUILD_COUNT_TIMEOUT:-60s}
+    #  Default: 10000
+    #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
+    #  Between 1 and 100000
+    labelPageTraces: ${TOPICS_BUILD_LABEL_PAGE_TRACES:-10000}
+    #  Default: 50000
+    #  Description: Traces per slice of the window the labelling pass reads in pages; a page's read costs about one
+    #  slice of keys. Between 1 and 1000000
+    labelSliceTraces: ${TOPICS_BUILD_LABEL_SLICE_TRACES:-50000}
+    #  Default: 3
+    #  Description: Retries of the trace_topics insert after the save's commit. At most 10
+    insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
+    #  Default: 500ms
+    #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
+    insertBackoff: ${TOPICS_BUILD_INSERT_BACKOFF:-500ms}
+    #  The ClickHouse guards of the build's reads (window count, window read, unlabelled read, topic counts), apart
+    #  from the vectors tick's: the build reads a whole window, the window read about three times
+    read:
+      #  Default: 300000000
+      #  Description: Per read; the window read reads about three rows per trace in the window. At most 1000000000
+      maxRowsToRead: ${TOPICS_BUILD_READ_MAX_ROWS_TO_READ:-300000000}
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per read. At most 8589934592 (8 GiB)
+      maxMemoryUsage: ${TOPICS_BUILD_READ_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 2
+      #  Description: ClickHouse threads per read, so the build stays a small share of the server. From 1 to 16
+      maxThreads: ${TOPICS_BUILD_READ_MAX_THREADS:-2}
+      #  Default: 100
+      #  Description: ClickHouse priority of the window count and the unlabelled read; a higher number yields to
+      #  lower ones, 0 is none. From 0 to 1000
+      priority: ${TOPICS_BUILD_READ_PRIORITY:-100}
+      #  Default: 8192
+      #  Description: Rows per block of the window count; its in-flight per-trace arrays grow with it. From 1024 to
+      #  1048576
+      maxBlockSize: ${TOPICS_BUILD_READ_MAX_BLOCK_SIZE:-8192}
+      #  Default: 1d
+      #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
+      #  a query's memory follows the slice and not the window. From 1h to 7d
+      countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
+  firstBuild:
+    #  Default: 72h
+    #  Description: A project's first build waits for its vectors backfill to drain. Past this long since the backfill
+    #  started, it is built anyway once timedOutShare of the backfill's traces have a vector; with fewer it keeps
+    #  waiting, and the planner logs a warning. At least 1m, at most 30d
+    backfillMaxWait: ${TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT:-72h}
+    #  Default: 0.99
+    #  Description: The share of a backfill's traces with a vector that lets a first build start past backfillMaxWait.
+    #  Between 0.5 and 1.0
+    timedOutShare: ${TOPICS_FIRST_BUILD_TIMED_OUT_SHARE:-0.99}
+    #  Default: [1h, 6h, 1d]
+    #  Description: The wait after a project's first, second, ... failed first build; the last applies to every later
+    #  one. The first is also the wait after a failed labelling pass. 1 to 10 entries
+    retryDelays: [1h, 6h, 1d]
+  #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
+  #  below. Any pod claims a run with a compare-and-set on its row and runs it
+  runs:
+    #  Default: topics-runs
+    #  Description: Redis stream of queued Topics runs
+    streamName: ${TOPICS_RUNS_STREAM_NAME:-'topics-runs'}
+    #  Default: topics-runs-consumers
+    #  Description: Consumer group of the Topics runs stream
+    consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
+    #  Default: 1
+    #  Description: Runs one pod runs at a time; each holds a window in memory. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-1}
+    #  Default: 5s
+    #  Description: How often a pod polls the stream for queued runs
+    poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
+    #  Default: 5s
+    #  Description: Timeout of a blocking read of the stream (long polling). At most 20s
+    longPollingDuration: ${TOPICS_RUNS_LONG_POLLING_DURATION:-5s}
+    #  Default: 2
+    #  Description: Claim pending messages every N polling intervals
+    claimIntervalRatio: ${TOPICS_RUNS_CLAIM_INTERVAL_RATIO:-2}
+    #  Default: 5m
+    #  Description: A message no pod acked for this long goes to another pod, which runs it when its row is queued
+    #  again (its pod stopped) and only acks it otherwise. At least 1m
+    pendingMessageDuration: ${TOPICS_RUNS_PENDING_MESSAGE_DURATION:-5m}
+    #  Default: 3
+    #  Description: Deliveries of a message that keeps failing before it is dropped; the planner publishes its run
+    #  again. At most 10
+    maxRetries: ${TOPICS_RUNS_MAX_RETRIES:-3}
+    #  Default: 10000
+    #  Description: Maximum stream length before old entries are trimmed
+    streamMaxLen: ${TOPICS_RUNS_STREAM_MAX_LEN:-10000}
+    #  Default: 100
+    #  Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+    streamTrimLimit: ${TOPICS_RUNS_STREAM_TRIM_LIMIT:-100}
+    #  Default: 2
+    #  Description: Runs queued, running or cancelling across the cluster; the planner queues no more. Each reads a
+    #  window from ClickHouse and calls the LLM. A run started by hand is not capped. At most 100
+    maxInFlight: ${TOPICS_RUNS_MAX_IN_FLIGHT:-2}
+    #  Default: 20s
+    #  Description: How often a running run writes its heartbeat on its row; a write that finds the row no longer
+    #  running (cancelled) stops the run. At most 5m
+    heartbeatInterval: ${TOPICS_RUNS_HEARTBEAT_INTERVAL:-20s}
+    #  Default: 60s
+    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. Above
+    #  heartbeatInterval, at most 1h
+    abandonGrace: ${TOPICS_RUNS_ABANDON_GRACE:-60s}
+    #  Default: 10m
+    #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
+    republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
+    #  Default: 2m
+    #  Description: The planner stops counting first-build candidates after this and queues what it found. At most 30m
+    planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+  nightly:
+    #  Default: true
+    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
+    #  topics.enabled
+    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project starts after this much of the night; the rest run the next night. At most 20h
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
@@ -2837,60 +3006,6 @@ topics:
       #  Description: The backfill's discovery and vector count read in slices of this much trace creation time. Their
       #  memory stays small, so the slices are wide: each slice re-reads the granules across its edges. From 1h to 365d
       discoverySliceSize: ${TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE:-7d}
-  build:
-    #  Default: 15m
-    #  Description: One project's build is stopped and failed with timeout after this. At most 2h
-    projectTimeout: ${TOPICS_BUILD_PROJECT_TIMEOUT:-15m}
-    #  Default: 100
-    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
-    minVectors: ${TOPICS_BUILD_MIN_VECTORS:-100}
-    #  Default: 30
-    #  Description: The window: this many whole UTC days before the day it ends on. The first-build job's window ends at
-    #  tomorrow's start, so it holds today's traces so far. At most 90
-    windowDays: ${TOPICS_BUILD_WINDOW_DAYS:-30}
-    #  Default: 100000
-    #  Description: A larger window is sampled: the build finds topics on this many of its traces, spread evenly by a
-    #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
-    maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
-    #  Default: 120s
-    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
-    qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
-    #  Default: 30s
-    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
-    #  projectTimeout
-    namingDeadline: ${TOPICS_BUILD_NAMING_DEADLINE:-30s}
-    #  Default: 60s
-    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
-    verifyDeadline: ${TOPICS_BUILD_VERIFY_DEADLINE:-60s}
-  firstBuild:
-    #  Default: true
-    #  Description: Runs the first-build job, which builds the list of a project that has none yet, and finishes
-    #  the labelling passes that did not end. A project whose first builds failed waits 1h, then 6h, then 1d between
-    #  attempts. Needs topics.enabled
-    enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
-    #  Default: 10m
-    #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
-    interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
-    #  Default: 9m
-    #  Description: No project starts after this much of a run; the rest wait for the next run. Unfinished
-    #  labelling passes use up to half of it while a first build waits, all of it otherwise. Must be shorter than interval
-    budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}
-    #  Default: 72h
-    #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the
-    #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
-    #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
-    backfillMaxWait: ${TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT:-72h}
-  nightly:
-    #  Default: true
-    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
-    #  topics.enabled
-    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
-    #  Default: 0 0 2 * * ? (02:00 UTC)
-    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
-    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
-    #  Default: 2h
-    #  Description: No project starts after this much of the night; the rest run the next night. At most 20h
-    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
