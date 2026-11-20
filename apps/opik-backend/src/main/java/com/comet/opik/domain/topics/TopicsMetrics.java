@@ -59,7 +59,7 @@ public class TopicsMetrics {
                         + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save, label")
+                .setDescription("Duration of each phase of a run: window, cluster, qwen, assign, save, label")
                 .build();
         this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
                 .setDescription("Qwen calls, by call (author) and outcome: ok, timeout, error, bad_answer")
