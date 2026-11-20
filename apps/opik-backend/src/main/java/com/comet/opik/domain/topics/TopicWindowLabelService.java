@@ -97,11 +97,11 @@ public class TopicWindowLabelService {
 
     /**
      * The saved list a pass labels with. The pass labels and counts the traces created in {@code [from, to)}, the run's
-     * window. {@code topicIds} are its live topics. {@code saveCounts} is true when
+     * window. {@code topicIds} are its live topics. {@code logCounts} is true when
      * a complete pass logs the run's counts: the list has a topic and the run's labels are not complete yet.
      */
     private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller,
-            List<UUID> topicIds, boolean saveCounts) {
+            List<UUID> topicIds, boolean logCounts) {
     }
 
     /** Ends a pass early: the deadline is too close or the thread was interrupted. */
@@ -258,7 +258,7 @@ public class TopicWindowLabelService {
                 labelSlice(saved.from().plus(span.multipliedBy(slice).dividedBy(slices)),
                         saved.from().plus(span.multipliedBy(slice + 1).dividedBy(slices)));
             }
-            if (saved.saveCounts()) {
+            if (saved.logCounts()) {
                 counts = count();
             }
         }
@@ -285,7 +285,7 @@ public class TopicWindowLabelService {
                     throw new CutException("interrupted");
                 }
                 log.warn("Topics labelling pass could not count run '{}', project '{}', errors '{}'; the run's "
-                        + "counts are not saved", saved.runId(), projectId,
+                        + "counts are not logged", saved.runId(), projectId,
                         ExceptionUtils.getThrowableList(exception).stream().map(TopicsRebuildService::formatError)
                                 .toList());
                 return Map.of();
