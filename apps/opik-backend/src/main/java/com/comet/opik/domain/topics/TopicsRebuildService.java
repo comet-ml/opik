@@ -18,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -38,6 +39,12 @@ import java.util.concurrent.Callable;
  * {@code trace_topics} for the traces it read, with its own bound. A failure before the commit writes nothing but the
  * failed attempt. The topics' sizes and the run's Other share are those of the traces it read: on a sampled window, of
  * the sample. The run's stats go to its log lines, not to a table.
+ *
+ * <p>A nightly update ({@link #nightlyUpdate}) reads the same window and the project's saved list, has the algorithm
+ * update the list and saves the changed list the same way: one transaction that checks no other run saved the project
+ * since this one read it, then the {@code trace_topics} insert. A retired topic's row is deleted, with a log line and
+ * {@code topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
+ * the first-build job builds the project again.
  */
 @Slf4j
 @Singleton
@@ -68,6 +75,16 @@ public class TopicsRebuildService {
             JsonNode stats) {
     }
 
+    /** What a nightly update saves, and the counts its metrics carry after the commit. */
+    private record Night(TopicRunStore.SavedList saved, TopicRunStore.NightSave save, List<NightTopic> retired,
+            List<TraceTopic> traceTopics, int born, int live, TopicChurn.Churn churn) {
+
+        /** Saved, but its project was deleted meanwhile, or no topic stayed: no trace_topics to write. */
+        Night discarded() {
+            return new Night(saved, save, retired, List.of(), born, live, churn);
+        }
+    }
+
     /** What a built run saves. */
     private record Built(List<Topic> topics, PrototypeVectors otherVectors, List<TraceTopic> traceTopics) {
 
@@ -86,13 +103,33 @@ public class TopicsRebuildService {
      */
     Mono<Outcome> firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night, long windowTraces) {
-        // The name is a Redis read, or an HTTP call on a miss: once per run, off the reactive threads. It falls back
-        // to the id, so the run goes on.
+        return workspaceName(workspaceId).flatMap(workspaceName -> run(TopicRun.of(runId, workspaceId,
+                workspaceName, projectId, night, config.getBuild().getWindowDays()), windowTraces));
+    }
+
+    /**
+     * Updates the project's saved topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces: the window read, the saved list read, the algorithm's steps
+     * ({@link #update}), the save ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics} insert. Never
+     * errors: a failure is recorded on the run and returned, and the previous list stays. The same time limit and
+     * race guard as {@link #firstBuild}. A save that leaves no live topic deletes them all and clears the project's list,
+     * so the first-build job builds it again; it inserts no {@code trace_topics}. As for a first build, the labelling
+     * pass is the caller's.
+     */
+    Mono<Outcome> nightlyUpdate(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull LocalDate night, long windowTraces) {
+        return workspaceName(workspaceId).flatMap(workspaceName -> nightly(TopicRun.of(runId, workspaceId,
+                workspaceName, projectId, night, config.getBuild().getWindowDays()), night, windowTraces));
+    }
+
+    /**
+     * The name is a Redis read, or an HTTP call on a miss: once per run, off the reactive threads. It falls back to the
+     * id, so the run goes on.
+     */
+    private Mono<String> workspaceName(String workspaceId) {
         return Mono.fromCallable(() -> workspaceNames.nameOrId(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
-                .onErrorReturn(workspaceId)
-                .flatMap(workspaceName -> run(TopicRun.of(runId, workspaceId, workspaceName, projectId, night,
-                        config.getBuild().getWindowDays()), windowTraces));
+                .onErrorReturn(workspaceId);
     }
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
@@ -137,6 +174,148 @@ public class TopicsRebuildService {
         return cpu(() -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
                 .flatMap(step -> night(run, step))
                 .doOnNext(update -> run.stats().setAll(update.stats()));
+    }
+
+    private Mono<Outcome> nightly(TopicRun run, LocalDate night, long windowTraces) {
+        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
+        run.stats().put("mode", TopicProject.RunMode.NIGHTLY_UPDATE.getValue());
+        return timed(run, "window", reader.read(run, windowTraces))
+                .flatMap(window -> timed(run, "state", store.readList(run, night))
+                        .flatMap(saved -> updated(run, window, saved)))
+                .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.saved(), updated.save()))
+                        .map(kept -> kept ? updated : updated.discarded()))
+                .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
+                        "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
+                .flatMap(updated -> savedNight(run, updated))
+                .onErrorResume(error -> failed(run, error))
+                .doOnCancel(() -> cancelled(run));
+    }
+
+    /** Runs the night's steps over the window and turns the changed list into the rows the save writes. */
+    private Mono<Night> updated(TopicRun run, TopicWindowReader.Window read, TopicRunStore.SavedList saved) {
+        int n = read.texts().length;
+        var stats = run.stats();
+        var versionShares = stats.putObject("task_version_shares");
+        read.versions().forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
+        stats.put("vectors", n);
+        var state = saved.state();
+        stats.put("saved_runs_before", state.getRebuilds());
+        stats.put("topics_before", state.liveCount());
+        var createdAt = new Instant[n];
+        for (int i = 0; i < n; i++) {
+            createdAt[i] = read.traces().get(i).traceCreatedAt();
+        }
+        var window = NightWindow.builder().texts(read.texts()).vectors(read.vectors()).createdAt(createdAt)
+                .from(run.from()).night(run.to()).dimensions(TopicEmbedding.DIMENSIONS).build();
+        return timed(run, "update", update(run, state, window))
+                .map(result -> {
+                    NightInvariants.check(state, TopicEmbedding.DIMENSIONS);
+                    return night(run, read.traces(), saved, result);
+                });
+    }
+
+    /** The night's rows and the counts its log line and metrics carry. */
+    private Night night(TopicRun run, List<TopicWindowReader.WindowTrace> traces, TopicRunStore.SavedList saved,
+            TopicUpdate result) {
+        var state = saved.state();
+        var stats = run.stats();
+        int n = traces.size();
+        boolean keep = state.liveCount() > 0;
+        int other = 0;
+        var traceTopics = new ArrayList<TraceTopic>(keep ? n : 0);
+        for (int i = 0; i < n; i++) {
+            int label = result.labels()[i];
+            other += label == TopicAlgorithm.OTHER ? 1 : 0;
+            if (keep) {
+                traceTopics.add(TraceTopic.builder()
+                        .workspaceId(run.workspaceId())
+                        .projectId(run.projectId())
+                        .traceId(traces.get(i).traceId())
+                        .traceCreatedAt(traces.get(i).traceCreatedAt())
+                        .topicId(label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : state.topic(label).getId())
+                        .source(TraceTopic.Source.RUN)
+                        .runId(run.runId())
+                        .build());
+            }
+        }
+        var churn = TopicChurn.of(result.before(), result.labels());
+        var inserted = new ArrayList<Topic>();
+        var updated = new ArrayList<Topic>();
+        var retired = new ArrayList<NightTopic>();
+        var retiredStats = stats.putObject("retired");
+        for (var topic : state.getTopics()) {
+            boolean stored = saved.topicIds().contains(topic.getId());
+            if (!topic.isLive()) {
+                var reason = topic.getRetiredReason().getValue();
+                retiredStats.put(reason, retiredStats.path(reason).asInt() + 1);
+                if (stored) {
+                    retired.add(topic);
+                }
+                continue;
+            }
+            var row = Topic.builder()
+                    .id(topic.getId())
+                    .workspaceId(run.workspaceId())
+                    .projectId(run.projectId())
+                    .name(topic.getName())
+                    .definition(topic.getDefinition())
+                    .born(topic.getBorn())
+                    .lowNights(topic.getLowNights())
+                    .size(topic.getSize())
+                    .vectors(new PrototypeVectors(topic.getPrototypes()))
+                    .build();
+            (stored ? updated : inserted).add(row);
+        }
+        int born = (int) state.getTopics().stream().filter(topic -> !saved.topicIds().contains(topic.getId()))
+                .count();
+        stats.put("born", born);
+        stats.put("topics", state.liveCount());
+        stats.put("other_share", (double) other / n);
+        stats.put("other_prototypes", state.getOtherPrototypes().size());
+        stats.put("churn", churn.churn());
+        stats.put("churn_any", churn.churnAny());
+        stats.set("seconds", run.seconds());
+        log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', born '{}', retired '{}', "
+                + "topics '{}', Other share '{}', churn '{}', seconds '{}'", run.runId(), run.projectId(), run.from(),
+                run.to(), n, born, retiredStats, state.liveCount(), TopicText.fixed((double) other / n, 3), churn,
+                run.seconds());
+        var otherVectors = !keep || state.getOtherPrototypes().isEmpty()
+                ? null
+                : new PrototypeVectors(state.getOtherPrototypes());
+        var save = new TopicRunStore.NightSave(keep, inserted, updated,
+                retired.stream().map(NightTopic::getId).toList(), otherVectors);
+        return new Night(saved, save, retired, traceTopics, born, state.liveCount(), churn);
+    }
+
+    /**
+     * After the commit: the night's metrics, a log line and {@code topics.retired} per retired topic, then the
+     * {@code trace_topics} insert, unless the list was cleared or the project is gone.
+     */
+    private Mono<Outcome> savedNight(TopicRun run, Night night) {
+        metrics.topics(run.workspace(), night.live(), night.born());
+        for (var topic : night.retired()) {
+            // Ids only: a name and definition come from trace text and must not reach the logs.
+            log.info("Topics run '{}' retired topic '{}', project '{}', reason '{}', size '{}'", run.runId(),
+                    topic.getId(), run.projectId(), topic.getRetiredReason().getValue(), topic.getSize());
+            metrics.retired(run.workspace(), topic.getRetiredReason());
+        }
+        metrics.otherShare(run.workspace(), run.stats().path("other_share").asDouble());
+        metrics.churn(run.workspace(), night.churn());
+        if (!night.save().keep()) {
+            log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
+                    + "cleared, so the first-build job builds it again", run.runId(), run.projectId());
+            return Mono.just(outcome(run, TopicProject.RunStatus.SAVED, null));
+        }
+        var insert = night.traceTopics().isEmpty()
+                ? Mono.just(false)
+                : store.insertTraceTopics(run, night.traceTopics());
+        return insert.map(inserted -> {
+            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated '{}', "
+                    + "deleted '{}', stats '{}'", run.runId(), run.projectId(),
+                    inserted ? night.traceTopics().size() : 0, night.save().inserted().size(),
+                    night.save().updated().size(), night.retired().size(), run.stats());
+            return outcome(run, TopicProject.RunStatus.SAVED, null);
+        });
     }
 
     /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */

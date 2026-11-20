@@ -832,4 +832,164 @@ class TopicsDaoStorageTest {
     private static Instant to() {
         return NIGHT;
     }
+
+    @Test
+    @DisplayName("the nightly save: kept topics updated, retired ones deleted, the topic reads, and the list cleared by "
+            + "a compare-and-set when no topic is left")
+    void nightlySave() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var other = UUID.randomUUID();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        data.savedList(workspaceId, other, NIGHT, BUILT);
+        var listRunId = data.topicProject(projectId).listRunId();
+        var topic = data.topics(projectId).getFirst();
+
+        assertThat(projectsWithTopics(workspaceId, List.of(projectId, other, UUID.randomUUID())))
+                .containsExactlyInAnyOrder(projectId, other);
+        assertThat(projectsWithTopics(List.of(workspaceId)))
+                .containsExactlyInAnyOrder(new TopicProjectKey(workspaceId, projectId),
+                        new TopicProjectKey(workspaceId, other));
+
+        var kept = topic.toBuilder().name("Renamed").definition("Changed").lowNights(2).size(7)
+                .vectors(new PrototypeVectors(List.of(TopicsTestData.unit(2), TopicsTestData.unit(3)))).build();
+        var updated = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .updateTopics(List.of(kept)));
+        assertThat(updated).containsExactly(1);
+        assertThat(data.topics(projectId)).singleElement()
+                .isEqualTo(kept.toBuilder().name(topic.name()).definition(topic.definition()).build());
+
+        var savedAt = NIGHT.plus(Duration.ofDays(1));
+        template.inTransaction(WRITE, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            assertThat(projectDAO.resetList(workspaceId, projectId, UUID.randomUUID(), savedAt)).isZero();
+            assertThat(projectDAO.resetList(workspaceId, projectId, listRunId, savedAt)).isEqualTo(1);
+            assertThat(topicDAO.deleteTopics(workspaceId, projectId, List.of(topic.id()))).isEqualTo(1);
+            return null;
+        });
+        var cleared = data.topicProject(projectId);
+        assertThat(cleared.listRunId()).isNull();
+        assertThat(cleared.windowUntil()).isNull();
+        assertThat(cleared.otherVectors()).isNull();
+        assertThat(cleared.embedModel()).isNull();
+        assertThat(cleared.savedRuns()).isEqualTo(2);
+        assertThat(cleared.lastSuccessAt()).isEqualTo(savedAt);
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(projectsWithTopics(List.of(workspaceId)))
+                .containsExactly(new TopicProjectKey(workspaceId, other));
+        assertThat(data.topicProject(other).listRunId()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a project is paused when its last 3 attempts failed, a running one past its lease counting as "
+            + "failed, and the latest started since the given time")
+    void pausedProjects() {
+        var workspaceId = UUID.randomUUID().toString();
+        var since = NIGHT.minus(Duration.ofDays(7));
+        var abandonedBefore = NIGHT.minus(Duration.ofHours(1));
+        var paused = UUID.randomUUID();
+        var savedLast = UUID.randomUUID();
+        var tooOld = UUID.randomUUID();
+        var twoFailures = UUID.randomUUID();
+        var abandoned = UUID.randomUUID();
+        var running = UUID.randomUUID();
+        attempts(workspaceId, paused, NIGHT, 3, null);
+        attempts(workspaceId, savedLast, NIGHT, 2, TopicProject.RunStatus.SAVED);
+        attempts(workspaceId, tooOld, since.minus(Duration.ofDays(1)), 3, null);
+        attempts(workspaceId, twoFailures, NIGHT, 2, null);
+        attempts(workspaceId, abandoned, abandonedBefore.minus(Duration.ofMinutes(1)), 2,
+                TopicProject.RunStatus.RUNNING);
+        attempts(workspaceId, running, NIGHT, 2, TopicProject.RunStatus.RUNNING);
+
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findPausedProjectIds(workspaceId, List.of(paused, savedLast, tooOld, twoFailures, abandoned, running),
+                        3, since, abandonedBefore));
+
+        assertThat(found).containsExactlyInAnyOrder(paused, abandoned);
+    }
+
+    @Test
+    @DisplayName("of the project ids asked for, only those of the workspace's existing projects are returned")
+    void existingProjectIds() {
+        var workspaceId = UUID.randomUUID().toString();
+        var existing = UUID.randomUUID();
+        var elsewhere = UUID.randomUUID();
+        data.project(workspaceId, existing);
+        data.project(UUID.randomUUID().toString(), elsewhere);
+
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findExistingProjectIds(workspaceId, List.of(existing, elsewhere, UUID.randomUUID())));
+
+        assertThat(found).containsExactly(existing);
+    }
+
+    @Test
+    @DisplayName("the night fields: a project looked at resets its not-reached streak, the gauges' counts and the "
+            + "latest night")
+    void nightFields() {
+        var workspaceId = UUID.randomUUID().toString();
+        var looked = UUID.randomUUID();
+        var starved = UUID.randomUUID();
+        var stale = UUID.randomUUID();
+        var night = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC);
+        for (var projectId : List.of(looked, starved, stale)) {
+            data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        }
+        attempts(workspaceId, stale, NIGHT, 3, null);
+
+        List<List<TopicProjectNightDAO.WorkspaceCount>> counts = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectNightDAO.class);
+            dao.markNotReached(workspaceId, List.of(looked, starved));
+            dao.markNotReached(workspaceId, List.of(looked, starved));
+            dao.markLooked(workspaceId, List.of(looked, stale), night);
+            dao.markLooked(workspaceId, List.of(stale), night.minusDays(1));
+            return List.of(dao.countStarved(List.of(workspaceId), 2), dao.countStale(List.of(workspaceId), 3),
+                    dao.countStarved(List.of(workspaceId), 3));
+        });
+
+        assertThat(counts).containsExactly(List.of(new TopicProjectNightDAO.WorkspaceCount(workspaceId, 1)),
+                List.of(new TopicProjectNightDAO.WorkspaceCount(workspaceId, 1)), List.of());
+        assertThat(data.topicProject(looked).lastNight()).isEqualTo(night);
+        assertThat(data.topicProject(looked).notReachedNights()).isZero();
+        assertThat(data.topicProject(starved).lastNight()).isNull();
+        assertThat(data.topicProject(starved).notReachedNights()).isEqualTo(2);
+        LocalDate lastNight = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectNightDAO.class)
+                .lastNight(List.of(workspaceId)));
+        assertThat(lastNight).isEqualTo(night);
+    }
+
+    private List<UUID> projectsWithTopics(String workspaceId, List<UUID> projectIds) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findProjectsWithTopics(workspaceId, projectIds));
+    }
+
+    private List<TopicProjectKey> projectsWithTopics(List<String> workspaceIds) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findProjectsWithTopics(workspaceIds));
+    }
+
+    /**
+     * {@code failures} failed attempts of the project, one hour apart, then one more that ends {@code last} (null for
+     * none); the latest starts at {@code latest}.
+     */
+    private void attempts(String workspaceId, UUID projectId, Instant latest, int failures,
+            TopicProject.RunStatus last) {
+        int count = failures + (last == null ? 0 : 1);
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicProjectDAO.class);
+            for (int i = 0; i < count; i++) {
+                var runId = UUID.randomUUID();
+                var startedAt = latest.minus(Duration.ofHours(count - 1 - i));
+                runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.NIGHTLY_UPDATE, startedAt);
+                if (i < failures) {
+                    runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
+                            TopicProject.RunError.INTERNAL);
+                } else if (last == TopicProject.RunStatus.SAVED) {
+                    runDAO.markSaved(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)));
+                }
+            }
+            return null;
+        });
+    }
 }

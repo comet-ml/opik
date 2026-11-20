@@ -15,6 +15,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -42,6 +43,37 @@ public interface TopicDAO {
             ORDER BY born, id
             """)
     List<Topic> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
+    /**
+     * The nightly update's save of a topic it kept. Only {@code low_nights}, {@code size} and {@code vectors} change:
+     * the night never changes a topic's id, name, definition or born.
+     */
+    @SqlBatch("""
+            UPDATE topics SET low_nights = :lowNights, size = :size, vectors = :vectors
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND id = :id
+            """)
+    int[] updateTopics(@BindMethods List<Topic> topics);
+
+    /** The nightly update's retire: the topic's row is deleted. */
+    @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId AND id IN (<ids>)")
+    int deleteTopics(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @BindList("ids") Collection<UUID> ids);
+
+    @SqlQuery("""
+            SELECT DISTINCT project_id FROM topics
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            """)
+    List<UUID> findProjectsWithTopics(@Bind("workspaceId") String workspaceId,
+            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    /** The projects of {@code workspaceIds} with at least one topic: the nightly update's candidates. */
+    @SqlQuery("SELECT DISTINCT workspace_id, project_id FROM topics WHERE workspace_id IN (<workspaceIds>)")
+    List<TopicProjectKey> findProjectsWithTopics(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    /** Of {@code projectIds}, those the workspace still has. A plain read: it locks no {@code projects} row. */
+    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
+    Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,

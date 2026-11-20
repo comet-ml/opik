@@ -302,6 +302,46 @@ class TopicsRebuildServiceTest {
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("a nightly update after the first build saves the list under its own run, keeps the topics' ids and "
+            + "writes one trace_topics row per trace as its run's")
+    void nightlyUpdateSaves() {
+        stubAnswer(FIXTURE.firstBuildAnswer);
+        var firstRunId = start();
+        assertThat(service.firstBuild(firstRunId, workspaceId, projectId, NIGHT, FIXTURE.size()).block().status())
+                .isEqualTo(TopicProject.RunStatus.SAVED);
+        var before = data.topics(projectId);
+        stubAnswer(emptyNaming());
+        var updateRunId = store.startRun(workspace(), projectId, TopicProject.RunMode.NIGHTLY_UPDATE, Instant.EPOCH)
+                .block();
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(outcome.stats().path("mode").asText()).isEqualTo("nightly_update");
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(updateRunId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(project.listRunId()).isEqualTo(updateRunId);
+            assertThat(project.savedRuns()).isEqualTo(2);
+        });
+        var live = outcome.stats().get("topics").asInt();
+        assertThat(data.topics(projectId)).hasSize(live)
+                .extracting(Topic::id).isSubsetOf(before.stream().map(Topic::id).toList());
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
+        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
+    }
+
     private UUID start() {
         return store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD, Instant.EPOCH).block();
     }

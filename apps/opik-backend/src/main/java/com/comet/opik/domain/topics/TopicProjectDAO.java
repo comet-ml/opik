@@ -22,6 +22,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -135,6 +136,20 @@ public interface TopicProjectDAO {
             @Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
 
     /**
+     * Of {@code projectIds}, those whose last {@code failures} attempts or more failed in a row, the latest started at
+     * or after {@code since}: the night pauses them. An attempt still {@code running} that started before
+     * {@code abandonedBefore} counts as failed: its pod died, and only the project's next attempt records it.
+     */
+    @SqlQuery("""
+            SELECT project_id FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND run_started_at >= :since
+            AND failed_runs + (run_status = 'running' AND run_started_at < :abandonedBefore) >= :failures
+            """)
+    Set<UUID> findPausedProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds, @Bind("failures") int failures,
+            @Bind("since") Instant since, @Bind("abandonedBefore") Instant abandonedBefore);
+
+    /**
      * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
      * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
      * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
@@ -150,6 +165,19 @@ public interface TopicProjectDAO {
             @Nullable @Bind("expectedListRunId") UUID expectedListRunId, @Bind("runId") UUID runId,
             @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
+
+    /**
+     * A nightly save that left no live topic: the project has no list again, so the first-build job builds it. A
+     * compare-and-set on {@code list_run_id} as {@link #saveList}; the save still counts in {@code saved_runs}.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET saved_runs = saved_runs + 1, last_success_at = :savedAt, list_run_id = NULL, window_until = NULL,
+                labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
+            """)
+    int resetList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("expectedListRunId") UUID expectedListRunId, @Bind("savedAt") Instant savedAt);
 
     /**
      * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that

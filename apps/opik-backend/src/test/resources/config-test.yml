@@ -1097,6 +1097,10 @@ topics:
     retireNights: 3
     maxTopics: 10
     provisionalBelow: 1000
+  nightly:
+    enabled: true
+    schedule: "0 0 2 * * ?"
+    budget: 2h
 
 # Python evaluator configuration
 pythonEvaluator:
