@@ -16,12 +16,15 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,33 +65,50 @@ public class TraceTopicsDAO {
     /**
      * Traces per topic among the project's traces created in the window that Logs lists, each by its latest row. Any
      * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows.
+     *
+     * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join, so the query streams by
+     * trace id instead of holding a state per trace. Its memory still grows with the traces it covers, so
+     * {@link #countByTopic} runs it once per {@link #COUNT_SLICE} of the window.
      */
     private static final String COUNT_BY_TOPIC = """
-            SELECT latest_topic AS topic_id, count() AS traces
+            SELECT t.topic_id AS topic_id, count() AS traces
             FROM (
-                SELECT argMax(topic_id, (last_updated_at, source = 'run')) AS latest_topic
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                AND trace_id IN (
-                    SELECT id
-                    FROM traces
+                SELECT trace_id, topic_id
+                FROM (
+                    SELECT trace_id, topic_id, is_deleted
+                    FROM trace_topics
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                    AND source IN :logs_sources
-                    AND visibility_mode = :logs_visibility_mode
+                    AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                    AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                    LIMIT 1 BY workspace_id, project_id, trace_id
                 )
-                GROUP BY trace_id
-                HAVING argMax(is_deleted, (last_updated_at, source = 'run')) = 0
-            )
+                WHERE is_deleted = 0
+            ) AS t
+            INNER JOIN (
+                SELECT id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND source IN :logs_sources
+                AND visibility_mode = :logs_visibility_mode
+                ORDER BY workspace_id, project_id, id
+                LIMIT 1 BY workspace_id, project_id, id
+            ) AS tr ON t.trace_id = tr.id
             GROUP BY topic_id
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+            SETTINGS join_algorithm = 'full_sorting_merge', max_threads = 2,
+                max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
+
+    /**
+     * The window's slice per count query. A trace falls in exactly one slice by its creation time, so the per-slice
+     * counts add up to the window's.
+     */
+    static final Duration COUNT_SLICE = Duration.ofDays(1);
 
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM trace_topics
@@ -166,9 +186,30 @@ public class TraceTopicsDAO {
                 });
     }
 
-    /** Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. */
+    /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}: one query
+     * per {@link #COUNT_SLICE}, one after another, summed. {@code maxExecutionSeconds} bounds each query.
+     */
     public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
+        return Flux.<Instant, Instant>generate(() -> from, (sliceFrom, sink) -> {
+            if (!sliceFrom.isBefore(to)) {
+                sink.complete();
+                return sliceFrom;
+            }
+            sink.next(sliceFrom);
+            return sliceFrom.plus(COUNT_SLICE);
+        })
+                .concatMap(sliceFrom -> countSlice(workspaceId, projectId, sliceFrom,
+                        ObjectUtils.min(sliceFrom.plus(COUNT_SLICE), to), maxExecutionSeconds))
+                .collect(LinkedHashMap<UUID, Long>::new,
+                        (traces, count) -> traces.merge(count.topicId(), count.traces(), Long::sum))
+                .flatMapIterable(Map::entrySet)
+                .map(entry -> TopicCount.builder().topicId(entry.getKey()).traces(entry.getValue()).build());
+    }
+
+    private Flux<TopicCount> countSlice(String workspaceId, UUID projectId, Instant from, Instant to,
+            long maxExecutionSeconds) {
         var find = config.getVectors().getFind();
         var template = getSTWithLogComment(COUNT_BY_TOPIC, "topics:count_by_topic", workspaceId, null,
                 "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))

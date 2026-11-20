@@ -39,6 +39,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -380,6 +381,41 @@ class TopicsDaoStorageTest {
 
         assertThat(counts).extracting(TraceTopicsDAO.TopicCount::topicId, TraceTopicsDAO.TopicCount::traces)
                 .containsExactlyInAnyOrder(tuple(topicId, 2L), tuple(TraceTopic.OTHER, 1L));
+    }
+
+    @Test
+    @DisplayName("the topic counts sum the window's days, the last one cut at the window's end")
+    void countsSumTheWindowsDays() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var topicIds = List.of(UUID.randomUUID(), UUID.randomUUID(), TraceTopic.OTHER);
+        traceTopicsDAO.insert(IntStream.range(0, SPREAD)
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(SPREAD_TRACES.traceIds().get(i))
+                        .traceCreatedAt(SPREAD_TRACES.createdAt().get(i))
+                        .topicId(topicIds.get(i % topicIds.size()))
+                        .source(TraceTopic.Source.RUN)
+                        .runId(UUID.randomUUID())
+                        .build())
+                .toList()).block();
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, SPREAD)
+                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, SPREAD_TRACES.traceIds().get(i),
+                        SPREAD_TRACES.createdAt().get(i)))
+                .toList());
+        var to = to().minus(Duration.ofHours(30));
+        var expected = new HashMap<UUID, Long>();
+        IntStream.range(0, SPREAD)
+                .filter(i -> SPREAD_TRACES.createdAt().get(i).isBefore(to))
+                .forEach(i -> expected.merge(topicIds.get(i % topicIds.size()), 1L, Long::sum));
+
+        var counts = traceTopicsDAO.countByTopic(workspaceId, projectId, from(), to, 60).collectList().block();
+
+        assertThat(counts).containsExactlyInAnyOrderElementsOf(expected.entrySet().stream()
+                .map(entry -> TraceTopicsDAO.TopicCount.builder().topicId(entry.getKey()).traces(entry.getValue())
+                        .build())
+                .toList());
     }
 
     @Test
