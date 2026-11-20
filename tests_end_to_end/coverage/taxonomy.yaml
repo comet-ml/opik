@@ -1595,6 +1595,45 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    specs: []
+    # The page is the policy store: a policy is a named group of rules that an
+    # application asks for by name (docs: Guardrails -> Policies). Workspace-level,
+    # and a policy has no route of its own — it opens in a side panel, which is why
+    # create/edit/duplicate are three modes of one component rather than three pages.
+    #
+    # Deliberately NOT cloud_only: the nav entry and the page guard both come from
+    # useGuardrailsEnabled, i.e. the GUARDRAILS_VALIDATIONS_ENABLED backend toggle
+    # and — only where the comet plugin supplies getGuardrailsEnabled — an extra
+    # organization check. Without the plugin the toggle alone decides, so the surface
+    # exists self-hosted.
+    #
+    # Trace-level guardrails stay in `traces` (set-guardrail, guardrail-results):
+    # those are a dialog and a column on the Logs surface, not this page.
+    capabilities:
+      # -- Policies list --
+      list-policies:         { covered: false, note: "name/description/rules/execution scope/last updated, sortable_by from the list endpoint" }
+      search-policies:       { covered: false, note: "SearchInput — sent as ?name= to the list endpoint" }
+      # -- Policy panel (one component, three modes) --
+      create-policy:         { covered: false, note: "GuardrailPolicyPanel mode=create" }
+      edit-policy:           { covered: false, note: "row click or row-menu Edit; mode=edit, which is also where the audit fields show" }
+      duplicate-policy:      { covered: false, note: "row-menu Duplicate; opens under a name that does not collide with the page's names" }
+      delete-policy:         { covered: false, note: "row-menu Delete + ConfirmDialog" }
+      bulk-delete-policies:  { covered: false, note: "GuardrailPoliciesActionsPanel over the row selection — one batch delete" }
+      execution-scope:       { covered: false, note: "On request vs Global radio" }
+      # -- Rules. A policy holds at most one rule per type, so the form is a toggle
+      # per type and each type's config is its own behaviour.
+      rule-pii-entities:     { covered: false, note: "RuleConfig.PIIEntities over POLICY_PII_ENTITIES" }
+      rule-topics:           { covered: false, note: "RuleConfig.TopicsList — allowed and restricted lists, at least one required" }
+      rule-prompt-injection: { covered: false, note: "toggle only, nothing to configure" }
+      # -- Everything else the panel owns --
+      policy-code-snippet:   { covered: false, note: "GuardrailPolicyCodeSection — the Guardrail.from_stored_policies snippet, named after the policy" }
+      rename-warning:        { covered: false, note: "renaming a stored policy breaks every application still naming the old one; the panel warns before Save" }
+      policy-deep-link:      { covered: false, note: "?policyId= opens the panel — the only way to link a policy; an unknown or deleted id drops the param and toasts" }
+
   configuration:
     label: Configuration
     nav_group: Workspace
