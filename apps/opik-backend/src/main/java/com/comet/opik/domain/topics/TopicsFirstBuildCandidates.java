@@ -112,7 +112,8 @@ class TopicsFirstBuildCandidates {
 
     /**
      * Of the listless projects, by workspace, those whose retry is due and whose gate is open. A workspace with
-     * projects whose backfill waits past {@code backfillMaxWait} with too few vectors is logged once.
+     * projects whose gate timed out closed (a stale workspace, or a backfill past {@code backfillMaxWait} with too few
+     * vectors) is logged once.
      */
     private Map<String, List<UUID>> open(List<ListlessProject> listless, Instant now) {
         var open = new LinkedHashMap<String, List<UUID>>();
@@ -129,8 +130,9 @@ class TopicsFirstBuildCandidates {
             }
         }
         overdue.forEach((workspaceId, projects) -> log.warn(
-                "Topics first builds wait for the vectors backfill past topics.firstBuild.backfillMaxWait '{}' with "
-                        + "too few traces embedded, workspace '{}', projects '{}', longest wait seconds '{}'",
+                "Topics first builds held back: the vectors tick stopped checking the workspace, or a backfill ran "
+                        + "past topics.firstBuild.backfillMaxWait '{}' with too few traces embedded, workspace '{}', "
+                        + "projects '{}', longest wait seconds '{}'",
                 config.getFirstBuild().getBackfillMaxWait(), workspaceId, projects.size(),
                 projects.stream().map(project -> TopicsBackfillGate.waited(project, now)).max(Comparator.naturalOrder())
                         .orElse(Duration.ZERO).toSeconds()));

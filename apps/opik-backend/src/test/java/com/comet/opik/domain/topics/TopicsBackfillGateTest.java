@@ -44,12 +44,16 @@ class TopicsBackfillGateTest {
     static Stream<Arguments> gates() {
         return Stream.of(
                 Arguments.of("no backfill, fresh workspace", project().vectorsCheckedAt(ago(47)), State.OPEN),
-                Arguments.of("no backfill, stale workspace", project().vectorsCheckedAt(ago(49)), State.WAITING),
+                Arguments.of("no backfill, stale workspace", project().vectorsCheckedAt(ago(49)),
+                        State.TIMED_OUT_WAITING),
                 Arguments.of("no backfill, never checked", project(), State.WAITING),
                 Arguments.of("drained, fresh workspace", project().vectorsCheckedAt(ago(1)).backfillStartedAt(ago(5))
                         .backfillDrainedAt(ago(2)), State.OPEN),
                 Arguments.of("drained, stale workspace", project().vectorsCheckedAt(ago(49))
-                        .backfillStartedAt(ago(60)).backfillDrainedAt(ago(50)), State.WAITING),
+                        .backfillStartedAt(ago(60)).backfillDrainedAt(ago(50)), State.TIMED_OUT_WAITING),
+                Arguments.of("past the longest wait with enough vectors, stale workspace", project()
+                        .vectorsCheckedAt(ago(49)).backfillStartedAt(ago(73)).backfillTracesTotal(1000)
+                        .backfillTracesDone(995), State.TIMED_OUT_WAITING),
                 Arguments.of("not drained within the longest wait", project().vectorsCheckedAt(ago(1))
                         .backfillStartedAt(ago(72)).backfillTracesTotal(100).backfillTracesDone(100), State.WAITING),
                 Arguments.of("past the longest wait, enough vectors", project().vectorsCheckedAt(ago(1))
@@ -86,6 +90,16 @@ class TopicsBackfillGateTest {
     @DisplayName("a failed first build waits 1h, then 6h, then 1d before the next")
     void retryDue(String name, ListlessProject.ListlessProjectBuilder project, boolean due) {
         assertThat(CANDIDATES.retryDue(project.build(), NOW)).isEqualTo(due);
+    }
+
+    @Test
+    @DisplayName("the wait counts from the backfill start, or from the workspace's last check without a backfill")
+    void waited() {
+        assertThat(TopicsBackfillGate.waited(project().vectorsCheckedAt(ago(1)).backfillStartedAt(ago(73)).build(),
+                NOW)).isEqualTo(Duration.ofHours(73));
+        assertThat(TopicsBackfillGate.waited(project().vectorsCheckedAt(ago(49)).build(), NOW))
+                .isEqualTo(Duration.ofHours(49));
+        assertThat(TopicsBackfillGate.waited(project().build(), NOW)).isEqualTo(Duration.ZERO);
     }
 
     @Test
