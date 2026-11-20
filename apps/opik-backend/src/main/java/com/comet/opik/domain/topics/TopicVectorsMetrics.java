@@ -31,6 +31,11 @@ class TopicVectorsMetrics {
 
     /** A workspace as the metrics tag it: its id, and its attributes with the name looked up once per tick. */
     record Workspace(@NonNull String id, @NonNull Attributes attributes) {
+
+        /** Its name falls back to the id, as for a failed lookup: for a workspace the tick had no time to read. */
+        static Workspace unnamed(@NonNull String id) {
+            return new Workspace(id, workspace(id, id).build());
+        }
     }
 
     private final WorkspaceNameService names;

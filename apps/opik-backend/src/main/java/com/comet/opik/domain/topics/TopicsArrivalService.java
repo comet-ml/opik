@@ -206,7 +206,7 @@ public class TopicsArrivalService {
                         count(workspaceId, workspaceName, NO_PROTOTYPES, group.size());
                         continue;
                     }
-                    var topicIds = labeller.get().label(flatten(group));
+                    var topicIds = labeller.get().label(group.stream().map(TopicVector::vector).toList());
                     for (int i = 0; i < group.size(); i++) {
                         var vector = group.get(i);
                         rows.add(TraceTopic.builder()
@@ -240,8 +240,8 @@ public class TopicsArrivalService {
                 return Mono.just(true);
             }
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                var dao = handle.attach(TopicDAO.class);
-                return new SavedLists(dao.findProjects(workspaceId, toRead), dao.findByProjects(workspaceId, toRead));
+                return new SavedLists(handle.attach(TopicProjectDAO.class).findProjects(workspaceId, toRead),
+                        handle.attach(TopicDAO.class).findByProjects(workspaceId, toRead));
             }))
                     .subscribeOn(Schedulers.boundedElastic())
                     .timeout(left(until))
@@ -262,10 +262,11 @@ public class TopicsArrivalService {
                         var topics = saved.get().topics().stream().collect(Collectors.groupingBy(Topic::projectId));
                         for (var projectId : toRead) {
                             var project = projects.get(projectId);
-                            labellers.put(projectId, project == null || project.listRunId() == null
+                            var live = topics.getOrDefault(projectId, List.<Topic>of());
+                            // A list with no topic would label every trace Other: it gets no row, as no list.
+                            labellers.put(projectId, project == null || project.listRunId() == null || live.isEmpty()
                                     ? Optional.empty()
-                                    : algorithm.labeller(topics.getOrDefault(projectId, List.of()),
-                                            project.otherVectors()));
+                                    : Optional.of(algorithm.labeller(live, project.otherVectors())));
                         }
                         return true;
                     });
@@ -331,13 +332,4 @@ public class TopicsArrivalService {
         return left.isNegative() ? Duration.ZERO : left;
     }
 
-    /** The vectors' values, one vector after another, as the labeller takes them. */
-    private static float[] flatten(List<TopicVector> vectors) {
-        int dimensions = TopicEmbedding.DIMENSIONS;
-        var out = new float[vectors.size() * dimensions];
-        for (int r = 0; r < vectors.size(); r++) {
-            System.arraycopy(vectors.get(r).vector(), 0, out, r * dimensions, dimensions);
-        }
-        return out;
-    }
 }

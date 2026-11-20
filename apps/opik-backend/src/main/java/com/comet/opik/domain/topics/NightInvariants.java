@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Checks the night's list before anything is written. Two live topics must not have one name (case and spaces
  * ignored). Every prototype of a live topic and of the known-Other memory must have {@code dimensions} values and unit
- * length, by the first build's check ({@link TopicsRebuildService#isUnit}). A failed check fails the run with
+ * length, by the first build's check ({@link PrototypeVectors#isUnit}). A failed check fails the run with
  * {@code invariant}.
  */
 @UtilityClass
@@ -31,9 +31,9 @@ public class NightInvariants {
     }
 
     private static void unit(float[] prototype, int dimensions) {
-        if (!TopicsRebuildService.isUnit(prototype, dimensions)) {
+        if (!PrototypeVectors.isUnit(prototype, dimensions)) {
             throw invariant("a prototype has '%s' values and norm '%s'".formatted(prototype.length,
-                    TopicsRebuildService.norm(prototype)));
+                    PrototypeVectors.norm(prototype)));
         }
     }
 

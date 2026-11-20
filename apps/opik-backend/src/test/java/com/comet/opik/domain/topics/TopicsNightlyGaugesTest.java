@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.TopicsConfig;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,7 @@ class TopicsNightlyGaugesTest {
     private static final LocalDate NIGHT = LocalDate.of(2026, 10, 15);
     private static final Instant NOW = NIGHT.atTime(6, 0).toInstant(ZoneOffset.UTC);
 
-    private TopicsTestMeter meter;
+    private InMemoryMetricReader reader;
     private TopicsConfig config;
     private TopicProjectNightDAO dao;
     private TransactionTemplate template;
@@ -39,7 +40,7 @@ class TopicsNightlyGaugesTest {
 
     @BeforeEach
     void setUp() {
-        meter = new TopicsTestMeter();
+        reader = InMemoryMetricReader.create();
         config = TestConfigUtils.loadConfigTest().getTopics();
         config.setEnabled(true);
         dao = mock(TopicProjectNightDAO.class);
@@ -51,7 +52,7 @@ class TopicsNightlyGaugesTest {
         var workspaces = mock(TopicWorkspaceService.class);
         when(workspaces.enabledWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, QUIET_WORKSPACE_ID));
         gauges = new TopicsNightlyGauges(config, template, workspaces, workspaceId -> "name of " + workspaceId,
-                meter.meter, Clock.fixed(NOW, ZoneOffset.UTC));
+                TopicsMetricsReader.meter(reader), Clock.fixed(NOW, ZoneOffset.UTC));
         gauges.begin();
     }
 
@@ -68,16 +69,18 @@ class TopicsNightlyGaugesTest {
         when(template.inTransaction(any(TxConfig.class), any())).thenThrow(new IllegalStateException("MySQL down"));
         gauges.refresh();
 
-        assertThat(meter.observe(TopicsNightlyGauges.STALE_PROJECTS))
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.STALE_PROJECTS))
                 .extracting(point -> point.get("workspace_id"), point -> point.get("workspace_name"),
-                        TopicsTestMeter.Point::value)
+                        TopicsMetricsReader.Point::value)
                 .containsExactlyInAnyOrder(tuple(WORKSPACE_ID, "name of " + WORKSPACE_ID, 2.0),
                         tuple(QUIET_WORKSPACE_ID, "name of " + QUIET_WORKSPACE_ID, 0.0));
-        assertThat(meter.observe(TopicsNightlyGauges.STARVED_PROJECTS)).extracting(TopicsTestMeter.Point::value)
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.STARVED_PROJECTS))
+                .extracting(TopicsMetricsReader.Point::value)
                 .containsExactly(0.0, 0.0);
-        assertThat(meter.observe(TopicsNightlyGauges.LAST_NIGHT_AGE)).extracting(TopicsTestMeter.Point::value)
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.LAST_NIGHT_AGE))
+                .extracting(TopicsMetricsReader.Point::value)
                 .containsExactly(6 * 3_600.0);
-        assertThat(meter.sum(TopicsNightlyGauges.STATE_REFRESH_FAILURES)).isEqualTo(1);
+        assertThat(TopicsMetricsReader.sum(reader, TopicsNightlyGauges.STATE_REFRESH_FAILURES)).isEqualTo(1);
     }
 
     @Test
@@ -85,12 +88,12 @@ class TopicsNightlyGaugesTest {
     void beforeTheFirstNightAndOff() {
         gauges.refresh();
 
-        assertThat(meter.observe(TopicsNightlyGauges.LAST_NIGHT_AGE)).isEmpty();
-        assertThat(meter.observe(TopicsNightlyGauges.STALE_PROJECTS)).hasSize(2);
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.LAST_NIGHT_AGE)).isEmpty();
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.STALE_PROJECTS)).hasSize(2);
 
         config.getNightly().setEnabled(false);
 
-        assertThat(meter.observe(TopicsNightlyGauges.STALE_PROJECTS)).isEmpty();
-        assertThat(meter.observe(TopicsNightlyGauges.STATE_AGE)).isEmpty();
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.STALE_PROJECTS)).isEmpty();
+        assertThat(TopicsMetricsReader.points(reader, TopicsNightlyGauges.STATE_AGE)).isEmpty();
     }
 }

@@ -1,7 +1,7 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Progress;
+import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
+import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
