@@ -1050,6 +1050,18 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
+  algorithm:
+    minGroups: 30
+    maxGroups: 50
+    textsPerGroup: 30
+    kmeansMaxIterations: 150
+    kmeansRestarts: 3
+    authorFrequent: 5
+    authorBudget: 250
+    authorMinExamples: 5
+    authorMaxExamples: 10
+    assignMinCosine: 0.75
+    otherGate: 0.95
 
 # Python evaluator configuration
 pythonEvaluator:

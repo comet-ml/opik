@@ -5,7 +5,9 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Merges identical intents into weighted points: one point per exact text (no further normalization), weighted by its
@@ -23,28 +25,23 @@ public class IntentMerger {
         Preconditions.checkArgument(vectors.length == texts.length * dimensions,
                 "vectors must hold one row per text, texts '%s', values '%s', dimensions '%s'", texts.length,
                 vectors.length, dimensions);
-        var first = new HashMap<String, Integer>();
-        var counts = new HashMap<String, Integer>();
         for (int i = 0; i < texts.length; i++) {
             Preconditions.checkArgument(texts[i] != null, "texts must not hold null, index '%s'", i);
-            first.putIfAbsent(texts[i], i);
-            counts.merge(texts[i], 1, Integer::sum);
         }
-        var unique = first.keySet().toArray(String[]::new);
-        Arrays.sort(unique, TopicText.CODE_POINT_ORDER);
-        var index = new HashMap<String, Integer>(unique.length * 2);
-        var weights = new int[unique.length];
-        var firstIndex = new int[unique.length];
+        // Hash grouping, then one sort of the unique texts: faster than a sorted map of every trace.
+        var tracesOfText = IntStream.range(0, texts.length).boxed()
+                .collect(Collectors.groupingBy(i -> texts[i]));
+        var unique = tracesOfText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
+        var traces = Arrays.stream(unique).map(tracesOfText::get).toList();
+        var weights = traces.stream().mapToInt(List::size).toArray();
+        var firstIndex = traces.stream().mapToInt(List::getFirst).toArray();
         var uniqueVectors = new float[unique.length * dimensions];
-        for (int u = 0; u < unique.length; u++) {
-            index.put(unique[u], u);
-            weights[u] = counts.get(unique[u]);
-            firstIndex[u] = first.get(unique[u]);
-            System.arraycopy(vectors, firstIndex[u] * dimensions, uniqueVectors, u * dimensions, dimensions);
-        }
         var textOfTrace = new int[texts.length];
-        for (int i = 0; i < texts.length; i++) {
-            textOfTrace[i] = index.get(texts[i]);
+        for (int u = 0; u < unique.length; u++) {
+            System.arraycopy(vectors, firstIndex[u] * dimensions, uniqueVectors, u * dimensions, dimensions);
+            for (int i : traces.get(u)) {
+                textOfTrace[i] = u;
+            }
         }
         return MergedIntents.builder()
                 .texts(unique)
