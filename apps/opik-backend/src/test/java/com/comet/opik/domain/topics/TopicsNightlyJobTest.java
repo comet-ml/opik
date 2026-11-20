@@ -1000,7 +1000,7 @@ class TopicsNightlyJobTest {
         return logEvents().stream()
                 .filter(event -> isRun(event, runId) && event.getMessage().contains("retired topic"))
                 .collect(Collectors.toMap(event -> (UUID) event.getArgumentArray()[1],
-                        event -> (String) event.getArgumentArray()[5]));
+                        event -> (String) event.getArgumentArray()[3]));
     }
 
     /** The run's traces per topic, from its labelling pass's {@code topic_counts} line. */

@@ -76,7 +76,7 @@ public class NightState {
         this.otherPrototypes = new ArrayList<>(prototypes);
     }
 
-    /** Why a topic was retired; stored in {@code topics.retired_reason}. */
+    /** Why a topic was retired: logged with the retire and counted in {@code topics.retired}; its row is deleted. */
     public enum RetiredReason {
         /** No trace in the window, or under 0.5% of it on 3 saved nights in a row. */
         LOW_SHARE,
