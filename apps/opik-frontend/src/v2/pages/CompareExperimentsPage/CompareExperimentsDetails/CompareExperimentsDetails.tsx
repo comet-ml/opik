@@ -22,6 +22,7 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { isTestSuiteExperiment } from "@/lib/experiments";
+import { EXPERIMENTS_PAGE_TAB } from "@/constants/experiments";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
 import ExperimentIdButton from "@/v2/pages/CompareExperimentsPage/ExperimentIdButton";
 
@@ -95,6 +96,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <div className="flex min-w-0 items-center gap-2">
           <BackButton
             to="/$workspaceName/projects/$projectId/experiments"
+            search={
+              experiment
+                ? {
+                    tab: isTestSuiteExperiment(experiment)
+                      ? EXPERIMENTS_PAGE_TAB.TEST_SUITES
+                      : EXPERIMENTS_PAGE_TAB.DATASETS,
+                  }
+                : undefined
+            }
             tooltip="Back to experiments"
           />
           <h1 className="comet-body-accented truncate break-words">{title}</h1>
