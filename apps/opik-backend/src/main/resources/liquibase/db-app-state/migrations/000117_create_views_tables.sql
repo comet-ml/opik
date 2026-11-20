@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andriidudar:000116_create_views_tables
+--changeset andriidudar:000117_create_views_tables
 --comment: Create views and view_versions, the generated HTML views shown in Opik content areas
 
 CREATE TABLE IF NOT EXISTS views
