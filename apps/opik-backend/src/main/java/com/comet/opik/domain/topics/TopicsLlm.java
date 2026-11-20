@@ -61,7 +61,7 @@ class TopicsLlm {
                     .maxTokens(call.maxTokens())
                     .temperature(0)
                     .build();
-            run.add("qwen_calls", 1);
+            run.add("llm_calls", 1);
             return client.generate(request, Instant.now().plus(deadline(call.call())))
                     .onErrorMap(InferenceException.class, exception -> failed(run, call.call(), exception))
                     .map(response -> answer(run, call.call(), response, read));
@@ -78,16 +78,16 @@ class TopicsLlm {
         var canonical = output == null ? "null" : InferenceJson.canonical(output);
         log.info("Topics run '{}' answer body, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
                 run.projectId(), canonical.length(), sha256(canonical));
-        run.add("qwen_input_tokens", response.usage().inputTokens());
-        run.add("qwen_output_tokens", response.usage().outputTokens());
-        run.stats().put("qwen_cache_hit", response.cacheHit());
+        run.add("llm_input_tokens", response.usage().inputTokens());
+        run.add("llm_output_tokens", response.usage().outputTokens());
+        run.stats().put("llm_cache_hit", response.cacheHit());
         try {
             // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
             var answer = read.apply(output);
-            metrics.qwen(run.workspaceId(), call, "ok");
+            metrics.llm(run.workspace(), call, "ok");
             return answer;
         } catch (TopicsRunException exception) {
-            metrics.qwen(run.workspaceId(), call, "bad_answer");
+            metrics.llm(run.workspace(), call, "bad_answer");
             throw exception;
         }
     }
@@ -95,21 +95,21 @@ class TopicsLlm {
     private TopicsRunException failed(TopicRun run, LlmCall call, InferenceException exception) {
         if (exception.isSchemaViolation()) {
             // The service checks the answer against the schema: a cut or off-schema answer comes back so.
-            metrics.qwen(run.workspaceId(), call, "bad_answer");
+            metrics.llm(run.workspace(), call, "bad_answer");
             return new TopicsRunException(RunError.LLM_BAD_ANSWER,
-                    "the Qwen answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()), exception);
+                    "the LLM answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()), exception);
         }
         boolean timeout = isTimeout(exception);
-        metrics.qwen(run.workspaceId(), call, timeout ? "timeout" : "error");
+        metrics.llm(run.workspace(), call, timeout ? "timeout" : "error");
         return new TopicsRunException(timeout ? RunError.LLM_TIMEOUT : RunError.LLM_ERROR,
-                "the Qwen call failed, code '%s', status '%s'".formatted(exception.getCode(),
+                "the LLM call failed, code '%s', status '%s'".formatted(exception.getCode(),
                         exception.getHttpStatus()),
                 exception);
     }
 
     private Duration deadline(LlmCall call) {
         return switch (call) {
-            case AUTHOR -> config.getBuild().getQwenDeadline().toJavaDuration();
+            case AUTHOR -> config.getBuild().getLlmDeadline().toJavaDuration();
         };
     }
 

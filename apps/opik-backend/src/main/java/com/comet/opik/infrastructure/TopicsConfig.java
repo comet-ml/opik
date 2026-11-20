@@ -85,11 +85,11 @@ public class TopicsConfig {
         @JsonProperty
         @Min(100) @Max(100_000) private int maxVectors;
 
-        /** The deadline of the Qwen call that names the groups. */
+        /** The deadline of the LLM call that names the groups. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
-        private Duration qwenDeadline;
+        private Duration llmDeadline;
 
         /**
          * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
@@ -111,9 +111,9 @@ public class TopicsConfig {
         private Duration insertBackoff;
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
-            return qwenDeadline == null || projectTimeout == null
-                    || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
+            return llmDeadline == null || projectTimeout == null
+                    || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */

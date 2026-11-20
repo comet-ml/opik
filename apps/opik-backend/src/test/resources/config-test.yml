@@ -1057,7 +1057,7 @@ topics:
     minVectors: 100
     windowDays: 30
     maxVectors: 100000
-    qwenDeadline: 120s
+    llmDeadline: 120s
     readTimeout: 120s
     insertRetries: 3
     insertBackoff: 500ms

@@ -23,10 +23,10 @@ class TopicsConfigTest {
         return Stream.of(
                 arguments("config-test.yml", (Consumer<TopicsConfig>) topics -> {
                 }, List.of()),
-                arguments("Qwen deadline equal to the project timeout", (Consumer<TopicsConfig>) topics -> {
+                arguments("LLM deadline equal to the project timeout", (Consumer<TopicsConfig>) topics -> {
                     topics.getBuild().setProjectTimeout(Duration.minutes(2));
-                    topics.getBuild().setQwenDeadline(Duration.minutes(2));
-                }, List.of("build.qwenDeadlineValid")),
+                    topics.getBuild().setLlmDeadline(Duration.minutes(2));
+                }, List.of("build.llmDeadlineValid")),
                 arguments("max vectors under the min vectors", (Consumer<TopicsConfig>) topics -> {
                     topics.getBuild().setMinVectors(500);
                     topics.getBuild().setMaxVectors(400);

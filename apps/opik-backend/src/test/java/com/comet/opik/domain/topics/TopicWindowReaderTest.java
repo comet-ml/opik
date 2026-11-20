@@ -46,7 +46,7 @@ class TopicWindowReaderTest {
         var dao = mock(TopicWindowDAO.class);
         when(dao.readWindow(any(), any(), any(), any(), anyInt(), anyLong())).thenReturn(Flux.fromIterable(rows));
         var reader = new TopicWindowReader(TestConfigUtils.loadConfigTest().getTopics(), dao);
-        var run = TopicRun.of(new UUID(2, 0), "workspace", new UUID(3, 0),
+        var run = TopicRun.of(new UUID(2, 0), "workspace", "workspace", new UUID(3, 0),
                 LocalDate.of(2026, 11, 20), 30);
 
         var window = reader.read(run, count).block();

@@ -60,8 +60,9 @@ class TopicRunStore {
      * project's lock. An attempt the row still shows {@code running} and that started before {@code abandonedBefore},
      * the lock's lease ago, lost its pod: it is recorded first, as failed with {@code abandoned}, and counted.
      */
-    Mono<UUID> startRun(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull TopicProject.RunMode mode,
-            @NonNull Instant abandonedBefore) {
+    Mono<UUID> startRun(@NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
+            @NonNull TopicProject.RunMode mode, @NonNull Instant abandonedBefore) {
+        var workspaceId = workspace.id();
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int abandoned = template.inTransaction(WRITE, handle -> {
@@ -74,7 +75,7 @@ class TopicRunStore {
             if (abandoned > 0) {
                 log.warn("Topics run had an attempt left running past its lease, recorded as abandoned, project '{}'",
                         projectId);
-                metrics.run(workspaceId, TopicProject.RunStatus.FAILED, RunError.ABANDONED.getValue());
+                metrics.run(workspace, TopicProject.RunStatus.FAILED, RunError.ABANDONED.getValue());
             }
             return runId;
         });
@@ -86,13 +87,13 @@ class TopicRunStore {
      * and counts nothing: the project's next attempt records it, and counts it as {@code abandoned}, so every run is
      * counted once.
      */
-    Mono<Boolean> fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
+    Mono<Boolean> fail(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
             @NonNull RunError code) {
         return jdbi(() -> {
             int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
-                    .markFailed(workspaceId, projectId, runId, Instant.now(), code));
+                    .markFailed(workspace.id(), projectId, runId, Instant.now(), code));
             if (updated == 1) {
-                metrics.run(workspaceId, TopicProject.RunStatus.FAILED, code.getValue());
+                metrics.run(workspace, TopicProject.RunStatus.FAILED, code.getValue());
             }
             return updated == 1;
         });
@@ -135,8 +136,8 @@ class TopicRunStore {
                 }
                 return null;
             });
-            metrics.run(run.workspaceId(), TopicProject.RunStatus.SAVED, null);
-            metrics.saved(run.workspaceId(), "topics", topics.size());
+            metrics.run(run.workspace(), TopicProject.RunStatus.SAVED, null);
+            metrics.saved(run.workspace(), "topics", topics.size());
             return true;
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
@@ -186,12 +187,12 @@ class TopicRunStore {
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
                                 signal.totalRetries() + 2, signal.failure())))
                 .map(__ -> {
-                    metrics.saved(run.workspaceId(), "trace_topics", traceTopics.size());
-                    metrics.traceTopicsInsert(run.workspaceId(), "ok");
+                    metrics.saved(run.workspace(), "trace_topics", traceTopics.size());
+                    metrics.traceTopicsInsert(run.workspace(), "ok");
                     return true;
                 })
                 .onErrorResume(exception -> {
-                    metrics.traceTopicsInsert(run.workspaceId(), "failed");
+                    metrics.traceTopicsInsert(run.workspace(), "failed");
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
                     return Mono.just(false);

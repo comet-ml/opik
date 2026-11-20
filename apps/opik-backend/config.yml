@@ -2564,7 +2564,7 @@ inference:
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
     #  Default: 300s
     #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
-    #  topics.build.qwenDeadline must not be above it
+    #  topics.build.llmDeadline must not be above it
     maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
@@ -2797,8 +2797,8 @@ topics:
     #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
     maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
     #  Default: 120s
-    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
-    qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
+    #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
+    llmDeadline: ${TOPICS_BUILD_LLM_DEADLINE:-120s}
     #  Default: 120s
     #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
     #  attempt of its trace_topics insert. At most 30m

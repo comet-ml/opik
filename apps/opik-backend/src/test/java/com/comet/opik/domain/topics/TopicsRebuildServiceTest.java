@@ -4,6 +4,7 @@ import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.GenerateRequest;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
@@ -13,6 +14,10 @@ import com.comet.opik.infrastructure.inference.Usage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.util.Duration;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +44,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,7 +61,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * What a run counts, with every store mocked: each failed run once, Qwen outcomes after the answer is read, and the
+ * What a run counts, with every store mocked: each failed run once, LLM outcomes after the answer is read, and the
  * save order (MySQL first, then the retried trace_topics insert). A run builds the fixture's window, so its steps are
  * the real ones. Also the time bounds of the window read and of each insert attempt.
  */
@@ -66,6 +72,8 @@ class TopicsRebuildServiceTest {
     private static final int TRACES = 120;
     private static final String WORKSPACE_ID = "ws-1";
     private static final String WORKSPACE_NAME = "Acme";
+    private static final TopicsMetrics.Workspace WORKSPACE = new TopicsMetrics.Workspace(WORKSPACE_ID,
+            WORKSPACE_NAME);
     private static final int INSERT_RETRIES = 3;
     private static final java.time.Duration READ_TIMEOUT = java.time.Duration.ofSeconds(120);
 
@@ -73,7 +81,7 @@ class TopicsRebuildServiceTest {
     private final UUID runId = UUID.randomUUID();
     private final LocalDate night = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
 
-    private TopicsTestMeter meter;
+    private InMemoryMetricReader metricReader;
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
     private ProjectService projectService;
@@ -86,7 +94,7 @@ class TopicsRebuildServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        meter = new TopicsTestMeter();
+        metricReader = InMemoryMetricReader.create();
         runDAO = mock(TopicRunDAO.class);
         topicDAO = mock(TopicDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
@@ -108,13 +116,16 @@ class TopicsRebuildServiceTest {
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
-        var metrics = new TopicsMetrics(meter.meter, workspaceId -> WORKSPACE_NAME);
+        var metrics = new TopicsMetrics(SdkMeterProvider.builder().registerMetricReader(metricReader).build()
+                .get("opik.topics"));
+        var workspaceNames = mock(WorkspaceNameService.class);
+        when(workspaceNames.nameOrId(WORKSPACE_ID)).thenReturn(WORKSPACE_NAME);
         var config = TestConfigUtils.loadConfigTest().getTopics();
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         serviceWith = algorithm -> new TopicsRebuildService(config, reader, llm, store, idGenerator, metrics,
-                algorithm);
+                workspaceNames, algorithm);
         service = serviceWith.apply(TopicsTestAlgorithm.algorithm());
     }
 
@@ -124,11 +135,11 @@ class TopicsRebuildServiceTest {
         var abandonedBefore = Instant.now().minusSeconds(3_600);
         when(runDAO.recordAbandoned(eq(WORKSPACE_ID), eq(projectId), eq(abandonedBefore), any())).thenReturn(1, 0);
 
-        var started = store.startRun(WORKSPACE_ID, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore)
+        var started = store.startRun(WORKSPACE, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore)
                 .block();
-        store.startRun(WORKSPACE_ID, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore).block();
+        store.startRun(WORKSPACE, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore).block();
 
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+        assertThat(points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("failed");
             assertThat(point.get("error_code")).isEqualTo("abandoned");
         });
@@ -143,9 +154,9 @@ class TopicsRebuildServiceTest {
     void alreadyEndedIsNotCounted() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(0);
 
-        assertThat(store.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.TIMEOUT).block()).isFalse();
+        assertThat(store.fail(runId, WORKSPACE, projectId, TopicProject.RunError.TIMEOUT).block()).isFalse();
 
-        assertThat(meter.points("topics.runs")).isEmpty();
+        assertThat(points("topics.runs")).isEmpty();
     }
 
     @Test
@@ -156,12 +167,12 @@ class TopicsRebuildServiceTest {
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
-        assertThatThrownBy(() -> store.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.LLM_ERROR).block())
+        assertThatThrownBy(() -> store.fail(runId, WORKSPACE, projectId, TopicProject.RunError.LLM_ERROR).block())
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(meter.points("topics.runs")).isEmpty();
+        assertThat(points("topics.runs")).isEmpty();
 
-        assertThat(store.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.TIMEOUT).block()).isTrue();
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+        assertThat(store.fail(runId, WORKSPACE, projectId, TopicProject.RunError.TIMEOUT).block()).isTrue();
+        assertThat(points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("failed");
             assertThat(point.get("error_code")).isEqualTo("timeout");
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
@@ -179,13 +190,13 @@ class TopicsRebuildServiceTest {
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
-        assertThat(meter.points("topics.qwen.calls")).singleElement().satisfies(point -> {
+        assertThat(points("topics.llm.calls")).singleElement().satisfies(point -> {
             assertThat(point.get("call")).isEqualTo("author");
             assertThat(point.get("outcome")).isEqualTo("bad_answer");
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "llm_bad_answer")).isEqualTo(1);
-        assertThat(meter.points("topics.run.duration_seconds"))
+        assertThat(sum("topics.runs", "status", "failed", "error_code", "llm_bad_answer")).isEqualTo(1);
+        assertThat(points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
     }
 
@@ -206,7 +217,7 @@ class TopicsRebuildServiceTest {
         verify(client, never()).generate(any(), any());
         verify(topicDAO, never()).insertTopics(any());
         verify(traceTopicsDAO, never()).insert(any());
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "window_read")).isEqualTo(1);
+        assertThat(sum("topics.runs", "status", "failed", "error_code", "window_read")).isEqualTo(1);
     }
 
     @Test
@@ -221,10 +232,10 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
-        assertThat(meter.sum("topics.qwen.calls", "outcome", "ok")).isEqualTo(1);
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
-        assertThat(meter.sum("topics.runs", "status", "saved")).isZero();
-        assertThat(meter.points("topics.save.rows")).isEmpty();
+        assertThat(sum("topics.llm.calls", "outcome", "ok")).isEqualTo(1);
+        assertThat(sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+        assertThat(sum("topics.runs", "status", "saved")).isZero();
+        assertThat(points("topics.save.rows")).isEmpty();
     }
 
     @Test
@@ -243,7 +254,7 @@ class TopicsRebuildServiceTest {
         verify(topicDAO, never()).insertTopics(any());
         verify(runDAO, never()).markSaved(any(), any(), any(), any());
         verify(traceTopicsDAO, never()).insert(any());
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+        assertThat(sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
     }
 
     @Test
@@ -279,7 +290,7 @@ class TopicsRebuildServiceTest {
         var order = inOrder(runDAO, traceTopicsDAO);
         order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(projectId), eq(runId), any());
         order.verify(traceTopicsDAO).insert(any());
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
+        assertThat(sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
 
     @Test
@@ -298,11 +309,11 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
         verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
-        assertThat(meter.points("topics.runs")).singleElement()
+        assertThat(points("topics.runs")).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
-        assertThat(meter.sum("topics.save.rows", "table", "topics")).isPositive();
-        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
+        assertThat(sum("topics.save.rows", "table", "trace_topics")).isZero();
+        assertThat(sum("topics.save.rows", "table", "topics")).isPositive();
+        assertThat(sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
     }
 
     @Test
@@ -319,8 +330,8 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
-        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
-        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "ok")).isZero();
+        assertThat(sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
+        assertThat(sum("topics.trace_topics.inserts", "outcome", "ok")).isZero();
     }
 
     @Test
@@ -352,7 +363,7 @@ class TopicsRebuildServiceTest {
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
         assertThat(cancelled).as("every stalled attempt is cancelled")
                 .hasValue(1 + INSERT_RETRIES);
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
+        assertThat(sum("topics.save.rows", "table", "trace_topics")).isZero();
     }
 
     @Test
@@ -381,7 +392,7 @@ class TopicsRebuildServiceTest {
         assertThat(cancelled).hasValue(1);
         verify(topicDAO, never()).insertTopics(any());
         verify(traceTopicsDAO, never()).insert(any());
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "timeout")).isEqualTo(1);
+        assertThat(sum("topics.runs", "status", "failed", "error_code", "timeout")).isEqualTo(1);
     }
 
     @Test
@@ -404,14 +415,14 @@ class TopicsRebuildServiceTest {
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+        assertThat(points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("saved");
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
+        assertThat(sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(TRACES);
         double saved = outcome.stats().get("other_share").asDouble();
-        assertThat(meter.points("topics.run.other_share")).singleElement().satisfies(point -> {
+        assertThat(points("topics.run.other_share")).singleElement().satisfies(point -> {
             assertThat(point.value()).isEqualTo(saved);
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
@@ -657,5 +668,36 @@ class TopicsRebuildServiceTest {
                     .build());
         }
         return rows;
+    }
+
+    /** One point of a metric: a counter's sum or a histogram's sum, for one set of attributes. */
+    private record Point(double value, Attributes attributes) {
+
+        String get(String key) {
+            return attributes.get(AttributeKey.stringKey(key));
+        }
+    }
+
+    private List<Point> points(String name) {
+        return metricReader.collectAllMetrics().stream()
+                .filter(metric -> metric.getName().equals(name))
+                .flatMap(metric -> switch (metric.getType()) {
+                    case LONG_SUM -> metric.getLongSumData().getPoints().stream()
+                            .map(point -> new Point(point.getValue(), point.getAttributes()));
+                    case DOUBLE_SUM -> metric.getDoubleSumData().getPoints().stream()
+                            .map(point -> new Point(point.getValue(), point.getAttributes()));
+                    case HISTOGRAM -> metric.getHistogramData().getPoints().stream()
+                            .map(point -> new Point(point.getSum(), point.getAttributes()));
+                    default -> throw new IllegalStateException("unexpected metric type " + metric.getType());
+                })
+                .toList();
+    }
+
+    /** The metric's total over the points whose attributes hold every given key and value pair. */
+    private double sum(String name, String... pairs) {
+        return points(name).stream()
+                .filter(point -> IntStream.range(0, pairs.length / 2)
+                        .allMatch(i -> pairs[2 * i + 1].equals(point.get(pairs[2 * i]))))
+                .mapToDouble(Point::value).sum();
     }
 }

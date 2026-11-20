@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -42,7 +43,7 @@ import java.util.concurrent.Callable;
 public class TopicsRebuildService {
 
     /**
-     * Failure codes whose exceptions can carry trace-derived text: of Qwen's answer, or the topic names and definitions
+     * Failure codes whose exceptions can carry trace-derived text: of the LLM's answer, or the topic names and definitions
      * a failed save statement quotes in its bound arguments.
      */
     private static final Set<RunError> TEXT_CODES = EnumSet.of(RunError.LLM_TIMEOUT, RunError.LLM_ERROR,
@@ -54,13 +55,14 @@ public class TopicsRebuildService {
     private final @NonNull TopicRunStore store;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull WorkspaceNameService workspaceNames;
     private final @NonNull TopicAlgorithm algorithm;
     /** The k-means and assign steps: CPU work, one run at a time per pod plus one started by hand. */
     private final Scheduler cpu = Schedulers.newBoundedElastic(2, Integer.MAX_VALUE, "topics-cpu", 60, true);
 
     /** How a run ended, with the stats it logged. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
-    public record Outcome(@NonNull UUID runId, @NonNull TopicProject.RunStatus status, String errorCode,
+    record Outcome(@NonNull UUID runId, @NonNull TopicProject.RunStatus status, String errorCode,
             JsonNode stats) {
     }
 
@@ -80,20 +82,27 @@ public class TopicsRebuildService {
      * {@code topics.build.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber
      * is failed with {@code timeout} too.
      */
-    public Mono<Outcome> firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
+    Mono<Outcome> firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night, long windowTraces) {
-        return Mono.defer(() -> {
-            var run = TopicRun.of(runId, workspaceId, projectId, night, config.getBuild().getWindowDays());
-            var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-            return build(run, windowTraces)
-                    .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
-                            .map(kept -> kept ? built : built.discarded()))
-                    .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
-                            "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
-                    .flatMap(built -> saved(run, built))
-                    .onErrorResume(error -> failed(run, error))
-                    .doOnCancel(() -> cancelled(run));
-        });
+        // The name is a Redis read, or an HTTP call on a miss: once per run, off the reactive threads. It falls back
+        // to the id, so the run goes on.
+        return Mono.fromCallable(() -> workspaceNames.nameOrId(workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorReturn(workspaceId)
+                .flatMap(workspaceName -> run(TopicRun.of(runId, workspaceId, workspaceName, projectId, night,
+                        config.getBuild().getWindowDays()), windowTraces));
+    }
+
+    private Mono<Outcome> run(TopicRun run, long windowTraces) {
+        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
+        return build(run, windowTraces)
+                .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
+                        .map(kept -> kept ? built : built.discarded()))
+                .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
+                        "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
+                .flatMap(built -> saved(run, built))
+                .onErrorResume(error -> failed(run, error))
+                .doOnCancel(() -> cancelled(run));
     }
 
     private Mono<Built> build(TopicRun run, long windowTraces) {
@@ -109,7 +118,7 @@ public class TopicsRebuildService {
             return timed(run, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
                     config.getAlgorithm().getMaxTopics())))
                     .doOnNext(clustering -> stats.setAll(clustering.stats()))
-                    .flatMap(clustering -> timed(run, "qwen", llm.generate(run, clustering.author(),
+                    .flatMap(clustering -> timed(run, "llm", llm.generate(run, clustering.author(),
                             AuthorAnswer::parse))
                             .flatMap(answer -> timed(run, "assign", cpu(() -> clustering.finish(answer)))))
                     .map(built -> built(run, traces, built));
@@ -195,7 +204,7 @@ public class TopicsRebuildService {
     }
 
     private Mono<Outcome> saved(TopicRun run, Built built) {
-        metrics.otherShare(run.workspaceId(), run.stats().path("other_share").asDouble());
+        metrics.otherShare(run.workspace(), run.stats().path("other_share").asDouble());
         var insert = built.traceTopics().isEmpty()
                 ? Mono.just(false)
                 : store.insertTraceTopics(run, built.traceTopics());
@@ -213,7 +222,7 @@ public class TopicsRebuildService {
     private Mono<Outcome> failed(TopicRun run, Throwable error) {
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
         run.stats().set("seconds", run.seconds());
-        return store.fail(run.runId(), run.workspaceId(), run.projectId(), code)
+        return store.fail(run.runId(), run.workspace(), run.projectId(), code)
                 .flatMap(marked -> marked ? Mono.just(false) : store.isSaved(run))
                 .onErrorResume(markError -> {
                     log.error("Topics run '{}' could not be marked failed, project '{}'", run.runId(),
@@ -233,7 +242,7 @@ public class TopicsRebuildService {
 
     private void cancelled(TopicRun run) {
         log.warn("Topics run '{}' cancelled, project '{}'", run.runId(), run.projectId());
-        store.fail(run.runId(), run.workspaceId(), run.projectId(), RunError.TIMEOUT).subscribe(
+        store.fail(run.runId(), run.workspace(), run.projectId(), RunError.TIMEOUT).subscribe(
                 __ -> {
                 },
                 error -> log.error("Topics run '{}' could not be marked failed, project '{}'", run.runId(),
@@ -268,7 +277,7 @@ public class TopicsRebuildService {
             return action.doFinally(signal -> {
                 var duration = Duration.ofNanos(System.nanoTime() - started);
                 run.seconds().put(phase, run.seconds().path(phase).asDouble(0) + duration.toMillis() / 1000.0);
-                metrics.phase(run.workspaceId(), phase, duration);
+                metrics.phase(run.workspace(), phase, duration);
             });
         });
     }
