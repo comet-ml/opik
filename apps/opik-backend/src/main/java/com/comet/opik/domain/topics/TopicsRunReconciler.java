@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicProject.CancelReason;
-import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -14,6 +13,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -92,7 +92,8 @@ class TopicsRunReconciler {
 
     /**
      * Publishes a run queued before {@code topics.runs.republishAfter} again. A first build is counted again for
-     * {@code night}, as the stream entry carries the window's count.
+     * {@code night}, as the stream entry carries the window's count; a nightly update for the current night, which
+     * the row does not keep (a night by hand for another date goes again for the current one).
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {
         var queuedBefore = now.minus(config.getRuns().getRepublishAfter().toJavaDuration());
@@ -101,10 +102,17 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
-        var ready = run.runMode() == RunMode.FIRST_BUILD
-                ? candidates.windowVectors(run.workspaceId(), run.projectId(), night)
-                        .map(vectors -> message.night(night).windowTraces(vectors).build())
-                : Mono.just(message.build());
+        var counted = switch (run.runMode()) {
+            case FIRST_BUILD -> night;
+            case NIGHTLY_UPDATE -> TopicsNightPass.current(config.getNightly().getSchedule(), now)
+                    .map(TopicsNightPass.Night::date)
+                    .orElse(LocalDate.ofInstant(now, ZoneOffset.UTC));
+            case LABELS -> null;
+        };
+        var ready = counted == null
+                ? Mono.just(message.build())
+                : candidates.windowVectors(run.workspaceId(), run.projectId(), counted)
+                        .map(vectors -> message.night(counted).windowTraces(vectors).build());
         return ready.flatMap(built -> store.write(dao -> dao.republish(run.workspaceId(), run.projectId(),
                 run.runId(), queuedBefore, now))
                 .flatMap(marked -> {

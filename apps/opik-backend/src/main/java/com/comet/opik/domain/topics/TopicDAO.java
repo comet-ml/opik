@@ -59,13 +59,6 @@ public interface TopicDAO {
     int deleteTopics(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @BindList("ids") Collection<UUID> ids);
 
-    @SqlQuery("""
-            SELECT DISTINCT project_id FROM topics
-            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            """)
-    List<UUID> findProjectsWithTopics(@Bind("workspaceId") String workspaceId,
-            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
-
     /** The projects of {@code workspaceIds} with at least one topic: the nightly update's candidates. */
     @SqlQuery("SELECT DISTINCT workspace_id, project_id FROM topics WHERE workspace_id IN (<workspaceIds>)")
     List<TopicProjectKey> findProjectsWithTopics(@BindList("workspaceIds") Collection<String> workspaceIds);

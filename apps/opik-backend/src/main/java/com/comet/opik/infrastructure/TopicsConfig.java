@@ -18,6 +18,7 @@ import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
+import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
@@ -430,11 +431,16 @@ public class TopicsConfig {
         @NotBlank @JsonProperty
         private String schedule;
 
-        /** No project starts after this much of the night has passed; the rest run the next night. */
+        /** No project is queued after this much of the night, from its start; the rest run the next night. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 20, unit = TimeUnit.HOURS)
         private Duration budget;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
+            return schedule == null || CronExpression.isValidExpression(schedule);
+        }
     }
 
     @Data

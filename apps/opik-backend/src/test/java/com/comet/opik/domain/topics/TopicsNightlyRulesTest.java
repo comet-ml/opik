@@ -581,7 +581,7 @@ class TopicsNightlyRulesTest {
         @DisplayName("a night on which every live topic retires saves an empty list: all traces are Other, and the "
                 + "invariants hold")
         void allLiveRetire() {
-            // The next night the job finds no live topic and runs a first build (TopicsNightlyService.modeOf): it saves
+            // The next night the project has no list, so the planner queues a first build: it saves
             // rebuilds 1 and a new first build night, and replaces every prototype, so these topics cannot come back.
             var east = topic("East", EAST).toBuilder().lowNights(2).build();
             var north = topic("North", NORTH).toBuilder().lowNights(2).build();
