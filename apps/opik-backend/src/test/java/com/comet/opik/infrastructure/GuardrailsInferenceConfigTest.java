@@ -33,8 +33,8 @@ class GuardrailsInferenceConfigTest {
             String credential, boolean starts) {
         var config = new OpikConfiguration();
         config.getServiceToggles().setGuardrailsValidationsEnabled(guardrailsEnabled);
-        config.getAiLabels().getInference().setUrl(url);
-        config.getAiLabels().getInference().setCredential(credential);
+        config.getInference().setUrl(url);
+        config.getInference().setCredential(credential);
 
         assertThat(VALIDATOR.validateProperty(config, "guardrailsInferenceConfigured")).hasSize(starts ? 0 : 1);
     }

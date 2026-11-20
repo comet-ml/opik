@@ -289,6 +289,31 @@ class OpenTelemetryResourceTest {
                     HttpStatus.SC_BAD_REQUEST, expectedError);
         }
 
+        Stream<Arguments> invalidJsonBodies() {
+            return Stream.of(
+                    arguments("not valid JSON", "{",
+                            "Unexpected end-of-input: expected close marker for Object (start marker at [Source: "
+                                    + "REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, "
+                                    + "column: 1])"),
+                    arguments("valid JSON that does not fit the OTLP message", "{\"unknownField\":1}",
+                            "Cannot find field: unknownField in message "
+                                    + "opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidJsonBodies")
+        @DisplayName("answer 400, not 500, when the JSON body cannot be parsed")
+        void testOtelRequestWithInvalidJson(String description, String body, String parserError) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Invalid JSON message, error: '%s'".formatted(parserError));
+
+            otelResourceClient.exportJsonTraces(Entity.json(body), projectName, workspaceName, okApikey,
+                    HttpStatus.SC_BAD_REQUEST, expectedError);
+        }
+
         @Test
         @DisplayName("answer an oversized protobuf body, rejected before the resource, with a protobuf 413")
         void testOtelRequestOverSizeLimit() {
@@ -750,6 +775,70 @@ class OpenTelemetryResourceTest {
                     .as("cost stored for model %s under provider %s", model, expectedProvider)
                     .isNotNull()
                     .isGreaterThan(BigDecimal.ZERO);
+        }
+
+        static Stream<Arguments> testReportedCostWithCurrencyIsAcceptedAndStored() {
+            return Stream.of(
+                    arguments("cost + currency", "gen_ai.usage.cost", false),
+                    arguments("amount + currency + source", "gen_ai.usage.cost.amount", true));
+        }
+
+        @ParameterizedTest(name = "reported cost via {0} is accepted, stored and not replaced")
+        @MethodSource
+        @DisplayName("test reported OTel cost with currency is accepted, stored in metadata and not replaced")
+        void testReportedCostWithCurrencyIsAcceptedAndStored(String testName, String costAttribute,
+                boolean withSource) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var currency = RandomStringUtils.secure().nextAlphabetic(3).toUpperCase();
+            var source = RandomStringUtils.secure().nextAlphabetic(10);
+            var inputTokens = RandomUtils.secure().randomInt(100, 10_000);
+            var outputTokens = RandomUtils.secure().randomInt(100, 10_000);
+            // Far above the computed price of any of these token counts, so a replaced cost cannot match.
+            var reportedCost = BigDecimal.valueOf(RandomUtils.secure().randomLong(1_000_000, 10_000_000), 6);
+
+            var otelSpanBuilder = Span.newBuilder()
+                    .setName("llm call")
+                    .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(stringAttribute("gen_ai.system", "openai"))
+                    .addAttributes(stringAttribute("gen_ai.request.model", "gpt-4o"))
+                    .addAttributes(intAttribute("gen_ai.usage.input_tokens", inputTokens))
+                    .addAttributes(intAttribute("gen_ai.usage.output_tokens", outputTokens))
+                    .addAttributes(KeyValue.newBuilder().setKey(costAttribute)
+                            .setValue(AnyValue.newBuilder().setDoubleValue(reportedCost.doubleValue())).build())
+                    .addAttributes(stringAttribute("gen_ai.usage.cost.currency", currency));
+            var expectedMetadata = new java.util.LinkedHashMap<String, String>();
+            expectedMetadata.put("provider", "openai");
+            expectedMetadata.put("gen_ai.usage.cost.currency", currency);
+            if (withSource) {
+                otelSpanBuilder.addAttributes(stringAttribute("gen_ai.usage.cost.source", source));
+                expectedMetadata.put("gen_ai.usage.cost.source", source);
+            }
+            var otelSpan = otelSpanBuilder.build();
+
+            sendProtobufTraces(List.of(otelSpan), "Test Project", workspaceName, okApikey, true, null);
+
+            var opikTraceId = opikTraceIdOf(otelSpan);
+            var expectedSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+                    .usage(Map.of("prompt_tokens", inputTokens, "completion_tokens", outputTokens,
+                            "total_tokens", inputTokens + outputTokens))
+                    .metadata(JsonUtils.getMapper().valueToTree(expectedMetadata))
+                    .environment("")
+                    .build();
+
+            var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, "Test Project", workspaceName,
+                    okApikey);
+            assertThat(spans.content()).hasSize(1);
+            var persistedSpan = spans.content().getFirst();
+            assertThat(persistedSpan)
+                    .usingRecursiveComparison()
+                    .ignoringFields(SpanAssertions.IGNORED_FIELDS)
+                    .isEqualTo(expectedSpan);
+            assertThat(persistedSpan.totalEstimatedCost()).isEqualByComparingTo(reportedCost);
         }
 
         private KeyValue stringAttribute(String key, String value) {

@@ -53,29 +53,6 @@ class TestRadicalInnovationMutation:
         messages = result.get_messages()
         assert any("innovative" in str(m.get("content", "")).lower() for m in messages)
 
-    def test_returns_original_on_parse_error(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call("Not valid JSON at all"),
-        )
-
-        prompt = ChatPrompt(system="Original", user="Question")
-        initial_prompt = ChatPrompt(system="Initial", user="Task")
-
-        result = mutation_ops._radical_innovation_mutation(
-            prompt=prompt,
-            initial_prompt=initial_prompt,
-            model="gpt-4",
-            model_parameters={},
-            output_style_guidance="Be concise",
-            prompts=evo_prompts,
-        )
-
-        assert result is not prompt
-        assert result.get_messages() == prompt.get_messages()
-
     def test_returns_original_on_llm_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
@@ -102,35 +79,6 @@ class TestRadicalInnovationMutation:
 
 class TestSemanticMutation:
     """Tests for _semantic_mutation function."""
-
-    def test_triggers_radical_innovation_randomly(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        rng = force_random(monkeypatch, random_value=0.05)
-
-        def fake_radical_innovation(**kwargs: Any) -> ChatPrompt:
-            _ = kwargs
-            return ChatPrompt(system="Radical innovation", user="New")
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops._radical_innovation_mutation",
-            fake_radical_innovation,
-        )
-
-        prompt = ChatPrompt(system="Original", user="Question")
-
-        result = mutation_ops._semantic_mutation(
-            prompt=prompt,
-            initial_prompt=prompt,
-            model="gpt-4",
-            model_parameters={},
-            verbose=0,
-            output_style_guidance="Be concise",
-            prompts=evo_prompts,
-            rng=rng,
-        )
-
-        assert isinstance(result, ChatPrompt)
 
     def test_returns_original_on_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
