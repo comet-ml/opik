@@ -660,6 +660,15 @@ class InferenceClientTest {
     }
 
     @Test
+    void generateDeadlineExceededIsNotRetried() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(error("deadline_exceeded", 504)));
+
+        assertThatThrownBy(() -> client.generate(generateRequest(), later()).block())
+                .isInstanceOf(InferenceException.class);
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
+    }
+
+    @Test
     void generateServerErrorIsRetriedWithTheSameRequestIdThenSucceeds() {
         stubSequence(() -> post(urlEqualTo(REALTIME_GENERATE_PATH)), error("overloaded", 503),
                 error("overloaded", 503), generated());
@@ -704,17 +713,17 @@ class InferenceClientTest {
         server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated()));
 
         client.generate(generateRequest(), Instant.now().plusSeconds(600)).block();
-        client.generate(generateRequest().toBuilder().lane(GenerateRequest.Lane.REALTIME).build(),
+        client.generate(generateRequest().toBuilder().lane(GenerateLane.REALTIME).build(),
                 Instant.now().plusSeconds(600)).block();
-        client.generate(generateRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(5))
-                .block();
+        client.generate(generateRequest(), Instant.now().plusSeconds(5)).block();
 
         var sent = server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH))).stream()
                 .map(request -> json(request).path("deadline_ms").asLong())
                 .toList();
         assertThat(sent).hasSize(3);
-        assertThat(sent.get(0)).isEqualTo(GenerateRequest.Lane.BATCH.getMaxDeadline().toMillis());
-        assertThat(sent.get(1)).isEqualTo(GenerateRequest.Lane.REALTIME.getMaxDeadline().toMillis());
+        var limits = TestConfigUtils.loadConfigTest().getInference().getLimits();
+        assertThat(sent.get(0)).isEqualTo(limits.getMaxGenerateBatchDeadline().toMilliseconds());
+        assertThat(sent.get(1)).isEqualTo(limits.getMaxGenerateRealtimeDeadline().toMilliseconds());
         assertThat(sent.get(2)).isBetween(1L, 5_000L);
     }
 
@@ -723,8 +732,6 @@ class InferenceClientTest {
         assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().messages(List.of()).build(), later()))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().maxTokens(4097).build(), later()))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().deadlineMs(0L).build(), later()))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(server.getAllServeEvents()).isEmpty();
     }
@@ -816,7 +823,7 @@ class InferenceClientTest {
                 .orgId("workspace-1")
                 .workspaceId("workspace-1")
                 .cache(true)
-                .lane(GenerateRequest.Lane.BATCH)
+                .lane(GenerateLane.BATCH)
                 .messages(List.of(Message.builder().role(Message.Role.USER).content("Name these groups").build()))
                 .schema(schema)
                 .maxTokens(2500)

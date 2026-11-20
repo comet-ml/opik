@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.inference.GenerateLane;
 import com.comet.opik.infrastructure.inference.GenerateRequest;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
@@ -54,7 +55,7 @@ class TopicsLlm {
                     .workspaceId(run.workspaceId())
                     .requestId(run.runId() + ":" + tag)
                     .cache(true)
-                    .lane(GenerateRequest.Lane.BATCH)
+                    .lane(GenerateLane.BATCH)
                     .messages(List.of(Message.builder().role(Message.Role.USER).content(call.prompt()).build()))
                     .schema(call.schema())
                     .maxTokens(call.maxTokens())

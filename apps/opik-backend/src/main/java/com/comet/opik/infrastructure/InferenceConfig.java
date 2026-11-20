@@ -48,6 +48,13 @@ public class InferenceConfig {
     @Min(1) private int maxConcurrentDecides;
 
     /**
+     * Synchronous generate calls in flight from this instance, each on a thread of its own for the model's whole
+     * answer. They share the {@code jerseyClient} connection pool with the other calls to opik-inference.
+     */
+    @JsonProperty
+    @Min(1) private int maxConcurrentGenerates;
+
+    /**
      * The most of a response body, success or error, that a call reads; a longer one fails the call unread. Every call
      * in flight can hold up to this much heap, so it is capped at 64 MiB.
      */
@@ -75,6 +82,16 @@ public class InferenceConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
         private Duration maxEmbedDeadline;
+
+        /** The most {@code deadline_ms} a realtime-lane generate call sends. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxGenerateRealtimeDeadline;
+
+        /** The most {@code deadline_ms} a batch-lane generate call sends. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxGenerateBatchDeadline;
 
         /** Items in one batch submit. */
         @JsonProperty

@@ -1017,10 +1017,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
