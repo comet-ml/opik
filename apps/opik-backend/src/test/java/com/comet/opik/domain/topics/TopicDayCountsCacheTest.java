@@ -18,6 +18,7 @@ import io.dropwizard.configuration.FileConfigurationSourceProvider;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.configuration.YamlConfigurationFactory;
 import io.dropwizard.jackson.Jackson;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import lombok.NonNull;
 import org.apache.commons.text.StringSubstitutor;
 import org.apache.commons.text.lookup.StringLookupFactory;
@@ -68,6 +69,7 @@ class TopicDayCountsCacheTest {
 
     private InMemoryCache cache;
     private TopicDAO topicDAO;
+    private TopicProjectDAO projectDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private Topic topic;
     private TopicReadService service;
@@ -76,9 +78,11 @@ class TopicDayCountsCacheTest {
     void setUp() throws Exception {
         cache = new InMemoryCache();
         topicDAO = mock(TopicDAO.class);
+        projectDAO = mock(TopicProjectDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
@@ -105,7 +109,7 @@ class TopicDayCountsCacheTest {
                 bind(ProjectService.class).toInstance(mock(ProjectService.class));
                 bind(TopicWindowDAO.class).toInstance(mock(TopicWindowDAO.class));
                 bind(TraceTopicsDAO.class).toInstance(traceTopicsDAO);
-                bind(TopicsMetrics.class).toInstance(new TopicsMetrics(new TopicsTestMeter().meter));
+                bind(TopicsMetrics.class).toInstance(TopicsMetricsReader.metrics(InMemoryMetricReader.create()));
                 bind(CacheManager.class).toInstance(cache);
                 bindInterceptor(Matchers.any(), Matchers.annotatedWith(Cacheable.class),
                         new CacheInterceptor(getProvider(CacheManager.class), cacheConfiguration));
@@ -163,7 +167,7 @@ class TopicDayCountsCacheTest {
     }
 
     private void savedBy(UUID lastRunId) {
-        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
+        when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
                 .projectId(projectId)
                 .workspaceId(WORKSPACE_ID)
                 .savedRuns(1)

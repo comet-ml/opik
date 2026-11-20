@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
-import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -10,26 +9,27 @@ import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.annotation.Nullable;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
 import java.time.Duration;
-import java.util.function.Function;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' and the topics read API's metrics. Every metric of one workspace's work carries
- * {@code workspace_id} and {@code workspace_name}; {@code topics.api.duration_seconds} has neither, where every
- * caller's workspace would add series.
+ * The topic builds' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
+ * carries {@code workspace_id} and {@code workspace_name}: the caller resolves the name once, at its boundary, so
+ * recording never blocks. {@code topics.api.duration_seconds} has neither, where every caller's workspace would add
+ * series.
  */
 @Singleton
 public class TopicsMetrics {
 
-    /** The run could not start: its attempt's write on {@code topic_projects}, or the read before it, failed. */
-    static final String ERROR_START_FAILED = "start_failed";
     static final String API_STATUS_ERROR = "error";
+
+    /** The workspace a metric is recorded for. */
+    public record Workspace(@NonNull String id, @NonNull String name) {
+    }
 
     private static final AttributeKey<String> WORKSPACE_ID = stringKey("workspace_id");
     private static final AttributeKey<String> WORKSPACE_NAME = stringKey("workspace_name");
@@ -40,38 +40,35 @@ public class TopicsMetrics {
     private static final AttributeKey<String> CALL = stringKey("call");
     private static final AttributeKey<String> TABLE = stringKey("table");
 
-    private final Function<String, String> names;
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
-    private final LongCounter qwenCalls;
+    private final LongCounter llmCalls;
     private final LongCounter saveRows;
+    private final LongCounter traceTopicsInserts;
     private final DoubleHistogram otherShare;
     private final DoubleHistogram apiDuration;
 
-    @Inject
-    public TopicsMetrics(@NonNull WorkspaceNameService names) {
-        this(GlobalOpenTelemetry.get().getMeter("opik.topics"), names::nameOrId);
+    public TopicsMetrics() {
+        this(GlobalOpenTelemetry.get().getMeter("opik.topics"));
     }
 
-    /** Workspace names fall back to the id. */
     TopicsMetrics(@NonNull Meter meter) {
-        this(meter, workspaceId -> workspaceId);
-    }
-
-    TopicsMetrics(@NonNull Meter meter, @NonNull Function<String, String> names) {
-        this.names = names;
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
                         + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save, label")
+                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save, label")
                 .build();
-        this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by call (author) and outcome: ok, timeout, error, bad_answer")
+        this.llmCalls = meter.counterBuilder("topics.llm.calls")
+                .setDescription("LLM calls, by call (author) and outcome: ok, timeout, error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
+                .build();
+        this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
+                .setDescription("A saved run's trace_topics insert after its commit, by outcome: ok, failed (after "
+                        + "its retries; the labelling pass gives the traces their topics)")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -84,32 +81,36 @@ public class TopicsMetrics {
                 .build();
     }
 
-    void run(@NonNull String workspaceId, @NonNull TopicProject.RunStatus status, String errorCode) {
-        var attributes = workspace(workspaceId).put(STATUS, status.getValue());
+    void run(@NonNull Workspace workspace, @NonNull TopicProject.RunStatus status, String errorCode) {
+        var attributes = attributes(workspace).put(STATUS, status.getValue());
         if (errorCode != null) {
             attributes.put(ERROR_CODE, errorCode);
         }
         runs.add(1, attributes.build());
     }
 
-    void phase(@NonNull String workspaceId, @NonNull String phase, @NonNull Duration duration) {
-        runDuration.record(duration.toNanos() / 1e9, workspace(workspaceId).put(PHASE, phase).build());
+    void phase(@NonNull Workspace workspace, @NonNull String phase, @NonNull Duration duration) {
+        runDuration.record(duration.toNanos() / 1e9, attributes(workspace).put(PHASE, phase).build());
     }
 
-    void qwen(@NonNull String workspaceId, @NonNull LlmCall call, @NonNull String outcome) {
-        qwenCalls.add(1, workspace(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
+    void llm(@NonNull Workspace workspace, @NonNull LlmCall call, @NonNull String outcome) {
+        llmCalls.add(1, attributes(workspace).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 
-    void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
-        saveRows.add(rows, workspace(workspaceId).put(TABLE, table).build());
+    void saved(@NonNull Workspace workspace, @NonNull String table, long rows) {
+        saveRows.add(rows, attributes(workspace).put(TABLE, table).build());
     }
 
-    void otherShare(@NonNull String workspaceId, double share) {
-        otherShare.record(share, workspace(workspaceId).build());
+    void traceTopicsInsert(@NonNull Workspace workspace, @NonNull String outcome) {
+        traceTopicsInserts.add(1, attributes(workspace).put(OUTCOME, outcome).build());
     }
 
-    private AttributesBuilder workspace(String workspaceId) {
-        return Attributes.builder().put(WORKSPACE_ID, workspaceId).put(WORKSPACE_NAME, names.apply(workspaceId));
+    void otherShare(@NonNull Workspace workspace, double share) {
+        otherShare.record(share, attributes(workspace).build());
+    }
+
+    private static AttributesBuilder attributes(Workspace workspace) {
+        return Attributes.builder().put(WORKSPACE_ID, workspace.id()).put(WORKSPACE_NAME, workspace.name());
     }
 
     /** {@code status} is null when the request failed before it had one: recorded as {@code error}. */

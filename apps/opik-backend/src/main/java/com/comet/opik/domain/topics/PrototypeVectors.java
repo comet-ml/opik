@@ -33,6 +33,22 @@ public record PrototypeVectors(@NonNull List<float @NonNull []> vectors) {
         vectors = List.copyOf(copies);
     }
 
+    /** How far from 1 a unit vector's norm may be: float32 rounding of a normalised vector. */
+    static final double UNIT_TOLERANCE = 1e-3;
+
+    /** {@value TopicEmbedding#DIMENSIONS} values of unit length; a NaN or infinite value fails. */
+    static boolean isUnit(@NonNull float[] values) {
+        return values.length == TopicEmbedding.DIMENSIONS && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
+    }
+
+    static double norm(@NonNull float[] values) {
+        double sum = 0;
+        for (float value : values) {
+            sum += (double) value * value;
+        }
+        return Math.sqrt(sum);
+    }
+
     public int size() {
         return vectors.size();
     }

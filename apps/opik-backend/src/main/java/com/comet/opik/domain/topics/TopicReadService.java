@@ -187,7 +187,8 @@ public class TopicReadService {
         }
         return Optional.of(template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(TopicDAO.class);
-            var project = dao.findProjects(workspaceId, List.of(projectId)).stream().findFirst().orElse(null);
+            var project = handle.attach(TopicProjectDAO.class).findProjects(workspaceId, List.of(projectId)).stream()
+                    .findFirst().orElse(null);
             var live = project == null || project.listRunId() == null
                     ? List.<Topic>of()
                     : dao.findByProject(workspaceId, projectId);
