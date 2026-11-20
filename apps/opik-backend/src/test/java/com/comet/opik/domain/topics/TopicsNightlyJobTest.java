@@ -530,7 +530,9 @@ class TopicsNightlyJobTest {
                 .execute()).flatMap(result -> Mono.from(result.getRowsUpdated()))).block();
         template.inTransaction(WRITE, handle -> handle.execute(
                 "UPDATE topic_projects SET labels_complete = FALSE WHERE project_id = ?", projectId.toString()));
-        assertThat(labels(workspaceId, projectId, lost.runId())).isEmpty();
+        // The delete is a mutation: wait until it is applied.
+        Awaitility.await().atMost(Duration.ofSeconds(30))
+                .untilAsserted(() -> assertThat(labels(workspaceId, projectId, lost.runId())).isEmpty());
 
         firstBuildService.run(Instant.now());
 
@@ -865,6 +867,7 @@ class TopicsNightlyJobTest {
             rows.add(TopicVector.builder()
                     .workspaceId(workspaceId)
                     .projectId(projectId)
+                    .task(TopicEmbedding.SUMMARY_TASK)
                     .traceId(ID_GENERATOR.generateId())
                     .traceCreatedAt(day.plus(Duration.ofMinutes(i)))
                     .taskVersion(1)
@@ -885,6 +888,7 @@ class TopicsNightlyJobTest {
         var row = TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
+                .task(TopicEmbedding.SUMMARY_TASK)
                 .traceId(ID_GENERATOR.generateId())
                 .traceCreatedAt(secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1)))
                 .taskVersion(1)
