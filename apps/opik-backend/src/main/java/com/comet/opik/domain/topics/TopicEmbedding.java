@@ -19,4 +19,12 @@ public class TopicEmbedding {
 
     /** The bytes of one vector in a MySQL vector BLOB: {@link #DIMENSIONS} little-endian float32 values. */
     public static final int BYTES = DIMENSIONS * Float.BYTES;
+
+    /**
+     * Whether a trace's vector can be labelled: the run's window and the labelling pass take the same ones. Length
+     * only: the vectors come back from a {@code BFloat16} column, whose cast truncates, so their norm is not 1.
+     */
+    public static boolean usable(float[] vector) {
+        return vector.length == DIMENSIONS;
+    }
 }
