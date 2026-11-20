@@ -8,6 +8,7 @@ import com.clickhouse.client.api.metrics.Metric;
 import com.clickhouse.client.api.metrics.OperationMetrics;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,6 +68,13 @@ class JsonEachRowBulkInsertTest {
         return RandomStringUtils.secure().nextAlphanumeric(32);
     }
 
+    /** The analytics config with only the knob this class reads set; shared with the other bulk insert tests. */
+    static DatabaseAnalyticsFactory streamRows(boolean streamRows) {
+        var databaseAnalytics = new DatabaseAnalyticsFactory();
+        databaseAnalytics.setBulkInsertStreamRows(streamRows);
+        return databaseAnalytics;
+    }
+
     private static final Function<String, ObjectNode> ROW_MAPPER = value -> {
         ObjectNode node = JsonUtils.createObjectNode();
         node.put("name", value);
@@ -80,7 +88,7 @@ class JsonEachRowBulkInsertTest {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var settingsCaptor = ArgumentCaptor.forClass(InsertSettings.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", items, ROW_MAPPER)
                 .block();
 
@@ -132,7 +140,7 @@ class JsonEachRowBulkInsertTest {
         when(client.insert(eq("feedback_scores"), any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow),
                 any(InsertSettings.class))).thenReturn(insertFuture);
 
-        var subscription = new JsonEachRowBulkInsert(client, MAPPER)
+        var subscription = new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of(randomValue()), ROW_MAPPER)
                 .subscribe();
 
@@ -180,7 +188,7 @@ class JsonEachRowBulkInsertTest {
         var first0 = randomValue();
         var second0 = randomValue();
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("authored_feedback_scores", "log-comment", List.of(first0, second0), ROW_MAPPER).block();
 
         verify(client).insert(eq("authored_feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -207,7 +215,7 @@ class JsonEachRowBulkInsertTest {
         var mapped = new AtomicInteger();
         var only = randomValue();
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of(only), value -> {
                     mapped.incrementAndGet();
                     return ROW_MAPPER.apply(value);
@@ -234,6 +242,38 @@ class JsonEachRowBulkInsertTest {
     }
 
     @Test
+    @DisplayName("buffered: rows are mapped before the client is called, and the body is the same")
+    void bufferedModeMapsRowsBeforeTheInsert() throws Exception {
+        var client = clientReturning(2L);
+        var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var mapped = new AtomicInteger();
+        var items = List.of(randomValue(), randomValue());
+
+        new JsonEachRowBulkInsert(client, MAPPER, streamRows(false))
+                .insert("feedback_scores", "log-comment", items, value -> {
+                    mapped.incrementAndGet();
+                    return ROW_MAPPER.apply(value);
+                })
+                .block();
+
+        // The batch is built before the insert: the mock client never asked for the body.
+        assertThat(mapped).hasValue(items.size());
+
+        verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), eq(ClickHouseFormat.JSONEachRow),
+                any(InsertSettings.class));
+        var first = new ByteArrayOutputStream();
+        var second = new ByteArrayOutputStream();
+        writerCaptor.getValue().onOutput(first);
+        writerCaptor.getValue().onRetry();
+        writerCaptor.getValue().onOutput(second);
+
+        var expected = "{\"name\":\"%s\"}\n{\"name\":\"%s\"}\n".formatted(items.get(0), items.get(1));
+        assertThat(first.toString(StandardCharsets.UTF_8)).isEqualTo(expected);
+        assertThat(second.toString(StandardCharsets.UTF_8)).isEqualTo(expected);
+        assertThat(mapped).hasValue(items.size());
+    }
+
+    @Test
     @DisplayName("the per-request server settings the row encoding depends on are set")
     void setsTheServerSettingsTheEncodingDependsOn() throws Exception {
         var captured = insertAndCapture(clientReturning(1L), List.of("a"));
@@ -252,7 +292,7 @@ class JsonEachRowBulkInsertTest {
     void emptyBatchDoesNotCallTheClient() {
         var client = mock(Client.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of(), ROW_MAPPER)
                 .block();
 
@@ -279,7 +319,7 @@ class JsonEachRowBulkInsertTest {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var value = randomValue();
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of(value), nullMapper).block();
 
         verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -305,7 +345,7 @@ class JsonEachRowBulkInsertTest {
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER).block();
 
         // try-with-resources should release it; an unclosed response holds its stream, which over a
@@ -324,7 +364,7 @@ class JsonEachRowBulkInsertTest {
         // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
         // still wrapped in the future's CompletionException would silently bypass the retry the R2DBC
         // path gets. Mono.fromFuture unwraps that wrapper; this pins the behaviour we depend on.
-        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER)
+        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER)
                 .block())
                 .hasRootCauseInstanceOf(SocketException.class);
@@ -334,7 +374,7 @@ class JsonEachRowBulkInsertTest {
     @DisplayName("the row count comes from the server, not from items.size()")
     void returnsTheServerRowCount() {
         // Deduplication or truncation would make these differ; the caller must see the server's number.
-        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), MAPPER)
+        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), MAPPER, streamRows(true))
                 .insert("feedback_scores", "log-comment", List.of("a", "b", "c"), ROW_MAPPER)
                 .block();
 

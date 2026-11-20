@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.DataStreamWriter;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.core.JsonFactory;
@@ -20,8 +22,11 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -46,17 +51,16 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
  * implementation it replaced; both the toggle and that implementation are gone.
  *
- * <p><b>Rows are written straight into the request body.</b> {@link #write} runs as the client's
- * {@code DataStreamWriter}, so each row is mapped and serialized into the body as it is sent, and the batch is
- * never held as a buffer: the client sends the body chunked through its fixed-size compression buffer. For span
- * and trace payloads that buffer was most of the memory the insert allocated, up to the size of the whole batch
- * several times over while it grew.
- *
- * <p>The callback runs on the client's {@code chc-operation} pool, because {@code DatabaseAnalyticsFactory} builds
- * the client with {@code useAsyncRequests(true)}: {@link Client#insert} returns a deferred future that
- * {@link Mono#fromFuture} consumes without parking a thread of ours on it, and serialization stays off the reactive
- * event loop. The thread is the one the insert holds for its HTTP round trip anyway, so writing the rows there adds
- * none.
+ * <p><b>Two ways to build the body</b>, chosen by {@code databaseAnalytics.bulkInsertStreamRows}:
+ * <ul>
+ *   <li><b>Streamed</b> (true): {@link #write} runs as the client's {@code DataStreamWriter}, so each row is mapped
+ *   and serialized into the body as it is sent, and the batch is never held as a buffer: the client sends the body
+ *   chunked through its fixed-size compression buffer. The writer runs on the client's {@code chc-operation} pool
+ *   ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), which is unbounded, and the insert holds its
+ *   pooled connection while the rows are mapped and serialized.</li>
+ *   <li><b>Buffered</b> (false): the batch is serialized into a buffer on {@code boundedElastic}, and the insert takes
+ *   a connection only to send the finished buffer.</li>
+ * </ul>
  *
  * <p>The client calls the writer again on a retry, which maps and serializes the items again. That gives identical
  * bytes as long as the row mapper is a pure function of the item; callers resolve values such as the batch
@@ -85,6 +89,8 @@ public class JsonEachRowBulkInsert {
 
     private final ObjectWriter rowWriter;
 
+    private final boolean streamRows;
+
     /**
      * The mapper is injected rather than read from {@code JsonUtils}: that one is a static field the
      * application <em>replaces</em> during startup, so anything reaching for it risks the pre-configuration
@@ -101,8 +107,10 @@ public class JsonEachRowBulkInsert {
      * flush empties the generator into the {@link BufferedWriter} without draining the writer itself.
      */
     @Inject
-    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper) {
+    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper,
+            @NonNull @Config("databaseAnalytics") DatabaseAnalyticsFactory databaseAnalytics) {
         this.clickHouseClient = clickHouseClient;
+        this.streamRows = databaseAnalytics.isBulkInsertStreamRows();
         // One nesting level above the mapper's, so a payload node.toString() can serialize still fits inside the row
         // object that JsonRowValues embeds it in.
         this.rowFactory = objectMapper.getFactory().rebuild()
@@ -130,18 +138,13 @@ public class JsonEachRowBulkInsert {
             return Mono.just(0L);
         }
 
-        // Deferred so the segment opens at subscription, not at assembly. It times row mapping and serialization
-        // with the statement, as the rows are written while the body is sent. Named for the table, so spans report
-        // custom-reactive-spans / batch_insert.
-        return Mono.defer(() -> {
-            Segment segment = startSegment(table, "Clickhouse", "batch_insert");
+        Mono<Long> insert = streamRows
+                ? send(table, logComment, body -> write(body, items, rowMapper))
+                : Mono.fromCallable(() -> buffer(items, rowMapper))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(body -> send(table, logComment, body::writeTo));
 
-            return AsyncUtils.usingClickHouseFuture(
-                    () -> clickHouseClient.insert(table, body -> write(body, items, rowMapper),
-                            ClickHouseFormat.JSONEachRow, settings(logComment)),
-                    response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong())
-                    .doFinally(signalType -> endSegment(segment));
-        })
+        return insert
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it
                 // was serialization, a connection reset or a server-side rejection. Only the table and
@@ -161,6 +164,33 @@ public class JsonEachRowBulkInsert {
                 // the filter belongs with the other v2-client settings rather than here.
                 .doOnError(err -> log.error("Failed JSONEachRow insert: table='{}' rows='{}'",
                         table, items.size(), err));
+    }
+
+    /**
+     * Sends the body the writer produces. Deferred so the segment opens at subscription, not at assembly. Named for
+     * the table, so spans report custom-reactive-spans / batch_insert. When rows are streamed, it times their mapping
+     * and serialization with the statement.
+     */
+    private Mono<Long> send(String table, String logComment, DataStreamWriter body) {
+        return Mono.defer(() -> {
+            Segment segment = startSegment(table, "Clickhouse", "batch_insert");
+
+            return AsyncUtils.usingClickHouseFuture(
+                    () -> clickHouseClient.insert(table, body, ClickHouseFormat.JSONEachRow, settings(logComment)),
+                    response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong())
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    /**
+     * Renders the batch into a buffer. Returns the buffer rather than a {@code byte[]} so the client is handed it
+     * through {@link ByteArrayOutputStream#writeTo}, which writes the backing array without copying it again.
+     */
+    private <T> ByteArrayOutputStream buffer(Collection<T> items, Function<T, ObjectNode> rowMapper)
+            throws IOException {
+        var body = new ByteArrayOutputStream();
+        write(body, items, rowMapper);
+        return body;
     }
 
     private InsertSettings settings(String logComment) {

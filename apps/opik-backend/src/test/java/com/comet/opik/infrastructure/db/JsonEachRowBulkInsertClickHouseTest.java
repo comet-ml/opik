@@ -11,8 +11,9 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 
 import java.util.List;
@@ -60,9 +61,10 @@ class JsonEachRowBulkInsertClickHouseTest {
         return JsonUtils.createObjectNode().put("name", name);
     }
 
-    @Test
-    @DisplayName("a row mapper failing mid-body fails the insert, wrapped by the client, and writes no row")
-    void mapperFailureMidBodyFailsTheInsertAndWritesNothing() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @DisplayName("a row mapper failing mid-body fails the insert and writes no row")
+    void mapperFailureMidBodyFailsTheInsertAndWritesNothing(boolean streamRows) {
         var table = newTable();
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32),
@@ -75,25 +77,30 @@ class JsonEachRowBulkInsertClickHouseTest {
             return row(item);
         };
 
-        // The client wraps what the writer throws, and does not retry it, so callers matching on exception types see
-        // ClickHouseException rather than the mapper's own exception.
-        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER)
-                .insert(table, "log-comment", items, rowMapper)
-                .block())
-                .isInstanceOf(ClickHouseException.class)
-                .hasRootCause(failure);
+        var insert = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamRows(streamRows))
+                .insert(table, "log-comment", items, rowMapper);
+
+        if (streamRows) {
+            // The client wraps what the writer throws, and does not retry it, so callers matching on exception types
+            // see ClickHouseException rather than the mapper's own exception.
+            assertThatThrownBy(insert::block).isInstanceOf(ClickHouseException.class).hasRootCause(failure);
+        } else {
+            // The batch is built before the client is called, so the mapper's exception is what fails the insert.
+            assertThatThrownBy(insert::block).isSameAs(failure);
+        }
 
         assertThat(count(table)).isZero();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("rows written into the body reach the table")
-    void writesTheRows() {
+    void writesTheRows(boolean streamRows) {
         var table = newTable();
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32));
 
-        Long written = new JsonEachRowBulkInsert(client, MAPPER)
+        Long written = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamRows(streamRows))
                 .insert(table, "log-comment", items, JsonEachRowBulkInsertClickHouseTest::row)
                 .block();
 
