@@ -2,18 +2,23 @@ import React from "react";
 
 import { cn } from "@/lib/utils";
 import FeedbackScoresChartContainer from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContainer";
-import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
+import {
+  ChartData,
+  ChartLegendPosition,
+} from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 
 type FeedbackScoresChartsWrapperProps = {
   chartsData: ChartData[];
   areAggregatedScores?: boolean;
   noDataComponent?: React.ReactNode;
+  legendPosition?: ChartLegendPosition;
 };
 
 const FeedbackScoresChartsWrapper = ({
   chartsData,
   areAggregatedScores = false,
   noDataComponent,
+  legendPosition,
 }: FeedbackScoresChartsWrapperProps) => {
   const chartClassName =
     chartsData.length === 1
@@ -34,6 +39,7 @@ const FeedbackScoresChartsWrapper = ({
               chartId={data.id}
               chartName={data.name}
               subtitle={areAggregatedScores ? "Aggregated scores" : undefined}
+              legendPosition={legendPosition}
             />
           ))}
     </div>

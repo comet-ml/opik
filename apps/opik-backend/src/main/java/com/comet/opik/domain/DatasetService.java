@@ -147,9 +147,9 @@ class DatasetServiceImpl implements DatasetService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotBlank(dataset.projectName()) && dataset.projectId() == null) {
-            var project = projectService.getOrCreate(workspaceId, dataset.projectName(), userName);
-            builder.projectId(project.id());
+        if (dataset.projectId() == null) {
+            var projectName = StringUtils.defaultIfBlank(dataset.projectName(), ProjectService.DEFAULT_PROJECT);
+            builder.projectId(projectService.getOrCreate(workspaceId, projectName, userName).id());
         }
 
         var newDataset = builder.build();
@@ -190,14 +190,18 @@ class DatasetServiceImpl implements DatasetService {
         if (dataset.isEmpty()) {
 
             UUID id = idGenerator.generateId();
-            log.info("Creating dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
+            UUID datasetProjectId = projectId != null
+                    ? projectId
+                    : projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, userName).id();
+            log.info("Creating dataset with id '{}', name '{}', workspaceId '{}', projectId '{}'", id, name,
+                    workspaceId, datasetProjectId);
             template.inTransaction(WRITE, handle -> {
                 handle.attach(DatasetDAO.class)
                         .save(
                                 Dataset.builder()
                                         .id(id)
                                         .name(name)
-                                        .projectId(projectId)
+                                        .projectId(datasetProjectId)
                                         .visibility(Visibility.PRIVATE)
                                         .createdBy(userName)
                                         .lastUpdatedBy(userName)

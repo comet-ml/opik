@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
+import com.comet.opik.domain.topics.TopicVectorsTickService.VectorKey;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -12,7 +13,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -33,22 +34,30 @@ class TopicVectorWriter {
      *        are rows the fresh reads missed, and are counted as such
      * @param arrival the tick's arrival steps
      */
-    Mono<TickResult> embedAndWrite(@NonNull String workspaceId, @NonNull List<Candidate> candidates,
-            @NonNull TickBudget budget, @Nullable Instant missedBefore, @NonNull TopicsArrivalService.Tick arrival) {
+    Mono<TickResult> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
+            @NonNull TopicsArrivalService.Tick arrival) {
+        return embedAndWrite(workspace, candidates, budget, missedBefore, arrival, ConcurrentHashMap.newKeySet());
+    }
+
+    /** As above, adding the key of each vector written to {@code written}. */
+    Mono<TickResult> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
+            @NonNull TopicsArrivalService.Tick arrival, @NonNull Set<VectorKey> written) {
         var missed = missedBefore == null
-                ? Set.<Key>of()
+                ? Set.<VectorKey>of()
                 : candidates.stream().filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
-                        .map(candidate -> new Key(candidate.projectId(), candidate.traceId(), candidate.taskVersion()))
+                        .map(VectorKey::of)
                         .collect(Collectors.toUnmodifiableSet());
-        return embedder.embed(workspaceId, candidates, budget)
-                .concatMap(outcome -> write(workspaceId, outcome, missed, budget, arrival))
+        return embedder.embed(workspace, candidates, budget)
+                .concatMap(outcome -> write(workspace, outcome, missed, budget, arrival, written))
                 .reduce(TickResult.EMPTY, TickResult::plus);
     }
 
-    private Mono<TickResult> write(String workspaceId, ChunkOutcome outcome, Set<Key> missed, TickBudget budget,
-            TopicsArrivalService.Tick arrival) {
+    private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome, Set<VectorKey> missed,
+            TickBudget budget, TopicsArrivalService.Tick arrival, Set<VectorKey> written) {
         return Mono.defer(() -> {
-            outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspaceId, reason, traces));
+            outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
             var skipped = new TickResult(0, outcome.skipped());
             var vectors = outcome.vectors();
             if (vectors.isEmpty()) {
@@ -56,24 +65,20 @@ class TopicVectorWriter {
             }
             return dao.insert(vectors)
                     .then(Mono.fromCallable(() -> {
-                        metrics.written(workspaceId, vectors.size());
-                        metrics.longWindowMissed(workspaceId, (int) vectors.stream()
-                                .filter(vector -> missed.contains(
-                                        new Key(vector.projectId(), vector.traceId(), vector.taskVersion())))
-                                .count());
+                        vectors.forEach(vector -> written.add(VectorKey.of(vector)));
+                        metrics.written(workspace, vectors.size());
+                        metrics.longWindowMissed(workspace,
+                                (int) vectors.stream().filter(vector -> missed.contains(VectorKey.of(vector))).count());
                         return skipped.plus(TickResult.written(vectors.size()));
                     }))
                     // Only after the insert; arrival never fails, so the handler below sees only insert errors.
-                    .flatMap(result -> arrival.label(workspaceId, vectors, budget.deadline()).thenReturn(result))
+                    .flatMap(result -> arrival.label(workspace.id(), vectors, budget.deadline()).thenReturn(result))
                     .onErrorResume(exception -> {
-                        log.warn("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next "
-                                + "tick", workspaceId, vectors.size(), exception);
-                        metrics.skipped(workspaceId, SkipReason.INSERT_FAILED, vectors.size());
+                        log.warn("Topic vectors insert failed, embedding them again next tick, workspace '{}', rows "
+                                + "'{}'", workspace.id(), vectors.size(), exception);
+                        metrics.skipped(workspace, SkipReason.INSERT_FAILED, vectors.size());
                         return Mono.just(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, vectors.size())));
                     });
         });
-    }
-
-    private record Key(UUID projectId, UUID traceId, int taskVersion) {
     }
 }

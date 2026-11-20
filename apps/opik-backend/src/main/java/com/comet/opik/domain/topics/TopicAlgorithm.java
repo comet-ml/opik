@@ -8,10 +8,10 @@ import java.util.Optional;
 
 /**
  * The topic algorithm: how a project's window of vectors becomes its topic list, how a nightly update changes that list,
- * and the rule that labels a trace by a saved list. {@link TopicsRebuildService} does everything around a run: it reads
- * the window and the saved list, makes the LLM calls the algorithm asks for, checks what the algorithm returns, saves,
- * computes the churn and counts. {@link TopicWindowLabelService} labels the window's
- * other traces with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
+ * and the rule that labels a trace by a saved list. The rebuild service does everything around a run: it reads the
+ * window and the saved list, makes the LLM calls the algorithm asks for, checks what the algorithm returns, saves,
+ * computes the churn and counts. The labelling pass labels the window's other traces with {@link #labeller}. To try
+ * another algorithm, implement this interface and bind it in place of
  * {@link KMeansTopicAlgorithm}.
  *
  * <p>The limit of this seam: an algorithm leaves its list in the saved format the service owns. That is the topics

@@ -26,7 +26,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
@@ -36,8 +38,10 @@ import java.util.stream.Collectors;
  * <ul>
  * <li>The fresh phase: per workspace, one read of the done statuses written in {@code window}, all its drained projects
  * together, up to {@code maxTracesPerTick}, oldest first, then their embed calls and writes. It keeps new traces
- * served. Once per {@code longWindowInterval} ({@link LongWindowPass}) it reads the long window instead, in slices,
- * for rows it missed.</li>
+ * served. It starts at the workspace's watermark in {@code topic_workspaces}, less {@link #WATERMARK_OVERLAP}, and
+ * never before the window: the read moves it past the statuses it gave a vector or left to the backfill, and never past
+ * one it found and left. Once per {@code longWindowInterval} ({@link LongWindowPass}) it reads the long window
+ * instead, in slices, for rows it missed, and leaves the watermark as it is.</li>
  * <li>The backfill phase, with the budget the fresh phase left: per workspace, its projects not drained yet
  * ({@link TopicVectorBackfiller}).</li>
  * </ul>
@@ -71,6 +75,12 @@ public class TopicVectorsTickService {
     private final @NonNull TopicsArrivalService arrivalService;
 
     /**
+     * How far before its watermark a workspace's read starts. ClickHouse stamps a status by its own clock and before
+     * the insert is visible, so one stamped just before a read's upper bound can show up only after the read.
+     */
+    static final Duration WATERMARK_OVERLAP = Duration.ofMinutes(5);
+
+    /**
      * Fails with {@link IllegalStateException} when ai-labels has no {@code trace_summary} task: no tick can run, so the
      * job counts the tick as failed rather than as one that ran and found nothing.
      */
@@ -96,25 +106,33 @@ public class TopicVectorsTickService {
         // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
         var missedBefore = pass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
         var arrival = arrivalService.tick();
-        return Mono.fromCallable(workspaces::enabledWorkspaceIds)
+        return Mono.fromCallable(() -> {
+            var workspaceIds = workspaces.enabledWorkspaceIds();
+            return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds));
+        })
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(TopicVectorsTickService::shuffled)
-                .flatMap(workspaceIds -> backfiller.discover(workspaceIds, backfillLowerBound,
+                .flatMap(enabled -> backfiller.discover(enabled.workspaceIds(), backfillLowerBound,
                         createdAfter(backfillLowerBound), budget)
-                        .then(backfiller.undrained(workspaceIds))
-                        .flatMap(undrained -> Flux.fromIterable(workspaceIds)
+                        .then(backfiller.undrained(enabled.workspaceIds()))
+                        .flatMap(undrained -> Flux.fromIterable(enabled.workspaceIds())
                                 .flatMap(workspaceId -> visit(workspaceId,
                                         undrained.getOrDefault(workspaceId, List.of()),
-                                        find(workspaceId, lowerBound, start), pass, missedBefore, budget, arrival),
+                                        find(workspaceId, pass
+                                                ? lowerBound
+                                                : readFrom(lowerBound, enabled.watermarks().get(workspaceId)),
+                                                start),
+                                        pass, missedBefore, budget, arrival),
                                         vectors.getEmbedConcurrency())
                                 .collectList()
-                                .flatMap(visits -> {
-                                    var fresh = finish(visits);
+                                .flatMap(visits -> finish(visits).flatMap(fresh -> {
                                     var drained = visits.stream().allMatch(Visit::complete) && !fresh.cut();
                                     return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
                                             .then(backfill(visits, undrained, backfillLowerBound, budget, arrival))
                                             .map(backfilled -> fresh.plus(backfilled).plus(passResult));
-                                })));
+                                }))));
+    }
+
+    private record Enabled(List<String> workspaceIds, Map<String, Instant> watermarks) {
     }
 
     /** One workspace's read of the statuses written from {@code lowerBound} to the tick's start. */
@@ -134,40 +152,51 @@ public class TopicVectorsTickService {
                 config.getVectors().getFind().getCreatedAtSlack().toJavaDuration());
     }
 
-    /** One workspace's turn in the fresh phase: its workspace read, then its embed calls and writes. */
+    /**
+     * One workspace's turn in the fresh phase: its workspace read, then its embed calls and writes. A long-window pass
+     * ({@code pass}) leaves its watermark as it is.
+     */
     private Mono<Visit> visit(String workspaceId, List<Backfill> undrained, TopicVectorsFind find, boolean pass,
             @Nullable Instant missedBefore, TickBudget budget, TopicsArrivalService.Tick arrival) {
-        return Mono.defer(() -> {
+        return metrics.workspace(workspaceId).flatMap(workspace -> {
             var vectors = config.getVectors();
             var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
             if (!budget.hasTimeForRead(embedTimeout)) {
-                return Mono.just(Visit.notRead(workspaceId, false));
+                return Mono.just(Visit.notRead(workspace, false));
             }
-            var excluded = backfiller.excluded(workspaceId, undrained);
-            if (excluded.isEmpty()) {
+            var readableWithout = backfiller.readableWithout(workspaceId, undrained);
+            if (readableWithout.isEmpty()) {
                 // Its traces are the backfill's for now; it does not hold the long-window pass.
-                return Mono.just(Visit.notRead(workspaceId, true));
+                return Mono.just(Visit.notRead(workspace, true));
             }
             long readStarted = System.nanoTime();
             return WindowRead.read(dao,
-                    find.toBuilder().excludedProjectIds(excluded.get()).build(),
+                    find.toBuilder().excludedProjectIds(readableWithout.get()).build(),
                     pass ? vectors.getFind().getSliceSize().toJavaDuration() : null, budget,
                     vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
                     .flatMap(read -> backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start())
                             .flatMap(served -> {
                                 var readTime = since(readStarted);
                                 long embedStarted = System.nanoTime();
+                                // The traces of the projects it started are the backfill's from now on.
+                                Set<VectorKey> done = ConcurrentHashMap.newKeySet();
+                                read.candidates().stream().map(VectorKey::of).forEach(done::add);
+                                served.candidates().stream().map(VectorKey::of).forEach(done::remove);
                                 return writer
-                                        .embedAndWrite(workspaceId, served.candidates(), budget, missedBefore, arrival)
-                                        .map(result -> new Visit(workspaceId, true, read.complete(),
-                                                oldest(served.candidates()), result, served.started(), readTime,
-                                                since(embedStarted)));
+                                        .embedAndWrite(workspace, served.candidates(), budget, missedBefore, arrival,
+                                                done)
+                                        .map(result -> new Visit(workspace, true, read.complete(),
+                                                pass
+                                                        ? null
+                                                        : watermark(read.candidates(), done, find.limit(),
+                                                                find.upperBound()),
+                                                result, served.started(), readTime, since(embedStarted)));
                             }))
                     .onErrorResume(exception -> {
-                        metrics.readFailure("find", workspaceId, exception);
-                        log.warn("Topic vectors window read failed, workspace '{}'; reading it again next tick",
+                        metrics.readFailure("find", workspace, exception);
+                        log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
                                 workspaceId, exception);
-                        return Mono.just(new Visit(workspaceId, true, false, null, TickResult.EMPTY, List.of(),
+                        return Mono.just(new Visit(workspace, true, false, null, TickResult.EMPTY, List.of(),
                                 since(readStarted), Duration.ZERO));
                     });
         });
@@ -175,48 +204,37 @@ public class TopicVectorsTickService {
 
     /**
      * The backfill phase: each workspace's projects not drained yet, the ones its workspace read started included,
-     * except in a workspace an embed call failed for in the fresh phase. Publishes what is left undrained.
+     * except in a workspace an embed call failed for in the fresh phase.
      */
     private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
             Instant lowerBound, TickBudget budget, TopicsArrivalService.Tick arrival) {
         long started = System.nanoTime();
         return Flux.fromIterable(visits)
                 .flatMap(visit -> {
-                    var projects = new ArrayList<>(undrained.getOrDefault(visit.workspaceId(), List.of()));
+                    var workspaceId = visit.workspace().id();
+                    var projects = new ArrayList<>(undrained.getOrDefault(workspaceId, List.of()));
                     projects.addAll(visit.started());
-                    var backfill = visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
-                            ? Mono.just(TopicVectorBackfiller.Done.NONE)
-                            : backfiller.backfill(projects, find(visit.workspaceId(), lowerBound, budget.start()),
-                                    budget, arrival);
-                    return backfill.map(done -> Map.entry(visit.workspaceId(), new Backfilled(done.result(),
-                            projects.stream().filter(project -> !done.drained().contains(project.projectId()))
-                                    .toList())));
+                    return visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
+                            ? Mono.just(TickResult.EMPTY)
+                            : backfiller.backfill(visit.workspace(), projects,
+                                    find(workspaceId, lowerBound, budget.start()), budget, arrival);
                 }, config.getVectors().getEmbedConcurrency())
-                .collectList()
-                .map(backfilled -> {
-                    metrics.phase("backfill", since(started));
-                    metrics.undrained(backfilled.stream().collect(Collectors.toMap(Map.Entry::getKey,
-                            entry -> entry.getValue().undrained())));
-                    return backfilled.stream().map(entry -> entry.getValue().result())
-                            .reduce(TickResult.EMPTY, TickResult::plus);
-                });
+                .reduce(TickResult.EMPTY, TickResult::plus)
+                .doOnNext(__ -> metrics.phase("backfill", since(started)));
     }
 
-    private record Backfilled(TickResult result, List<Backfill> undrained) {
-    }
-
-    private TickResult finish(List<Visit> visits) {
-        var oldest = new HashMap<String, Instant>();
-        var notRead = new ArrayList<String>();
+    private Mono<TickResult> finish(List<Visit> visits) {
+        var watermarks = new HashMap<String, Instant>();
+        var notRead = new ArrayList<TopicVectorsMetrics.Workspace>();
         var result = TickResult.EMPTY;
         var read = Duration.ZERO;
         var embed = Duration.ZERO;
         for (var visit : visits) {
-            if (visit.oldest() != null) {
-                oldest.put(visit.workspaceId(), visit.oldest());
+            if (visit.watermark() != null) {
+                watermarks.put(visit.workspace().id(), visit.watermark());
             }
             if (!visit.reached()) {
-                notRead.add(visit.workspaceId());
+                notRead.add(visit.workspace());
             }
             result = result.plus(visit.result());
             read = read.plus(visit.readTime());
@@ -227,24 +245,31 @@ public class TopicVectorsTickService {
             log.warn("Topic vectors workspace reads did not read workspaces '{}' of '{}'", notRead.size(),
                     visits.size());
         }
-        metrics.oldest(oldest);
         metrics.phase("find", read);
         metrics.phase("embed", embed);
-        return result;
+        var tickResult = result;
+        return Mono.fromRunnable(() -> workspaces.setVectorsWatermarks(watermarks))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(exception -> {
+                    // Only costs a wider read next tick: the old watermarks stay behind the new ones.
+                    log.warn("Topic vectors watermarks not saved, workspaces '{}'", watermarks.size(), exception);
+                    return Mono.empty();
+                })
+                .thenReturn(tickResult);
     }
 
     /**
      * One workspace's part of the fresh phase. {@code reached} is false when the budget left no time to read it, or it
      * has too many projects in backfill; {@code complete} when its read saw its whole window or it was left to the
-     * backfill; {@code oldest} is its oldest done status without a vector, {@link Instant#MAX} with none, null when not
-     * reached or its read failed; {@code started} the projects its read saw for the first time.
+     * backfill; {@code watermark} is its next one, null when not reached, its read failed or it was a long-window pass;
+     * {@code started} the projects its read saw for the first time.
      */
-    private record Visit(@NonNull String workspaceId, boolean reached, boolean complete, @Nullable Instant oldest,
-            @NonNull TickResult result, @NonNull List<Backfill> started, @NonNull Duration readTime,
-            @NonNull Duration embedTime) {
+    private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached, boolean complete,
+            @Nullable Instant watermark, @NonNull TickResult result, @NonNull List<Backfill> started,
+            @NonNull Duration readTime, @NonNull Duration embedTime) {
 
-        static Visit notRead(String workspaceId, boolean complete) {
-            return new Visit(workspaceId, false, complete, null, TickResult.EMPTY, List.of(), Duration.ZERO,
+        static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean complete) {
+            return new Visit(workspace, false, complete, null, TickResult.EMPTY, List.of(), Duration.ZERO,
                     Duration.ZERO);
         }
     }
@@ -254,8 +279,39 @@ public class TopicVectorsTickService {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
-    private static Instant oldest(List<Candidate> found) {
-        return found.stream().map(Candidate::statusUpdatedAt).min(Comparator.naturalOrder()).orElse(Instant.MAX);
+    /** A {@code topic_vectors} row's key within a workspace's read. */
+    record VectorKey(@NonNull UUID projectId, @NonNull UUID traceId, int taskVersion) {
+
+        static VectorKey of(TopicVector vector) {
+            return new VectorKey(vector.projectId(), vector.traceId(), vector.taskVersion());
+        }
+
+        static VectorKey of(Candidate candidate) {
+            return new VectorKey(candidate.projectId(), candidate.traceId(), candidate.taskVersion());
+        }
+    }
+
+    /**
+     * A workspace's next watermark after a read that found {@code found}, oldest status first, and wrote or left to
+     * the backfill {@code done}: the status of the first one not done, so the next read finds it again; with none, the
+     * last status found when the read hit {@code limit}, as more may share it, and else the read's upper bound.
+     */
+    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> done, int limit,
+            @NonNull Instant upperBound) {
+        return found.stream()
+                .filter(candidate -> !done.contains(VectorKey.of(candidate)))
+                .findFirst()
+                .map(Candidate::statusUpdatedAt)
+                .orElseGet(() -> found.size() < limit ? upperBound : found.getLast().statusUpdatedAt());
+    }
+
+    /** A workspace's read starts {@link #WATERMARK_OVERLAP} before its watermark, never before the window. */
+    static Instant readFrom(@NonNull Instant windowStart, @Nullable Instant watermark) {
+        if (watermark == null) {
+            return windowStart;
+        }
+        var fromWatermark = watermark.minus(WATERMARK_OVERLAP);
+        return fromWatermark.isAfter(windowStart) ? fromWatermark : windowStart;
     }
 
     private static Duration since(long startedNanos) {

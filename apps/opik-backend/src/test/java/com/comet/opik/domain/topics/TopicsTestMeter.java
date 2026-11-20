@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
@@ -14,7 +13,6 @@ import io.opentelemetry.api.metrics.ObservableDoubleMeasurement;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -132,20 +130,6 @@ final class TopicsTestMeter {
             longGauges.get(name).accept(measurement);
         }
         return observed;
-    }
-
-    /** One scrape of the gauge: its value per {@code workspace_id}. */
-    Map<String, Double> observeGauge(String name) {
-        var values = new HashMap<String, Double>();
-        observe(name).forEach(point -> values.put(point.get("workspace_id"), point.value()));
-        return values;
-    }
-
-    /** Workspace names as {@code name-<id>}. */
-    static WorkspaceNameService names() {
-        var names = mock(WorkspaceNameService.class);
-        when(names.nameOrId(anyString())).thenAnswer(invocation -> "name-" + invocation.getArgument(0));
-        return names;
     }
 
     private static double number(Object value) {

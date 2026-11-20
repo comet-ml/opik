@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
@@ -118,6 +119,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -484,19 +486,32 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a 429 on the second chunk: the first chunk is written, the next tick completes the second")
+    @DisplayName("a 429 on the second chunk: the first chunk is written and the watermark stays behind the second, "
+            + "which the next tick completes, moving the watermark to its start")
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
+        // Drained, so its traces are the workspace read's, which keeps the watermark.
+        markDrained(workspaceId, projectId);
         var traceIds = labelTraces(workspaceId, projectId, 15, 1);
         embedStub.throttleCall = 2;
 
-        assertThat(tick()).isEqualTo(new TickResult(10, Map.of(SkipReason.EMBED_FAILED, 5)));
+        // MySQL keeps microseconds.
+        var first = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(first).block())
+                .isEqualTo(new TickResult(10, Map.of(SkipReason.EMBED_FAILED, 5)));
         assertThat(countRows(workspaceId)).isEqualTo(10);
+        assertThat(watermark(workspaceId)).isBefore(first);
 
-        assertThat(tick()).isEqualTo(TickResult.written(5));
+        var second = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(second).block()).isEqualTo(TickResult.written(5));
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(watermark(workspaceId)).isEqualTo(second);
+    }
+
+    private Instant watermark(String workspaceId) {
+        return workspaceService.vectorsWatermarks(List.of(workspaceId)).get(workspaceId);
     }
 
     @Test
@@ -1386,8 +1401,10 @@ class TopicVectorsTickTest {
 
     private TopicsArrivalService arrival(TopicsTestMeter meter, TransactionTemplate transactions,
             TraceTopicsDAO rows, TopicAlgorithm labelling) {
-        return new TopicsArrivalService(opikConfig.getTopics(), transactions, rows, labelling, TopicsTestMeter.names(),
-                meter.meter, Clock.systemUTC());
+        var names = mock(WorkspaceNameService.class);
+        when(names.nameOrId(anyString())).thenAnswer(invocation -> "name-" + invocation.getArgument(0));
+        return new TopicsArrivalService(opikConfig.getTopics(), transactions, rows, labelling, names, meter.meter,
+                Clock.systemUTC());
     }
 
     /** The tick as Guice builds it, with {@code arrival} in place of the bound arrival service. */

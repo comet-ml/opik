@@ -74,12 +74,6 @@ class TopicVectorBackfiller {
     /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
     private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
-    /** What one workspace's backfill did: its result, and the projects it drained. */
-    record Done(@NonNull TickResult result, @NonNull Set<UUID> drained) {
-
-        static final Done NONE = new Done(TickResult.EMPTY, Set.of());
-    }
-
     /** A workspace read's candidates to serve, and the projects it saw for the first time and started. */
     record Served(@NonNull List<Candidate> candidates, @NonNull List<Backfill> started) {
     }
@@ -172,26 +166,27 @@ class TopicVectorBackfiller {
                         discoveredAt.put(workspaceId, start);
                     })
                     .onErrorResume(exception -> {
-                        metrics.readFailure("discover", workspaceId, exception);
-                        log.warn("Topic vectors project discovery failed, workspace '{}'; trying again next tick",
+                        log.warn("Topic vectors project discovery failed, trying again next tick, workspace '{}'",
                                 workspaceId, exception);
-                        return Mono.empty();
+                        return metrics.workspace(workspaceId)
+                                .doOnNext(workspace -> metrics.readFailure("discover", workspace, exception))
+                                .then(Mono.empty());
                     })
                     .then();
         });
     }
 
     /**
-     * The projects a workspace read leaves out: those in backfill. Empty when there are more than
-     * {@link #MAX_EXCLUDED_PROJECTS}: the workspace is not read by the workspace read until its backfill brings it
+     * The projects a workspace read leaves out, those in backfill; empty when the workspace must not be read. That is
+     * when there are more than {@link #MAX_EXCLUDED_PROJECTS}: the workspace read skips it until its backfill brings it
      * under, and its traces are the backfill's for now.
      */
-    Optional<List<UUID>> excluded(@NonNull String workspaceId, @NonNull List<Backfill> undrained) {
+    Optional<List<UUID>> readableWithout(@NonNull String workspaceId, @NonNull List<Backfill> undrained) {
         if (undrained.size() > MAX_EXCLUDED_PROJECTS) {
             if (overExcluded.add(workspaceId)) {
-                log.warn("Topic vectors workspace reads skipped until the backfill brings it under '{}' projects, "
-                        + "workspace '{}', projects in backfill '{}'", MAX_EXCLUDED_PROJECTS, workspaceId,
-                        undrained.size());
+                log.warn("Topic vectors workspace reads skipped until the backfill brings the projects in backfill "
+                        + "under the limit, workspace '{}', projects in backfill '{}', limit '{}'", workspaceId,
+                        undrained.size(), MAX_EXCLUDED_PROJECTS);
             }
             return Optional.empty();
         }
@@ -248,10 +243,10 @@ class TopicVectorBackfiller {
      * @param window the backfill window's bounds and the workspace
      * @param arrival the tick's arrival steps
      */
-    Mono<Done> backfill(@NonNull Collection<Backfill> projects, @NonNull TopicVectorsFind window,
-            @NonNull TickBudget budget, @NonNull TopicsArrivalService.Tick arrival) {
+    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<Backfill> projects,
+            @NonNull TopicVectorsFind window, @NonNull TickBudget budget, @NonNull TopicsArrivalService.Tick arrival) {
         if (projects.isEmpty()) {
-            return Mono.just(Done.NONE);
+            return Mono.just(TickResult.EMPTY);
         }
         var vectors = config.getVectors();
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
@@ -260,18 +255,17 @@ class TopicVectorBackfiller {
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(project, window, budget, arrival).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, arrival).doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
                     backfills.record(run.progress);
-                    return new Done(run.result, run.progress.stream().filter(done -> done.drainedAt() != null)
-                            .map(Progress::projectId).collect(Collectors.toUnmodifiableSet()));
+                    return run.result;
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .onErrorResume(exception -> {
-                    log.warn("Topic vectors backfill progress not recorded, workspace '{}', projects '{}'; reading "
-                            + "them again next tick", window.workspaceId(), run.progress.size(), exception);
-                    return Mono.just(new Done(run.result, Set.of()));
+                    log.warn("Topic vectors backfill progress not recorded, reading them again next tick, workspace "
+                            + "'{}', projects '{}'", window.workspaceId(), run.progress.size(), exception);
+                    return Mono.just(run.result);
                 });
     }
 
@@ -303,16 +297,18 @@ class TopicVectorBackfiller {
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
      * was left and vectors were written, so another read now finds the next ones.
      */
-    private Mono<Turn> turn(Backfill project, TopicVectorsFind window, TickBudget budget,
-            TopicsArrivalService.Tick arrival) {
+    private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, Backfill project, TopicVectorsFind window,
+            TickBudget budget, TopicsArrivalService.Tick arrival) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
-        var sliceSize = project.backfillTracesTotal() > ONE_SLICE_MAX_TRACES
+        // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
+        var traces = project.backfillTracesTotal();
+        var sliceSize = traces == 0 || traces > ONE_SLICE_MAX_TRACES
                 ? vectors.getFind().getSliceSize().toJavaDuration()
                 : null;
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
-                .flatMap(read -> writer.embedAndWrite(workspaceId, read.candidates(), budget, null, arrival)
+                .flatMap(read -> writer.embedAndWrite(workspace, read.candidates(), budget, null, arrival)
                         .map(result -> {
                             boolean drained = read.complete() && !result.cut();
                             if (!drained && result.written() == 0) {
@@ -326,9 +322,9 @@ class TopicVectorBackfiller {
                                     .build()), !read.complete() && !result.cut());
                         }))
                 .onErrorResume(exception -> {
-                    metrics.readFailure("backfill", workspaceId, exception);
-                    log.warn("Topic vectors backfill read failed, workspace '{}', project '{}'; reading it again next "
-                            + "tick", workspaceId, project.projectId(), exception);
+                    metrics.readFailure("backfill", workspace, exception);
+                    log.warn("Topic vectors backfill read failed, reading it again next tick, workspace '{}', project "
+                            + "'{}'", workspaceId, project.projectId(), exception);
                     return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false));
                 });
     }
