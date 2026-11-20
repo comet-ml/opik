@@ -118,8 +118,8 @@ public class TopicsBackfillGate {
                                     Collectors.toMap(TopicVectorBackfillDAO.Backfill::projectId,
                                             Function.identity()))))
                     .checkedAt(dao.findWorkspaces(workspaceIds).stream()
-                            .collect(Collectors.toMap(TopicWorkspace::workspaceId,
-                                    TopicWorkspace::vectorsCheckedAt)))
+                            .collect(Collectors.toMap(TopicVectorBackfillDAO.Workspace::workspaceId,
+                                    TopicVectorBackfillDAO.Workspace::vectorsCheckedAt)))
                     .build();
         });
     }

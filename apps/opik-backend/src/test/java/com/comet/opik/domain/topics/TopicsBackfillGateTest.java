@@ -40,7 +40,7 @@ class TopicsBackfillGateTest {
 
     private final UUID project = UUID.randomUUID();
     private final List<TopicVectorBackfillDAO.Backfill> rows = new ArrayList<>();
-    private final List<TopicWorkspace> workspaces = new ArrayList<>();
+    private final List<TopicVectorBackfillDAO.Workspace> workspaces = new ArrayList<>();
     private TopicVectorBackfillDAO dao;
     private TopicsBackfillGate gate;
 
@@ -169,7 +169,8 @@ class TopicsBackfillGateTest {
 
     private void checked(String workspaceId, Instant at) {
         workspaces.removeIf(workspace -> workspace.workspaceId().equals(workspaceId));
-        workspaces.add(TopicWorkspace.builder().workspaceId(workspaceId).vectorsCheckedAt(at).build());
+        workspaces
+                .add(TopicVectorBackfillDAO.Workspace.builder().workspaceId(workspaceId).vectorsCheckedAt(at).build());
     }
 
     /** A backfill started an hour ago, not drained, nothing counted. */

@@ -110,7 +110,7 @@ class TopicsFirstBuildServiceTest {
                 .filter(row -> invocation.<Collection<String>>getArgument(0).contains(row.workspaceId())).toList());
         when(backfillDAO.findWorkspaces(any())).thenAnswer(invocation -> checkedWorkspaces.stream()
                 .filter(invocation.<Collection<String>>getArgument(0)::contains)
-                .map(workspaceId -> TopicWorkspace.builder().workspaceId(workspaceId)
+                .map(workspaceId -> TopicVectorBackfillDAO.Workspace.builder().workspaceId(workspaceId)
                         .vectorsCheckedAt(Instant.now()).build())
                 .toList());
         var template = mock(TransactionTemplate.class);
@@ -464,7 +464,7 @@ class TopicsFirstBuildServiceTest {
 
         service.run(START);
 
-        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicsRunException.Code.INTERNAL);
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.INTERNAL);
     }
 
     @Test
@@ -492,7 +492,7 @@ class TopicsFirstBuildServiceTest {
 
         service.run(Instant.now());
 
-        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicsRunException.Code.TIMEOUT);
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.TIMEOUT);
         assertThat(events).containsExactly("insert done", "unlock");
     }
 

@@ -194,10 +194,10 @@ class TopicsDaoStorageTest {
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, BUILT);
         var deleted = TRACES.traceIds().subList(0, 10);
-        // deleteByKeys runs deleteByTraceIds, the trace-delete cascade's delete, as the system user.
-        vectorsDAO.deleteByKeys(workspaceId, deleted.stream()
-                .map(traceId -> TopicVectorsDAO.ProjectTraceKey.builder().projectId(projectId).traceId(traceId).build())
-                .toList()).block();
+        vectorsDAO.deleteByTraceIds(Set.copyOf(deleted), projectId)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .block();
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
                 .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - deleted.size()));
@@ -563,7 +563,7 @@ class TopicsDaoStorageTest {
             var runDAO = handle.attach(TopicRunDAO.class);
             runDAO.start(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
-                    TopicProject.RunError.QWEN_TIMEOUT)).isEqualTo(1);
+                    TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
             runDAO.start(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);

@@ -100,7 +100,7 @@ public class TopicWindowLabelService {
      * window. {@code topicIds} are its live topics. {@code saveCounts} is true when
      * a complete pass logs the run's counts: the list has a topic and the run's labels are not complete yet.
      */
-    private record Saved(UUID runId, Instant from, Instant to, TopicAlgorithm.Labeller labeller,
+    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller,
             List<UUID> topicIds, boolean saveCounts) {
     }
 

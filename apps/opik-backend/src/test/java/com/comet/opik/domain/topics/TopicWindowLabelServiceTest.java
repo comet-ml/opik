@@ -11,7 +11,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -90,11 +89,10 @@ class TopicWindowLabelServiceTest {
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         windowDAO = mock(TopicWindowDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
-        var names = new TopicsWorkspaceNames(workspaceId -> "Acme", Clock.systemUTC());
         var config = TestConfigUtils.loadConfigTest().getTopics();
         config.getBuild().setWindowDays(WINDOW_DAYS);
         service = new TopicWindowLabelService(config, template, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(new TopicsTestMeter().meter, names), new KMeansTopicAlgorithm());
+                new TopicsMetrics(new TopicsTestMeter().meter, workspaceId -> "Acme"), TopicsTestAlgorithm.algorithm());
 
         billingPrototype = unit(random);
         refundsPrototype = unit(random);

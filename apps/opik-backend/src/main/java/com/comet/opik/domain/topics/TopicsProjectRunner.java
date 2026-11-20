@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
@@ -134,15 +134,15 @@ public class TopicsProjectRunner {
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicProject.RunStatus.SAVED;
         } catch (TimeoutException exception) {
-            return stop(runId, workspaceId, projectId, future, Code.TIMEOUT,
+            return stop(runId, workspaceId, projectId, future, RunError.TIMEOUT,
                     "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return stop(runId, workspaceId, projectId, future, Code.TIMEOUT, "the job was interrupted");
+            return stop(runId, workspaceId, projectId, future, RunError.TIMEOUT, "the job was interrupted");
         } catch (ExecutionException exception) {
             // firstBuild records its own failures; this is a bug in it.
             log.error("Topics run '{}' threw, project '{}'", runId, projectId, exception.getCause());
-            return stop(runId, workspaceId, projectId, future, Code.INTERNAL, String.valueOf(exception.getCause()));
+            return stop(runId, workspaceId, projectId, future, RunError.INTERNAL, String.valueOf(exception.getCause()));
         }
     }
 
@@ -152,7 +152,7 @@ public class TopicsProjectRunner {
      * and its insert is waited for (it ends within {@link TopicsRebuildService#INSERT_BOUND}), so the project's locks
      * are released only after it.
      */
-    private boolean stop(UUID runId, String workspaceId, UUID projectId, Future<?> future, Code code,
+    private boolean stop(UUID runId, String workspaceId, UUID projectId, Future<?> future, RunError code,
             String message) {
         boolean saved = false;
         try {

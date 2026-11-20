@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -62,7 +63,6 @@ import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The topic vectors storage against real ClickHouse and MySQL: {@link TopicVectorsDAO}'s window read, discovery,
@@ -468,18 +468,15 @@ class TopicVectorsStorageTest {
         var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
                 List.of(first, second), 10).block();
 
-        assertThat(found).extracting(BackfillProject::projectId, BackfillProject::traces)
-                .containsExactlyInAnyOrder(tuple(first, 3L), tuple(second, 1L));
+        assertThat(tracesByProject(found)).isEqualTo(Map.of(first, 3L, second, 1L));
         assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                 Instant.now().plusSeconds(1)));
-        assertThat(tracesWithVectors.get(first)).isEqualTo(2);
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
-        assertThat(tracesWithVectors).doesNotContainKey(second);
+        assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
         // A window that starts after the traces were created counts none of them, but still finds the projects.
-        assertThat(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block())
-                .extracting(BackfillProject::projectId, BackfillProject::traces)
-                .containsExactlyInAnyOrder(tuple(first, 0L), tuple(second, 0L));
+        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before,
+                lower.minus(8, ChronoUnit.DAYS), 10).collectList().block()))
+                .isEqualTo(Map.of(first, 0L, second, 0L));
     }
 
     @Test
@@ -490,9 +487,9 @@ class TopicVectorsStorageTest {
         var projectId = ID_GENERATOR.generateId();
         var notAsked = ID_GENERATOR.generateId();
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        // A day apart or more: the default slice is a day, so each trace is in its own slice.
-        var createdAts = List.of(now.minus(12, ChronoUnit.HOURS), now.minus(3, ChronoUnit.DAYS),
-                now.minus(5, ChronoUnit.DAYS));
+        // A week apart or more: the discovery slice is a week, so each trace is in its own slice.
+        var createdAts = List.of(now.minus(3, ChronoUnit.DAYS), now.minus(10, ChronoUnit.DAYS),
+                now.minus(20, ChronoUnit.DAYS));
         var statuses = new ArrayList<AiLabelStatus>();
         var vectors = new ArrayList<TopicVector>();
         for (var owner : List.of(projectId, notAsked)) {
@@ -504,15 +501,14 @@ class TopicVectorsStorageTest {
         }
         statusDAO.insert(statuses).block();
         vectorsDAO.insert(vectors).block();
-        var lower = now.minus(6, ChronoUnit.DAYS);
+        var lower = now.minus(25, ChronoUnit.DAYS);
 
         var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
                 .collectList().block();
         var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
                 List.of(projectId), 10).block();
 
-        assertThat(found).extracting(BackfillProject::projectId, BackfillProject::traces)
-                .containsExactlyInAnyOrder(tuple(projectId, 3L), tuple(notAsked, 3L));
+        assertThat(tracesByProject(found)).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
         assertThat(tracesWithVectors).isEqualTo(Map.of(projectId, 3L));
         assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower, List.of(), 10).block())
                 .isEmpty();
@@ -606,13 +602,11 @@ class TopicVectorsStorageTest {
         var t4 = t3.plus(3, ChronoUnit.DAYS);
         backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
 
-        assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third)).values()).hasSize(3)
-                .allSatisfy(reset -> {
-                    assertThat(reset.backfillStartedAt()).isEqualTo(t4);
-                    assertThat(reset.backfillDrainedAt()).isNull();
-                    assertThat(reset.backfillTracesTotal()).isZero();
-                    assertThat(reset.backfillTracesDone()).isZero();
-                });
+        var reset = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
+        assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
+                first, reset.projectId(first).backfillLastDoneAt(t2).build(),
+                second, reset.projectId(second).backfillLastDoneAt(t0).build(),
+                third, reset.projectId(third).backfillLastDoneAt(t2).build()));
         assertThat(vectorsCheckedAt(workspaceId)).isEqualTo(t4);
     }
 
@@ -675,14 +669,19 @@ class TopicVectorsStorageTest {
     /** {@code match(c, NON_BLANK)} in ClickHouse for each string. */
     private List<Integer> matchNonBlank(List<String> values) {
         return templateAsync.nonTransaction(connection -> Flux
-                .from(connection.createStatement("SELECT match(value, :non_blank) AS matched FROM "
-                        + "(SELECT arrayJoin(:values) AS value)")
+                .from(connection.createStatement("""
+                        SELECT match(value, :non_blank) AS matched FROM (SELECT arrayJoin(:values) AS value)
+                        """)
                         .bind("non_blank", TopicVectorsDAO.NON_BLANK)
                         .bind("values", values.toArray(String[]::new))
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> row.get("matched", Integer.class)))
                 .collectList())
                 .block();
+    }
+
+    private static Map<UUID, Long> tracesByProject(List<BackfillProject> found) {
+        return found.stream().collect(Collectors.toMap(BackfillProject::projectId, BackfillProject::traces));
     }
 
     /** The window read as the tick walks it: slices counted back from {@code start}, the newest open-ended. */
