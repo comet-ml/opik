@@ -79,6 +79,223 @@ export class ExperimentGroupRows {
     return this.experimentRow(experimentId).locator('td[data-cell-id$="_pass_rate"]');
   }
 
+  /**
+   * Every experiment row currently rendered, in DOM order, across all groups.
+   *
+   * The complement of `groupRows`: a group row's id starts with the
+   * `$__grouping__` prefix, an experiment row's with the experiment's own uuid.
+   * Both kinds carry a selection checkbox, so a range selection has to be able
+   * to say which rows are the experiments.
+   */
+  get experimentRows(): Locator {
+    return this.page.locator(
+      'tbody tr[data-row-id]:not([data-row-id^="$__grouping"])',
+    );
+  }
+
+  /**
+   * One experiment row's Name cell — the cell opik#9620 restyled and widened.
+   *
+   * Under grouping the Name column is not the ordinary name column at all:
+   * `useExperimentsTableConfig` replaces the select and pin columns with a
+   * single `generateDataRowCellDef` cell that carries the checkbox, the
+   * depth indent and a `ResourceCell` for the name. The ungrouped list keeps
+   * the old column, which is why `ExperimentsPage.expectExperimentNameInList`
+   * (`td[data-cell-id="<id>_name"]`) and this locator are not the same cell
+   * even though they share a column id.
+   */
+  experimentNameCell(experimentId: string): Locator {
+    return this.experimentRow(experimentId).locator('td[data-cell-id$="_name"]');
+  }
+
+  /**
+   * The link inside that cell — `ResourceLink`'s anchor.
+   *
+   * The anchor survives opik#9620: the PR changed what it RENDERS (a plain
+   * `span` under `variant: "text"` instead of an underlined `tableLink`
+   * button), not whether the name is a link. The anchor still stops its own
+   * clicks, which is what makes "a click beside the name" a different code
+   * path from "a click on the name" — see `clickNameCellPastTheLink`.
+   */
+  experimentNameLink(experimentId: string): Locator {
+    return this.experimentNameCell(experimentId).locator('a');
+  }
+
+  /** One experiment row's selection checkbox. */
+  experimentRowCheckbox(experimentId: string): Locator {
+    return this.experimentRow(experimentId).locator('button[role="checkbox"]');
+  }
+
+  /**
+   * Assert a grouped experiment's name renders as PLAIN cell text.
+   *
+   * The whole point of opik#9620's restyle, and both halves are asserted
+   * because the old `tableLink` button set both: `underline` and
+   * `font-medium`. A spec that read only the underline would pass against a
+   * cell that had lost the underline and kept the heavier weight, which is
+   * half a revert and looks wrong on screen in exactly the same way.
+   *
+   * The values are read COMPUTED rather than off the class list: the class
+   * names are Tailwind's and a utility rename would fail this for no
+   * user-visible reason, while `text-decoration-line` and `font-weight` are
+   * what a reader actually sees. `400` rather than "not 500" because an
+   * accidental `font-semibold` is the same defect.
+   *
+   * `hover` is a parameter rather than a separate method because the rest and
+   * hover states are the same claim: `tableLink` underlines on hover as well
+   * as at rest (`hover:underline`), so a revert that only showed up under the
+   * pointer would be invisible to a rest-only assertion.
+   */
+  async expectExperimentNamePlainText(
+    experimentId: string,
+    expectedName: string,
+    opts: { hover?: boolean } = {},
+  ): Promise<void> {
+    const where = opts.hover ? 'on hover' : 'at rest';
+    await test.step(`experiment ${experimentId}'s name is plain cell text ${where}`, async () => {
+      const cell = this.experimentNameCell(experimentId);
+      await expect(cell, `exactly one Name cell on experiment ${experimentId}`).toHaveCount(1, {
+        timeout: 30_000,
+      });
+      const link = this.experimentNameLink(experimentId);
+      await expect(link, `exactly one name link on experiment ${experimentId}`).toHaveCount(1);
+
+      // The name itself, so "no underline" is a fact about the cell that shows
+      // this experiment rather than about whatever rendered in its place.
+      await expect(link, `experiment ${experimentId} name`).toHaveText(expectedName);
+
+      if (opts.hover) await link.hover();
+
+      const styles = await link.evaluate((anchor) => {
+        const span = anchor.querySelector('span');
+        if (span === null) return null;
+        const computed = getComputedStyle(span);
+        return {
+          textDecorationLine: computed.textDecorationLine,
+          fontWeight: computed.fontWeight,
+        };
+      });
+      // Asserted present rather than defaulted: a null here means the `text`
+      // variant stopped rendering its span, and defaulting would turn that
+      // into a silent pass.
+      expect(styles, `experiment ${experimentId}'s name renders a span to style`).not.toBeNull();
+      expect(
+        styles?.textDecorationLine,
+        `experiment ${experimentId} name text-decoration-line ${where}`,
+      ).toBe('none');
+      expect(
+        styles?.fontWeight,
+        `experiment ${experimentId} name font-weight ${where}`,
+      ).toBe('400');
+    });
+  }
+
+  /** Click a grouped experiment's name text. */
+  async clickExperimentName(experimentId: string): Promise<void> {
+    await test.step(`click experiment ${experimentId}'s name`, async () => {
+      const link = this.experimentNameLink(experimentId);
+      await expect(link, `exactly one name link on experiment ${experimentId}`).toHaveCount(1, {
+        timeout: 30_000,
+      });
+      await link.click();
+    });
+  }
+
+  /**
+   * Click the Name cell in the strip BESIDE the link — the click target
+   * opik#9620 widened.
+   *
+   * Before the PR, `generateDataRowCellDef`'s `CellWrapper` carried
+   * `stopClickPropagation`, so every click anywhere in this cell died there and
+   * only the anchor navigated. Dropping it lets the rest of the cell reach the
+   * table's `onRowClick`. The two paths are genuinely different code — the
+   * anchor is a TanStack `Link` with its own `stopPropagation`, the strip is
+   * `handleRowClick`'s `navigate()` — and they are supposed to land in the same
+   * place, which is the only reason this is worth a test.
+   *
+   * The strip is MEASURED rather than assumed. The anchor is a flex item with
+   * `max-w-full`, so it grows to the cell's content box and the only part of
+   * the cell outside it is the wrapper's right padding — about 12px at the
+   * column's default width. Its existence is asserted before the click,
+   * because if the anchor ever filled the cell edge to edge there would be
+   * nothing here to click and a click that landed on the LINK would pass this
+   * test while proving nothing about the row handler.
+   *
+   * Clicked through `mouse.click` at viewport coordinates rather than
+   * `locator.click({ position })`, whose origin is the padding box — the
+   * distinction matters when the target is the padding itself.
+   */
+  async clickNameCellPastTheLink(experimentId: string): Promise<void> {
+    await test.step(`click experiment ${experimentId}'s name cell beside the link`, async () => {
+      const cell = this.experimentNameCell(experimentId);
+      const link = this.experimentNameLink(experimentId);
+      await expect(cell, `exactly one Name cell on experiment ${experimentId}`).toHaveCount(1, {
+        timeout: 30_000,
+      });
+      await expect(link, `exactly one name link on experiment ${experimentId}`).toHaveCount(1);
+
+      const cellBox = await cell.boundingBox();
+      const linkBox = await link.boundingBox();
+      // Thrown rather than returned: both are visible by the assertions above,
+      // so this is the type narrowing and never a path a run takes.
+      if (cellBox === null || linkBox === null) {
+        throw new Error(`experiment ${experimentId}'s Name cell or link has no box`);
+      }
+
+      const stripLeft = linkBox.x + linkBox.width;
+      const stripRight = cellBox.x + cellBox.width;
+      expect(
+        stripRight - stripLeft,
+        `the Name cell of experiment ${experimentId} has a strip beside the link to click`,
+      ).toBeGreaterThan(6);
+
+      await this.page.mouse.click(
+        (stripLeft + stripRight) / 2,
+        cellBox.y + cellBox.height / 2,
+      );
+    });
+  }
+
+  /**
+   * Assert one experiment row's selection state.
+   *
+   * Read off Radix's `data-state` rather than `aria-checked`, because that is
+   * what the shared `DataTable` styles the row from — so this is the state the
+   * user is looking at.
+   */
+  async expectRowSelected(experimentId: string, selected: boolean): Promise<void> {
+    await test.step(`experiment ${experimentId} is ${selected ? '' : 'not '}selected`, async () => {
+      const checkbox = this.experimentRowCheckbox(experimentId);
+      await expect(
+        checkbox,
+        `exactly one selection checkbox on experiment ${experimentId}`,
+      ).toHaveCount(1, { timeout: 30_000 });
+      await expect(checkbox, `experiment ${experimentId} selection state`).toHaveAttribute(
+        'data-state',
+        selected ? 'checked' : 'unchecked',
+      );
+    });
+  }
+
+  /**
+   * Tick one experiment row's checkbox, optionally with Shift held.
+   *
+   * Shift is what `checkboxClickHandler` reads to extend the selection from the
+   * last-clicked row, and it is the gesture most at risk from opik#9620: the
+   * handler's own `stopPropagation` is now the ONLY thing keeping a checkbox
+   * click from also reaching `onRowClick` and navigating away.
+   */
+  async clickRowCheckbox(experimentId: string, opts: { shift?: boolean } = {}): Promise<void> {
+    await test.step(`${opts.shift ? 'shift-' : ''}click experiment ${experimentId}'s checkbox`, async () => {
+      const checkbox = this.experimentRowCheckbox(experimentId);
+      await expect(
+        checkbox,
+        `exactly one selection checkbox on experiment ${experimentId}`,
+      ).toHaveCount(1, { timeout: 30_000 });
+      await checkbox.click(opts.shift ? { modifiers: ['Shift'] } : {});
+    });
+  }
+
   /** Block until the table has rendered group rows at all. */
   async waitForGroupRows(expected: number): Promise<void> {
     await test.step(`wait for ${expected} group row(s)`, async () => {
