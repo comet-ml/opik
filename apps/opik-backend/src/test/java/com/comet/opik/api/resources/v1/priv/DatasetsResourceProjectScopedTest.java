@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetType;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.TestContainersSetup;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -279,5 +282,52 @@ class DatasetsResourceProjectScopedTest {
                 DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
 
         assertThat(dataset.projectId()).isEqualTo(projectId);
+    }
+
+    @Test
+    @DisplayName("Create dataset without a project creates it in the Default Project")
+    void createDatasetWithoutProjectCreatesItInDefaultProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var dataset = buildDataset().toBuilder().id(null).projectId(null).projectName(null).build();
+
+        var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        var expectedDataset = dataset.toBuilder().projectId(defaultProjectId).build();
+        assertDataset(datasetResourceClient.getDatasetById(id, apiKey, workspaceName), expectedDataset);
+    }
+
+    @Test
+    @DisplayName("Put items without a project into a new dataset name creates the dataset in the Default Project")
+    void putDatasetItemsWithoutProjectCreatesDatasetInDefaultProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String datasetName = "dataset-" + UUID.randomUUID();
+        var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                .id(null)
+                .tags(Set.of())
+                .build();
+
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetName(datasetName)
+                .items(List.of(item))
+                .build(), workspaceName, apiKey);
+
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        var expectedDataset = Dataset.builder()
+                .name(datasetName)
+                .projectId(defaultProjectId)
+                .type(DatasetType.DATASET)
+                .visibility(Visibility.PRIVATE)
+                .build();
+        var page = datasetResourceClient.getDatasetsByProjectId(defaultProjectId, workspaceName, apiKey);
+        assertThat(page.content())
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
+                .containsExactly(expectedDataset);
     }
 }

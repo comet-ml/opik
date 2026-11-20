@@ -210,6 +210,10 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
+        /** ClickHouse threads per read, so the tick stays a small share of the server. */
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
         /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -226,5 +230,14 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration sliceSize;
+
+        /**
+         * The backfill's discovery and vector count read in slices of this much creation time. Their memory stays
+         * small, so wide slices: each slice re-reads the granules across its edges.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration discoverySliceSize;
     }
 }
