@@ -94,7 +94,7 @@ public class TopicVectorsTickService {
         });
     }
 
-    private record Enabled(List<String> workspaceIds, Map<String, Instant> watermarks) {
+    private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks) {
     }
 
     /** One workspace's turn: its window read from {@code lowerBound}, then its embed calls and writes. */
