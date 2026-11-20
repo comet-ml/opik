@@ -1,0 +1,35 @@
+.ov-view {
+  display: block;
+  box-sizing: border-box;
+  color: var(--ov-fg);
+  font-family: var(--ov-font);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ov-view .ov-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color-scheme: light;
+}
+.ov-view[data-theme="dark"] .ov-frame {
+  color-scheme: dark;
+}
+.ov-view .ov-error {
+  box-sizing: border-box;
+  color: var(--ov-danger);
+  background: color-mix(in srgb, var(--ov-danger) 10%, transparent);
+  border: 1px solid var(--ov-danger);
+  border-radius: var(--ov-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.ov-view .ov-placeholder {
+  box-sizing: border-box;
+  color: var(--ov-fg-muted);
+  border: 1px dashed var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+}

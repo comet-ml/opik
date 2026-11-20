@@ -1,0 +1,9 @@
+node_modules/
+dist
+*.tgz
+*/screenshots/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+python/src/opik_genui/data/

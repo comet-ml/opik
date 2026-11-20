@@ -1,0 +1,11 @@
+from pathlib import Path
+
+import pytest
+
+DATA = Path(__file__).parent.parent / "src" / "opik_genui" / "data"
+
+if not (DATA / "engine.json").is_file():
+    pytest.exit(
+        f"{DATA} is empty; run `npm run build` in sdks/genui, which writes the engine files there",
+        returncode=pytest.ExitCode.USAGE_ERROR,
+    )
