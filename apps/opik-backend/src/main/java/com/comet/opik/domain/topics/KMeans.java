@@ -379,7 +379,7 @@ public class KMeans {
 
         /** Never negative: rounding can take |x|² + |c|² - 2 x·c below 0 for a point on its centre. */
         double squaredDistance(int i, double[] centres, int j) {
-            return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * dot(i, centres, j));
+            return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * VectorMath.dot(x, i * d, centres, j * d, d));
         }
 
         /** The sum of {@code (x - c)²} over the dimensions, in scalar double: exactly 0 for a point on its centre. */
@@ -392,35 +392,6 @@ public class KMeans {
                 s += v * v;
             }
             return s;
-        }
-
-        /** Eight partial sums over interleaved dimensions, so the additions do not wait on each other; fixed order. */
-        private double dot(int i, double[] c, int j) {
-            int xi = i * d;
-            int cj = j * d;
-            double s0 = 0;
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-            double s4 = 0;
-            double s5 = 0;
-            double s6 = 0;
-            double s7 = 0;
-            int t = 0;
-            for (; t + 7 < d; t += 8) {
-                s0 += x[xi + t] * c[cj + t];
-                s1 += x[xi + t + 1] * c[cj + t + 1];
-                s2 += x[xi + t + 2] * c[cj + t + 2];
-                s3 += x[xi + t + 3] * c[cj + t + 3];
-                s4 += x[xi + t + 4] * c[cj + t + 4];
-                s5 += x[xi + t + 5] * c[cj + t + 5];
-                s6 += x[xi + t + 6] * c[cj + t + 6];
-                s7 += x[xi + t + 7] * c[cj + t + 7];
-            }
-            for (; t < d; t++) {
-                s0 += x[xi + t] * c[cj + t];
-            }
-            return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
         }
     }
 
