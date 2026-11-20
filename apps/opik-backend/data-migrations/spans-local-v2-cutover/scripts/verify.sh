@@ -220,7 +220,7 @@ done
 [[ "$FROM_WEEK" =~ ^(0|[1-9][0-9]{0,8})$ ]] \
     || { echo "ERROR: --from-week must be a non-negative integer (a week offset)." >&2; exit 2; }
 [[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]{0,8}$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
-[[ "$BATCH_WEEKS" =~ ^[0-9]{1,6}$ ]] \
+[[ "$BATCH_WEEKS" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
     || { echo "ERROR: --batch-weeks must be a non-negative integer (0 = the whole range in one query)." >&2; exit 2; }
 (( BATCH_WEEKS == 0 || SINGLE_PASS == 1 )) \
     || { echo "ERROR: --batch-weeks sizes the queries of --single-pass; pass --single-pass with it." >&2; exit 2; }
@@ -553,14 +553,18 @@ fi
 
 # Granule-level estimate of what one compare reads over [$1, $2), both sides, in on-disk bytes. EXPLAIN ESTIMATE runs
 # the index analysis only — primary key, the created_at skip index, the coverage slice — and reads no data.
+# Returns non-zero when either EXPLAIN fails, so a client error is never read as a zero-byte estimate; a window the
+# index analysis selects nothing in returns no rows and correctly estimates 0.
 estimate_window_bytes() {
-    local old_rows new_rows
-    old_rows="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $OLD_STORAGE FINAL
+    local old_plan new_plan old_rows new_rows
+    old_plan="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $OLD_STORAGE FINAL
         WHERE created_at >= toDateTime64('$1', 9, 'UTC') AND created_at < toDateTime64('$2', 9, 'UTC') AND $ROW_FILTER
-        SETTINGS use_skip_indexes_if_final = 1" | awk -F'\t' '{ r += $4 } END { print r + 0 }')"
-    new_rows="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $NEW_STORAGE FINAL
+        SETTINGS use_skip_indexes_if_final = 1")" || return 1
+    new_plan="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $NEW_STORAGE FINAL
         WHERE created_at >= toDateTime64('$1', 6, 'UTC') AND created_at < toDateTime64('$2', 6, 'UTC') AND $ROW_FILTER
-        SETTINGS use_skip_indexes_if_final = 1" | awk -F'\t' '{ r += $4 } END { print r + 0 }')"
+        SETTINGS use_skip_indexes_if_final = 1")" || return 1
+    old_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$old_plan")"
+    new_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$new_plan")"
     awk -v o="$old_rows" -v ob="$OLD_BYTES_PER_ROW" -v n="$new_rows" -v nb="$NEW_BYTES_PER_ROW" \
         'BEGIN { printf "%d %d\n", o * ob, n * nb }'
 }
@@ -578,8 +582,10 @@ if (( WINDOW_MODE == 1 )); then
     QUERY_HI=("$WINDOW_TO")
 else
     # Index i holds the Monday of week FROM_WEEK + i, through TO_WEEK + 1 (the last window's upper bound).
-    read -r -a WEEK_STARTS <<<"$(ch "SELECT arrayStringConcat(arrayMap(w -> toString(addWeeks(toDate('$ANCHOR'), w)),
+    # Captured first, so a failed query aborts here under set -e rather than surfacing later as an empty array.
+    week_starts="$(ch "SELECT arrayStringConcat(arrayMap(w -> toString(addWeeks(toDate('$ANCHOR'), w)),
         range($FROM_WEEK, greatest($FROM_WEEK, $TO_WEEK + 2))), ' ')")"
+    read -r -a WEEK_STARTS <<<"$week_starts"
     week_start() { echo "${WEEK_STARTS[$(( $1 - FROM_WEEK ))]} 00:00:00"; }
     if (( SINGLE_PASS == 1 )); then
         # A batch spans BATCH_WEEKS selected weeks, so a multiple of the stride, which keeps every batch on the stride's
@@ -632,7 +638,11 @@ EST_OLD=0
 EST_NEW=0
 QUERY_EST=()
 for i in "${!QUERY_LO[@]}"; do
-    read -r est_old est_new <<<"$(estimate_window_bytes "${QUERY_LO[$i]}" "${QUERY_HI[$i]}")"
+    estimate="$(estimate_window_bytes "${QUERY_LO[$i]}" "${QUERY_HI[$i]}")" || {
+        log "ERROR: EXPLAIN ESTIMATE failed for [${QUERY_LO[$i]}, ${QUERY_HI[$i]}); see the client error above." >&2
+        exit 2
+    }
+    read -r est_old est_new <<<"$estimate"
     QUERY_EST+=($(( est_old + est_new )))
     EST_OLD=$(( EST_OLD + est_old ))
     EST_NEW=$(( EST_NEW + est_new ))
