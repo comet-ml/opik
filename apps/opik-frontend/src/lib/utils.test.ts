@@ -338,6 +338,16 @@ describe("isLooseEqual", () => {
     expect(isLooseEqual({}, {})).toBe(true);
   });
 
+  it("compares keys named like Object methods as plain values", () => {
+    const a = { rows: [{ toString: 1, valueOf: "x" }] };
+    expect(isLooseEqual(a, { rows: [{ toString: 1, valueOf: "x" }] })).toBe(
+      true,
+    );
+    expect(isLooseEqual(a, { rows: [{ toString: 2, valueOf: "x" }] })).toBe(
+      false,
+    );
+  });
+
   it("should return true for objects with all undefined vs empty object", () => {
     const a = { x: undefined, y: undefined };
     const b = {};

@@ -9,6 +9,18 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RowsTable from "./RowsTable";
 
+// happy-dom has no canvas: 8px per character, 14px per wide (CJK) one.
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getTextWidth: (texts: string[]) =>
+    texts.map((text) =>
+      [...text].reduce(
+        (width, char) => width + (/[\u3000-\u9fff]/.test(char) ? 14 : 8),
+        0,
+      ),
+    ),
+}));
+
 const ROWS = [
   { model: "gpt-4o", cost: "9.5" },
   { model: "claude", cost: "10" },
@@ -149,6 +161,12 @@ describe("RowsTable", () => {
       expect(shownWidths()).toEqual(["344px", "80px"]);
     });
 
+    it("sizes a column to its measured text, wide characters included", () => {
+      render(<RowsTable rows={[{ 用户满意度评分: "高" }]} />);
+      // 7 * 14 + 24 + 18 = 140px; a flat 8px per character cut it at 98px.
+      expect(shownWidths()).toEqual(["140px"]);
+    });
+
     it("sizes a column named like an object property", () => {
       render(
         <RowsTable
@@ -249,6 +267,45 @@ describe("RowsTable", () => {
         expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 250 }),
       );
     });
+  });
+
+  it("does not let a drag shrink a column below the minimum width", async () => {
+    const onColumnsWidthChange = vi.fn();
+    render(
+      <RowsTable
+        rows={ROWS}
+        columns={["model", "cost"]}
+        columnsWidth={{ model: 100 }}
+        onColumnsWidthChange={onColumnsWidthChange}
+      />,
+    );
+    document.querySelector<HTMLElement>(
+      "[data-table-scroll-container]",
+    )!.getBoundingClientRect = () => ({ right: 10000 }) as DOMRect;
+    const resizer = header("model").querySelector(".cursor-ew-resize")!;
+
+    fireEvent.mouseDown(resizer, { clientX: 500 });
+    fireEvent.mouseMove(document, { clientX: 0 });
+    fireEvent.mouseUp(document, { clientX: 0 });
+
+    await waitFor(() =>
+      expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 80 }),
+    );
+  });
+
+  it("ignores a saved width below the minimum", () => {
+    render(
+      <RowsTable
+        rows={ROWS}
+        columns={["model", "cost"]}
+        columnsWidth={{ model: 0 }}
+      />,
+    );
+    expect(
+      Array.from(document.querySelectorAll("col")).map(
+        (col) => col.style.width,
+      ),
+    ).toEqual(["80px", "80px"]);
   });
 
   it("does not report widths after it unmounts mid-save", () => {
