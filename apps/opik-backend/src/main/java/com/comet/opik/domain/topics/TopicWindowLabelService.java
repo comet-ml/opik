@@ -133,8 +133,9 @@ public class TopicWindowLabelService {
     /**
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
      * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it
-     * ended is the outcome. A project with no saved list is complete. The caller keeps a run of the same project from
-     * saving meanwhile: that would make this pass label with a list that is no longer the project's.
+     * ended is the outcome. A project with no saved list is complete. The caller runs it as a claimed run of the project
+     * ({@link TopicProjectDAO#claim}), so no build of the project saves meanwhile: that would make this pass label with a
+     * list that is no longer the project's.
      */
     Mono<PassOutcome> labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
             @NonNull Trigger trigger) {

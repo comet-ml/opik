@@ -157,7 +157,7 @@ final class TopicsTestData {
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
             runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
@@ -174,6 +174,19 @@ final class TopicsTestData {
             runDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
+    }
+
+    /**
+     * Puts {@code runId} on the project's row, running since {@code at} with a deadline an hour later, as the
+     * planner's queue and a pod's claim do. The project must have no run in flight.
+     */
+    static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId,
+            TopicProject.RunMode mode, Instant at) {
+        runDAO.ensureRow(workspaceId, projectId);
+        if (runDAO.queue(workspaceId, projectId, runId, mode, at) != 1
+                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
     }
 
     /** An Opik id: UUID v7. */

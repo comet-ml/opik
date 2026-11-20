@@ -120,7 +120,8 @@ class TopicsRebuildServiceFaultsTest {
         var workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(workspaceId)).thenReturn(workspaceName);
         var config = TestConfigUtils.loadConfigTest().getTopics();
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                workspaceNames);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         serviceWith = algorithm -> new TopicsRebuildService(config, reader, llm, store, idGenerator, metrics,

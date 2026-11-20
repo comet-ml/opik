@@ -2771,8 +2771,9 @@ topics:
     #  attempt of its trace_topics insert. At most 30m
     readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
     #  Default: 60s
-    #  Description: The labelling pass's count of its run's window, with its slice bounds, stops after this (or the
-    #  pass's deadline, when sooner). At most 30m
+    #  Description: A ClickHouse count of a window stops after this: the labelling pass's, with its slice bounds (or
+    #  the pass's deadline, when sooner), and the planner's count of each workspace's first-build candidates. At most
+    #  30m
     countTimeout: ${TOPICS_BUILD_COUNT_TIMEOUT:-60s}
     #  Default: 10000
     #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
@@ -2812,6 +2813,73 @@ topics:
       #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
+  firstBuild:
+    #  Default: 72h
+    #  Description: A project's first build waits for its vectors backfill to drain. Past this long since the backfill
+    #  started, it is built anyway once timedOutShare of the backfill's traces have a vector; with fewer it keeps
+    #  waiting, and the planner logs a warning. At least 1m, at most 30d
+    backfillMaxWait: ${TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT:-72h}
+    #  Default: 0.99
+    #  Description: The share of a backfill's traces with a vector that lets a first build start past backfillMaxWait.
+    #  Between 0.5 and 1.0
+    timedOutShare: ${TOPICS_FIRST_BUILD_TIMED_OUT_SHARE:-0.99}
+    #  Default: [1h, 6h, 1d]
+    #  Description: The wait after a project's first, second, ... failed first build; the last applies to every later
+    #  one. The first is also the wait after a failed labelling pass. 1 to 10 entries
+    retryDelays: [1h, 6h, 1d]
+  #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
+  #  below. Any pod claims a run with a compare-and-set on its row and runs it
+  runs:
+    #  Default: topics-runs
+    #  Description: Redis stream of queued Topics runs
+    streamName: ${TOPICS_RUNS_STREAM_NAME:-'topics-runs'}
+    #  Default: topics-runs-consumers
+    #  Description: Consumer group of the Topics runs stream
+    consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
+    #  Default: 1
+    #  Description: Runs one pod runs at a time; each holds a window in memory. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-1}
+    #  Default: 5s
+    #  Description: How often a pod polls the stream for queued runs
+    poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
+    #  Default: 5s
+    #  Description: Timeout of a blocking read of the stream (long polling). At most 20s
+    longPollingDuration: ${TOPICS_RUNS_LONG_POLLING_DURATION:-5s}
+    #  Default: 2
+    #  Description: Claim pending messages every N polling intervals
+    claimIntervalRatio: ${TOPICS_RUNS_CLAIM_INTERVAL_RATIO:-2}
+    #  Default: 5m
+    #  Description: A message no pod acked for this long goes to another pod, which runs it when its row is queued
+    #  again (its pod stopped) and only acks it otherwise. At least 1m
+    pendingMessageDuration: ${TOPICS_RUNS_PENDING_MESSAGE_DURATION:-5m}
+    #  Default: 3
+    #  Description: Deliveries of a message that keeps failing before it is dropped; the planner publishes its run
+    #  again. At most 10
+    maxRetries: ${TOPICS_RUNS_MAX_RETRIES:-3}
+    #  Default: 10000
+    #  Description: Maximum stream length before old entries are trimmed
+    streamMaxLen: ${TOPICS_RUNS_STREAM_MAX_LEN:-10000}
+    #  Default: 100
+    #  Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+    streamTrimLimit: ${TOPICS_RUNS_STREAM_TRIM_LIMIT:-100}
+    #  Default: 2
+    #  Description: Runs queued, running or cancelling across the cluster; the planner queues no more. Each reads a
+    #  window from ClickHouse and calls the LLM. A run started by hand is not capped. At most 100
+    maxInFlight: ${TOPICS_RUNS_MAX_IN_FLIGHT:-2}
+    #  Default: 20s
+    #  Description: How often a running run writes its heartbeat on its row; a write that finds the row no longer
+    #  running (cancelled) stops the run. At most 5m
+    heartbeatInterval: ${TOPICS_RUNS_HEARTBEAT_INTERVAL:-20s}
+    #  Default: 60s
+    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. Above
+    #  heartbeatInterval, at most 1h
+    abandonGrace: ${TOPICS_RUNS_ABANDON_GRACE:-60s}
+    #  Default: 10m
+    #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
+    republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
+    #  Default: 2m
+    #  Description: The planner stops counting first-build candidates after this and queues what it found. At most 30m
+    planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
