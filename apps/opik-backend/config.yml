@@ -2539,6 +2539,11 @@ inference:
   #  aiLabels.loadConcurrency (when ai-labels is on) and topics.vectors.embedConcurrency (when Topics is on) must be
   #  below jerseyClient.maxConnectionsPerRoute
   maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
+  #  Default: 4
+  #  Description: Most synchronous generate calls (Topics builds) in flight from one backend instance, each on a thread
+  #  of its own while the model answers. They share the jerseyClient connection pool with the other calls to
+  #  opik-inference
+  maxConcurrentGenerates: ${OPIK_INFERENCE_MAX_CONCURRENT_GENERATES:-4}
   #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
   #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
   #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
@@ -2554,6 +2559,13 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 60s
+    #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
+    maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
+    #  Default: 300s
+    #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
+    #  topics.build.llmDeadline must not be above it
+    maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
     maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
@@ -2785,26 +2797,18 @@ topics:
     #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
     maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
     #  Default: 120s
-    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
-    qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
-  firstBuild:
-    #  Default: true
-    #  Description: Runs the first-build job, which builds the list of a project that has none yet, and finishes
-    #  the labelling passes that did not end. A project whose first builds failed waits 1h, then 6h, then 1d between
-    #  attempts. Needs topics.enabled
-    enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
-    #  Default: 10m
-    #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
-    interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
-    #  Default: 9m
-    #  Description: No project starts after this much of a run; the rest wait for the next run. Unfinished
-    #  labelling passes use up to half of it while a first build waits, all of it otherwise. Must be shorter than interval
-    budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}
-    #  Default: 72h
-    #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the
-    #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
-    #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
-    backfillMaxWait: ${TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT:-72h}
+    #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
+    llmDeadline: ${TOPICS_BUILD_LLM_DEADLINE:-120s}
+    #  Default: 120s
+    #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
+    #  attempt of its trace_topics insert. At most 30m
+    readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 3
+    #  Description: Retries of the trace_topics insert after the save's commit. At most 10
+    insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
+    #  Default: 500ms
+    #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
+    insertBackoff: ${TOPICS_BUILD_INSERT_BACKOFF:-500ms}
   #  The k-means topic algorithm's tunables. The LLM call it makes is the author task in topics/tasks/author.yaml
   #  (prompt, schema, max tokens, version)
   algorithm:
@@ -2844,6 +2848,12 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 10
+    #  Description: Most topics in a project's list. At most 100
+    maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}
+    #  Default: 1000
+    #  Description: A first build over fewer traces is marked provisional in its stats
+    provisionalBelow: ${TOPICS_ALGORITHM_PROVISIONAL_BELOW:-1000}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
