@@ -145,7 +145,7 @@ public class TopicsRebuildService {
             return recorded;
         });
         if (abandoned > 0) {
-            log.warn("Topics project '{}' had an attempt left running past its lease, recorded as abandoned",
+            log.warn("Topics run had an attempt left running past its lease, recorded as abandoned, project '{}'",
                     projectId);
             metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicProject.RunError.ABANDONED.getValue());
         }
@@ -527,8 +527,8 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             int inserted = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
-            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', stats '{}'", runId,
-                    projectId, inserted, topics.size(), stats);
+            log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", runId, projectId, inserted,
+                    stats);
         }
 
         Outcome failed(RunError code, Exception exception) {
