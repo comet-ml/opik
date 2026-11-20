@@ -45,13 +45,15 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
         Map<Integer, List<Integer>> claimed = firstMention.entrySet().stream()
                 .filter(entry -> entry.getValue() >= 0 && entry.getValue() < named.size())
                 .collect(groupingBy(Map.Entry::getValue, mapping(Map.Entry::getKey, toUnmodifiableList())));
-        return new AuthorAnswer(IntStream.range(0, named.size())
-                .mapToObj(t -> AuthorTopic.builder()
-                        .name(named.get(t).name())
-                        .definition(named.get(t).definition())
-                        .clusters(claimed.getOrDefault(t, List.of()))
-                        .build())
-                .toList());
+        return AuthorAnswer.builder()
+                .topics(IntStream.range(0, named.size())
+                        .mapToObj(t -> AuthorTopic.builder()
+                                .name(named.get(t).name())
+                                .definition(named.get(t).definition())
+                                .clusters(claimed.getOrDefault(t, List.of()))
+                                .build())
+                        .toList())
+                .build();
     }
 
     private record Named(String name, String definition) {

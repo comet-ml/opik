@@ -11,6 +11,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -33,7 +34,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     @Inject
     public KMeansTopicAlgorithm(@NonNull @Config("topics") TopicsConfig topics, @NonNull TopicTasks tasks) {
-        this.config = topics.getAlgorithm();
+        this.config = Objects.requireNonNull(topics.getAlgorithm(), "topics.algorithm");
         this.tasks = tasks;
     }
 
