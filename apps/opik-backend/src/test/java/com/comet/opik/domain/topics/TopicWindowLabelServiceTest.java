@@ -31,10 +31,14 @@ import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.domain.topics.TopicWindowLabelService.PassOutcome.COMPLETE;
+import static com.comet.opik.domain.topics.TopicWindowLabelService.PassOutcome.CUT;
+import static com.comet.opik.domain.topics.TopicWindowLabelService.PassOutcome.FAILED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -151,19 +155,15 @@ class TopicWindowLabelServiceTest {
                                     trace.vector()))
                             .toList());
                 });
-        stubInsert(false);
+        stubInsert();
     }
 
     @Test
     @DisplayName("every window trace gets exactly one row of the run, labelled by the saved prototypes; no trace "
             + "outside the window gets one, and the run's labels are marked complete")
     void labelsEveryWindowTraceOnce() {
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(COMPLETE);
 
-        assertThat(pass.complete()).isTrue();
-        assertThat(pass.runId()).isEqualTo(runId);
-        assertThat(pass.windowTraces()).isEqualTo(IN_WINDOW);
-        assertThat(pass.labelled()).isEqualTo(IN_WINDOW);
         var window = inWindow(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)), NIGHT);
         assertThat(inserted).extracting(TraceTopic::traceId)
                 .containsExactlyInAnyOrderElementsOf(window.stream().map(Trace::traceId).toList());
@@ -181,7 +181,6 @@ class TopicWindowLabelServiceTest {
                 .isEqualTo(expected);
         assertThat(expected.values()).contains(billing, refunds, TraceTopic.OTHER);
         verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
-        assertThat(pass.other()).isEqualTo(expected.values().stream().filter(TraceTopic.OTHER::equals).count());
     }
 
     @Test
@@ -189,9 +188,8 @@ class TopicWindowLabelServiceTest {
     void noTopicLabelsOther() {
         when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of());
 
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(COMPLETE);
 
-        assertThat(pass.complete()).isTrue();
         assertExactlyOneRowPerWindowTrace();
         assertThat(inserted).extracting(TraceTopic::topicId).containsOnly(TraceTopic.OTHER);
         verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
@@ -204,15 +202,16 @@ class TopicWindowLabelServiceTest {
         var sample = window.subList(0, 40).stream().map(this::ownRow).toList();
         inserted.addAll(sample);
 
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(COMPLETE);
 
-        assertThat(pass.complete()).isTrue();
-        assertThat(pass.labelled()).isEqualTo(IN_WINDOW - sample.size());
         assertExactlyOneRowPerWindowTrace();
+        var own = sample.stream().map(TraceTopic::traceId).collect(Collectors.toSet());
+        verify(traceTopicsDAO, never())
+                .insert(argThat(rows -> rows.stream().anyMatch(row -> own.contains(row.traceId()))));
     }
 
     @Test
-    @DisplayName("a failed chunk ends the pass without throwing, touches no part of the saved list and marks "
+    @DisplayName("a failed insert fails the pass without erroring, touches no part of the saved list and marks "
             + "nothing complete; a later pass labels the rest, every window trace ends with exactly one row, and "
             + "only then are the labels marked complete")
     void failedChunkResumes() {
@@ -226,50 +225,45 @@ class TopicWindowLabelServiceTest {
             return Mono.fromRunnable(() -> inserted.addAll(rows)).thenReturn((long) rows.size());
         }).when(traceTopicsDAO).insert(any());
 
-        var cut = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(FAILED);
 
-        assertThat(cut.complete()).isFalse();
-        assertThat(cut.labelled()).isEqualTo(2L * CHUNK);
         assertThat(inserted).hasSize(2 * CHUNK);
         verify(topicDAO, never()).insertTopics(any());
         verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
 
-        var resumed = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(COMPLETE);
 
-        assertThat(resumed.complete()).isTrue();
-        assertThat(resumed.labelled()).isEqualTo(IN_WINDOW - 2L * CHUNK);
         verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
         assertExactlyOneRowPerWindowTrace();
     }
 
     @Test
-    @DisplayName("a pass whose deadline is too close reads nothing, says it is not complete and marks nothing")
-    void deadlineTooClose() {
-        var pass = label(Instant.now().plus(TopicWindowLabelService.MIN_PAGE_TIME).minusSeconds(1));
+    @DisplayName("a pass past its deadline is cut before it reads anything, and marks nothing")
+    void pastDeadlineIsCut() {
+        assertThat(label(Instant.now().minusSeconds(1))).isEqualTo(CUT);
 
-        assertThat(pass.complete()).isFalse();
-        assertThat(pass.labelled()).isZero();
         verify(windowDAO, never()).countAndBounds(any(), any(), any(), any(), anyInt(), anyLong());
         verifyNoInteractions(traceTopicsDAO);
         verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
     }
 
     @Test
-    @DisplayName("an interrupt stops the pass at the next page and the interrupt is kept")
-    void interruptStops() {
-        stubInsert(true);
+    @DisplayName("a deadline that comes mid-pass cuts it: the pages inserted stay, the next is cancelled, and nothing "
+            + "is marked complete")
+    void deadlineCutsMidPass() {
+        var calls = new AtomicInteger();
+        doAnswer(invocation -> {
+            List<TraceTopic> rows = invocation.getArgument(0);
+            // The second page's insert outlasts the deadline.
+            var delay = calls.incrementAndGet() == 2 ? Duration.ofSeconds(30) : Duration.ZERO;
+            return Mono.delay(delay).then(Mono.fromRunnable(() -> inserted.addAll(rows)))
+                    .thenReturn((long) rows.size());
+        }).when(traceTopicsDAO).insert(any());
 
-        TopicWindowLabelService.Pass pass;
-        boolean interrupted;
-        try {
-            pass = label(Instant.now().plus(Duration.ofMinutes(5)));
-        } finally {
-            interrupted = Thread.interrupted();
-        }
+        assertThat(label(Instant.now().plusSeconds(2))).isEqualTo(CUT);
 
-        assertThat(interrupted).isTrue();
-        assertThat(pass.complete()).isFalse();
         assertThat(inserted).hasSize(CHUNK);
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
     }
 
     @Test
@@ -287,9 +281,8 @@ class TopicWindowLabelServiceTest {
                                                 trace.vector()))
                                         .toList()));
 
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(FAILED);
 
-        assertThat(pass.complete()).isFalse();
         int slices = (IN_WINDOW + SLICE_TRACES - 1) / SLICE_TRACES;
         assertThat(inserted).hasSize(slices * CHUNK);
         verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
@@ -308,9 +301,8 @@ class TopicWindowLabelServiceTest {
                                                 0x8000_0000_0000_0000L),
                                         invocation.getArgument(3), unit(random))));
 
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(FAILED);
 
-        assertThat(pass.complete()).isFalse();
         int slices = (IN_WINDOW + SLICE_TRACES - 1) / SLICE_TRACES;
         int maxPages = (SLICE_TRACES + CHUNK - 1) / CHUNK + 2;
         assertThat(inserted).hasSize(slices * maxPages * CHUNK);
@@ -322,10 +314,8 @@ class TopicWindowLabelServiceTest {
     void noSavedList() {
         when(topicDAO.findProjects(eq(WORKSPACE_ID), any())).thenReturn(List.of());
 
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        assertThat(label(Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(COMPLETE);
 
-        assertThat(pass.complete()).isTrue();
-        assertThat(pass.runId()).isNull();
         verifyNoInteractions(windowDAO, traceTopicsDAO);
     }
 
@@ -366,21 +356,18 @@ class TopicWindowLabelServiceTest {
                 .otherVectors(new PrototypeVectors(List.of(otherPrototype)))).build()));
     }
 
-    /** Each insert adds its rows to {@code inserted}; with {@code interrupt}, it then interrupts the thread. */
-    private void stubInsert(boolean interrupt) {
+    /** Each insert adds its rows to {@code inserted}. */
+    private void stubInsert() {
         doAnswer(invocation -> {
             List<TraceTopic> rows = invocation.getArgument(0);
             inserted.addAll(rows);
-            if (interrupt) {
-                Thread.currentThread().interrupt();
-            }
             return Mono.just((long) rows.size());
         }).when(traceTopicsDAO).insert(any());
     }
 
-    private TopicWindowLabelService.Pass label(Instant deadline) {
+    private TopicWindowLabelService.PassOutcome label(Instant deadline) {
         return service.labelWindow(WORKSPACE_ID, projectId, deadline, TopicWindowLabelService.Trigger.RUN, CHUNK,
-                SLICE_TRACES);
+                SLICE_TRACES).block();
     }
 
     private void assertExactlyOneRowPerWindowTrace() {

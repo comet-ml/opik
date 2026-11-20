@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -142,13 +141,11 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
      */
     private Mono<Void> label(TopicsRunMessage message, Instant deadline) {
         var passDeadline = deadline.minus(config.getRuns().getHeartbeatInterval().toJavaDuration());
-        return Mono.fromCallable(() -> labelService.labelWindow(message.workspaceId(), message.projectId(),
-                passDeadline, TopicWindowLabelService.Trigger.RESUME))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(pass -> pass.complete() || !Instant.now().isBefore(
-                        passDeadline.minus(TopicWindowLabelService.MIN_PAGE_TIME))
-                                ? store.endLabels(message).then()
-                                : fail(message, RunError.INTERNAL));
+        return labelService.labelWindow(message.workspaceId(), message.projectId(), passDeadline,
+                TopicWindowLabelService.Trigger.RESUME)
+                .flatMap(outcome -> outcome == TopicWindowLabelService.PassOutcome.FAILED
+                        ? fail(message, RunError.INTERNAL)
+                        : store.endLabels(message).then());
     }
 
     private Mono<Void> fail(TopicsRunMessage message, RunError code) {

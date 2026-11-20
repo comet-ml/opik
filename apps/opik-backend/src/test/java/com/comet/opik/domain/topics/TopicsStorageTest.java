@@ -147,13 +147,10 @@ class TopicsStorageTest {
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RUN, 7, 20);
+                TopicWindowLabelService.Trigger.RUN, 7, 20).block();
 
-        assertThat(pass.complete()).isTrue();
+        assertThat(pass).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
-        assertThat(pass.runId()).isEqualTo(runId);
-        assertThat(pass.windowTraces()).isEqualTo(BUILT);
-        assertThat(pass.labelled()).isEqualTo(BUILT - 30);
         assertThat(rowsOfRun(workspaceId, projectId, runId))
                 .containsOnlyKeys(TRACES.traceIds())
                 .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
@@ -172,11 +169,12 @@ class TopicsStorageTest {
         assertThat(data.traceTopics(workspaceId, projectId).stream()
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId))).isEqualTo(expected);
 
+        var rowsBefore = data.traceTopics(workspaceId, projectId).size();
         var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RESUME, 7, 20);
+                TopicWindowLabelService.Trigger.RESUME, 7, 20).block();
 
-        assertThat(again.complete()).isTrue();
-        assertThat(again.labelled()).isZero();
+        assertThat(again).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
