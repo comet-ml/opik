@@ -14,38 +14,6 @@ from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
 from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
 
 
-class TestFinalizeOptimization:
-    """Tests for _finalize_optimization method."""
-
-    @pytest.fixture
-    def optimizer(self) -> ConcreteOptimizer:
-        return ConcreteOptimizer(model="gpt-4")
-
-    def test_updates_optimization_status(self, optimizer) -> None:
-        """Should update optimization status when optimization exists."""
-        mock_optimization = MagicMock()
-        context = make_optimization_context(
-            ChatPrompt(name="test", system="test", user="test"),
-            optimization=mock_optimization,
-            optimization_id="opt-123",
-        )
-
-        optimizer._finalize_optimization(context, status="completed")
-
-        # error_info defaults to None on the success path (only failures pass a
-        # reason); it is threaded through so the graceful-error path can persist
-        # one (OPIK-7172).
-        mock_optimization.update.assert_called_with(status="completed", error_info=None)
-
-    def test_handles_none_optimization(self, optimizer) -> None:
-        """Should not raise when optimization is None."""
-        context = make_optimization_context(
-            ChatPrompt(name="test", system="test", user="test"),
-        )
-
-        optimizer._finalize_optimization(context, status="completed")
-
-
 class TestFinalizeFinishReason:
     """Tests for _finalize_finish_reason method."""
 

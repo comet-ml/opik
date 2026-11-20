@@ -45,6 +45,9 @@ def get() -> httpx.Client:
 
     hooks.httpx_client_hook.apply_httpx_client_hooks(client)
 
+    # Pre-signed URLs carry their own auth, and S3 rejects a second mechanism.
+    client.auth = None
+
     return client
 
 

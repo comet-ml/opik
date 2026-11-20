@@ -95,18 +95,20 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
-        /** Texts per embed call; the service takes at most 256. */
+        /** Texts per embed call, up to {@code inference.limits.maxEmbedInputs}. */
         @JsonProperty
-        @Min(1) @Max(256) private int embedBatchSize;
+        @Min(1) private int embedBatchSize;
 
         /** Embed calls in flight at a time; set it to the embed pool's replica count. */
         @JsonProperty
-        @Min(1) @Max(4) private int embedConcurrency = 1;
+        @Min(1) private int embedConcurrency;
 
-        /** Each embed call's deadline; a chunk starts only with at least this much of the tick budget left. */
+        /**
+         * Each embed call's deadline, up to {@code inference.limits.maxEmbedDeadline}; a chunk starts only with at least
+         * this much of the tick budget left.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
         private Duration embedTimeout;
 
         @Valid @NotNull @JsonProperty
@@ -152,6 +154,10 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
+        /** ClickHouse threads per read, so the tick stays a small share of the server. */
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
         /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -168,5 +174,14 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration sliceSize;
+
+        /**
+         * The backfill's discovery and vector count read in slices of this much creation time. Their memory stays
+         * small, so wide slices: each slice re-reads the granules across its edges.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration discoverySliceSize;
     }
 }
