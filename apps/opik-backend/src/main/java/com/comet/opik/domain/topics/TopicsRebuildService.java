@@ -16,7 +16,6 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -246,7 +245,7 @@ public class TopicsRebuildService {
             // The answer's length and SHA-256 are logged when it arrives.
             log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}', stats '{}'", run.runId(),
                     run.projectId(), code.getValue(), ExceptionUtils.getThrowableList(error).stream()
-                            .map(TopicsRebuildService::formatError).toList(),
+                            .map(TopicsErrors::formatError).toList(),
                     run.stats());
         } else {
             log.warn("Topics run '{}' failed, project '{}', code '{}', stats '{}'", run.runId(), run.projectId(),
@@ -276,15 +275,5 @@ public class TopicsRebuildService {
 
     private static TopicsRunException invariant(String message) {
         return new TopicsRunException(RunError.INVARIANT, message);
-    }
-
-    /**
-     * The type, and a SQL error's state and code, never the message: a Jackson, Jdbi or ClickHouse error can quote the
-     * answer, the bound arguments or the query, which can hold trace text.
-     */
-    static String formatError(Throwable throwable) {
-        return throwable instanceof SQLException sql
-                ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
-                : throwable.getClass().getName();
     }
 }
