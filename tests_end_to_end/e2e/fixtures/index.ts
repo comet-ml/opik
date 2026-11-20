@@ -1,4 +1,4 @@
-export { test, expect } from './experiments-tab-split.fixture';
+export { test, expect } from './same-name-datasets.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -665,3 +665,11 @@ export type {
   ExperimentsTabSplitRef,
   ExperimentsTabSplitFixtures,
 } from './experiments-tab-split.fixture';
+export type {
+  SameNameProjectRef,
+  SameNameProjectsRef,
+  SameNameProjectsFixtures,
+  SameNameCopyRef,
+  SameNameDatasetsRef,
+  SameNameDatasetsFixtures,
+} from './same-name-datasets.fixture';

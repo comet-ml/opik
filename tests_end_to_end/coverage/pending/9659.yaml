@@ -1,0 +1,135 @@
+# pending capabilities from opik#9659 (OPIK-8934) — applied by the release job
+#
+# All three are "a dataset name is unique per PROJECT, not per workspace": the
+# unique key became (workspace_id, name, IFNULL(project_id, '')) in migration
+# 000113, every by-name lookup went through a new findSingleByName, and the
+# delete-by-name DAO statement that matched on (workspace_id, name) was replaced
+# with a delete of the one resolved id.
+#
+# None of them fits the keys the exploration's candidates proposed, and the
+# reason is the same in each case: every one of those keys is already
+# `covered: true`, by a spec that would pass unchanged if the name scope
+# reverted to the workspace. A capability counted as covered is never
+# re-derived, so folding any of this under one of them would retire the question
+# permanently while nothing had ever held one name in two projects.
+#
+#   create-dataset-ui (t1-smoke, dataset-crud-smoke.spec.ts) types a name into
+#   the sidebar and submits it ONCE, under a name namespaced by the run prefix —
+#   so no two datasets in this estate could ever have collided, whatever the
+#   unique key was.
+#
+#   list-datasets (t1-smoke + t2-cuj) is the row and its computed summary
+#   columns, over datasets seeded in one project. The exploration filed the
+#   delete candidate here because that is where its UI assertion lands; but the
+#   area has no delete-dataset key of any kind, and recording a destructive
+#   scope rule under a key named for listing would mean a delete nobody had
+#   tested read as tested the moment the next listing spec passed.
+#
+#   create-dataset-sdk (t1-smoke) and sdk-round-trip (t1-smoke + t2-cuj) are
+#   about creating and reading a dataset back through the SDK. Neither is about
+#   which dataset a NAME resolves to once more than one answers to it, and both
+#   pass identically before and after this PR.
+#
+# Three keys rather than one, because the three are separately wired and fail
+# separately: whether two projects may hold one name at all is a DB constraint
+# plus the create path, which project a name-scoped DELETE removes from is the
+# delete path, and what an address carrying no usable project does is the
+# ambiguity branch shared by three read/write endpoints. A single key would
+# report all three as covered the moment any one spec passed — and the middle
+# one is the data-loss case.
+#
+- area: datasets
+  capability: per-project-name-scope
+  note: >-
+    The same dataset name held independently by two projects
+    (dataset-name-per-project-scope.spec.ts), driven through the Create-dataset
+    sidebar because that is where the relaxed constraint lands with no frontend
+    diff at all: the v2 create posts `project_id: activeProjectId`
+    (useDatasetForm.ts), so the Datasets page changed behaviour without changing.
+    Both halves of the claim, as two tests that fail for opposite reasons — the
+    second project's create is ACCEPTED and resolves to a new dataset with its
+    own description, and a repeat inside ONE project is still REFUSED. The
+    second is load-bearing: without it a regression that dropped the unique key
+    altogether would pass the first. The refusal is asserted as what a user
+    sees, the inline "This name already exists" under the Name field (the 409 is
+    mapped there by handleMutationError, and the exploration's first pass missed
+    it because the message carries no role="alert"), together with the sidebar
+    still being OPEN — the panel is never unmounted, so a refusal that closed it
+    anyway would still show a visible error for an instant while discarding what
+    was typed. Each project's list is asserted as a CLOSED set (its `total` and
+    its row ids, not "mine is in it"), since the failure this exists to catch
+    renders as two identical rows rather than as an error, and each project's
+    row is asserted to carry its own dataset id BEFORE it is clicked and to open
+    that id, with the other project's id asserted absent from the URL. NOT
+    covered: a dataset created with no project at all landing in the Default
+    Project (the PR's other half, verified by the exploration but not proposed
+    as a candidate), and the matching change for prompts, which is a different
+    area.
+- area: datasets
+  capability: delete-by-name-project-scope
+  note: >-
+    `POST /datasets/delete` with a dataset_name and a project_name removing
+    exactly that project's dataset (dataset-delete-by-name-project-scope.spec.ts)
+    — the highest-consequence line in opik#9659. The DAO statement it replaced
+    was `DELETE FROM datasets WHERE workspace_id = :workspace_id AND name =
+    :name`, which once two projects can share a name would have taken BOTH, with
+    a 204 and nothing in any log; the loss would surface only to whoever next
+    opened the other project. So the assertion is not "the dataset is gone" but
+    that exactly one of two identically-named datasets is gone and the other
+    still holds its own items — by item id, captured before the delete, so rows
+    deleted and re-created could not pass as untouched. Project B also holds a
+    differently-named bystander dataset the test never addresses, because "B's
+    copy disappeared" would read the same if the delete had taken everything in
+    project B. Asserted at the API (each dataset by id, each project's list as a
+    closed set) and on screen (project A's row still listed once and still
+    carrying its own dataset id, project B's gone — with the bystander row
+    asserted present first, so the absence is a real absence and not a table
+    that had not finished rendering). Ends on the other half of the same
+    change: with the name no longer held twice, a name-only address resolves
+    again, which is what makes the refusal while ambiguous a scoping rule rather
+    than the endpoint having been narrowed for good. NOT covered: delete by id,
+    and the batch delete, neither of which resolves a name.
+- area: datasets
+  capability: name-only-address-ambiguity
+  note: >-
+    What the three endpoints that address a dataset by NAME with no project of
+    their own do when the name belongs to two projects
+    (dataset-name-only-address-ambiguity.spec.ts): `POST /datasets/retrieve`,
+    `POST /datasets/delete` and `PUT /datasets/items` all resolve through
+    DatasetService.findSingleByName, which refuses with 409 instead of picking
+    one. Worth pinning because an intermediate commit in this same PR had that
+    lookup resolve to the OLDEST match deterministically and the final one
+    replaced it with the refusal: drifting back is a one-line change that no
+    existing test would notice, and what it costs is not an error message — it
+    is an items batch writing a user's rows into another project's dataset and a
+    delete removing it. Each refusal is therefore asserted together with the
+    thing that must NOT have happened: the server's own conflict sentence
+    verbatim, no dataset resolved, both datasets still answering by id with
+    their own items re-read after EVERY one of the three calls (a delete that
+    committed before answering 409 and a batch that wrote into the wrong dataset
+    are different failures, and one check at the end would report whichever came
+    first for all three), and the project the batch was addressed through still
+    holding no dataset — that endpoint is the only one of the three that CREATES
+    what it cannot find. The second test is the control and carries the whole
+    distinction: with the name in ONE project only, the same lookup still
+    reaches across projects, resolves, and announces itself with the
+    `X-Opik-Deprecation` header — asserted verbatim, and paired with the same
+    retrieve through the dataset's OWN project asserted to carry no such header,
+    without which a server that set it on every by-name retrieve would pass. The
+    control runs all three endpoints, so the fallback is pinned as writing
+    through (the row lands in the dataset the name resolved to, in another
+    project, while the addressed project still holds nothing) and as deleting
+    exactly that one dataset, with the ambiguous pair and the bystander asserted
+    untouched beside it. API-level deliberately: these are the SDK's own
+    addresses, used on every get_dataset / Dataset.insert / evaluate call, and
+    the one UI surface that reaches the branch is the by-name redirect page,
+    whose handling of the new 409 the exploration filed as suspect (it renders
+    "doesn't exist or has been deleted" for a dataset that exists twice), so a
+    spec over it would be asserting the bug. NOT covered, and not claimed: the
+    visibility tie-break in findSingleByName (a public-access request not being
+    made ambiguous by a private namesake) — Visibility.PUBLIC is only ever set
+    by RemoteAuthService, so an OSS install cannot produce such a request at
+    all; and opik.get_or_create_dataset propagating the 409 rather than creating
+    a dataset in the project it was scoped to, which the exploration filed as a
+    weak candidate because whether that is the contract the team wants is a
+    decision rather than a defect.

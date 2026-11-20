@@ -8,6 +8,7 @@ export {
   type InsightsViewDetail,
   type InsightsViewWidgetRef,
   type DatasetRef as BackendDatasetRef,
+  type RetrievedDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
   type ComparePairedRowRef,
