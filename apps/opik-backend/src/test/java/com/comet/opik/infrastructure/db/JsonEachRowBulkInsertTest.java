@@ -104,7 +104,8 @@ class JsonEachRowBulkInsertTest {
                 .orElseGet(() -> "ABSENT, settings were " + settings.getAllSettings().keySet());
     }
 
-    private Client clientReturning(long rowsWritten) {
+    /** A client whose insert succeeds with the given row count; shared with {@code JsonRowValuesTest}. */
+    static Client clientReturning(long rowsWritten) {
         var metric = mock(Metric.class);
         when(metric.getLong()).thenReturn(rowsWritten);
 
@@ -115,7 +116,7 @@ class JsonEachRowBulkInsertTest {
         when(response.getMetrics()).thenReturn(metrics);
 
         var client = mock(Client.class);
-        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+        when(client.insert(any(String.class), any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow),
                 any(InsertSettings.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 

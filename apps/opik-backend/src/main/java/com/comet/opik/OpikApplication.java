@@ -48,6 +48,7 @@ import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -133,25 +134,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         // Resources
         var jersey = environment.jersey();
 
-        // Configure ObjectMapper with standard settings
-        environment.getObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        // Naming strategy, this is the default for all objects serving as a fallback.
-        // However, it does not apply to OpenAPI documentation.
-        environment.getObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
-        environment.getObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-        environment.getObjectMapper().configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
-        environment.getObjectMapper().enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
-        environment.getObjectMapper()
-                .registerModule(new SimpleModule()
-                        .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
-                        .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
-                        .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
-
-        // Read-time redaction, registered only when switched on: with the flag off there is no serializer in
-        // the chain at all, so responses are written exactly as before.
-        if (configuration.getRedaction().isEnabled()) {
-            environment.getObjectMapper().registerModule(new RedactionModule());
-        }
+        configureObjectMapper(environment.getObjectMapper(), configuration.getRedaction().isEnabled());
 
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
         long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
@@ -172,6 +155,32 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.register(OtelProtobufErrorMessageBodyWriter.class);
         jersey.register(OtelProtobufDropwizardErrorMessageBodyWriter.class);
         jersey.register(OtelProtobufValidationErrorMessageBodyWriter.class);
+    }
+
+    /**
+     * Configures the HTTP (Dropwizard) mapper. Also the mapper {@code JsonEachRowBulkInsert} writes rows with, so tests
+     * of that path build it here rather than copying the settings.
+     */
+    public static void configureObjectMapper(ObjectMapper mapper, boolean redactionEnabled) {
+        // Configure ObjectMapper with standard settings
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        // Naming strategy, this is the default for all objects serving as a fallback.
+        // However, it does not apply to OpenAPI documentation.
+        mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        mapper.configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
+        mapper.enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
+        mapper
+                .registerModule(new SimpleModule()
+                        .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
+                        .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
+                        .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
+
+        // Read-time redaction, registered only when switched on: with the flag off there is no serializer in
+        // the chain at all, so responses are written exactly as before.
+        if (redactionEnabled) {
+            mapper.registerModule(new RedactionModule());
+        }
     }
 
     /**

@@ -121,11 +121,14 @@ public class JsonRowValues {
     /**
      * Writes a payload ({@code input}, {@code output}) and its slim copy into their {@code String} columns.
      *
-     * <p>An object or array is embedded as raw JSON and streamed from the node when the row is written, rather
-     * than serialized to a {@code String} first and escaped again into the row. ClickHouse stores such a value
-     * verbatim in a {@code String} column ({@code input_format_json_read_objects_as_strings} and
-     * {@code input_format_json_read_arrays_as_strings}, which {@link JsonEachRowBulkInsert} sets per request),
-     * so the cells are the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)}.
+     * <p>An object or array is embedded in the row as raw JSON, written from the node when the row is serialized.
+     * The cells hold the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)} only under this contract:
+     * <ul>
+     *   <li>the target columns are {@code String}, and</li>
+     *   <li>the insert sets {@code input_format_json_read_objects_as_strings} and
+     *   {@code input_format_json_read_arrays_as_strings}, which store a raw object or array verbatim, as
+     *   {@link JsonEachRowBulkInsert} does.</li>
+     * </ul>
      *
      * <p>Anything else is written as that text: ClickHouse would store a raw root string without its quotes and
      * a raw {@code null} as an empty string, which are not the cells the string path writes.
@@ -135,7 +138,7 @@ public class JsonRowValues {
         checkField(field);
         checkField(slimField);
         if (value != null && value.isContainerNode()) {
-            node.putRawValue(field, new RawValue(value));
+            node.putRawValue(field, new RawValue(TruncationUtils.toFullJson(value)));
             node.putRawValue(slimField, new RawValue(TruncationUtils.toSlimJson(value)));
             return;
         }

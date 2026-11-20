@@ -1,26 +1,27 @@
 package com.comet.opik.infrastructure.db;
 
-import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.DataStreamWriter;
-import com.clickhouse.client.api.insert.InsertResponse;
 import com.clickhouse.client.api.insert.InsertSettings;
-import com.clickhouse.client.api.metrics.Metric;
-import com.clickhouse.client.api.metrics.OperationMetrics;
-import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.OpikApplication;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.TruncationUtilsTest.ToJsonWithSlimTests;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.dropwizard.jackson.Jackson;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -31,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -39,9 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Covers {@link JsonRowValues#putDouble}, which decides how every {@code Float64} column on the
@@ -118,19 +116,24 @@ class JsonRowValuesTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    /** The row as {@link JsonEachRowBulkInsert} sends it to ClickHouse, without its line separator. */
-    private static String written(ObjectNode row) throws IOException {
-        var metric = mock(Metric.class);
-        when(metric.getLong()).thenReturn(1L);
-        var metrics = mock(OperationMetrics.class);
-        when(metrics.getMetric(ServerMetrics.NUM_ROWS_WRITTEN)).thenReturn(metric);
-        var response = mock(InsertResponse.class);
-        when(response.getMetrics()).thenReturn(metrics);
-        var client = mock(Client.class);
-        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
-                any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
+    /** The HTTP mapper as the application configures it, which is the one rows are written with. */
+    private static ObjectMapper applicationMapper(boolean redactionEnabled) {
+        var mapper = Jackson.newObjectMapper();
+        OpikApplication.configureObjectMapper(mapper, redactionEnabled);
+        return mapper;
+    }
 
-        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+    private static final ObjectMapper MAPPER = applicationMapper(false);
+
+    private static String written(ObjectNode row) throws IOException {
+        return written(row, MAPPER);
+    }
+
+    /** The row as {@link JsonEachRowBulkInsert} sends it to ClickHouse, without its line separator. */
+    private static String written(ObjectNode row, ObjectMapper mapper) throws IOException {
+        var client = JsonEachRowBulkInsertTest.clientReturning(1L);
+
+        new JsonEachRowBulkInsert(client, mapper)
                 .insert("spans", "log-comment", List.of(row), Function.identity())
                 .block();
 
@@ -151,10 +154,10 @@ class JsonRowValuesTest {
         return Stream.of(
                 JsonUtils.getJsonNodeFromString("{}"),
                 JsonUtils.getJsonNodeFromString("[]"),
-                JsonUtils.getJsonNodeFromString("{\"short\":\"%s\",\"n\":1,\"none\":null}"
-                        .formatted(randomText(20))),
-                JsonUtils.getJsonNodeFromString("[{\"long\":\"%s\"},\"%s\",1.5]"
-                        .formatted(randomText(max + 1), randomText(max * 2))));
+                JsonUtils.getJsonNodeFromString("{\"short\":\"%s\",\"n\":%d,\"none\":null}"
+                        .formatted(randomText(20), RandomUtils.secure().randomInt())),
+                JsonUtils.getJsonNodeFromString("[{\"long\":\"%s\"},\"%s\",%d]"
+                        .formatted(randomText(max + 1), randomText(max * 2), RandomUtils.secure().randomInt())));
     }
 
     @ParameterizedTest
@@ -181,7 +184,7 @@ class JsonRowValuesTest {
     static Stream<JsonNode> deepPayloads() {
         return Stream.of(
                 nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1),
-                // As deep as a request body can be: the row around it goes one level past the default limit.
+                // As deep as node.toString() can serialize: the row around it goes one level past the default limit.
                 nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH));
     }
 
@@ -202,7 +205,7 @@ class JsonRowValuesTest {
         return Stream.of(
                 null,
                 JsonUtils.getJsonNodeFromString("null"),
-                JsonUtils.getJsonNodeFromString("42"),
+                JsonUtils.getJsonNodeFromString(String.valueOf(RandomUtils.secure().randomInt())),
                 JsonUtils.getJsonNodeFromString("\"%s\"".formatted(
                         randomText(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH + 1))));
     }
@@ -232,6 +235,7 @@ class JsonRowValuesTest {
         var factory = JsonFactory.builder()
                 .streamReadConstraints(StreamReadConstraints.builder()
                         .maxNestingDepth(StreamReadConstraints.DEFAULT_MAX_DEPTH + 1)
+                        .maxNumberLength(Integer.MAX_VALUE)
                         .build())
                 .build();
         try (var parser = factory.createParser(row)) {
@@ -251,21 +255,28 @@ class JsonRowValuesTest {
         return cells;
     }
 
+    static Stream<Arguments> payloadsAndMappers() {
+        return Stream.of(containerPayloads(), deepPayloads(), textPayloads(),
+                ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads())
+                .flatMap(Function.identity())
+                .flatMap(payload -> Stream.of(
+                        Arguments.of(payload, false),
+                        Arguments.of(payload, true)));
+    }
+
     @ParameterizedTest
-    @MethodSource({"containerPayloads", "deepPayloads", "textPayloads",
-            "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#parsedPayloads",
-            "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#builtPayloads"})
-    @DisplayName("the stored cells are the ones the full and slim strings produced before")
-    void storedCellsMatchThePreviousStrings(JsonNode payload) throws IOException {
+    @MethodSource("payloadsAndMappers")
+    @DisplayName("the stored cells are the full and slim strings the single-row path writes, whatever the mapper")
+    void storedCellsMatchTheStrings(JsonNode payload, boolean redactionEnabled) throws IOException {
         var actual = JsonUtils.createObjectNode();
         JsonRowValues.putJsonWithSlim(actual, "input", "input_slim", payload);
 
-        // The previous row: the payload rendered to a string, and its slim copy from that string.
-        String json = TruncationUtils.toJsonString(payload);
+        var columns = TruncationUtils.toJsonWithSlim(payload);
         var expected = JsonUtils.createObjectNode()
-                .put("input", json)
-                .put("input_slim", TruncationUtils.createSlimJsonString(json));
+                .put("input", columns.json())
+                .put("input_slim", columns.slim());
 
-        assertThat(storedCells(written(actual))).isEqualTo(storedCells(written(expected)));
+        assertThat(storedCells(written(actual, applicationMapper(redactionEnabled))))
+                .isEqualTo(storedCells(written(expected)));
     }
 }
