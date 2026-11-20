@@ -1,0 +1,20 @@
+{
+  "view": {
+    "type": "html",
+    "engine_version": 1,
+    "inputs": {
+      "cost": {
+        "kind": "query",
+        "query_id": "q-cost",
+        "columns": { "model": "string", "usd": "number" }
+      }
+    },
+    "html": "<style>h1{font-size:13px;font-weight:600;margin:0 0 8px}.row{display:flex;align-items:center;gap:8px;margin:4px 0}.label{width:96px;color:var(--ov-fg-muted)}.bar{height:12px;border-radius:var(--ov-radius);background:var(--ov-chart-1)}</style><h1>Cost by model</h1><div id=\"rows\"></div><script>onViewData(function (data) { var rows = document.getElementById(\"rows\"); rows.replaceChildren(); var max = Math.max.apply(null, data.cost.map(function (r) { return r.usd; })); data.cost.forEach(function (r) { var row = document.createElement(\"div\"); row.className = \"row\"; var label = document.createElement(\"span\"); label.className = \"label\"; label.textContent = r.model; var bar = document.createElement(\"span\"); bar.className = \"bar\"; bar.style.width = Math.round(200 * r.usd / max) + \"px\"; var value = document.createElement(\"span\"); value.textContent = \"$\" + r.usd; row.append(label, bar, value); rows.append(row); }); });</script>"
+  },
+  "data": {
+    "cost": [
+      { "model": "gpt-4o", "usd": 12.4 },
+      { "model": "claude", "usd": 8.1 }
+    ]
+  }
+}

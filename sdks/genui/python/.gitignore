@@ -1,0 +1,5 @@
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+src/opik_genui/data/
