@@ -56,15 +56,16 @@ public class TraceTopicsDAO {
 
     /**
      * The Logs page's default filters, which the counts apply to the traces they count: {@code source = sdk} (with the
-     * {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue}) and
+     * {@code unknown} rows from before sources, {@link Source#loggingSourceDbValues}) and
      * {@code visibility_mode = default}. Bound as {@code :logs_sources} and {@code :logs_visibility_mode}.
      */
-    private static final String[] LOGS_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
     private static final String LOGS_VISIBILITY_MODE = VisibilityMode.DEFAULT.getValue();
 
     /**
-     * Traces per topic among the project's traces created in the window that Logs lists, each by its latest row. Any
-     * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows.
+     * Traces per topic among the project's traces created in the window that Logs lists, each by its latest topic row.
+     * A trace counts when any of its {@code traces} rows matches the Logs filters, as the traces list counts it (its
+     * filters apply before dedup), so a topic's count is what the list shows for it. Routing reads the latest row
+     * instead ({@code TraceDAO.getLoggingSourceIds}). Every topic row counts, run rows and arrival rows.
      *
      * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join, so the query streams by
      * trace id instead of holding a state per trace. Its memory still grows with the traces it covers, so
@@ -222,7 +223,7 @@ public class TraceTopicsDAO {
                         .bind("project_id", projectId.toString())
                         .bind("from_micros", toEpochMicros(from))
                         .bind("to_micros", toEpochMicros(to))
-                        .bind("logs_sources", LOGS_SOURCES)
+                        .bind("logs_sources", Source.loggingSourceDbValues())
                         .bind("logs_visibility_mode", LOGS_VISIBILITY_MODE)
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> TopicCount.builder()
