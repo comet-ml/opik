@@ -125,7 +125,8 @@ public class OnlineScoringStatusService {
     private static Mono<Void> bestEffort(Mono<?> write, String action, String workspaceId, UUID traceId, UUID ruleId) {
         return write.then()
                 .onErrorResume(error -> {
-                    log.warn("Failed to {} the online scoring status, workspace_id '{}', trace_id '{}', rule_id '{}'",
+                    log.warn(
+                            "Failed to write the online scoring status, action '{}', workspace_id '{}', trace_id '{}', rule_id '{}'",
                             action, workspaceId, traceId, ruleId, error);
                     return Mono.empty();
                 });

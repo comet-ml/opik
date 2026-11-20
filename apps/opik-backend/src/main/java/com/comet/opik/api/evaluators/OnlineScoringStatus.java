@@ -19,7 +19,7 @@ import java.util.UUID;
  * Why a rule has not scored a trace (yet). Only recorded for experiment traces, whose scores someone is waiting on.
  * A stored score always supersedes it.
  */
-@Builder
+@Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OnlineScoringStatus(
@@ -79,6 +79,7 @@ public record OnlineScoringStatus(
         }
     }
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record OnlineScoringStatusList(List<OnlineScoringStatus> content) {

@@ -230,7 +230,7 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     return (
       <TooltipWrapper content={scoringStatusMessage(retryingJudgeStatus)}>
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-slate">
-          <RefreshCw className="size-3 text-yellow-500" />
+          <RefreshCw className="size-3 text-chart-yellow" />
           Scoring failed, retrying
         </span>
       </TooltipWrapper>

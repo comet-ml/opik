@@ -741,7 +741,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         // Left pending to be redelivered, but not reported as retrying: an entry no longer pending was
                         // already retired by an overlapping delivery, and reporting it would overwrite that outcome.
                         .switchIfEmpty(Mono.fromRunnable(() -> log.warn(
-                                "No pending entry for failed messageId '{}', not reporting it as retrying",
+                                "Not reporting a failed delivery as retrying, as its entry is no longer pending, messageId '{}'",
                                 failure.messageId(), failure.error()))),
                         CONSUMER_SCHEDULER_THREAD_CAP_SIZE) // Parallelism for delivery count Redis queries
                 .flatMap(failure -> maxRetriesReached(failure)
