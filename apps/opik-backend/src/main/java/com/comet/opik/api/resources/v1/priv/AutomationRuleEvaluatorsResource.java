@@ -19,6 +19,7 @@ import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -194,6 +195,7 @@ public class AutomationRuleEvaluatorsResource {
     @Path("/{id}")
     @Operation(operationId = "updateAutomationRuleEvaluator", summary = "Update Automation Rule Evaluator by id", description = "Update Automation Rule Evaluator by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "409", description = "Conflict: the evaluator type can't be changed", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
     @RequiredPermissions(WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE)

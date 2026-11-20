@@ -27,9 +27,10 @@ import {
 } from "@/constants/shared";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
-import { cn } from "@/lib/utils";
+import { cn, formatCount } from "@/lib/utils";
 
 export const ITEM_SOURCE_LABEL = "Item source";
+export const EXPERIMENT_COUNT_UNIT = "exp";
 
 type CustomMeta = {
   nameKey?: string;
@@ -122,6 +123,8 @@ type GroupCustomMeta = {
   explainer?: Explainer;
   datasetTypeMap?: Record<string, DATASET_TYPE>;
   getIsDeleted?: (cellData: unknown) => boolean;
+  // Set where the type is already implied (e.g. a Test suites or Datasets tab).
+  hidePrefix?: boolean;
 };
 
 const resolveGroupPrefix = (
@@ -164,6 +167,7 @@ export const createItemSourceGroupCell = <TData,>(
       explainer,
       datasetTypeMap,
       getIsDeleted,
+      hidePrefix = false,
     } = (custom ?? {}) as GroupCustomMeta;
 
     const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -186,7 +190,9 @@ export const createItemSourceGroupCell = <TData,>(
       countAggregationKey && aggregationData
         ? get(aggregationData, countAggregationKey, undefined)
         : undefined;
-    const countText = isNumber(count) ? `(${count})` : "";
+    const countText = isNumber(count)
+      ? formatCount(count, EXPERIMENT_COUNT_UNIT)
+      : "";
 
     const rowHeight = table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
     const textClass = CELL_TEXT_CLASS_MAP[rowHeight];
@@ -198,10 +204,7 @@ export const createItemSourceGroupCell = <TData,>(
         className="items-center p-0 pr-2"
         stopClickPropagation
       >
-        <div
-          className="flex max-w-full items-center overflow-hidden"
-          style={{ paddingLeft: `${row.depth * 20}px` }}
-        >
+        <div className="flex max-w-full items-center overflow-hidden">
           <Checkbox
             variant="muted"
             checked={
@@ -227,9 +230,11 @@ export const createItemSourceGroupCell = <TData,>(
             ) : (
               <ChevronRight className="mr-1 size-4 shrink-0" />
             )}
-            <TooltipWrapper content={prefix}>
-              <span className="max-w-56 truncate">{prefix}</span>
-            </TooltipWrapper>
+            {!hidePrefix && (
+              <TooltipWrapper content={prefix}>
+                <span className="max-w-56 truncate">{prefix}</span>
+              </TooltipWrapper>
+            )}
           </Button>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -247,7 +252,7 @@ export const createItemSourceGroupCell = <TData,>(
               "-"
             )}
           </div>
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center text-light-slate">
             {countText}
             {isDeleted && explainer && (
               <ExplainerIcon {...explainer} className="ml-1" />

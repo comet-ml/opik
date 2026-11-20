@@ -38,15 +38,15 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Install opik
         run: uv pip install --system .
@@ -61,7 +61,21 @@ jobs:
           cd ./tests
           uv pip install --system -r library_integration/llama_index/requirements.txt
 
+      - name: Download NLTK data for llama-index
+        # NLTK >=3.10.4 refuses the stopwords llama-index bundles in site-packages on the
+        # runner: uv hardlinks the files, and the runner's default ACL makes the folder
+        # writable by other accounts. llama-index reads NLTK_DATA before its bundled cache,
+        # so point it at a fresh, private folder instead.
+        # Remove once run-llama/llama_index#22839 is fixed upstream.
+        env:
+          NLTK_DATA: ${{ runner.temp }}/nltk_data
+        run: |
+          python -m nltk.downloader -q -e -d "$NLTK_DATA" stopwords punkt_tab
+          stat -c '%a %U:%G %n' "$NLTK_DATA" "$NLTK_DATA/corpora" "$NLTK_DATA/corpora/stopwords"
+
       - name: Run tests
+        env:
+          NLTK_DATA: ${{ runner.temp }}/nltk_data
         run: |
           cd ./tests/library_integration/llama_index/
           python -m pytest  -vv .

@@ -52,7 +52,8 @@ export const tooltipVariants = cva(
 );
 
 export interface TooltipContentProps
-  extends React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>,
+  extends
+    React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>,
     VariantProps<typeof tooltipVariants> {
   asChild?: boolean;
 }

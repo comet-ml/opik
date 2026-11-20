@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -21,8 +22,10 @@ public class VertexAIModule extends AbstractModule {
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull LlmModelRegistryService registryService,
             @NonNull RemoteMediaInliner remoteMediaInliner,
-            @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
-        return new VertexAIClientGenerator(config, registryService, remoteMediaInliner, videoMimeTypeUtils);
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils,
+            @NonNull SharedTokenCache tokenCache) {
+        return new VertexAIClientGenerator(config, registryService, remoteMediaInliner, videoMimeTypeUtils,
+                tokenCache);
     }
 
     @Provides

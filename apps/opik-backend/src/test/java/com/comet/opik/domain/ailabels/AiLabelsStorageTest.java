@@ -135,7 +135,7 @@ class AiLabelsStorageTest {
         }
 
         assertThat(config.getAiLabels().isEnabled()).isFalse();
-        assertThat(config.getAiLabels().getInference().getUrl()).isNull();
+        assertThat(config.getInference().getUrl()).isNull();
         assertThat(jobClasses).isNotEmpty().doesNotContain(AiLabelsJob.class);
     }
 

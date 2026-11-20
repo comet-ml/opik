@@ -12,10 +12,10 @@ import okhttp3.OkHttpClient;
 class VertexAITestClients {
 
     static Client clientOf(ChatModel model) {
-        if (model instanceof CloseableVertexAiChatModel wrapper) {
+        if (model instanceof VertexAiChatModel wrapper) {
             return wrapper.client();
         }
-        throw new AssertionError("Expected a CloseableVertexAiChatModel but got " + model.getClass());
+        throw new AssertionError("Expected a VertexAiChatModel but got " + model.getClass());
     }
 
     /**

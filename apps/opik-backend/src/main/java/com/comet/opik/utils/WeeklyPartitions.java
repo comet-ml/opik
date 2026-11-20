@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
 import java.util.HashMap;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Single derivation point for the {@code id_at} weekly partition value(s) a batch of ids resolves to, so a statement
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
  * groups ids by the partition each belongs to, for a caller emitting one statement per partition (OPIK-8230) that
  * must bind only the ids belonging to it; {@link #weeksOf} returns just the values, for a read that carries them as
  * one {@code IN} list inside a single statement (OPIK-8332); {@link #weekOf} returns the value of one instant's week,
- * for a read bounded by a time window.
+ * for a read bounded by a time window; {@link #recentWeeks} returns the weeks an exists probe tries first.
  *
  * <p>Mirrors the partition expression of {@code traces_local_v2} / {@code spans_local_v2} exactly —
  * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}, where {@code id_at} is
@@ -204,6 +206,27 @@ public class WeeklyPartitions {
      */
     public static long weekOf(@NonNull Instant instant) {
         return weeklyPartitionOf(instant.getEpochSecond());
+    }
+
+    /**
+     * Start of the previous UTC week, where an exists probe's recent-weeks bound begins. Callers compute it once per
+     * probe, so the probe's id lower bound and its {@link #recentWeeks} cannot straddle a week boundary.
+     */
+    public static Instant previousMonday() {
+        return LocalDate.now(ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .minusWeeks(1)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant();
+    }
+
+    /**
+     * The weekly partition values of the week starting at {@code previousMonday} and the two after it.
+     */
+    public static List<Long> recentWeeks(@NonNull Instant previousMonday) {
+        return Stream.of(0, 1, 2)
+                .map(week -> weekOf(previousMonday.plus(7L * week, ChronoUnit.DAYS)))
+                .toList();
     }
 
     /**

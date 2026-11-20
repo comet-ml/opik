@@ -28,7 +28,8 @@ const autoGrowTextareaVariants = cva(
 );
 
 export interface AutoGrowTextareaProps
-  extends Omit<TextareaAutosizeProps, "onChange">,
+  extends
+    Omit<TextareaAutosizeProps, "onChange">,
     VariantProps<typeof autoGrowTextareaVariants> {
   value: string;
   onChange?: (value: string) => void;

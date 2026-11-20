@@ -63,11 +63,10 @@ test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@area:datasets'] }
     expect(found?.name).toBe(name);
     expect(found?.description).toBe(description);
 
-    /** Empty datasets use a different Add Item path than the sliding panel — see POM. */
     const items = await datasets.openDatasetByName(name);
     await items.waitForReady();
     const newItem = { input: 'ui input', expected_output: 'ui output' };
-    await items.addItemViaEmptyStateModal(newItem);
+    await items.addFirstItem(newItem);
 
     const fetchedItems = await backendClient.getDatasetItems(found!.id);
     expect(fetchedItems).toHaveLength(1);

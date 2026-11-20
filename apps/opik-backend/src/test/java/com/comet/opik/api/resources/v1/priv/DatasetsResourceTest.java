@@ -61,6 +61,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -190,10 +191,18 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_CREATE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_DELETE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_EDIT;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.PROJECT_DATA_VIEW;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -355,7 +364,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.id()).isEqualTo(id);
         assertThat(actualEntity).usingRecursiveComparison()
                 .ignoringFields(DATASET_IGNORED_FIELDS)
-                .isEqualTo(expected);
+                .isEqualTo(withDefaultProject(List.of(expected), workspaceName, apiKey).getFirst());
 
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
@@ -513,6 +522,79 @@ class DatasetsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/datasets";
+            var datasetId = UUID.randomUUID();
+            var itemId = UUID.randomUUID();
+            var jobId = UUID.randomUUID();
+            return Stream.of(
+                    ProtectedEndpoint.get(base, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base, DATASET_CREATE),
+                    ProtectedEndpoint.put(base + "/" + datasetId, DATASET_EDIT),
+                    ProtectedEndpoint.delete(base + "/" + datasetId, DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete-batch", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/items/delete", DATASET_DELETE),
+                    ProtectedEndpoint.put(base + "/items", DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/" + itemId, DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/batch", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/changes", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-csv", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-json", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/expansions", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-traces", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-spans", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/retrieve", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/items/stream", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/items/" + itemId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/export", DATASET_VIEW),
+                    ProtectedEndpoint.put(base + "/export-jobs/" + jobId + "/mark-viewed", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId, DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId + "/download", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items", DATASET_VIEW,
+                            EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/stats",
+                            DATASET_VIEW, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/output/columns",
+                            DATASET_VIEW, EXPERIMENT_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Dataset item and export endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest
+        @MethodSource("permissionDenials")
+        @DisplayName("Dataset item and export endpoints return 403 when a required permission is denied")
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicFallbackDenials")
+        @DisplayName("Public dataset reads fall back to the public-visitor lookup when a required permission is denied")
+        void publicFallbackEndpointRetriesAsPublicVisitorWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertPublicFallbackRejectedWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> publicFallbackDenials() {
+            return ProtectedEndpoint.publicFallbackDenials(protectedEndpoints());
+        }
     }
 
     @Nested
@@ -522,6 +604,8 @@ class DatasetsResourceTest {
 
         private final String fakeApikey = UUID.randomUUID().toString();
         private final String okApikey = UUID.randomUUID().toString();
+        // A workspace member whose role lacks dataset view; the auth service answers it with 401, as in production.
+        private final String datasetViewDeniedApikey = UUID.randomUUID().toString();
 
         Stream<Arguments> credentials() {
             return Stream.of(
@@ -544,7 +628,9 @@ class DatasetsResourceTest {
                     arguments("", PRIVATE, 404),
                     arguments("", PUBLIC, 200),
                     arguments(fakeApikey, PRIVATE, 404),
-                    arguments(fakeApikey, PUBLIC, 200));
+                    arguments(fakeApikey, PUBLIC, 200),
+                    arguments(datasetViewDeniedApikey, PRIVATE, 404),
+                    arguments(datasetViewDeniedApikey, PUBLIC, 200));
         }
 
         @BeforeEach
@@ -558,6 +644,17 @@ class DatasetsResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
+
+            wireMock.server().stubFor(
+                    post(urlPathEqualTo("/opik/auth"))
+                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(datasetViewDeniedApikey))
+                            .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(TEST_WORKSPACE)))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions",
+                                    equalToJson(JsonUtils.valueToTree(List.of(DATASET_VIEW.getValue())).toString())))
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new ReactServiceErrorResponse(
+                                                    RandomStringUtils.secure().nextAlphanumeric(32), 401)))));
         }
 
         @ParameterizedTest
@@ -1727,7 +1824,7 @@ class DatasetsResourceTest {
                 var actualEntity = actualResponse.readEntity(Dataset.class);
                 assertThat(actualEntity).usingRecursiveComparison()
                         .ignoringFields(DATASET_IGNORED_FIELDS)
-                        .isEqualTo(dataset);
+                        .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
             }
         }
 
@@ -1845,7 +1942,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity).usingRecursiveComparison()
                     .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(dataset);
+                    .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
         }
 
         @Test
@@ -2256,7 +2353,8 @@ class DatasetsResourceTest {
                     .filter(__ -> expectedContent.size() < defaultPageSize)
                     .forEach(expectedContent::add);
 
-            findAndAssertPage(actualEntity, defaultPageSize, expectedContent.size() + 1, 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, defaultPageSize, expectedContent.size() + 1, 1,
+                    expectedContent);
         }
 
         @Test
@@ -2289,7 +2387,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, pageSize, expected1.size() + expected2.size(), 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, pageSize, expected1.size() + expected2.size(), 1,
+                    expectedContent);
         }
 
         @Test
@@ -2316,7 +2415,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, expected.size(), expected.size(), 1, expected.reversed());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expected.size(), expected.size(), 1,
+                    expected.reversed());
         }
 
         @ParameterizedTest
@@ -2588,7 +2688,7 @@ class DatasetsResourceTest {
 
             assertThat(actualEntity.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
-                    .containsExactlyElementsOf(allDatasets);
+                    .containsExactlyElementsOf(withDefaultProject(allDatasets, workspaceName, apiKey));
         }
 
         @ParameterizedTest
@@ -2969,7 +3069,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(dataset1));
+            findAndAssertPage(actualEntity, TEST_WORKSPACE, API_KEY, 1, 1, 1, List.of(dataset1));
         }
 
         @Test
@@ -3000,7 +3100,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @Test
@@ -3137,7 +3237,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @ParameterizedTest
@@ -3168,7 +3268,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3208,7 +3308,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(),
+                                expectedDatasets.size(), 1,
                                 expectedDatasets.reversed());
                     });
 
@@ -3254,7 +3355,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(),
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedMatchedDatasets.size(),
+                                expectedMatchedDatasets.size(),
                                 1,
                                 expectedMatchedDatasets.reversed());
                     });
@@ -3379,7 +3481,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3442,7 +3544,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3487,7 +3589,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 2, 2, 1, List.of(testSuite, regularDataset));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 2, 2, 1, List.of(testSuite, regularDataset));
         }
 
         @ParameterizedTest
@@ -3530,7 +3632,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 1, 1, 1, List.of(expected));
         }
 
         @Test
@@ -3576,8 +3678,24 @@ class DatasetsResourceTest {
 
     }
 
-    private void findAndAssertPage(Dataset.DatasetPage actualEntity, int expected, int total, int page,
-            List<Dataset> expectedContent) {
+    /**
+     * Datasets created without a project are created in the Default Project.
+     */
+    private List<Dataset> withDefaultProject(List<Dataset> expectedDatasets, String workspaceName, String apiKey) {
+        if (expectedDatasets.stream().allMatch(dataset -> dataset.projectId() != null)) {
+            return expectedDatasets;
+        }
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        return expectedDatasets.stream()
+                .map(dataset -> dataset.projectId() == null
+                        ? dataset.toBuilder().projectId(defaultProjectId).build()
+                        : dataset)
+                .toList();
+    }
+
+    private void findAndAssertPage(Dataset.DatasetPage actualEntity, String workspaceName, String apiKey,
+            int expected, int total, int page, List<Dataset> expectedContent) {
+        expectedContent = withDefaultProject(expectedContent, workspaceName, apiKey);
         assertThat(actualEntity.size()).isEqualTo(expected);
         assertThat(actualEntity.content()).hasSize(expected);
         assertThat(actualEntity.page()).isEqualTo(page);
