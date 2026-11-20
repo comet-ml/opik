@@ -34,6 +34,7 @@ export interface HtmlFrameProps {
 const STOPPED = "The view tried to leave its sandbox and was stopped.";
 const MAX_REPORTED_ERRORS = 20;
 const RESIZE_INTERVAL_MS = 250;
+const IDLE = { doc: "", loads: 0, answered: false, handshake: false };
 
 const useClientLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -90,17 +91,12 @@ export function HtmlFrame({
   const [navigatedFrom, setNavigatedFrom] = useState<string | null>(null);
   const mounted = srcDoc !== null;
   const stopped = mounted && navigatedFrom === srcDoc;
-  const expected = useRef({
-    doc: "",
-    loads: 0,
-    answered: false,
-    handshake: false,
-  });
+  const expected = useRef({ ...IDLE });
   const reported = useRef(new Set<string>());
   const resize = useRef({ height: 0, timer: 0 });
 
   const stop = () => {
-    expected.current = { doc: "", loads: 0, answered: false, handshake: false };
+    expected.current = { ...IDLE };
     setInitialized(0);
     setNavigatedFrom(ref.current?.srcdoc ?? null);
   };
@@ -114,21 +110,15 @@ export function HtmlFrame({
   useClientLayoutEffect(() => {
     const current = expected.current;
     if (!mounted) {
-      expected.current = {
-        doc: "",
-        loads: 0,
-        answered: false,
-        handshake: false,
-      };
+      expected.current = { ...IDLE };
       return;
     }
     if (stopped || current.doc === srcDoc) return;
     reported.current = new Set();
     expected.current = {
+      ...IDLE,
       doc: srcDoc,
       loads: current.doc ? current.loads + 1 : 1,
-      answered: false,
-      handshake: false,
     };
   }, [srcDoc, stopped]);
 
