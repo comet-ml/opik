@@ -444,16 +444,43 @@ export class ExperimentGroupRows {
   /**
    * Close whatever tooltip is open, and wait until it is really gone.
    *
-   * Moving the pointer away is not enough: Radix's popper wrapper is wider than
-   * the visible tooltip and keeps intercepting pointer events, so the next
-   * `hover()` fails with "subtree intercepts pointer events". Escape is the
-   * dismissal `TooltipWrapper` honours.
+   * BOTH gestures, in this order, and neither is optional:
+   *
+   *  - **Move the pointer off the pill first.** Escape alone is not enough
+   *    while the pointer is still resting on the trigger. Radix closes on
+   *    `onEscapeKeyDown`, but its own open-on-hover state is still true, so it
+   *    re-opens immediately and `getByRole('tooltip')` never reaches 0 —
+   *    exactly how this read failed on staging for 2.2.152, on the prompt tab
+   *    and on the Experiments page, under parallel load that stretched the
+   *    reopen past the old 10s wait.
+   *  - **Then Escape.** Moving away is not enough on its own either: Radix's
+   *    popper wrapper is wider than the visible tooltip and keeps intercepting
+   *    pointer events, so the NEXT `hover()` fails with "subtree intercepts
+   *    pointer events". Escape is the dismissal `TooltipWrapper` honours.
+   *
+   * Retried rather than waited out, for the same reason `openPillTooltip`
+   * retries its hover: a `pointerleave` lost to a React re-render under the
+   * stationary pointer is not a slow close, and no amount of waiting fixes it —
+   * only another leave-and-dismiss does. Polled on the state, so this is a wait
+   * on the tooltip being gone and never a fixed sleep.
    */
   async dismissTooltip(): Promise<void> {
-    await this.page.keyboard.press('Escape');
-    await expect(this.page.getByRole('tooltip'), 'the tooltip after Escape').toHaveCount(0, {
-      timeout: 10_000,
-    });
+    const tooltip = this.page.getByRole('tooltip');
+    await expect
+      .poll(
+        async () => {
+          await this.page.mouse.move(0, 0);
+          await this.page.keyboard.press('Escape');
+          try {
+            await tooltip.first().waitFor({ state: 'detached', timeout: 2_000 });
+          } catch {
+            return await tooltip.count();
+          }
+          return await tooltip.count();
+        },
+        { timeout: 30_000, message: 'the tooltip after moving away and pressing Escape' },
+      )
+      .toBe(0);
   }
 
   /**

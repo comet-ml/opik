@@ -2528,9 +2528,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    *
    * Retrying is safe only because these writes are keyed on a caller-supplied
    * id and are upserts on it: a request that actually landed before the gateway
-   * gave up is overwritten, not duplicated. Only 5xx is retried — a 4xx is this
+   * gave up is overwritten, not duplicated. 5xx is retried — a 4xx is this
    * suite sending something the API rejects, and repeating it would just delay
    * the message that says so.
+   *
+   * 429 is the one exception, and it is retried for the opposite reason to the
+   * rest of 4xx: it is not a rejection of the request but an instruction to
+   * come back, and the request is unchanged and idempotent, so repeating it is
+   * the correct response rather than a delayed error. It shows up on a shared
+   * cloud workspace when several workers seed at once — the per-user,
+   * per-workspace limit counts this suite's writes alongside everyone else's —
+   * and the heaviest seeds hit it first: `grouped-pass-rate-experiments` writes
+   * 200 assertion results in one batch and failed its seed this way on staging
+   * for 2.2.152. Without this it is unfixable flake in a fixture that is doing
+   * nothing wrong.
    *
    * The backoff exists because retrying instantly is no retry at all: the three
    * attempts land inside the same burst and all fail.
@@ -2561,7 +2572,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const { status, message, location } = await rawFetch(method, path, { body });
       if (status === expectedStatus) return;
       last = { status, message, location };
-      if (status < 500) break;
+      if (status < 500 && status !== 429) break;
       if (attempt < backoffMs.length) {
         await new Promise((r) => setTimeout(r, backoffMs[attempt]));
       }
