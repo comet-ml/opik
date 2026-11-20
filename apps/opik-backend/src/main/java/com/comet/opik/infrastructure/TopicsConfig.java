@@ -35,6 +35,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
 
+    @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -203,6 +206,29 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration countSlice;
+    }
+
+    /**
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /** ClickHouse's {@code max_execution_time}, in whole seconds. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
+        }
     }
 
     /**
