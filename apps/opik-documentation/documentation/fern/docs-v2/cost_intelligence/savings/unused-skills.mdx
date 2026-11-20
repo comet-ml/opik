@@ -83,18 +83,17 @@ One call to the decision model asks two questions about the prompt and the hidde
 
 ## How much it saves
 
-We measured this on a month of Comet's own coding agent usage, with Cost Intelligence.
+Across organizations using Cost Intelligence, unused skill descriptions make up about 5% of coding agent spend. Your own share depends on how much your organization uses skills: more installed skills, and more requests per developer, mean a bigger saving.
 
-- **Skill descriptions are a steady slice of the bill.** They made up about 2% of the month's coding agent spend.
-- **Almost all of it was for skills nobody ran.** Close to 9 in every 10 dollars spent carrying skill descriptions went to skills that developer never used that month. A typical developer carried around 150 of them.
-- **The check is far cheaper than what it removes.** The decision model reads each prompt together with that developer's hidden skills, once per prompt. At typical decision model pricing, checking every prompt for the month costs roughly a fiftieth of what the hidden descriptions cost.
+- **Most of what skill descriptions cost goes to skills nobody runs.** In our own organization, close to 9 in every 10 dollars spent carrying skill descriptions went to skills that developer never used in 30 days. A typical developer carried around 150 of them.
+- **The check is far cheaper than what it removes.** The decision model reads each prompt together with that developer's hidden skills, once per prompt. At typical decision model pricing, checking every prompt costs under a hundredth of what the hidden descriptions cost.
 
 | | Share of monthly coding agent spend |
 | --- | --- |
-| Unused skill descriptions, carried on every request | About 2% |
+| Unused skill descriptions, carried on every request | About 5%, depending on skill use |
 | Decision model, checking every prompt | Under 0.05% |
 
-The saving grows with the number of skills a team installs and the number of requests each developer sends. When a hidden skill is needed, its description comes back for that conversation, which adds a little of the cost back.
+When a hidden skill is needed, its description comes back for that conversation, which adds a little of the cost back.
 
 ## Next steps
 
