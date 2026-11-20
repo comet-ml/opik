@@ -31,12 +31,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * The labelling pass: gives every trace of a saved run's window its {@code trace_topics} row. A run finds its topics on
  * a sample of the window when the window is larger than {@code topics.build.maxVectors}, and its own insert labels
  * only the sample; this pass labels the rest, by the same rule: the {@link TopicAlgorithm#labeller} of the saved
- * prototypes. A list with no topic prototype labels every trace Other, as its run did. The rows carry
+ * prototypes. A list with no topic labels every trace Other, as its run did. The rows carry
  * {@code source = 'run'} and the run's id, as the run's own rows do: they are the run's labels.
  *
  * <p>Resumable: what is left is read from ClickHouse each time, as the window's traces without a row of the run. A pass
  * cut by its deadline, an interrupt or a failed read or insert loses nothing: the list stays saved, the rows written
- * stay, and a later call goes on from there. No cursor is kept: the state's {@code labels_complete} is false from the
+ * stay, and a later call goes on from there. No cursor is kept: the project's {@code labels_complete} is false from the
  * save until a pass ends complete, and the first-build job calls the pass again for every project where it is false.
  *
  * <p>Bounded: the window is read in slices of trace creation time with about {@value #SLICE_TRACES} traces each, and a
@@ -44,17 +44,17 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * one page of vectors. Every read and insert ends by the deadline, and no page starts with less than
  * {@link #MIN_PAGE_TIME} left.
  *
- * <p>The run's saved counts ({@code topics.size}, {@code stats.other_share}) stay the sample's: they are written before
+ * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
  *
- * <p>Counted: the pass that ends complete counts the window's traces per topic and saves the counts in its run's
- * {@code stats.topic_counts}, in the transaction that marks the labels complete. Later runs relabel the window, so
- * these counts are the only record of the run's. They are written once per run, and not for a list with no topic
- * prototype. A failed count read is logged and saves no counts: the labels are still marked complete.
+ * <p>Counted: the pass that ends complete counts the window's traces per topic and logs the counts with the run's id.
+ * Later runs relabel the window, so this log line is the only record of the run's counts. It is written once per run,
+ * when the pass marks the labels complete, and not for a list with no topic. A failed count read is logged and the
+ * labels are still marked complete.
  *
- * <p>The counts cover the run's window exactly, {@code [window_from, window_until)} as its {@code stats} name it, so
- * two runs' counts compare like with like. The Topics page counts a sliding window that includes today, so its counts
- * can differ from a run's by the traces of the days at the window's edges.
+ * <p>The counts cover the run's window exactly, {@code [window_until - windowDays, window_until)}, so two runs' counts
+ * compare like with like. The Topics page counts a sliding window that includes today, so its counts can differ from a
+ * run's by the traces of the days at the window's edges.
  */
 @Slf4j
 @Singleton
@@ -87,18 +87,20 @@ public class TopicWindowLabelService {
     /**
      * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the exact
      * count of the traces the pass labels. {@code complete} is true when no trace of the window is left without a row of the run; false when the
-     * pass was cut, and a later call finishes it.
+     * pass was cut, and a later call finishes it. {@code counts} are the run's traces per topic id and Other that this
+     * pass logged, empty when it logged none.
      */
     @Builder(toBuilder = true)
-    public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete) {
+    public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete,
+            Map<UUID, Long> counts) {
     }
 
     /**
-     * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the counts cover the
-     * run's window, {@code [from, windowUntil)}. {@code topicIds} are its live topics. {@code saveCounts} is true when
-     * a complete pass saves the run's counts: the list has a topic prototype and the run's labels are not complete yet.
+     * The saved list a pass labels with. The pass labels and counts the traces created in {@code [from, to)}, the run's
+     * window. {@code topicIds} are its live topics. {@code saveCounts} is true when
+     * a complete pass logs the run's counts: the list has a topic and the run's labels are not complete yet.
      */
-    private record Saved(UUID runId, Instant from, Instant to, Instant windowUntil, TopicAlgorithm.Labeller labeller,
+    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller,
             List<UUID> topicIds, boolean saveCounts) {
     }
 
@@ -129,10 +131,10 @@ public class TopicWindowLabelService {
         } catch (RuntimeException exception) {
             log.warn("Topics labelling pass could not read the saved list, project '{}'", projectId, exception);
             metrics.labelPass(workspaceId, trigger, false);
-            return Pass.builder().complete(false).build();
+            return Pass.builder().complete(false).counts(Map.of()).build();
         }
         if (saved.isEmpty()) {
-            return Pass.builder().complete(true).build();
+            return Pass.builder().complete(true).counts(Map.of()).build();
         }
         var pass = new Labelling(workspaceId, projectId, saved.get(), deadline, chunk);
         try {
@@ -148,8 +150,8 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass failed, run '{}', project '{}'; a later pass labels the rest",
                     saved.get().runId(), projectId, exception);
         }
-        if (pass.complete) {
-            markComplete(workspaceId, projectId, saved.get().runId(), pass.counts);
+        if (pass.complete && !markComplete(workspaceId, projectId, saved.get().runId(), pass.counts)) {
+            pass.counts = Map.of();
         }
         var duration = Duration.ofNanos(System.nanoTime() - started);
         metrics.phase(workspaceId, "label", duration);
@@ -165,59 +167,61 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * Sets {@code labels_complete} for the run and saves its counts, in one transaction, only while the state still
-     * names the run. A failed write leaves both unwritten: the job's next run calls the pass again, which finds nothing
-     * left, counts and writes them again.
+     * Sets {@code labels_complete} for the run, only while the project still names it, then logs its counts. False when
+     * nothing was marked. A failed write leaves it unset: the job's next run calls the pass again, which finds nothing
+     * left, counts and logs again.
      */
-    private void markComplete(String workspaceId, UUID projectId, UUID runId, Map<UUID, Long> counts) {
+    private boolean markComplete(String workspaceId, UUID projectId, UUID runId, Map<UUID, Long> counts) {
+        int updated;
         try {
-            int updated = template.inTransaction(WRITE, handle -> {
-                int marked = handle.attach(TopicDAO.class).markLabelsComplete(workspaceId, projectId, runId);
-                if (marked > 0 && !counts.isEmpty()) {
-                    var topicCounts = JsonUtils.createObjectNode();
-                    counts.forEach((topicId, traces) -> topicCounts.put(topicId.toString(), traces));
-                    handle.attach(TopicRunDAO.class).setTopicCounts(workspaceId, runId, topicCounts.toString());
-                }
-                return marked;
-            });
-            if (updated == 0) {
-                log.info("Topics labelling pass complete, but run '{}' is no longer the last saved run of project "
-                        + "'{}'; its labels stay as the newer run left them", runId, projectId);
-            }
+            updated = template.inTransaction(WRITE,
+                    handle -> handle.attach(TopicDAO.class).markLabelsComplete(workspaceId, projectId, runId));
         } catch (RuntimeException exception) {
             log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
                     + "first-build job runs the pass again", runId, projectId,
                     ExceptionUtils
                             .getThrowableList(exception).stream().map(TopicsRebuildService::formatError).toList());
+            return false;
         }
+        if (updated == 0) {
+            log.info("Topics labelling pass complete, but run '{}' is no longer the saved run of project '{}'; its "
+                    + "labels stay as the newer run left them", runId, projectId);
+            return false;
+        }
+        if (!counts.isEmpty()) {
+            var topicCounts = JsonUtils.createObjectNode();
+            counts.forEach((topicId, traces) -> topicCounts.put(topicId.toString(), traces));
+            log.info("Topics run '{}' counts, project '{}', topic_counts '{}'", runId, projectId, topicCounts);
+        }
+        return true;
     }
 
     /**
-     * The project's last saved run, the traces it labels and the labeller of its prototypes, read in one transaction.
-     * The traces run from the run's window start to its window end or its save, whichever is later. A nightly update
-     * saves after its window's end: its pass also labels the traces vectored since, which arrival labelled by the list
-     * before the save. A first build's window ends at tomorrow's start, after its save.
+     * The project's saved list, the traces it labels and the labeller of its prototypes, read in one transaction. The
+     * traces run from the list's window start to its window end or its save, whichever is later. A nightly update saves
+     * after its window's end: its pass also labels the traces vectored since, which arrival labelled by the list before
+     * the save. A first build's window ends at tomorrow's start, after its save.
      */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
-            var state = topicDAO.findStates(workspaceId, List.of(projectId)).stream().findFirst();
-            if (state.isEmpty() || state.get().lastRunId() == null || state.get().windowUntil() == null) {
+            var project = topicDAO.findProjects(workspaceId, List.of(projectId)).stream().findFirst();
+            if (project.isEmpty() || project.get().listRunId() == null || project.get().windowUntil() == null) {
                 return Optional.empty();
             }
-            var windowUntil = state.get().windowUntil();
-            var lastSuccessAt = state.get().lastSuccessAt();
+            var windowUntil = project.get().windowUntil();
+            var lastSuccessAt = project.get().lastSuccessAt();
             var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
             var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
-            var labeller = algorithm.labeller(topicDAO.findPrototypes(workspaceId, projectId));
-            var topicIds = topicDAO.findLive(workspaceId, projectId).stream().map(Topic::id).toList();
-            return Optional.of(new Saved(state.get().lastRunId(), from, to, state.get().windowUntil(),
-                    labeller.orElse(TopicWindowLabelService::allOther), topicIds,
-                    labeller.isPresent() && !state.get().labelsComplete()));
+            var topics = topicDAO.findByProject(workspaceId, projectId);
+            var labeller = algorithm.labeller(topics, project.get().otherVectors());
+            return Optional.of(new Saved(project.get().listRunId(), from, to,
+                    labeller.orElse(TopicWindowLabelService::allOther), topics.stream().map(Topic::id).toList(),
+                    labeller.isPresent() && !project.get().labelsComplete()));
         });
     }
 
-    /** The labels of a list with no topic prototype: every trace is Other, as its run labelled them. */
+    /** The labels of a list with no topic: every trace is Other, as its run labelled them. */
     private static UUID[] allOther(float[] vectors) {
         var out = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
         Arrays.fill(out, TraceTopic.OTHER);
@@ -276,7 +280,7 @@ public class TopicWindowLabelService {
                 var traces = new LinkedHashMap<UUID, Long>();
                 saved.topicIds().forEach(topicId -> traces.put(topicId, 0L));
                 traces.put(TraceTopic.OTHER, 0L);
-                traceTopicsDAO.countByTopic(workspaceId, projectId, saved.from(), saved.windowUntil(),
+                traceTopicsDAO.countByTopic(workspaceId, projectId, saved.from(), saved.to(),
                         Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds()))
                         .collectList()
                         .block(left)
@@ -338,7 +342,7 @@ public class TopicWindowLabelService {
                         .traceCreatedAt(kept.get(i).traceCreatedAt())
                         .topicId(labels[i])
                         .source(TraceTopic.Source.RUN)
-                        .runId(saved.runId().toString())
+                        .runId(saved.runId())
                         .build());
             }
             return rows;
@@ -379,6 +383,7 @@ public class TopicWindowLabelService {
                     .other(other)
                     .skipped(skipped)
                     .complete(complete)
+                    .counts(counts)
                     .build();
         }
     }

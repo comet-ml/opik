@@ -32,6 +32,7 @@ const DatasetItemEditor: React.FC<DatasetItemEditorProps> = ({
     >
       <DatasetItemEditorAutosaveLayout
         datasetItemId={datasetItemId}
+        columns={columns}
         isOpen={isOpen}
         onClose={onClose}
       />

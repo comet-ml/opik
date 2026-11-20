@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -76,6 +77,26 @@ public class TopicsFirstBuildService {
     private record Gated(@NonNull Map<String, List<UUID>> open, @NonNull Map<String, Duration> longestWaits) {
     }
 
+    /**
+     * A project's failed first builds: how many, when the first of them started, and when the last ended. An attempt
+     * left running past the lease counts as one more, ended at its start: its pod died, at a time nobody saw.
+     */
+    record Failures(@NonNull UUID projectId, int failures, @NonNull Instant firstFailedAt,
+            @NonNull Instant lastFinishedAt) {
+
+        static Optional<Failures> of(TopicProject project, Instant abandonedBefore) {
+            boolean abandoned = project.runStatus() == TopicProject.RunStatus.RUNNING
+                    && project.runStartedAt().isBefore(abandonedBefore);
+            int failures = project.failedRuns() + (abandoned ? 1 : 0);
+            if (failures == 0) {
+                return Optional.empty();
+            }
+            var firstFailedAt = project.firstFailedAt() != null ? project.firstFailedAt() : project.runStartedAt();
+            var lastFinishedAt = abandoned ? project.runStartedAt() : project.runFinishedAt();
+            return Optional.of(new Failures(project.projectId(), failures, firstFailedAt, lastFinishedAt));
+        }
+    }
+
     private enum Outcome {
         SAVED,
         FAILED,
@@ -92,15 +113,14 @@ public class TopicsFirstBuildService {
     }
 
     /**
-     * The job's run: the runs' housekeeping and the delete of deleted projects' topic data, then the labelling passes
+     * The job's run: the delete of deleted projects' topics, then the labelling passes
      * that did not finish ({@link #resumeLabels}), then the first builds of {@link #candidates}, one at a time, until
      * the budget is used. The passes go first but stop at half the budget when a first build waits, so a project with
      * unfinished labels and a project with no list both get a turn in every run.
      */
     public void run(@NonNull Instant start) {
         var began = Instant.now();
-        runner.housekeeping(began);
-        var workspaceIds = workspaceService.eligibleWorkspaceIds();
+        var workspaceIds = workspaceService.enabledWorkspaceIds();
         runner.deleteOfMissingProjects(workspaceIds);
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
         var candidates = candidates(night, began, workspaceIds);
@@ -181,8 +201,8 @@ public class TopicsFirstBuildService {
 
     /**
      * Builds the project under its lock. Skipped when another run holds the lock or the project got a list since it
-     * was listed. A run that cannot start (the read or its {@code topic_runs} insert fails) has no row to fail, so it
-     * is counted here, as {@code start_failed}.
+     * was listed. A run that cannot start (the read or its start write fails) has no attempt to fail, so it is counted
+     * here, as {@code start_failed}.
      */
     private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night) {
         var workspaceId = candidate.workspaceId();
@@ -198,10 +218,10 @@ public class TopicsFirstBuildService {
                     log.info("Topics first build skipped project '{}', it got a list since it was listed", projectId);
                     return Outcome.SKIPPED;
                 }
-                runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
+                runId = runner.startFirstBuild(workspaceId, projectId);
             } catch (RuntimeException exception) {
                 log.error("Topics run could not start, project '{}'", projectId, exception);
-                metrics.run(workspaceId, TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
+                metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicsMetrics.ERROR_START_FAILED);
                 return Outcome.FAILED;
             }
             log.info("Topics run '{}' started, workspace '{}', project '{}', vectors '{}'", runId, workspaceId,
@@ -219,7 +239,7 @@ public class TopicsFirstBuildService {
      * read fails is left for the next run. Also publishes the gate's waits and the projects waiting for a list.
      */
     List<Candidate> candidates(@NonNull LocalDate night, @NonNull Instant now) {
-        return candidates(night, now, workspaceService.eligibleWorkspaceIds());
+        return candidates(night, now, workspaceService.enabledWorkspaceIds());
     }
 
     private List<Candidate> candidates(LocalDate night, Instant now, List<String> workspaceIds) {
@@ -288,19 +308,23 @@ public class TopicsFirstBuildService {
 
     /**
      * Of {@code found}, those whose last failed first build is older than its {@link #retryDelay}, or that have none.
+     * The failures are the project's failed attempts since its last saved one, plus one its pod left running past a
+     * lock's lease, which its next start records as {@code abandoned}.
      * Publishes, per workspace, the gate's longest wait and the projects whose first failure started more than
      * {@link #WAITING_AFTER} ago; every eligible workspace gets both, 0 when it has none, so a wait that ended is seen to
      * end.
      */
     private List<Candidate> due(List<Candidate> found, List<String> workspaceIds,
             Map<String, Duration> longestWaits, Instant now) {
-        var failures = new HashMap<UUID, TopicRunDAO.FirstBuildFailures>();
+        var failures = new HashMap<UUID, Failures>();
         if (!found.isEmpty()) {
+            var abandonedBefore = now.minus(runner.projectLease());
             template.inTransaction(READ_ONLY, handle -> {
-                var runDAO = handle.attach(TopicRunDAO.class);
+                var topicDAO = handle.attach(TopicDAO.class);
                 found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                         Collectors.mapping(Candidate::projectId, Collectors.toSet())))
-                        .forEach((workspaceId, ids) -> runDAO.findFirstBuildFailures(workspaceId, ids)
+                        .forEach((workspaceId, ids) -> topicDAO.findProjects(workspaceId, ids).stream()
+                                .flatMap(project -> Failures.of(project, abandonedBefore).stream())
                                 .forEach(failure -> failures.put(failure.projectId(), failure)));
                 return null;
             });
@@ -314,7 +338,7 @@ public class TopicsFirstBuildService {
                 due.add(candidate);
                 continue;
             }
-            if (!failure.firstStartedAt().isAfter(now.minus(WAITING_AFTER))) {
+            if (!failure.firstFailedAt().isAfter(now.minus(WAITING_AFTER))) {
                 waiting.merge(candidate.workspaceId(), 1L, Long::sum);
             }
             if (!failure.lastFinishedAt().plus(retryDelay(failure.failures())).isAfter(now)) {
@@ -335,7 +359,7 @@ public class TopicsFirstBuildService {
 
     /**
      * Starts the project's first build now and returns its run id. The run goes on in the background with the same
-     * timeout, and its outcome is its {@code topic_runs} row. The window ends at {@code night}'s start (UTC). {@code
+     * timeout, and its outcome is the project's attempt in {@code topic_projects}. The window ends at {@code night}'s start (UTC). {@code
      * ignoreBackfill} is the operator's way to build a project whose backfill cannot drain. A failed first build's wait
      * does not apply.
      *
@@ -348,7 +372,7 @@ public class TopicsFirstBuildService {
      */
     public UUID runNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             boolean ignoreBackfill) {
-        if (!workspaceService.isEligible(workspaceId)) {
+        if (!workspaceService.isEnabled(workspaceId)) {
             throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs to be in "
                     + "topics.enabledWorkspaces and enabled in ai_label_workspaces").formatted(workspaceId));
         }
@@ -385,9 +409,9 @@ public class TopicsFirstBuildService {
             }
             UUID runId;
             try {
-                runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
+                runId = runner.startFirstBuild(workspaceId, projectId);
             } catch (RuntimeException exception) {
-                metrics.run(workspaceId, TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
+                metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicsMetrics.ERROR_START_FAILED);
                 throw exception;
             }
             log.info("Topics run '{}' started by hand, workspace '{}', project '{}', window until '{}'", runId,
