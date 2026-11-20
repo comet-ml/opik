@@ -274,6 +274,50 @@ class FreeFormSqlPostRunCheckTest {
         assertThat(run("SELECT toJSONString(map('n', toString((SELECT 1)))) AS result")).isEqualTo("1");
     }
 
+    static Stream<Arguments> identityExpressionsAsEachAccount() {
+        return FreeFormSqlQueryServiceTest.identityAliases().flatMap(shape -> Stream.of(FreeFormSqlAccount.values())
+                .map(account -> arguments(shape.get()[0], account, shape.get()[1])));
+    }
+
+    @ParameterizedTest(name = "{0} as {1}")
+    @MethodSource("identityExpressionsAsEachAccount")
+    @DisplayName("real ClickHouse AST causes identity and infrastructure reads to be rejected")
+    void identityExpressionsAreRejectedFromRealAst(String expression, FreeFormSqlAccount account, String expectedNode) {
+        String query = "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression);
+        // The service uses these exact labels from the real DAO. Pinning them catches a parser-label change that
+        // hand-written service-test labels cannot catch.
+        var ast = new FreeFormSqlQueryDAOImpl(standard, extended, admin).explainAst(account, query).join();
+        assertThat(ast.stream().map(String::stripLeading).toList())
+                .anySatisfy(label -> assertThat(label).startsWith(expectedNode));
+        assertThatThrownBy(() -> service(standard, STANDARD.getUsername())
+                .executeQuery(account, workspaceA, projectA, query).join())
+                .isInstanceOf(CompletionException.class)
+                .cause().isInstanceOf(BadRequestException.class)
+                .satisfies(
+                        error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse().getEntity()))
+                                .contains("Query rejected: access denied"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("catalogTableFunctions")
+    @DisplayName("the real read-only accounts deny catalog reads through merge table functions")
+    void catalogReadsThroughMergeAreDenied(String query) {
+        for (var account : FreeFormSqlAccount.values()) {
+            assertThatThrownBy(() -> service(standard, STANDARD.getUsername())
+                    .executeQuery(account, workspaceA, projectA, query).join())
+                    .isInstanceOf(CompletionException.class)
+                    .cause().isInstanceOf(BadRequestException.class);
+        }
+    }
+
+    static Stream<Arguments> catalogTableFunctions() {
+        return Stream.of(
+                arguments(
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', '^tables$')"),
+                arguments(
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', '^columns$')"));
+    }
+
     @Test
     @DisplayName("a table read without its row policy is withheld, not returned")
     void missingPolicyIsWithheld() {

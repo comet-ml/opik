@@ -113,8 +113,8 @@ public class FreeFormSqlQueryService {
      * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
      * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
      * Matched on the database qualifier of a {@code TableIdentifier} node, lower-cased, since ClickHouse exposes both
-     * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; this fails
-     * closed in the app regardless of how the account is granted.
+     * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; direct
+     * table references are rejected in the app even if those grants change.
      */
     private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
@@ -123,12 +123,16 @@ public class FreeFormSqlQueryService {
      * Environment and identity functions that disclose the service account, host or build rather than tenant data.
      * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
      * identity out of both the result and the error surface. Compared lower-cased; ClickHouse function names are
-     * case-insensitive. {@code user} is an alias of {@code currentUser}.
+     * case-insensitive. ClickHouse also exposes SQL-style aliases for the current database and user. Bare
+     * {@code current_user} is represented by an Identifier node, not a Function node, in EXPLAIN AST.
      */
     private static final String FUNCTION_AST_PREFIX = "Function ";
+    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
     private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
-            "currentuser", "user", "currentdatabase", "currentschemas", "currentroles", "currentprofiles",
-            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid");
+            "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
+            "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
+            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport");
+    private static final Set<String> FORBIDDEN_IDENTIFIERS = Set.of("current_user", "session_user");
 
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
     static final String SCALAR_SUBQUERY_MESSAGE = """
@@ -476,11 +480,19 @@ public class FreeFormSqlQueryService {
     }
 
     private static boolean containsForbiddenFunctionNode(List<String> nodeLabels) {
-        return nodeLabels.stream()
-                .map(String::stripLeading)
-                .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
-                .map(label -> label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0].toLowerCase(Locale.ROOT))
-                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
+        return nodeLabels.stream().map(String::stripLeading).anyMatch(label -> {
+            if (label.startsWith(FUNCTION_AST_PREFIX)) {
+                String name = label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0]
+                        .toLowerCase(Locale.ROOT);
+                return FORBIDDEN_FUNCTIONS.contains(name);
+            }
+            if (label.startsWith(IDENTIFIER_AST_PREFIX)) {
+                String name = label.substring(IDENTIFIER_AST_PREFIX.length()).split("\\s", 2)[0]
+                        .toLowerCase(Locale.ROOT);
+                return FORBIDDEN_IDENTIFIERS.contains(name);
+            }
+            return false;
+        });
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {

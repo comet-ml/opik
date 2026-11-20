@@ -31,6 +31,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -147,6 +148,37 @@ class FreeFormSqlQueryServiceTest {
         for (var account : FreeFormSqlAccount.values()) {
             assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
                     "SELECT toJSONString(map('u', currentUser())) AS result").join())
+                    .cause().satisfies(error -> {
+                        assertThat(error).isInstanceOf(BadRequestException.class);
+                        assertThat(((WebApplicationException) error).getResponse().getEntity())
+                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
+                    });
+        }
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    static Stream<Arguments> identityAliases() {
+        return Stream.of(
+                arguments("database()", "Function database"),
+                arguments("schema()", "Function schema"),
+                arguments("current_database()", "Function current_database"),
+                arguments("current_user()", "Function current_user"),
+                arguments("current_user", "Identifier current_user"),
+                arguments("getMacro('replica')", "Function getMacro"),
+                arguments("getServerPort('tcp_port')", "Function getServerPort"));
+    }
+
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("identityAliases")
+    @DisplayName("verified identity and infrastructure aliases are rejected before execution")
+    void identityAliasesAreRejected(String expression, String astLabel) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  " + astLabel)));
+
+        for (var account : FreeFormSqlAccount.values()) {
+            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
+                    "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression)).join())
                     .cause().satisfies(error -> {
                         assertThat(error).isInstanceOf(BadRequestException.class);
                         assertThat(((WebApplicationException) error).getResponse().getEntity())
