@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueReference;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
@@ -51,10 +53,13 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
@@ -67,6 +72,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.ThreadDAOTestQueries;
 import com.comet.opik.domain.cost.CostService;
@@ -96,6 +102,7 @@ import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -105,6 +112,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -134,10 +142,12 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -166,6 +176,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB;
 import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
 import static com.comet.opik.api.validation.InRangeValidator.MIN_ANALYTICS_DB;
@@ -247,6 +258,9 @@ class TracesResourceTest {
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private EnvironmentsResourceClient environmentsResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private final GuardrailsGenerator guardrailsGenerator = new GuardrailsGenerator();
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -266,6 +280,8 @@ class TracesResourceTest {
         this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
         this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
         this.environmentsResourceClient = new EnvironmentsResourceClient(this.client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(this.client, baseURI);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -2383,6 +2399,232 @@ class TracesResourceTest {
         void getTrace__whenTraceDoesNotExist__thenReturnNotFound() {
             var id = generator.generate();
             getAndAssertTraceNotFound(id, API_KEY, TEST_WORKSPACE);
+        }
+    }
+
+    @Nested
+    @DisplayName("Trace id in more than one project:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceIdInMultipleProjects {
+
+        private static final String[] IGNORED_FIELDS_AGGREGATES = Arrays.stream(IGNORED_FIELDS_SCORES)
+                .map(field -> "spanFeedbackScores." + field)
+                .toArray(String[]::new);
+
+        private record ProjectTrace(String projectName, UUID projectId, Trace expectedTrace, Comment comment) {
+        }
+
+        private record SharedTrace(UUID id, ProjectTrace returned, ProjectTrace other, String sharedScoreName) {
+        }
+
+        private record ExpectedTraces(Trace returned, Trace other) {
+        }
+
+        /**
+         * Logs the same trace id in two projects, each with its own spans, trace scores (one name shared by both
+         * projects), span scores, comment, guardrails and annotation queue. The trace in the project that is not
+         * returned by id is created first, so its comment is added while it is the only project with that trace id.
+         */
+        private SharedTrace createSharedTrace() {
+            // ClickHouse compares project_id as a string, so the trace by id comes from the larger UUID string.
+            var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .limit(2)
+                    .map(name -> Map.entry(name, projectResourceClient.createProject(name, API_KEY, TEST_WORKSPACE)))
+                    .sorted(Map.Entry.comparingByValue(Comparator.comparing(UUID::toString)))
+                    .toList();
+
+            var id = generator.generate();
+            var sharedScoreName = RandomStringUtils.secure().nextAlphanumeric(32);
+            var other = logTrace(id, projects.getFirst().getKey(), projects.getFirst().getValue(), sharedScoreName);
+            var returned = logTrace(id, projects.getLast().getKey(), projects.getLast().getValue(), sharedScoreName);
+
+            return new SharedTrace(id, returned, other, sharedScoreName);
+        }
+
+        private ProjectTrace logTrace(UUID id, String projectName, UUID projectId, String sharedScoreName) {
+            var trace = createTrace().toBuilder()
+                    .id(id)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var comment = traceResourceClient.generateAndCreateComment(id, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(id)
+                            .parentSpanId(null)
+                            .build())
+                    .toList();
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
+            var traceScores = Stream.concat(
+                    PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class).stream(),
+                    Stream.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .name(sharedScoreName)
+                            .build()))
+                    .<FeedbackScoreBatchItem>map(score -> score.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+            traceResourceClient.feedbackScores(traceScores, API_KEY, TEST_WORKSPACE);
+
+            var spanScores = spans.stream()
+                    .<FeedbackScoreBatchItem>map(
+                            span -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .id(span.id())
+                                    .projectName(projectName)
+                                    .build())
+                    .toList();
+            spanResourceClient.feedbackScores(spanScores, API_KEY, TEST_WORKSPACE);
+
+            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(id, spans.getFirst().id(), projectName);
+            guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
+
+            var queue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(queue)), API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(queue.id(), Set.of(id), API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(aggregateSpansUsage(spans))
+                    .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .spanCount(spans.size())
+                    .llmSpanCount((int) spans.stream().filter(span -> span.type() == SpanType.llm).count())
+                    .hasToolSpans(spans.stream().anyMatch(span -> span.type() == SpanType.tool))
+                    .providers(spans.stream()
+                            .map(Span::provider)
+                            .filter(StringUtils::isNotEmpty)
+                            .distinct()
+                            .sorted()
+                            .toList())
+                    .feedbackScores(traceScores.stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
+                    .spanFeedbackScores(spanScores.stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
+                    .comments(List.of(comment))
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(guardrails))
+                    .annotationQueues(List.of(new AnnotationQueueReference(queue.id(), queue.name())))
+                    .build();
+
+            return new ProjectTrace(projectName, projectId, expectedTrace, comment);
+        }
+
+        private void assertSharedTrace(SharedTrace sharedTrace, ExpectedTraces expectedTraces) {
+            var actualTrace = getAndAssert(expectedTraces.returned(), sharedTrace.returned().projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            assertAggregates(actualTrace, expectedTraces.returned());
+
+            assertProjectTrace(sharedTrace.returned(), expectedTraces.returned());
+            assertProjectTrace(sharedTrace.other(), expectedTraces.other());
+        }
+
+        private void assertProjectTrace(ProjectTrace projectTrace, Trace expectedTrace) {
+            var actualTraces = traceResourceClient.getTraces(projectTrace.projectName(), null, API_KEY,
+                    TEST_WORKSPACE, null, null, 10, Map.of()).content();
+
+            TraceAssertions.assertTraces(actualTraces, List.of(expectedTrace), USER);
+            assertThat(actualTraces.getFirst().projectId()).isEqualTo(projectTrace.projectId());
+            assertAggregates(actualTraces.getFirst(), expectedTrace);
+        }
+
+        /** Compares the fields that {@link TraceAssertions} ignores. */
+        private void assertAggregates(Trace actualTrace, Trace expectedTrace) {
+            assertThat(actualTrace)
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields("totalEstimatedCost", "spanCount", "llmSpanCount", "hasToolSpans",
+                            "providers", "spanFeedbackScores", "guardrailsValidations", "annotationQueues")
+                    .ignoringFields(IGNORED_FIELDS_AGGREGATES)
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .isEqualTo(expectedTrace);
+        }
+
+        @Test
+        @DisplayName("when a trace id exists in two projects, then get by id returns the trace with the highest project id and only its project's data")
+        void getTrace__whenTraceIdExistsInTwoProjects__thenReturnHighestProjectWithItsOwnData() {
+            var sharedTrace = createSharedTrace();
+
+            assertSharedTrace(sharedTrace, new ExpectedTraces(
+                    sharedTrace.returned().expectedTrace(), sharedTrace.other().expectedTrace()));
+        }
+
+        Stream<Arguments> writeByTraceId() {
+            return Stream.of(
+                    arguments(Named.of("score create", (Function<SharedTrace, ExpectedTraces>) this::createScore)),
+                    arguments(Named.of("score delete", (Function<SharedTrace, ExpectedTraces>) this::deleteScore)),
+                    arguments(Named.of("comment create",
+                            (Function<SharedTrace, ExpectedTraces>) this::createComment)),
+                    arguments(Named.of("comment update",
+                            (Function<SharedTrace, ExpectedTraces>) this::updateComment)));
+        }
+
+        @ParameterizedTest
+        @MethodSource("writeByTraceId")
+        @DisplayName("when a trace id exists in two projects, then a write by trace id acts on the project that get by id returns")
+        void write__whenTraceIdExistsInTwoProjects__thenActOnReturnedProject(
+                Function<SharedTrace, ExpectedTraces> write) {
+            var sharedTrace = createSharedTrace();
+
+            var expectedTraces = write.apply(sharedTrace);
+
+            assertSharedTrace(sharedTrace, expectedTraces);
+        }
+
+        private ExpectedTraces createScore(SharedTrace sharedTrace) {
+            var score = factory.manufacturePojo(FeedbackScore.class);
+            traceResourceClient.feedbackScore(sharedTrace.id(), score, TEST_WORKSPACE, API_KEY);
+
+            var returned = sharedTrace.returned().expectedTrace();
+            var feedbackScores = Stream.concat(returned.feedbackScores().stream(), Stream.of(score)).toList();
+            return new ExpectedTraces(
+                    returned.toBuilder().feedbackScores(feedbackScores).build(),
+                    sharedTrace.other().expectedTrace());
+        }
+
+        private ExpectedTraces deleteScore(SharedTrace sharedTrace) {
+            traceResourceClient.deleteTraceFeedbackScore(
+                    DeleteFeedbackScore.builder().name(sharedTrace.sharedScoreName()).build(),
+                    sharedTrace.id(), API_KEY, TEST_WORKSPACE);
+
+            var returned = sharedTrace.returned().expectedTrace();
+            var feedbackScores = returned.feedbackScores().stream()
+                    .filter(score -> !score.name().equals(sharedTrace.sharedScoreName()))
+                    .toList();
+            return new ExpectedTraces(
+                    returned.toBuilder().feedbackScores(feedbackScores.isEmpty() ? null : feedbackScores).build(),
+                    sharedTrace.other().expectedTrace());
+        }
+
+        private ExpectedTraces createComment(SharedTrace sharedTrace) {
+            var comment = traceResourceClient.generateAndCreateComment(sharedTrace.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var returned = sharedTrace.returned().expectedTrace();
+            var comments = Stream.concat(returned.comments().stream(), Stream.of(comment))
+                    .sorted(Comparator.comparing(Comment::id))
+                    .toList();
+            return new ExpectedTraces(
+                    returned.toBuilder().comments(comments).build(),
+                    sharedTrace.other().expectedTrace());
+        }
+
+        private ExpectedTraces updateComment(SharedTrace sharedTrace) {
+            // The comment of the project that is not returned by id, added before the other project existed.
+            var comment = sharedTrace.other().comment();
+            var text = RandomStringUtils.secure().nextAlphanumeric(32);
+            traceResourceClient.updateComment(text, comment.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            return new ExpectedTraces(
+                    sharedTrace.returned().expectedTrace(),
+                    sharedTrace.other().expectedTrace().toBuilder()
+                            .comments(List.of(comment.toBuilder().text(text).build()))
+                            .build());
         }
     }
 
