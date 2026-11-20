@@ -2744,6 +2744,10 @@ topics:
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
     #  tickBudget, at most inference.limits.maxEmbedDeadline
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
+    #  Default: 5s
+    #  Description: How much longer than the rest the leader lock lasts, for the insert after the last embed call,
+    #  which has no deadline of its own. The tick is cancelled when the lock's lease ends. At most 1m
+    leaseSlack: ${TOPICS_VECTORS_LEASE_SLACK:-5s}
     find:
       #  Default: 30000000
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000
