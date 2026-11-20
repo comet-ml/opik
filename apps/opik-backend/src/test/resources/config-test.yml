@@ -1018,10 +1018,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
@@ -1035,6 +1038,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
@@ -1056,14 +1060,46 @@ topics:
     minVectors: 100
     windowDays: 30
     maxVectors: 100000
-    qwenDeadline: 120s
+    llmDeadline: 120s
     namingDeadline: 30s
     verifyDeadline: 60s
+    readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
+    insertRetries: 3
+    insertBackoff: 500ms
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
   firstBuild:
-    enabled: true
-    interval: 10m
-    budget: 9m
+    enabled: false
+    planInterval: 5m
+    sweepInterval: 24h
     backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: [1h, 6h, 1d]
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 1
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
   filter:
     maxExecutionTime: 30s
     maxMemoryUsage: 4294967296
@@ -1088,6 +1124,8 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+    maxTopics: 10
+    provisionalBelow: 1000
   nightly:
     enabled: true
     schedule: "0 0 2 * * ?"

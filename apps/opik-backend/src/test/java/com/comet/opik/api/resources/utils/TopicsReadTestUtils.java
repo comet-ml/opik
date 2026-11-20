@@ -5,10 +5,9 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.PrototypeVectors;
 import com.comet.opik.domain.topics.Topic;
-import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
-import com.comet.opik.domain.topics.TopicRunDAO;
+import com.comet.opik.domain.topics.TopicProjectDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -94,12 +93,20 @@ public class TopicsReadTestUtils {
      * {@code savedAt}, with a window up to the start of today.
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
-        var runDAO = handle.attach(TopicRunDAO.class);
-        runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
-                savedAt.minus(Duration.ofMinutes(5)));
-        handle.attach(TopicDAO.class).saveList(workspaceId, projectId, null, runId, savedAt,
+        var runDAO = handle.attach(TopicProjectDAO.class);
+        startRun(runDAO, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
+        runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
         runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+    }
+
+    /** Puts first build {@code runId} on the project's row, running since {@code at}, as a queue and a claim do. */
+    public static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId, Instant at) {
+        runDAO.ensureRow(workspaceId, projectId);
+        if (runDAO.queue(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, at) != 1
+                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
     }
 
     private static float[] unit() {

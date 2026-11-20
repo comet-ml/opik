@@ -6,7 +6,7 @@ import lombok.experimental.UtilityClass;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Lenient reads of a Qwen answer's fields: an entry off the schema is skipped, not an error. */
+/** Lenient reads of an LLM answer's fields: an entry off the schema is skipped, not an error. */
 @UtilityClass
 class NightJson {
 
