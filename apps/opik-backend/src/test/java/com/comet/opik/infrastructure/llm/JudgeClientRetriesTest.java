@@ -1,11 +1,14 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.freemodel.FreeModelServiceProvider;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import dev.langchain4j.data.message.UserMessage;
@@ -70,6 +73,10 @@ class JudgeClientRetriesTest {
                 mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var anthropic = new AnthropicClientGenerator(new LlmProviderClientConfig(), bundledRegistry(),
                 LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
+        var freeModelConfig = new FreeModelConfig();
+        freeModelConfig.setEnabled(true);
+        var freeModel = new FreeModelServiceProvider(openAi, mock(LlmProviderFactory.class), freeModelConfig,
+                new LlmProviderClientConfig(), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         return Stream.of(
                 Arguments.of("OpenAI chat completions", (Function<String, ChatModel>) baseUrl -> openAi
                         .generateChat(config(baseUrl + "/v1", Map.of()), JUDGE)),
@@ -80,7 +87,10 @@ class JudgeClientRetriesTest {
                         .generateChat(config(baseUrl + "/v1", Map.of()),
                                 LlmAsJudgeModelParameters.builder().name("custom-llm/judge-model").build())),
                 Arguments.of("Anthropic", (Function<String, ChatModel>) baseUrl -> anthropic
-                        .generateChat(config(baseUrl + "/v1/", Map.of()), JUDGE)));
+                        .generateChat(config(baseUrl + "/v1/", Map.of()), JUDGE)),
+                Arguments.of("Opik free model", (Function<String, ChatModel>) baseUrl -> freeModel
+                        .getLanguageModel(config(baseUrl + "/v1", Map.of()),
+                                LlmAsJudgeModelParameters.builder().name(FreeModelConfig.FREE_MODEL).build())));
     }
 
     @ParameterizedTest(name = "{0}")
