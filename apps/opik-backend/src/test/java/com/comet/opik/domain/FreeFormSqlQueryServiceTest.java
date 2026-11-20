@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.ServerException;
+import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
@@ -114,6 +115,62 @@ class FreeFormSqlQueryServiceTest {
         var config = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         config.setUsername(user);
         return config;
+    }
+
+    @Test
+    @DisplayName("explicit system table reads are rejected before execution for both accounts")
+    void systemTableReadsAreRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
+                "SelectWithUnionQuery (children 1)", "   TableIdentifier system.tables")));
+
+        for (var account : FreeFormSqlAccount.values()) {
+            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
+                    "SELECT toJSONString(count()) AS result FROM system.tables").join())
+                    .cause().satisfies(error -> {
+                        assertThat(error).isInstanceOf(BadRequestException.class);
+                        assertThat(((WebApplicationException) error).getResponse().getEntity())
+                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
+                    });
+        }
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("identity and environment function reads are rejected before execution for both accounts")
+    void identityFunctionReadsAreRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
+                "SelectWithUnionQuery (children 1)", "   ExpressionList (children 1)",
+                "    Function currentUser (children 1)")));
+
+        for (var account : FreeFormSqlAccount.values()) {
+            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
+                    "SELECT toJSONString(map('u', currentUser())) AS result").join())
+                    .cause().satisfies(error -> {
+                        assertThat(error).isInstanceOf(BadRequestException.class);
+                        assertThat(((WebApplicationException) error).getResponse().getEntity())
+                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
+                    });
+        }
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a query returning more than the single result column is a clean 400")
+    void nonSingleResultColumnIsRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new NoSuchColumnException("Free-form SQL must return exactly one result column")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(
+                                    new ErrorMessage(List.of("Query must return exactly one column named 'result'")));
+                });
     }
 
     @Test

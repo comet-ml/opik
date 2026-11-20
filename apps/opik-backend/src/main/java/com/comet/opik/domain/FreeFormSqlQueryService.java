@@ -34,6 +34,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -85,6 +86,7 @@ public class FreeFormSqlQueryService {
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
         PARSE_ERROR("rejected", "parse_error"),
         PERMISSION_DENIED("error", "permission_denied"),
+        FORBIDDEN_FUNCTION("rejected", "forbidden_function"),
         SCALAR_SUBQUERY_NOT_ALLOWED("rejected", "scalar_subquery_not_allowed"),
         POLICY_UNVERIFIED("error", "policy_unverified"),
         POLICY_CHECK_FAILED("error", "policy_check_failed"),
@@ -106,6 +108,27 @@ public class FreeFormSqlQueryService {
      * keeps intent explicit; the SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
      */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
+
+    /**
+     * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
+     * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
+     * Matched on the database qualifier of a {@code TableIdentifier} node, lower-cased, since ClickHouse exposes both
+     * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; this fails
+     * closed in the app regardless of how the account is granted.
+     */
+    private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
+
+    /**
+     * Environment and identity functions that disclose the service account, host or build rather than tenant data.
+     * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
+     * identity out of both the result and the error surface. Compared lower-cased; ClickHouse function names are
+     * case-insensitive. {@code user} is an alias of {@code currentUser}.
+     */
+    private static final String FUNCTION_AST_PREFIX = "Function ";
+    private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
+            "currentuser", "user", "currentdatabase", "currentschemas", "currentroles", "currentprofiles",
+            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid");
 
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
     static final String SCALAR_SUBQUERY_MESSAGE = """
@@ -309,6 +332,13 @@ public class FreeFormSqlQueryService {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
                     "Query rejected: SETTINGS/SET clauses are not allowed", null);
         }
+        if (containsForbiddenCatalogTableNode(nodeLabels)) {
+            throw reject(Outcome.PERMISSION_DENIED, startMillis, "Query rejected: access denied", null);
+        }
+        if (containsForbiddenFunctionNode(nodeLabels)) {
+            // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
+            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, "Query rejected: access denied", null);
+        }
         return nodeLabels;
     }
 
@@ -435,6 +465,22 @@ public class FreeFormSqlQueryService {
         return nodeLabels.stream()
                 .map(label -> label.stripLeading().split("\\s", 2)[0])
                 .anyMatch(SETTINGS_AST_NODES::contains);
+    }
+
+    private static boolean containsForbiddenCatalogTableNode(List<String> nodeLabels) {
+        return nodeLabels.stream()
+                .map(String::stripLeading)
+                .filter(label -> label.startsWith(TABLE_IDENTIFIER_AST_PREFIX))
+                .map(label -> label.substring(TABLE_IDENTIFIER_AST_PREFIX.length()).toLowerCase(Locale.ROOT))
+                .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
+    }
+
+    private static boolean containsForbiddenFunctionNode(List<String> nodeLabels) {
+        return nodeLabels.stream()
+                .map(String::stripLeading)
+                .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
+                .map(label -> label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0].toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
