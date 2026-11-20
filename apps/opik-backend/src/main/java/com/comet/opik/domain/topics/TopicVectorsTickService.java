@@ -22,7 +22,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,8 +41,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>ClickHouse alone says which traces have no vector: every read is the done statuses less the keys already in
  * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing. Each workspace's read starts at its
- * watermark in {@code topic_workspaces}, less {@link #WATERMARK_OVERLAP}, and never before the window: the tick moves it
- * past the statuses it gave a vector and never past one it found and left, so a leader change loses nothing. Work per
+ * watermark in {@code topic_vector_watermarks}, less {@code watermarkOverlap}, and never before the window. The tick
+ * moves it past the statuses it gave a vector or never will (a refused input, a zero vector), never past one it left
+ * for a later try, and saves it when the workspace's turn ends, so a cancelled tick keeps what its finished turns did.
+ * A status that becomes visible more than {@code watermarkOverlap} after a later one was read is left to the daily
+ * pass, which reads the whole long window. Work per
  * tick is bounded per workspace by {@code maxTracesPerTick} and in total by the tick budget; what is left is found
  * again by the next tick. Workspaces are visited in a new random order every tick, so when the budget does not reach
  * them all, the ones left out differ from tick to tick.
@@ -60,12 +62,6 @@ public class TopicVectorsTickService {
     private final @NonNull AiLabelTaskRegistry registry;
     private final @NonNull TopicEmbedder embedder;
     private final @NonNull TopicVectorsMetrics metrics;
-
-    /**
-     * How far before its watermark a workspace's read starts. ClickHouse stamps a status by its own clock and before
-     * the insert is visible, so one stamped just before a read's upper bound can show up only after the read.
-     */
-    static final Duration WATERMARK_OVERLAP = Duration.ofMinutes(5);
 
     /**
      * Fails with {@link IllegalStateException} when ai-labels has no {@code trace_summary} task: no tick can run, so the
@@ -88,7 +84,9 @@ public class TopicVectorsTickService {
                     .subscribeOn(Schedulers.boundedElastic())
                     .flatMapMany(enabled -> Flux.fromIterable(enabled.workspaceIds())
                             .concatMap(workspaceId -> visit(workspaceId,
-                                    readFrom(windowStart, enabled.watermarks().get(workspaceId)), start, budget)))
+                                    readFrom(windowStart, enabled.watermarks().get(workspaceId),
+                                            vectors.getWatermarkOverlap().toJavaDuration()),
+                                    start, budget)))
                     .collectList()
                     .flatMap(this::finish);
         });
@@ -97,14 +95,17 @@ public class TopicVectorsTickService {
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks) {
     }
 
-    /** One workspace's turn: its window read from {@code lowerBound}, then its embed calls and writes. */
+    /**
+     * One workspace's turn: its window read from {@code lowerBound}, then its embed calls and writes, then its new
+     * watermark saved. Without time left for the read, it skips the workspace name lookup too.
+     */
     private Mono<Visit> visit(String workspaceId, Instant lowerBound, Instant start, TickBudget budget) {
+        var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
+        if (!budget.hasTimeForRead(embedTimeout)) {
+            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId)));
+        }
         return metrics.workspace(workspaceId).flatMap(workspace -> {
             var vectors = config.getVectors();
-            var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
-            if (!budget.hasTimeForRead(embedTimeout)) {
-                return Mono.just(Visit.notRead(workspace));
-            }
             var find = TopicVectorsFind.builder()
                     .workspaceId(workspaceId)
                     .task(TopicEmbedding.SUMMARY_TASK)
@@ -129,28 +130,44 @@ public class TopicVectorsTickService {
                     .flatMap(found -> {
                         var read = since(readStarted);
                         if (found.isEmpty()) {
-                            return Mono.just(new Visit(workspace, true, null, TickResult.EMPTY, read, Duration.ZERO));
+                            return Mono.just(new Visit(workspace, true, TickResult.EMPTY, read, Duration.ZERO));
                         }
                         long embedStarted = System.nanoTime();
-                        Set<VectorKey> written = ConcurrentHashMap.newKeySet();
-                        return embedAndWrite(workspace, found.get(), written, budget)
-                                .map(result -> new Visit(workspace, true,
-                                        watermark(found.get(), written, find.limit(), start), result, read,
-                                        since(embedStarted)));
+                        Set<VectorKey> done = ConcurrentHashMap.newKeySet();
+                        return embedAndWrite(workspace, found.get(), done, budget)
+                                .flatMap(result -> {
+                                    var embed = since(embedStarted);
+                                    var watermark = watermark(found.get(), done, find.limit(), start);
+                                    return saveWatermark(workspaceId, watermark)
+                                            .thenReturn(new Visit(workspace, true, result, read, embed));
+                                });
                     });
         });
     }
 
+    /** One small write per workspace, as its turn ends: a tick cancelled later keeps the workspaces it finished. */
+    private Mono<Void> saveWatermark(String workspaceId, Instant watermark) {
+        return Mono.<Void>fromRunnable(() -> workspaces.setVectorsWatermark(workspaceId, watermark))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(exception -> {
+                    // Only costs a wider read next tick: the old watermark stays behind the new one.
+                    log.warn("Topic vectors watermark not saved, workspace '{}'", workspaceId, exception);
+                    return Mono.empty();
+                });
+    }
+
     private Mono<TickResult> embedAndWrite(TopicVectorsMetrics.Workspace workspace, List<Candidate> found,
-            Set<VectorKey> written, TickBudget budget) {
+            Set<VectorKey> done, TickBudget budget) {
         return embedder.embed(workspace, found, budget)
-                .concatMap(outcome -> write(workspace, outcome, written))
+                .concatMap(outcome -> write(workspace, outcome, done))
                 .reduce(TickResult.EMPTY, TickResult::plus);
     }
 
+    /** Adds to {@code done} the chunk's traces no later tick would embed, and its vectors once they are written. */
     private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
-            Set<VectorKey> written) {
+            Set<VectorKey> done) {
         return Mono.defer(() -> {
+            done.addAll(outcome.settled());
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
             var skipped = new TickResult(0, outcome.skipped());
             var vectors = outcome.vectors();
@@ -159,7 +176,7 @@ public class TopicVectorsTickService {
             }
             return dao.insert(vectors)
                     .then(Mono.fromCallable(() -> {
-                        vectors.forEach(vector -> written.add(VectorKey.of(vector)));
+                        vectors.forEach(vector -> done.add(VectorKey.of(vector)));
                         metrics.written(workspace, vectors.size());
                         return skipped.plus(TickResult.written(vectors.size()));
                     }))
@@ -173,15 +190,11 @@ public class TopicVectorsTickService {
     }
 
     private Mono<TickResult> finish(List<Visit> visits) {
-        var watermarks = new HashMap<String, Instant>();
         var notRead = new ArrayList<TopicVectorsMetrics.Workspace>();
         var result = TickResult.EMPTY;
         var read = Duration.ZERO;
         var embed = Duration.ZERO;
         for (var visit : visits) {
-            if (visit.watermark() != null) {
-                watermarks.put(visit.workspace().id(), visit.watermark());
-            }
             if (!visit.reached()) {
                 notRead.add(visit.workspace());
             }
@@ -196,27 +209,15 @@ public class TopicVectorsTickService {
         }
         metrics.phase("find", read);
         metrics.phase("embed", embed);
-        var tickResult = result;
-        return Mono.fromRunnable(() -> workspaces.setVectorsWatermarks(watermarks))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(exception -> {
-                    // Only costs a wider read next tick: the old watermarks stay behind the new ones.
-                    log.warn("Topic vectors watermarks not saved, workspaces '{}'", watermarks.size(), exception);
-                    return Mono.empty();
-                })
-                .thenReturn(tickResult);
+        return Mono.just(result);
     }
 
-    /**
-     * One workspace's part of a tick. {@code reached} is false when the budget left no time to read it;
-     * {@code watermark} is its next one, null when not reached or its read failed.
-     */
+    /** One workspace's part of a tick. {@code reached} is false when the budget left no time to read it. */
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached,
-            @Nullable Instant watermark, @NonNull TickResult result, @NonNull Duration readTime,
-            @NonNull Duration embedTime) {
+            @NonNull TickResult result, @NonNull Duration readTime, @NonNull Duration embedTime) {
 
         static Visit notRead(TopicVectorsMetrics.Workspace workspace) {
-            return new Visit(workspace, false, null, TickResult.EMPTY, Duration.ZERO, Duration.ZERO);
+            return new Visit(workspace, false, TickResult.EMPTY, Duration.ZERO, Duration.ZERO);
         }
     }
 
@@ -233,25 +234,26 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * A workspace's next watermark after a read that found {@code found}, oldest status first, and wrote
-     * {@code written}: the status of the first one it found and did not write, so the next read finds it again; with
-     * none, the last status found when the read hit {@code limit}, as more may share it, and else the read's upper bound.
+     * A workspace's next watermark after a read that found {@code found}, oldest status first, and settled
+     * {@code done} (written, or never to be embedded): the status of the first one it found and did not settle, so the
+     * next read finds it again; with none, the last status found when the read hit {@code limit}, as more may share it,
+     * and else the read's upper bound.
      */
-    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> written, int limit,
+    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> done, int limit,
             @NonNull Instant upperBound) {
         return found.stream()
-                .filter(candidate -> !written.contains(VectorKey.of(candidate)))
+                .filter(candidate -> !done.contains(VectorKey.of(candidate)))
                 .findFirst()
                 .map(Candidate::statusUpdatedAt)
                 .orElseGet(() -> found.size() < limit ? upperBound : found.getLast().statusUpdatedAt());
     }
 
-    /** A workspace's read starts {@link #WATERMARK_OVERLAP} before its watermark, never before the window. */
-    static Instant readFrom(@NonNull Instant windowStart, @Nullable Instant watermark) {
+    /** A workspace's read starts {@code overlap} before its watermark, never before the window. */
+    static Instant readFrom(@NonNull Instant windowStart, @Nullable Instant watermark, @NonNull Duration overlap) {
         if (watermark == null) {
             return windowStart;
         }
-        var fromWatermark = watermark.minus(WATERMARK_OVERLAP);
+        var fromWatermark = watermark.minus(overlap);
         return fromWatermark.isAfter(windowStart) ? fromWatermark : windowStart;
     }
 
