@@ -3,7 +3,6 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.db.PrototypeVectorsArgumentFactory;
 import com.comet.opik.infrastructure.db.PrototypeVectorsColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -27,7 +26,7 @@ import java.util.stream.Collectors;
 @RegisterArgumentFactory(PrototypeVectorsArgumentFactory.class)
 @RegisterColumnMapper(PrototypeVectorsColumnMapper.class)
 @RegisterConstructorMapper(Topic.class)
-@RegisterConstructorMapper(TopicDAO.ProjectKey.class)
+@RegisterConstructorMapper(TopicProjectKey.class)
 public interface TopicDAO {
 
     @SqlBatch("""
@@ -55,8 +54,8 @@ public interface TopicDAO {
      */
     default int deleteTopicsOfMissingProjects(Collection<String> workspaceIds) {
         return findTopicProjectsOfMissingProjects(workspaceIds).stream()
-                .collect(Collectors.groupingBy(ProjectKey::workspaceId,
-                        Collectors.mapping(ProjectKey::projectId, Collectors.toList())))
+                .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
+                        Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
                 .entrySet().stream()
                 .mapToInt(entry -> deleteTopicsByProjects(entry.getKey(), entry.getValue()))
                 .sum();
@@ -67,8 +66,5 @@ public interface TopicDAO {
             LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
             WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
             """)
-    List<ProjectKey> findTopicProjectsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    record ProjectKey(@NonNull String workspaceId, @NonNull UUID projectId) {
-    }
+    List<TopicProjectKey> findTopicProjectsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
 }

@@ -1,9 +1,10 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.infrastructure.db.AbstractEnumColumnMapper;
-import com.comet.opik.infrastructure.db.HasValue;
 import com.comet.opik.infrastructure.db.PrototypeVectorsArgumentFactory;
 import com.comet.opik.infrastructure.db.PrototypeVectorsColumnMapper;
+import com.comet.opik.infrastructure.db.TopicRunErrorMapper;
+import com.comet.opik.infrastructure.db.TopicRunModeMapper;
+import com.comet.opik.infrastructure.db.TopicRunStatusMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import jakarta.annotation.Nullable;
 import lombok.Builder;
@@ -19,7 +20,6 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -35,15 +35,15 @@ import java.util.UUID;
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(PrototypeVectorsArgumentFactory.class)
-@RegisterArgumentFactory(TopicProjectDAO.RunModeMapper.class)
-@RegisterArgumentFactory(TopicProjectDAO.RunErrorMapper.class)
+@RegisterArgumentFactory(TopicRunModeMapper.class)
+@RegisterArgumentFactory(TopicRunErrorMapper.class)
 @RegisterColumnMapper(PrototypeVectorsColumnMapper.class)
-@RegisterColumnMapper(TopicProjectDAO.RunModeMapper.class)
-@RegisterColumnMapper(TopicProjectDAO.RunStatusMapper.class)
-@RegisterColumnMapper(TopicProjectDAO.RunErrorMapper.class)
+@RegisterColumnMapper(TopicRunModeMapper.class)
+@RegisterColumnMapper(TopicRunStatusMapper.class)
+@RegisterColumnMapper(TopicRunErrorMapper.class)
 @RegisterConstructorMapper(TopicProject.class)
 @RegisterConstructorMapper(TopicProjectDAO.Backfill.class)
-@RegisterConstructorMapper(TopicDAO.ProjectKey.class)
+@RegisterConstructorMapper(TopicProjectKey.class)
 public interface TopicProjectDAO {
 
     /**
@@ -168,7 +168,7 @@ public interface TopicProjectDAO {
             WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL AND labels_complete = FALSE
             ORDER BY last_success_at, project_id
             """)
-    List<TopicDAO.ProjectKey> findLabelsIncomplete(@BindList("workspaceIds") Collection<String> workspaceIds);
+    List<TopicProjectKey> findLabelsIncomplete(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,
@@ -186,7 +186,7 @@ public interface TopicProjectDAO {
                 WHERE s.workspace_id = p.workspace_id AND s.project_id = p.id AND s.list_run_id IS NOT NULL
             )
             """)
-    List<TopicDAO.ProjectKey> findListlessProjects(@BindList("workspaceIds") Collection<String> workspaceIds,
+    List<TopicProjectKey> findListlessProjects(@BindList("workspaceIds") Collection<String> workspaceIds,
             @Bind("since") Instant since);
 
     @SqlQuery("""
@@ -283,29 +283,4 @@ public interface TopicProjectDAO {
             WHERE t.workspace_id = :workspaceId AND p.id IS NULL
             """)
     List<UUID> findOfMissingProjects(@Bind("workspaceId") String workspaceId);
-
-    class RunModeMapper extends AbstractEnumColumnMapper<TopicProject.RunMode> {
-        public RunModeMapper() {
-            super(value -> byValue(TopicProject.RunMode.values(), value), "topic_run_mode");
-        }
-    }
-
-    class RunStatusMapper extends AbstractEnumColumnMapper<TopicProject.RunStatus> {
-        public RunStatusMapper() {
-            super(value -> byValue(TopicProject.RunStatus.values(), value), "topic_run_status");
-        }
-    }
-
-    class RunErrorMapper extends AbstractEnumColumnMapper<TopicProject.RunError> {
-        public RunErrorMapper() {
-            super(value -> byValue(TopicProject.RunError.values(), value), "topic_run_error");
-        }
-    }
-
-    private static <T extends HasValue> T byValue(T[] values, String value) {
-        return Arrays.stream(values)
-                .filter(candidate -> candidate.getValue().equals(value))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown value '%s'".formatted(value)));
-    }
 }

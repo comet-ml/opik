@@ -297,16 +297,16 @@ public class TopicWindowDAO {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
     }
 
-    public record ProjectCount(@NonNull UUID projectId, long traces) {
+    record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */
-    @Builder(toBuilder = true)
-    public record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
+    @Builder
+    record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
             @NonNull String text, float @NonNull [] vector) {
     }
 
     /** One trace of a labelling page: its id, creation time and the vector of its highest live task version. */
-    public record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
+    record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
     }
 }

@@ -550,7 +550,7 @@ class TopicsDaoStorageTest {
         var unfinished = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findLabelsIncomplete(List.of(workspaceId)));
 
-        assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
+        assertThat(unfinished).extracting(TopicProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
 
     @Test

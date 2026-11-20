@@ -321,7 +321,7 @@ public class TraceTopicsDAO {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
     }
 
-    @Builder(toBuilder = true)
-    public record TopicCount(@NonNull UUID topicId, long traces) {
+    @Builder
+    record TopicCount(@NonNull UUID topicId, long traces) {
     }
 }

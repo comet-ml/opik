@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.UUID;
 
 /**
@@ -83,6 +84,13 @@ public record TopicProject(
         NIGHTLY_UPDATE("nightly_update");
 
         private final String value;
+
+        public static RunMode fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run mode '%s'".formatted(value)));
+        }
     }
 
     @Getter
@@ -93,6 +101,13 @@ public record TopicProject(
         FAILED("failed");
 
         private final String value;
+
+        public static RunStatus fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run status '%s'".formatted(value)));
+        }
     }
 
     /**
@@ -118,5 +133,12 @@ public record TopicProject(
         ABANDONED("abandoned");
 
         private final String value;
+
+        public static RunError fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run error '%s'".formatted(value)));
+        }
     }
 }
