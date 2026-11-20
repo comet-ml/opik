@@ -1,7 +1,8 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Progress;
+import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
+import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -9,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -20,9 +22,17 @@ import java.util.stream.Collectors;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
-/** The topic vectors tick's reads and writes of its backfill state ({@link TopicVectorBackfillDAO}). */
+/** The topic vectors tick's reads and writes of its backfill state ({@link TopicProjectDAO}, {@link TopicVectorBackfillDAO}). */
 @ImplementedBy(TopicVectorBackfillServiceImpl.class)
 public interface TopicVectorBackfillService {
+
+    /**
+     * A workspace the tick has not discovered for this long is stale: the tick stopped for it, so its backfills restart
+     * and its drained marks say nothing about the traces since. Twice {@code topics.vectors.longWindowInterval}.
+     */
+    static Duration staleAfter(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getLongWindowInterval().toJavaDuration().multipliedBy(2);
+    }
 
     /** The started backfills not drained yet, by workspace. */
     Map<String, List<Backfill>> findUndrained(Collection<String> workspaceIds);
@@ -57,7 +67,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicVectorBackfillDAO.class).findUndrained(workspaceIds))
+                handle -> handle.attach(TopicProjectDAO.class).findUndrainedBackfills(workspaceIds))
                 .stream()
                 .collect(Collectors.groupingBy(Backfill::workspaceId));
     }
@@ -68,7 +78,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicVectorBackfillDAO.class).findByKeys(workspaceId, projectIds))
+                handle -> handle.attach(TopicProjectDAO.class).findBackfills(workspaceId, projectIds))
                 .stream()
                 .collect(Collectors.toMap(Backfill::projectId, Function.identity()));
     }
@@ -79,7 +89,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
             return;
         }
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicVectorBackfillDAO.class).start(backfills);
+            handle.attach(TopicProjectDAO.class).startBackfills(backfills);
             return null;
         });
     }
@@ -88,14 +98,14 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
     public int discovered(@NonNull String workspaceId, @NonNull List<Backfill> found, @NonNull Instant now,
             @NonNull Instant staleBefore) {
         return template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicVectorBackfillDAO.class);
-            dao.resetStale(workspaceId, staleBefore, now);
-            dao.checked(workspaceId, now);
+            var projects = handle.attach(TopicProjectDAO.class);
+            projects.resetStaleBackfills(workspaceId, staleBefore, now);
+            handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             if (!found.isEmpty()) {
-                dao.discovered(found);
+                projects.discoverBackfills(found);
             }
             // Last, so a project deleted while the tick read it gets no row back.
-            return dao.deleteOfMissingProjects(workspaceId);
+            return projects.deleteOfMissingProjects(workspaceId);
         });
     }
 
@@ -105,7 +115,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
             return;
         }
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicVectorBackfillDAO.class).record(progress);
+            handle.attach(TopicProjectDAO.class).recordBackfills(progress);
             return null;
         });
     }
@@ -116,6 +126,6 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
             return 0;
         }
         return template.inTransaction(WRITE,
-                handle -> handle.attach(TopicVectorBackfillDAO.class).deleteByProjects(workspaceId, projectIds));
+                handle -> handle.attach(TopicProjectDAO.class).deleteByProjects(workspaceId, projectIds));
     }
 }

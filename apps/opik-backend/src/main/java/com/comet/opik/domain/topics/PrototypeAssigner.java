@@ -39,7 +39,7 @@ public class PrototypeAssigner {
                         "a prototype must have '%s' values, got '%s'", dimensions, prototype.length));
         var kept = otherPrototypes.stream()
                 .filter(other -> topicPrototypes.stream()
-                        .noneMatch(topic -> dot(other, 0, topic, 0, dimensions) >= otherGate))
+                        .noneMatch(topic -> VectorMath.dot(other, 0, topic, 0, dimensions) >= otherGate))
                 .toList();
         this.dimensions = dimensions;
         this.minCosine = minCosine;
@@ -64,7 +64,7 @@ public class PrototypeAssigner {
         int best = -1;
         double bestCosine = Double.NEGATIVE_INFINITY;
         for (int p = 0; p < owners.length; p++) {
-            double cosine = dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
+            double cosine = VectorMath.dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
             if (cosine > bestCosine) {
                 bestCosine = cosine;
                 best = p;
@@ -81,36 +81,5 @@ public class PrototypeAssigner {
     /** The known-Other prototypes the gate kept, in prototype order: the ones an assignment can use. */
     public List<float[]> keptOther() {
         return keptOther;
-    }
-
-    /**
-     * Row {@code a} dotted with row {@code b}, summed in double as eight partial sums over interleaved dimensions,
-     * added together in a fixed order, as {@code KMeans} does: it runs once per trace and prototype, and Java never
-     * reorders double additions, so the result is the same on every machine.
-     */
-    private static double dot(float[] a, int aOffset, float[] b, int bOffset, int dimensions) {
-        double s0 = 0;
-        double s1 = 0;
-        double s2 = 0;
-        double s3 = 0;
-        double s4 = 0;
-        double s5 = 0;
-        double s6 = 0;
-        double s7 = 0;
-        int t = 0;
-        for (; t + 7 < dimensions; t += 8) {
-            s0 += (double) a[aOffset + t] * b[bOffset + t];
-            s1 += (double) a[aOffset + t + 1] * b[bOffset + t + 1];
-            s2 += (double) a[aOffset + t + 2] * b[bOffset + t + 2];
-            s3 += (double) a[aOffset + t + 3] * b[bOffset + t + 3];
-            s4 += (double) a[aOffset + t + 4] * b[bOffset + t + 4];
-            s5 += (double) a[aOffset + t + 5] * b[bOffset + t + 5];
-            s6 += (double) a[aOffset + t + 6] * b[bOffset + t + 6];
-            s7 += (double) a[aOffset + t + 7] * b[bOffset + t + 7];
-        }
-        for (; t < dimensions; t++) {
-            s0 += (double) a[aOffset + t] * b[bOffset + t];
-        }
-        return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
     }
 }

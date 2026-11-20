@@ -9,13 +9,17 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -38,7 +42,8 @@ public class TopicWindowDAO {
      * next to each other, so a group is done when the next trace starts and memory does not grow with the window.
      * {@code maxMap} keeps, per task version, the latest row as {@code last_updated_at * 2 + live}, and the trace is
      * live when one of those is odd. Small blocks keep those per-trace arrays small in flight: 74 MiB at 3 million
-     * traces, where grouping every key and then {@code uniqExact} took 0.8 to 1.05 GiB, over the 1 GiB guard. Two rows
+     * traces, where grouping every key and then {@code uniqExact} took 0.8 to 1.05 GiB, over the 1 GiB guard. That
+     * figure scales with the parts the window spans: in-order aggregation keeps one stream per part. Two rows
      * of one key with the same {@code last_updated_at} count as live, as in the reads, whose {@code argMax} orders a
      * key's rows by {@code (last_updated_at, live)}.
      */
@@ -52,12 +57,41 @@ public class TopicWindowDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND task = :task
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                 GROUP BY project_id, trace_id
             )
             GROUP BY project_id
             HAVING traces > 0
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+                max_memory_usage = <max_memory_usage>, priority = <priority>, optimize_aggregation_in_order = 1,
+                max_block_size = <max_block_size>, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * One project's live traces in the window, counted as in {@link #COUNT_BY_PROJECT} and by the same in-order scan,
+     * plus the slice bounds of the labelling pass: every {@code :slice_traces}-th creation time of those traces, in
+     * order. Slices cut at these bounds hold {@code :slice_traces} traces each, however the traffic is spread in time.
+     * The extra state is one creation time per live trace, about 200 MiB in all at 3 million traces.
+     */
+    private static final String COUNT_AND_BOUNDS = """
+            SELECT count() AS traces,
+                arrayMap(t -> toUnixTimestamp64Micro(t),
+                    arrayFilter((t, i) -> i % :slice_traces = 0,
+                        arraySort(groupArray(created)) AS sorted, arrayEnumerate(sorted))) AS bounds
+            FROM (
+                SELECT trace_id, min(trace_created_at) AS created,
+                    arrayExists(x -> x % 2 = 1, (maxMap([task_version],
+                        [toUInt64(toUnixTimestamp64Micro(last_updated_at)) * 2 + (is_deleted = 0)])).2) AS live
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND task = :task
+                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
+                GROUP BY trace_id
+            )
+            WHERE live
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, priority = 100, optimize_aggregation_in_order = 1,
                 max_block_size = 8192, log_comment = '<log_comment>'
@@ -87,8 +121,8 @@ public class TopicWindowDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND task = :task
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                 AND is_deleted = 0
             ),
             keys AS (
@@ -99,8 +133,8 @@ public class TopicWindowDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND task = :task
-                    AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                     AND bitShiftRight(cityHash64(trace_id), 32) \\< (SELECT share FROM share) * 4294967296
                     GROUP BY trace_id, task_version
                 )
@@ -114,13 +148,13 @@ public class TopicWindowDAO {
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND task = :task
-            AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-            AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+            AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
             AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
             AND is_deleted = 0
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, log_comment = '<log_comment>'
             """;
 
@@ -142,8 +176,8 @@ public class TopicWindowDAO {
                     AND project_id = :project_id
                     AND task = :task
                     AND trace_id > :after
-                    AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                     GROUP BY trace_id, task_version
                 )
                 WHERE deleted = 0
@@ -153,10 +187,11 @@ public class TopicWindowDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND trace_id > :after
-                    AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                     AND source = 'run'
                     AND run_id = :run_id
+                    AND is_deleted = 0
                 )
                 GROUP BY trace_id
                 ORDER BY trace_id
@@ -168,14 +203,14 @@ public class TopicWindowDAO {
             AND project_id = :project_id
             AND task = :task
             AND trace_id > :after
-            AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-            AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+            AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
             AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
             AND is_deleted = 0
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, priority = 100, log_comment = '<log_comment>'
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+                max_memory_usage = <max_memory_usage>, priority = <priority>, log_comment = '<log_comment>'
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -188,35 +223,29 @@ public class TopicWindowDAO {
     public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
         Preconditions.checkArgument(!projectIds.isEmpty(), "a window count takes at least one project");
-        var find = config.getVectors().getFind();
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
-                "projects=%d, from=%s, to=%s".formatted(projectIds.size(), from, to))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+                "projects=%d, from=%s, to=%s".formatted(projectIds.size(), from, to));
+        withGuards(template, maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_ids", projectIds.stream().map(UUID::toString).toArray(String[]::new))
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
+                        .bind("window_from", from.toString())
+                        .bind("window_to", to.toString())
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> new ProjectCount(
                         UUID.fromString(row.get("project_id", String.class)),
                         ((Number) row.get("traces", Object.class)).longValue())));
     }
 
-    /**
-     * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
-     * are more, in no particular order.
-     */
-    public Flux<WindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
-        // The guards of the vectors job's window read: validated config numbers, never input.
+    /** The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}. */
+    public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
+        Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
         var find = config.getVectors().getFind();
-        var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
-                "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit))
+        var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces))
                 .add("max_rows_to_read", find.getMaxRowsToRead())
                 .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
@@ -225,8 +254,37 @@ public class TopicWindowDAO {
                         .bind("workspace_id", workspaceId)
                         .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_id", projectId.toString())
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
+                        .bind("window_from", from.toString())
+                        .bind("window_to", to.toString())
+                        .bind("slice_traces", sliceTraces)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var array = row.get("bounds", Object.class);
+                    var bounds = new ArrayList<Instant>(Array.getLength(array));
+                    for (int i = 0; i < Array.getLength(array); i++) {
+                        bounds.add(Instant.EPOCH.plus(((Number) Array.get(array, i)).longValue(), ChronoUnit.MICROS));
+                    }
+                    return new WindowBounds(((Number) row.get("traces", Object.class)).longValue(), bounds);
+                }))
+                .single();
+    }
+
+    /**
+     * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
+     * are more, in no particular order.
+     */
+    public Flux<WindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
+        var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit));
+        withGuards(template, maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
+                        .bind("project_id", projectId.toString())
+                        .bind("window_from", from.toString())
+                        .bind("window_to", to.toString())
                         .bind("limit", limit)
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> toRow(row)));
@@ -238,20 +296,17 @@ public class TopicWindowDAO {
     public Flux<WindowVector> readUnlabelled(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull UUID runId, @NonNull Instant from, @NonNull Instant to, @NonNull String after, int limit,
             long maxExecutionSeconds) {
-        var find = config.getVectors().getFind();
         var template = getSTWithLogComment(READ_UNLABELLED, "topics:read_unlabelled", workspaceId, null,
-                "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+                "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit));
+        withGuards(template, maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_id", projectId.toString())
                         .bind("run_id", runId.toString())
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
+                        .bind("window_from", from.toString())
+                        .bind("window_to", to.toString())
                         .bind("after", after)
                         .bind("limit", limit)
                         .execute())
@@ -259,6 +314,17 @@ public class TopicWindowDAO {
                         UUID.fromString(row.get("trace_id", String.class)),
                         row.get("trace_created_at", Instant.class),
                         toVector(row))));
+    }
+
+    /** The build's read guards ({@code topics.build.read}): validated config numbers, never input. */
+    private void withGuards(ST template, long maxExecutionSeconds) {
+        var read = config.getBuild().getRead();
+        template.add("max_rows_to_read", read.getMaxRowsToRead())
+                .add("max_memory_usage", read.getMaxMemoryUsage())
+                .add("max_threads", read.getMaxThreads())
+                .add("priority", read.getPriority())
+                .add("max_block_size", read.getMaxBlockSize())
+                .add("max_execution_time", maxExecutionSeconds);
     }
 
     private static WindowRow toRow(Row row) {
@@ -293,20 +359,20 @@ public class TopicWindowDAO {
         return vector;
     }
 
-    private static long toEpochMicros(Instant instant) {
-        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
+    record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
-    public record ProjectCount(@NonNull UUID projectId, long traces) {
+    /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
+    public record WindowBounds(long traces, @NonNull List<Instant> bounds) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */
     @Builder(toBuilder = true)
-    public record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
+    record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
             @NonNull String text, float @NonNull [] vector) {
     }
 
     /** One trace of a labelling page: its id, creation time and the vector of its highest live task version. */
-    public record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
+    record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
     }
 }
