@@ -18,6 +18,54 @@ import {
 export const ONLY_INTERNAL_CALLS_MESSAGE = 'Only internal calls in this thread';
 
 /**
+ * Copy the panel shows instead of its turns when a search term matches nothing.
+ *
+ * Mirrors `NO_SEARCH_MATCHES_MESSAGE` in `ThreadDetailsPanel.tsx`, duplicated
+ * for the same reason as the constant above.
+ */
+export const NO_SEARCH_MATCHES_MESSAGE = 'No messages match your search';
+
+/**
+ * The two CSS Custom Highlight names `useThreadSearch` registers.
+ *
+ * Mirrors `MATCH_HIGHLIGHT` / `CURRENT_MATCH_HIGHLIGHT` in
+ * `useThreadSearch.ts`. These are the only observable record of what the search
+ * highlighted: the Custom Highlight API paints `Range`s that have no element
+ * and no attribute of their own, so there is nothing in the DOM to select and
+ * `readSearchHighlights()` below has to go through `CSS.highlights`.
+ */
+export const SEARCH_MATCH_HIGHLIGHT = 'thread-search-match';
+export const SEARCH_CURRENT_MATCH_HIGHLIGHT = 'thread-search-current-match';
+
+/** What the panel's search highlighted, read out of the highlight registry. */
+export interface ThreadSearchHighlights {
+  /** Ranges in the `thread-search-match` highlight, in registration order. */
+  matchCount: number;
+  /**
+   * The text each matched range covers, in the same order.
+   *
+   * Carried so a caller can assert the ranges really sit on the search term
+   * rather than merely counting to the right number — an offset bug paints the
+   * right number of ranges over the wrong characters.
+   */
+  matchTexts: string[];
+  /**
+   * How many ranges are in `thread-search-current-match`. Exactly one while a
+   * match is selected; asserted rather than assumed, because `new
+   * Highlight(current)` taking more than one range would mean the hook lost
+   * track of which match is current.
+   */
+  currentCount: number;
+  /**
+   * The current match's position among `matchCount`, or -1 when there is no
+   * single current range to place. `findNext`/`findPrev` are modular over the
+   * range list, so this index — not the count — is what says the wrap-around
+   * works.
+   */
+  currentIndex: number;
+}
+
+/**
  * The accessible name of the `Internal` tag a revealed internal trace carries,
  * from `TraceMessage.tsx`'s `INTERNAL_TRACE_TOOLTIP`. The tag is a `role="note"`
  * whose `aria-label` is this text, which is the only non-structural handle on
@@ -74,11 +122,44 @@ export class ThreadPanelPage {
     return this.page.getByTestId('thread');
   }
 
-  async waitForFullyLoaded(): Promise<void> {
+  /**
+   * Wait for the panel to open on its thread and render at least one turn,
+   * re-issuing the panel's own reads if the turn list came back empty.
+   *
+   * The turns are filled by `useTracesList` filtered on `thread_id`, and that
+   * listing is rate limited per workspace (`getTraces:{workspaceId}`). When
+   * parallel specs have spent the budget the panel's call is shed with a 429,
+   * the empty answer is KEPT, and nothing refetches — so the panel renders with
+   * no turn at all and a DOM wait of any length cannot succeed. Observed on
+   * staging for 2.2.140 under three workers, on this spec and on
+   * `thread-logging-smoke`, both of which pass immediately on their own.
+   *
+   * The reload is what makes it recoverable: it remounts the panel from the
+   * `?thread=` param the first line has already waited for, so the listing is
+   * issued again rather than read from the cache holding the shed answer. Same
+   * remedy, and the same reasoning, as `TracePanelPage.waitForSpanTreeNodes`.
+   *
+   * This is not a loosened assertion. The panel must still show a turn, and the
+   * last attempt rethrows the locator's own failure — so a thread that
+   * genuinely renders nothing still fails here, with the same message as before.
+   */
+  async waitForFullyLoaded(opts: { attempts?: number; timeout?: number } = {}): Promise<void> {
+    const attempts = opts.attempts ?? 3;
+    const timeout = opts.timeout ?? 30_000;
     return test.step(`Wait for thread panel ${this.threadId} to load`, async () => {
       await this.page.waitForURL((url) => url.searchParams.get('thread') === this.threadId);
-      await this.root.waitFor({ state: 'visible', timeout: 30_000 });
-      await this.turns.first().waitFor({ state: 'visible', timeout: 30_000 });
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const isLast = attempt === attempts;
+        try {
+          await this.root.waitFor({ state: 'visible', timeout });
+          await this.turns.first().waitFor({ state: 'visible', timeout });
+          return;
+        } catch (error) {
+          if (isLast) throw error;
+          await this.page.reload();
+          await this.page.waitForURL((url) => url.searchParams.get('thread') === this.threadId);
+        }
+      }
     });
   }
 
@@ -333,6 +414,212 @@ export class ThreadPanelPage {
    */
   costChip(formatted: string): Locator {
     return this.root.getByText(formatted, { exact: true });
+  }
+
+  // --- In-panel message search (opik#9329) ---
+  //
+  // `ExpandableSearchInput` in the panel's own toolbar, feeding `useThreadSearch`.
+  // Two separate things happen on one term and neither implies the other: the
+  // turn list narrows to the traces `traceMatchesSearch` accepts, and the
+  // surviving bodies get `Range`s registered in the CSS Custom Highlight
+  // registry. A spec has to read both.
+  //
+  // Note this is NOT the Threads table's "Search by anything" box
+  // (`LogsPage.searchFor`): that one is a server-side `search` param over
+  // `ThreadDAO`, deciding which THREADS to list. This one never leaves the
+  // browser.
+
+  /**
+   * Every rendered message body in the panel.
+   *
+   * `[data-message-content]` is the FE's own marker and the exact selector
+   * `useThreadSearch` searches within, so counting these is counting the thing
+   * the search narrowed. `TraceMessage` stamps two per turn (the input bubble
+   * and the output block), which is why the body count and the turn count are
+   * different numbers and both worth asserting.
+   */
+  get messageBodies(): Locator {
+    return this.root.locator('[data-message-content]');
+  }
+
+  /**
+   * The toolbar button that expands the search box.
+   *
+   * Icon-only: no text, no `aria-label`, no `data-testid` — the "Search
+   * messages" string is a `TooltipWrapper` content rendered in a portal only
+   * while hovered, so it is not an accessible name. The lucide class of the
+   * icon it carries is the only handle, scoped to the panel, the same way
+   * `LogsPage`'s pagination buttons are addressed and for the same reason.
+   * **A `data-testid` belongs on this button**; it is not added in this change
+   * because these specs are verified against a deployed environment, which a
+   * front-end change in the same PR would not reach — so the spec could not be
+   * run before review.
+   */
+  get searchTrigger(): Locator {
+    return this.root.locator('button:has(svg.lucide-search)');
+  }
+
+  /**
+   * The search box itself, once expanded.
+   *
+   * Addressed by its placeholder, which `ThreadDetailsPanel` passes explicitly
+   * ("Search messages") and is the FE's most stable handle here short of a
+   * testid. Scoped to the panel: the Logs page behind it mounts its own
+   * `SearchInput`, and the annotate side-panel can mount more.
+   */
+  get searchInput(): Locator {
+    return this.root.getByPlaceholder('Search messages');
+  }
+
+  /** The panel's "no search matches" empty state. */
+  get noSearchMatches(): Locator {
+    return this.root.getByText(NO_SEARCH_MATCHES_MESSAGE, { exact: true });
+  }
+
+  /**
+   * Expand the search box and leave it focused.
+   *
+   * The box exists in the DOM while collapsed — `overlayExpand` renders it into
+   * a zero-width, `inert` overlay — so "the input is attached" says nothing.
+   * Gated on it being editable, which is the state a `fill()` needs and the one
+   * the overlay withholds.
+   */
+  async openSearch(): Promise<void> {
+    return test.step('Expand the thread panel search box', async () => {
+      await expect(
+        this.searchTrigger,
+        'exactly one search trigger in the thread panel toolbar',
+      ).toHaveCount(1);
+      await this.searchTrigger.click();
+      await expect(this.searchInput, 'exactly one search box in the panel').toHaveCount(1);
+      await expect(this.searchInput, 'the expanded search box is editable').toBeEditable();
+    });
+  }
+
+  /**
+   * Type `term` into the search box and wait until the panel has taken it.
+   *
+   * The settle is the `thread_panel_search` URL param, which is the panel's
+   * single source of truth for the term and what both the narrowing and the
+   * highlighting are derived from. `DebounceInput` holds the keystrokes for
+   * 300ms, so a caller that read the turn list straight after typing would read
+   * the pre-search answer; waiting on the committed param rather than on a
+   * fixed delay is what keeps that deterministic.
+   *
+   * Compared VERBATIM, not folded: unlike the Logs search box, this panel
+   * commits the raw string (`setSearch(value)`), which is what lets a
+   * whitespace-only term be a real, assertable state.
+   *
+   * Does NOT wait for any particular turn count — what the panel then shows is
+   * the assertion, and a POM that waited for an expected count would be
+   * deciding the answer before the spec got to.
+   */
+  async searchMessages(term: string): Promise<void> {
+    return test.step(`Search the thread panel for "${term}"`, async () => {
+      await this.searchInput.fill(term);
+      await this.page.waitForURL(
+        (url) => url.searchParams.get('thread_panel_search') === term,
+        { timeout: 15_000 },
+      );
+    });
+  }
+
+  /**
+   * Step the current match with the keyboard.
+   *
+   * ArrowDown is `findNext`, ArrowUp is `findPrev`, both handled by
+   * `ExpandableSearchInput`'s own `onKeyDown` — so the key has to land on the
+   * INPUT, not on the panel. Pressed through the input locator for that reason.
+   *
+   * There is deliberately no settle here: `setCurrentIndex` is synchronous
+   * React state and the registry is rewritten in the effect that follows it, so
+   * the caller polls `readSearchHighlights()` for the index it expects rather
+   * than this method guessing one.
+   */
+  async stepSearchMatch(direction: 'next' | 'previous'): Promise<void> {
+    return test.step(`Step to the ${direction} search match`, async () => {
+      await this.searchInput.press(direction === 'next' ? 'ArrowDown' : 'ArrowUp');
+    });
+  }
+
+  /**
+   * Dismiss the search with Escape, and wait for the term to leave the URL.
+   *
+   * Escape is `handleCollapse`, which clears the term as well as closing the
+   * box (`onChange?.("")`), so the panel must come back to every turn. The
+   * param is set to the empty string rather than dropped, so the wait accepts
+   * either — "absent" and "empty" are the same answer to the panel
+   * (`searchTerm` is falsy for both) and pinning one of the two here would be
+   * asserting `use-query-params`' serialisation, not the panel's behaviour.
+   */
+  async dismissSearch(): Promise<void> {
+    return test.step('Dismiss the thread panel search with Escape', async () => {
+      await this.searchInput.press('Escape');
+      await this.page.waitForURL(
+        (url) => {
+          const value = url.searchParams.get('thread_panel_search');
+          return value === null || value === '';
+        },
+        { timeout: 15_000 },
+      );
+    });
+  }
+
+  /**
+   * What the search highlighted, read out of `CSS.highlights`.
+   *
+   * There is no DOM alternative. The Custom Highlight API paints ranges the
+   * browser never materialises as elements, so a highlighted match carries no
+   * class, no attribute and no node of its own — the registry is the only
+   * place the panel records what it found.
+   *
+   * Throws rather than reporting zeroes when the browser has no registry: "the
+   * highlight API is missing" and "the search highlighted nothing" are
+   * different answers, and collapsing them would make every assertion here
+   * pass on a browser that cannot highlight at all.
+   *
+   * `currentIndex` is resolved by comparing boundary points rather than by
+   * identity: the current-match highlight holds the same `Range` object the
+   * match list does today, but that is an implementation detail of the hook,
+   * and position is what the assertion is actually about.
+   */
+  async readSearchHighlights(): Promise<ThreadSearchHighlights> {
+    const raw = await this.page.evaluate(
+      ([matchName, currentName]) => {
+        const registry = (
+          CSS as unknown as { highlights?: { get(name: string): Iterable<Range> | undefined } }
+        ).highlights;
+        if (!registry || typeof registry.get !== 'function') return null;
+
+        const rangesOf = (name: string): Range[] => {
+          const highlight = registry.get(name);
+          return highlight ? Array.from(highlight) : [];
+        };
+        const matches = rangesOf(matchName);
+        const current = rangesOf(currentName);
+        const samePosition = (a: Range, b: Range): boolean =>
+          a.compareBoundaryPoints(Range.START_TO_START, b) === 0 &&
+          a.compareBoundaryPoints(Range.END_TO_END, b) === 0;
+
+        return {
+          matchCount: matches.length,
+          matchTexts: matches.map((range) => range.toString()),
+          currentCount: current.length,
+          currentIndex:
+            current.length === 1 ? matches.findIndex((r) => samePosition(r, current[0])) : -1,
+        };
+      },
+      [SEARCH_MATCH_HIGHLIGHT, SEARCH_CURRENT_MATCH_HIGHLIGHT] as const,
+    );
+
+    if (raw === null) {
+      throw new Error(
+        'ThreadPanelPage.readSearchHighlights: this browser exposes no CSS.highlights registry, ' +
+          'so the thread panel cannot highlight a search match at all and nothing here is ' +
+          'assertable. Reporting zero matches would read as "the search found nothing".',
+      );
+    }
+    return raw;
   }
 
   // --- Feedback scores tab ---

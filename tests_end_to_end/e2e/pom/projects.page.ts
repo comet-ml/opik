@@ -146,20 +146,45 @@ export class ProjectsPage {
     });
   }
 
+  /** The create dialog's Name input. */
+  get newProjectNameInput(): Locator {
+    return this.createProjectDialog.getByLabel('Name', { exact: true });
+  }
+
   /**
-   * Type a name into the open dialog and submit it.
+   * Type a name into the open dialog one keystroke at a time, without submitting.
    *
-   * Resolves on the POST having answered, not on the dialog closing: the
-   * dialog is wrapped in `DialogClose` and so closes on the click whether the
-   * create succeeded or failed, which makes its disappearance say nothing. The
-   * response is returned so a caller can compare what the server said against
-   * what the toast shows — the whole subject of opik#9187 is which of the two
-   * the user is given.
+   * Deliberately NOT `fill()`. `fill()` assigns the value and lets React's
+   * `onChange` see the whole string at once, while the `maxLength` the browser
+   * enforces applies to user edits — so a client-side cap is exactly the thing
+   * `fill()` would step over. A test about the cap has to produce real
+   * keystrokes; `submitNewProject` keeps `fill()` because its subject is the
+   * server's answer, not the input.
    */
-  async submitNewProject(name: string): Promise<{ status: number; message: string | null }> {
-    return test.step(`Submit a new project named "${name}"`, async () => {
-      const dialog = this.createProjectDialog;
-      await dialog.getByLabel('Name', { exact: true }).fill(name);
+  async typeNewProjectName(name: string): Promise<void> {
+    return test.step(`Type a ${name.length}-character project name`, async () => {
+      const input = this.newProjectNameInput;
+      await input.click();
+      await input.pressSequentially(name);
+    });
+  }
+
+  /**
+   * Submit the open create dialog and resolve on the POST having answered.
+   *
+   * Split out of `submitNewProject` so a caller that has already put a name in
+   * the input by other means (see `typeNewProjectName`) can submit it without
+   * the `fill()` that would overwrite it.
+   *
+   * Resolves on the response, not on the dialog closing: as of opik#9469 the
+   * submit button sits outside `DialogClose` and the dialog stays open on a
+   * refusal, so the two outcomes are worth telling apart by status rather than
+   * by the dialog's disappearance. The body is returned so a caller can compare
+   * what the server said against what the toast shows — the whole subject of
+   * opik#9187 is which of the two the user is given.
+   */
+  async submitOpenCreateDialog(): Promise<{ status: number; message: string | null }> {
+    return test.step('Submit the open create-project dialog', async () => {
       // The trailing slash is optional in the match, not in the URL: the
       // frontend's `PROJECTS_REST_ENDPOINT` carries one and the backend does
       // not, and a matcher that assumed either would silently never fire.
@@ -168,7 +193,9 @@ export class ProjectsPage {
           res.request().method() === 'POST' &&
           /\/v1\/private\/projects\/?$/.test(new URL(res.url()).pathname),
       );
-      await dialog.getByRole('button', { name: 'Create project', exact: true }).click();
+      await this.createProjectDialog
+        .getByRole('button', { name: 'Create project', exact: true })
+        .click();
       const response = await posted;
       let message: string | null = null;
       try {
@@ -184,6 +211,20 @@ export class ProjectsPage {
         // failure carries a message, and the caller asserts the status.
       }
       return { status: response.status(), message };
+    });
+  }
+
+  /**
+   * Type a name into the open dialog and submit it.
+   *
+   * The response is returned so a caller can compare what the server said
+   * against what the toast shows — the whole subject of opik#9187 is which of
+   * the two the user is given.
+   */
+  async submitNewProject(name: string): Promise<{ status: number; message: string | null }> {
+    return test.step(`Submit a new project named "${name}"`, async () => {
+      await this.newProjectNameInput.fill(name);
+      return this.submitOpenCreateDialog();
     });
   }
 }

@@ -14,6 +14,8 @@ from ..schemas import (
     DatasetInsertItemsResponse,
     DatasetInsertItemsSessionRequest,
     DatasetInsertItemsSessionResponse,
+    DatasetInsertRetryAfterFailureRequest,
+    DatasetInsertRetryAfterFailureResponse,
     DatasetInsertTypedItemRequest,
     DatasetInsertTypedItemResponse,
     DatasetReadItemsRequest,
@@ -150,6 +152,108 @@ def insert_dataset_items_session(
     return DatasetInsertItemsSessionResponse(
         dataset_id=dataset_id,
         inserted=[len(call.items) for call in body.inserts],
+    )
+
+
+class _AbortedInsert(RuntimeError):
+    """Raised by the generator feeding the aborted insert, so the cause is unambiguous.
+
+    A bespoke type rather than a bare RuntimeError: the route asserts that the
+    insert failed for the reason it arranged, and any other RuntimeError out of
+    the SDK (a failed upload body, a transport error) would otherwise be
+    reported as a successfully-aborted funnel and the test would assert the
+    retry against a state it does not understand.
+    """
+
+
+@router.post(
+    "/insert-retry-after-failed-funnel",
+    response_model=DatasetInsertRetryAfterFailureResponse,
+    status_code=200,
+)
+def insert_retry_after_failed_funnel(
+    body: DatasetInsertRetryAfterFailureRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> DatasetInsertRetryAfterFailureResponse:
+    """Abort an insert part-way, then retry the same items on the SAME `Dataset`.
+
+    `Dataset.insert` accepts any iterable and consumes it lazily, hashing each
+    item as it is yielded and before its batch is sent. So a source that raises
+    leaves the object's hash cache holding items that never reached the backend
+    — and a retry that trusted that cache would skip them as duplicates and
+    store nothing (opik#9393, issue-9376). The SDK's fix marks the cache out of
+    sync whenever the funnel does not complete, which forces the retry to
+    re-sync against what the backend really holds.
+
+    Three inserts, in order, all on one object:
+
+      1. the items as a generator that yields every one of them and THEN raises,
+      2. the same items as a list, deduplication left at its default — the retry,
+      3. the same items again, so deduplication is shown still to work.
+
+    Item counts are read between the steps through a separate `get_dataset()`:
+    a second `Dataset` object over the same backend dataset, so the read cannot
+    disturb the subject's cache. Public surface throughout — no internal flag is
+    inspected, because what a caller needs to assert is that the items landed,
+    not how the SDK decided to send them.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+
+    def count_stored() -> int:
+        return len(
+            client.get_dataset(
+                name=body.dataset_name, project_name=body.project_name
+            ).get_items()
+        )
+
+    def yield_then_raise() -> Any:
+        for item in body.items:
+            yield item
+        raise _AbortedInsert(
+            f"aborted after yielding {len(body.items)} item(s) — the funnel never completed"
+        )
+
+    try:
+        dataset = client.get_dataset(
+            name=body.dataset_name, project_name=body.project_name
+        )
+
+        aborted_insert_error: str | None = None
+        try:
+            dataset.insert(yield_then_raise())
+        except _AbortedInsert as err:
+            aborted_insert_error = str(err)
+
+        if aborted_insert_error is None:
+            # Loud rather than reported: the scenario did not happen, so every
+            # count below would describe a different test.
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "insert-retry-after-failed-funnel: the aborted insert completed "
+                    "without raising, so the failed-funnel state was never reached"
+                ),
+            )
+
+        items_after_aborted_insert = count_stored()
+
+        dataset.insert(body.items)
+        items_after_retry = count_stored()
+
+        dataset.insert(body.items)
+        items_after_repeat = count_stored()
+
+        dataset_id = str(dataset.id)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return DatasetInsertRetryAfterFailureResponse(
+        dataset_id=dataset_id,
+        aborted_insert_error=aborted_insert_error,
+        items_after_aborted_insert=items_after_aborted_insert,
+        items_after_retry=items_after_retry,
+        items_after_repeat=items_after_repeat,
     )
 
 

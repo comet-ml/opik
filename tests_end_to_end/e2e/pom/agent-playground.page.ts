@@ -54,9 +54,50 @@ export class AgentPlaygroundPage {
     });
   }
 
+  /**
+   * The header's Run control.
+   *
+   * Matched on a leading "Run" rather than an exact name: the button renders
+   * the Shift and Enter hotkey badges inside itself, so its accessible name is
+   * "Run ⇧ ⏎". Anchored so it cannot also match "Run all" or a future sibling,
+   * and `.first()` because the control sits inside a tooltip wrapper that
+   * duplicates nothing but has historically been re-nested.
+   *
+   * Exposed as a locator, not only through `clickRun`, because its DISABLED
+   * state is a behaviour in its own right: it is driven straight off the input
+   * form's zod validity (`hasAllRequiredParams`), so it is where a blanked
+   * required field has to show up.
+   */
+  runButton(): Locator {
+    return this.page.getByRole('button', { name: /^Run/ }).first();
+  }
+
+  /**
+   * The validation message the input form renders under ONE field.
+   *
+   * Anchored to the field's own input and read from its immediate parent, which
+   * is the box the form renders the control and its error into together. Scoped
+   * that way rather than matched page-wide on purpose: a message that surfaced
+   * under the WRONG field is exactly how a resolver major mismaps zod issues to
+   * form paths, and a page-wide text match would call that a pass.
+   *
+   * The parent step is a structural hop, which the estate avoids — there is no
+   * `data-testid` on the field card and the card carries no role or accessible
+   * name of its own. The field card SHOULD grow one (`agent-runner-field-
+   * <name>`); it is not added here because this spec ships on the QA branch,
+   * which may only touch `tests_end_to_end/`. Anchoring on the input rather
+   * than descending from the form keeps it independent of the form's nesting
+   * depth, which is the part most likely to move.
+   */
+  inputFieldError(fieldName: string): Locator {
+    return this.inputField(fieldName)
+      .locator('..')
+      .getByText('This field is required', { exact: true });
+  }
+
   async clickRun(): Promise<void> {
     return test.step('click Run', async () => {
-      await this.page.getByRole('button', { name: /^Run/ }).first().click();
+      await this.runButton().click();
     });
   }
 

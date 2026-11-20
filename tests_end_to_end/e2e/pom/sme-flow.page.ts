@@ -327,7 +327,147 @@ export class SmeFlowPage {
     });
   }
 
+  // --- Items sidebar (ItemsSidebar) ---
+  //
+  // The sidebar is where a reviewer sees what the flow thinks of each item:
+  // a per-item state tag, a To review / Processed split, and a remaining count.
+  // None of it carries a testid (see the class note), so the locators below are
+  // anchored on the four STATE_CONFIG labels and on the tab roles Radix gives
+  // the filter — both of which are the strings a reviewer reads.
+
+  /** The four labels `STATE_CONFIG` renders, as the sidebar spells them. */
+  static readonly ITEM_STATES = ['To review', 'In review', 'Reviewed', 'Completed'] as const;
+
+  /**
+   * One sidebar entry, located by the item's own preview name.
+   *
+   * `getItemPreviews` labels a trace entry `trace.name || id.slice(-12)`, so a
+   * named trace is addressable by name — and the name appears nowhere else on
+   * this route (the viewer's header names the trace by ID), which is what makes
+   * a page-scoped lookup safe here.
+   *
+   * Filtered on a descendant with the EXACT name rather than `hasText`: the
+   * entry also renders the item's input and output previews, and a substring
+   * filter over a namespaced seed would match a sibling whose preview happened
+   * to contain this one's name.
+   */
+  sidebarEntry(itemName: string): Locator {
+    return this.page
+      .getByRole('button')
+      .filter({ has: this.page.getByText(itemName, { exact: true }) });
+  }
+
+  /**
+   * The state tag inside one sidebar entry — "Reviewed", "Completed", …
+   *
+   * Matched on the label set rather than on one expected value, so a caller can
+   * read what the sidebar actually says and compare it. That matters because
+   * the two states this distinguishes are both "something happened to this
+   * item": asserting only that "Completed" is absent would also pass on an
+   * entry that lost its tag altogether.
+   *
+   * The DEFAULT state renders no tag at all (`state !== ITEM_STATE.DEFAULT`
+   * gates it), so an unprocessed entry resolves to zero elements here — which
+   * is the right answer for it and must not be confused with a missing tag on a
+   * processed one.
+   */
+  sidebarEntryState(itemName: string): Locator {
+    return this.sidebarEntry(itemName).getByText(
+      new RegExp(`^(${SmeFlowPage.ITEM_STATES.join('|')})$`),
+    );
+  }
+
+  /** The sidebar's To review / Processed filter, by its visible label. */
+  sidebarFilterTab(label: 'To review' | 'Processed'): Locator {
+    return this.page.getByRole('tab', { name: label, exact: true });
+  }
+
+  /**
+   * Switch the sidebar to one of its two filters, and wait for it to take.
+   *
+   * Gated on the tab's own selected state rather than on the list below it: the
+   * Processed list is legitimately empty until something has been annotated, so
+   * a caller that waited for an entry would hang on exactly the case where the
+   * filter is working and the item is not there.
+   */
+  async showSidebarFilter(label: 'To review' | 'Processed'): Promise<void> {
+    return test.step(`Switch the SME items sidebar to "${label}"`, async () => {
+      const tab = this.sidebarFilterTab(label);
+      await expect(tab, `exactly one "${label}" sidebar filter`).toHaveCount(1);
+      await tab.click();
+      await expect(tab, `the "${label}" filter is selected`).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+    });
+  }
+
+  /**
+   * The sidebar header's progress readout — `"<n> remaining"`, or
+   * `"All scored"` once nothing is left in the default state.
+   *
+   * Exposed as the raw string rather than a parsed number because the two
+   * answers are different sentences, not a number and a zero: a queue that
+   * reads "All scored" while an item is still awaiting its second annotator is
+   * the failure this release is about, and parsing would have to invent a
+   * number for it.
+   */
+  get itemsRemainingLabel(): Locator {
+    return this.page.getByText(/^(\d+ remaining|All scored)$/);
+  }
+
   // --- Annotating controls ---
+
+  /**
+   * The comment box of the annotation view's Comments card.
+   *
+   * By placeholder: `UserCommentForm.StandaloneTextareaField` renders no label
+   * and no testid, and "Add a comment..." is the only handle on it. One per
+   * route — the trace side panel's own comment form is not mounted in this view.
+   */
+  get commentInput(): Locator {
+    return this.page.getByPlaceholder('Add a comment...');
+  }
+
+  /**
+   * Leave a comment on the item on screen, resolving once the write has been
+   * ANSWERED.
+   *
+   * The same debounced-save shape as `setScore`, and for the same reason: the
+   * comment is persisted by `useAnnotationPersistence` on a timer that the blur
+   * flushes, and nothing on screen marks it as sent. A caller that only typed
+   * and blurred could not tell "the browser never issued the POST" from "the
+   * server has not caught up", and both read as a trace with no comments on
+   * whatever it polls next.
+   *
+   * `traceId` is required rather than inferred, exactly as on `setScore`: the
+   * route writes comments for whichever item is on screen, and a path-blind
+   * match would be satisfied by a sibling's write.
+   */
+  async addComment(text: string, traceId: string): Promise<void> {
+    return test.step(`Comment on trace ${traceId} in the SME view`, async () => {
+      const input = this.commentInput;
+      await expect(input, 'exactly one comment box').toHaveCount(1);
+
+      // Armed before the fill: the debounce can elapse while the blur is still
+      // in flight, so a subscription registered afterwards would wait for a
+      // request that has already been served.
+      const written = this.page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname.endsWith(`/v1/private/traces/${traceId}/comments`),
+        { timeout: 60_000 },
+      );
+      await input.fill(text);
+      await input.blur();
+
+      const response = await written;
+      expect(
+        response.ok(),
+        `the SME flow's comment write was accepted (got ${response.status()})`,
+      ).toBe(true);
+    });
+  }
 
   /**
    * The annotate score row for a named feedback definition.

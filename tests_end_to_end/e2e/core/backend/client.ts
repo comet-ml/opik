@@ -96,6 +96,30 @@ export interface InsightsViewDetail extends InsightsViewRef {
   sections: InsightsViewSectionRef[];
 }
 
+/**
+ * One widget out of an insights view's stored `config`, with its `config`
+ * handed back RAW.
+ *
+ * `InsightsViewSectionRef` above reduces a widget to its title, which is all a
+ * "which widgets landed where" assertion needs. This is the other question: a
+ * spec asserting what the dashboard auto-save actually wrote into one widget —
+ * a table widget's `sorting` and `columnsWidth` — has to see the whole config
+ * object, including the parts it expects to be untouched. Reducing it would
+ * defeat the point: the failure worth catching is the auto-save dropping
+ * `rows` or `version` while storing the sort correctly, and a mapper that only
+ * kept the keys the spec names could not see that.
+ *
+ * So the config is `Record<string, unknown>` rather than a typed widget shape.
+ * It is whatever the dashboards API stored, which is the subject, and a caller
+ * compares it whole against what it seeded.
+ */
+export interface InsightsViewWidgetRef {
+  id: string;
+  type: string | null;
+  title: string | null;
+  config: Record<string, unknown>;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -127,6 +151,43 @@ export interface ComparePairedRowRef {
   id: string;
   idx: number | null;
   experimentItems: Array<{ experimentId: string; traceId: string }>;
+}
+
+/**
+ * One page of the compare read, projected to the two facts the all-experiments
+ * mode decides: how many rows there are, and WHICH experiments composed them.
+ *
+ * Separate from `ComparePairedRowRef`, which carries the row → trace join. The
+ * question here is the other one — the experiment SET the server resolved. In
+ * all-experiments mode the caller never names it, so the only way to assert the
+ * resolution is to read back every `experiment_id` that appears and compare it
+ * against the experiments the seed created, by type.
+ *
+ * `experimentItemCounts` is the per-row width, kept because the exclusion rule
+ * is visible in it too: a trial experiment wrongly resolved shows up as a row
+ * carrying three results where every other row carries two, and a read asserted
+ * only on the id SET would still see the same ids and pass.
+ */
+export interface CompareExperimentSetRef {
+  total: number;
+  ids: string[];
+  experimentIds: string[];
+  experimentItemCounts: number[];
+}
+
+/**
+ * One column the dataset-items endpoint derives from the stored items' keys —
+ * the `columns` half of `GET /v1/private/datasets/{id}/items`, which no other
+ * helper here keeps.
+ *
+ * `types` is the set of JSON types seen for that key across the version, and it
+ * is carried rather than dropped because it is the only place the API says a
+ * field is still a number (or still an object) after an edit elsewhere in the
+ * record.
+ */
+export interface DatasetItemColumnRef {
+  name: string;
+  types: string[];
 }
 
 /**
@@ -216,6 +277,38 @@ export interface LlmCatalogModelRef {
    */
   label: string | null;
   effort: LlmCatalogEffortRef;
+}
+
+/**
+ * The body of a BLOCKING `POST /v1/private/chat/completions`, reduced to what a
+ * spec about a provider path reads back.
+ *
+ * Only the blocking shape is modelled: a streamed call answers
+ * `text/event-stream` and carries its usage on the final chunk, which is a
+ * different contract and a different parse. The playground only ever sends
+ * `stream: true`, so this is the half no UI assertion can reach.
+ *
+ * Every field is `| null` rather than optional for the reason the span shapes
+ * give: a completion that came back with no `usage` block at all and one that
+ * came back with an empty one are different answers, and a provider path that
+ * stopped mapping the vendor's token counters must not read as one that mapped
+ * them to nothing.
+ */
+export interface ChatCompletionRef {
+  /** The model id the server echoes — the provider-qualified one it resolved. */
+  model: string | null;
+  /** `choices[0].message.content`, the assistant's whole reply. */
+  content: string | null;
+  /**
+   * The usage counters, verbatim.
+   *
+   * Not summed or normalised here: a provider may report a `total_tokens`
+   * LARGER than `prompt_tokens + completion_tokens` (Gemini bills thinking
+   * tokens into the total and not into either half), so the relation between
+   * them is the caller's claim to make about its own provider, not this
+   * client's to assume.
+   */
+  usage: Record<string, number> | null;
 }
 
 /** One row of the dataset's Version history tab. */
@@ -398,6 +491,18 @@ export interface ExperimentRefDetail {
   id: string;
   name: string;
   datasetId: string | null;
+  /**
+   * The project the experiment's traces were written to.
+   *
+   * Nullable because the wire genuinely makes it optional, and a caller that
+   * cares has to assert the absence away rather than compare against a
+   * substituted default. It is the field that says WHICH project a
+   * `project_name` on the write resolved to — the whole subject of
+   * `resolveProjectIdOrCreate` (opik#9161), and unobservable anywhere else: an
+   * execute that created two projects for one name would still answer 202 with
+   * the right number of experiments.
+   */
+  projectId: string | null;
 }
 
 /**
@@ -540,6 +645,42 @@ export interface SpanCostRef {
    * empty one are different answers.
    */
   usage: Record<string, number> | null;
+  /**
+   * `total_estimated_cost_version` — the price-table version the server stamped
+   * when IT did the pricing, and absent when the cost did not come from the
+   * table at all.
+   *
+   * This is the only field that tells a REPORTED cost apart from a computed
+   * one, and the distinction is invisible in `totalEstimatedCost` alone: an
+   * amount a provider billed and an amount Opik derived are the same number in
+   * the same column. `OpenTelemetryMapper`'s COST outcome sets
+   * `totalEstimatedCost` directly and stamps no version, so a blank version
+   * beside a non-blank one on an otherwise-identical span is the backend saying
+   * "I did not price this myself" — which is exactly what opik#9499 made
+   * assertable. Without it, a regression that quietly re-priced a reported
+   * amount back to Opik's own estimate would be indistinguishable from the
+   * provider happening to agree.
+   *
+   * Null, never `''`: the column is NULL for a span nothing priced, and an
+   * empty-string default would make "no version" and "version ''" the same
+   * answer in a comparison that exists to tell two origins apart.
+   */
+  totalEstimatedCostVersion: string | null;
+  /**
+   * The span's `metadata` as the backend stored it.
+   *
+   * Carried on the COST shape because the currency a reported amount is
+   * denominated in lands there rather than in a column of its own:
+   * `gen_ai.usage.cost.currency` and `gen_ai.usage.cost.source` are METADATA
+   * outcomes, while the amount beside them is a COST one. A reported cost whose
+   * currency was dropped in transit is a figure with no unit — `$1.23` rendered
+   * for an amount the provider billed in euros — and the amount alone cannot
+   * see it.
+   *
+   * Null, not `{}`, for the reason `usage` is: a span carrying no metadata and
+   * one carrying an empty object are different answers.
+   */
+  metadata: Record<string, unknown> | null;
 }
 
 /** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
@@ -619,13 +760,15 @@ export interface TrackedSpanRef {
 export interface OtelSpanSeed {
   name: string;
   /**
-   * Numbers are sent as OTLP `intValue`, strings as `stringValue`.
+   * Numbers are sent as OTLP `intValue`, strings as `stringValue`, and a value
+   * wrapped in {@link otelDouble} as `doubleValue`.
    *
-   * There is no float case, and that is not an omission: every numeric
-   * attribute Opik reads off an OTel span is a token count, and
-   * `extractUsageField` only reads `hasIntValue()`.
+   * A float is reachable only through that marker, and that is not an
+   * omission: every numeric attribute Opik reads off an OTel span is a token
+   * count, and `extractUsageField` only reads `hasIntValue()`. The exception is
+   * a reported cost — see {@link OtelDoubleAttribute}.
    */
-  attributes: Record<string, string | number>;
+  attributes: Record<string, OtelAttributeValue>;
 }
 
 /**
@@ -644,9 +787,10 @@ export interface OtelExportSpanSeed {
   name: string;
   /**
    * Span-level attributes, `opik.project_name` among them when the span routes
-   * itself. Sent through the same encoder as the resource attributes.
+   * itself. Sent through the same encoder as the resource attributes, so a
+   * float needs the {@link otelDouble} marker here too.
    */
-  attributes?: Record<string, string | number>;
+  attributes?: Record<string, OtelAttributeValue>;
   /**
    * This span's own OTLP trace id, as lowercase hex.
    *
@@ -707,8 +851,36 @@ export interface SpanBatchSeed {
   endTime?: Date;
   model?: string;
   provider?: string;
-  /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
+  /** Written through verbatim. See `totalEstimatedCost` for the cost counterpart. */
   usage?: Record<string, number>;
+  /**
+   * The span's `tags`, sent only when supplied.
+   *
+   * A breakdown on `tags` is the one group expression that is not a scalar
+   * column: `arrayJoin(if(empty(s.tags), ['Unknown'], s.tags))` fans a span out
+   * once per tag it carries, so a span with two tags is counted under both. That
+   * overlap is the documented behaviour behind the tag-cost warning, and it is
+   * only observable from a seed that can put more than one tag on a span.
+   */
+  tags?: string[];
+  /**
+   * The span's `total_estimated_cost`, supplied by the CLIENT rather than priced
+   * by the server.
+   *
+   * The opposite choice from `createSpan`/`modelCostSpans`, and deliberately so.
+   * Those exist to exercise server-side price resolution, where a client-supplied
+   * cost would defeat the whole test. Here the subject is the arithmetic a cost
+   * BREAKDOWN does over costs that already exist — `SpanDAO` stores an explicit
+   * `total_estimated_cost` as given (`SpanDAO.java:2163`) rather than
+   * recalculating — so an explicit cost is what makes the expected sums literals
+   * in the spec instead of whatever the shipped price table happens to say this
+   * week.
+   *
+   * A JS number, not a string: `JSON.stringify` emits the shortest exact decimal
+   * text for these values (`0.1` -> `0.1`), and Jackson builds the BigDecimal
+   * from that text, so the stored decimal is the one written here.
+   */
+  totalEstimatedCost?: number;
   /**
    * The span's `metadata` payload, sent only when supplied.
    *
@@ -840,6 +1012,14 @@ export interface TraceBatchSeed {
    * absent value and a present one are different seeds.
    */
   environment?: string;
+  /**
+   * The trace's `tags`, sent only when supplied.
+   *
+   * The trace-side counterpart of `SpanBatchSeed.tags`: a breakdown on `tags`
+   * for a TRACE metric groups on `t.tags`, not on the spans' own, so the two
+   * have to be seedable independently.
+   */
+  tags?: string[];
 }
 
 /**
@@ -1176,6 +1356,65 @@ export interface LlmJudgeModelRef {
 }
 
 /**
+ * The provider API a judge rule asks its model for, as `LlmAsJudgeModelApi`
+ * enumerates it — one value today, plus genuinely absent.
+ *
+ * A union with `undefined` rather than a plain string because absence is a
+ * state the product distinguishes: a decisions-ONLY model (Jev) resolves to the
+ * Decisions API with no `api` key at all, while a model its provider also
+ * serves over chat (gpt-6-luna) reaches it only when the rule says so. So a
+ * read that defaulted the absent case to `'decisions'` would make
+ * "the key round-tripped" true for a rule that never carried it.
+ */
+export type JudgeModelApi = 'decisions';
+
+/**
+ * The `code` of one judge rule as a caller wants to WRITE it, with every field
+ * the decision-model validator reads left expressible — including the shapes it
+ * exists to refuse.
+ *
+ * Deliberately un-defaulted and deliberately flat, unlike `createLlmJudgeRule`
+ * above, which fills in a model, a schema and a variable map so a seed can be
+ * one line. `DecisionModelRuleValidator`'s whole contract is which payloads are
+ * rejected, and every default is a field a rejection test cannot then state: a
+ * builder that always sent exactly one USER message cannot express the
+ * two-message refusal, and one that always sent a BOOLEAN schema cannot express
+ * the INTEGER one. `maxCostUsd` is omitted from the request when absent rather
+ * than sent as `null` for the same reason it is on `createLlmJudgeRule` — the
+ * validator refuses a budget that is PRESENT, so "no budget" and "a null
+ * budget" have to stay distinguishable.
+ */
+export interface JudgeRuleWrite {
+  /**
+   * The evaluator discriminator. `trace_thread_llm_as_judge` is in the union
+   * because "a thread rule cannot use a decisions model" is one of the
+   * refusals, and it is unreachable from the two trace/span types.
+   */
+  type: 'llm_as_judge' | 'span_llm_as_judge' | 'trace_thread_llm_as_judge';
+  projectId: string;
+  name: string;
+  model: { name: string; temperature?: number; api?: JudgeModelApi };
+  messages: Array<{ role: string; content: string }>;
+  /**
+   * Absent for a thread rule, which takes none — the scorer hands the metric
+   * the rendered conversation rather than binding fields of one entity.
+   */
+  variables?: Record<string, string>;
+  schema: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
+  maxCostUsd?: number;
+  samplingRate?: number;
+  /**
+   * Defaults to FALSE here, the opposite of `createLlmJudgeRule`.
+   *
+   * A validation spec creates rules it never wants to fire: an enabled judge
+   * rule on a shared workspace starts sampling real traffic the moment it is
+   * stored, and every call it makes is billed. The rules this writes exist to
+   * be accepted or refused, never to score.
+   */
+  enabled?: boolean;
+}
+
+/**
  * One `llm_as_judge` rule's whole stored body — the top-level fields the editor
  * can change, plus `code` exactly as `GET /automations/evaluators/{id}` answers
  * it.
@@ -1441,6 +1680,17 @@ export interface AnnotationQueueWrite {
    * states and a seed must be able to produce either.
    */
   instructions?: string;
+  /**
+   * How many distinct annotators an item needs before the reviewer flow calls
+   * it Completed — the create sheet's "Annotators per item", and the ceiling
+   * `getItemState` compares the distinct-annotator count against.
+   *
+   * Omitted from the request entirely when not given rather than sent as `1`:
+   * the field is `@Nullable` on the API and absent is what every queue written
+   * before it existed carries, so a seed has to be able to produce that state
+   * as well as an explicit number.
+   */
+  annotatorsPerItem?: number;
   feedbackDefinitionNames?: string[];
   automation?: {
     enabled: boolean;
@@ -1456,6 +1706,73 @@ export interface AnnotationQueueWrite {
  * error: a thread with the right id but a wrong message count or cost still
  * renders as a perfectly ordinary row.
  */
+/**
+ * The `groups` array the Experiments page sends by default — `DEFAULT_GROUPS`
+ * in `useExperimentsGroupsAndFilters.ts`, verbatim.
+ *
+ * Exported because a spec about the DEFAULT grouping must not restate it:
+ * `field: 'dataset_id'` is the column the page groups by out of the box
+ * (opik#9374, OPIK-8654), and the label the UI renders over that column is
+ * "Item source" rather than "Dataset" — so a spec that reasoned from the
+ * rendered label and sent `field: 'item_source'` would get a 400 from
+ * `GroupingFactory`. `id: 'default_groups'` is part of the value the page
+ * stores, not a nonce.
+ */
+export const DEFAULT_EXPERIMENT_GROUPS = JSON.stringify([
+  { id: 'default_groups', field: 'dataset_id', type: 'string', direction: 'ASC', key: '' },
+]);
+
+/**
+ * One group's row in `GET /v1/private/experiments/groups/aggregations`.
+ *
+ * Every aggregate is `number | undefined` and never defaulted. The endpoint
+ * OMITS an aggregate it has nothing to report — a group whose experiments carry
+ * no priced span has no `total_estimated_cost_avg` at all — and that absence is
+ * what the UI renders as a blank cell rather than as a dash. A `?? 0` here
+ * would turn "this group has no cost to report" into "this group cost nothing",
+ * which are the two answers a reader of the table most needs told apart.
+ */
+export interface ExperimentGroupAggregationsEntry {
+  /** The group value's display name — the dataset's name, for the default grouping. */
+  label: string | null;
+  experimentCount?: number;
+  traceCount?: number;
+  totalEstimatedCost?: number;
+  totalEstimatedCostAvg?: number;
+  durationP50?: number;
+  durationP90?: number;
+  durationP99?: number;
+  /**
+   * `feedback_scores`, flattened to name -> average, or `undefined` when the
+   * payload carried no array at all.
+   *
+   * A separate shape from the numeric aggregates above because the wire form is
+   * a `List<FeedbackScoreAverage>` rather than a scalar, and because the group
+   * row renders every entry of it: `FeedbackScoreListCell.Aggregation` reads
+   * `feedback_scores` out of `meta.aggregationMap` and joins
+   * `"<name> (avg): <value>"` over the whole list, so a spec that compared one
+   * name would pass against a cell that also named two it should not have.
+   *
+   * `undefined` is kept distinct from `{}` for the same reason the cost fields
+   * are optional: a group that reports no scores at all and one that reports an
+   * empty list are different answers from the server, even though the UI
+   * renders both as an empty cell.
+   */
+  feedbackScores?: Record<string, number>;
+}
+
+/** One group in `GET /v1/private/experiments/groups`, and what it answered. */
+export interface ExperimentGroupsResponse {
+  /** The HTTP status, verbatim — this endpoint is permission-gated (opik#9492). */
+  status: number;
+  message: string;
+  /**
+   * Group value -> its label, for the top level of the grouping. `null` when
+   * the response carried no `content` object.
+   */
+  groups: Record<string, string | null> | null;
+}
+
 export interface ThreadRowRef {
   id: string;
   numberOfMessages: number | null;
@@ -1597,6 +1914,76 @@ export interface OptimizationPageRef {
   content: OptimizationRef[];
 }
 
+/**
+ * One assertion verdict against one trace, as `PUT /v1/private/assertion-results`
+ * takes it — the rows a test-suite run's judge would have written.
+ *
+ * This is the only route to a chosen pass rate. A real `opik.run_tests` run
+ * decides pass/fail with an LLM judge, which cannot be steered to a ratio, so
+ * any spec about what a pass-rate CELL renders has to write the verdicts
+ * directly. `ExperimentDAO`'s `pass_rate_agg` then computes off these rows
+ * exactly as it would for a judged run: an item passes when every assertion on
+ * its trace passed, and an experiment's `pass_rate` is its passing items over
+ * its items carrying assertions at all.
+ *
+ * `name` must be non-empty: the query counts an item as having assertions via
+ * `countIf(ar.name != '')`, so a blank name writes a row the pass rate cannot
+ * see.
+ */
+export interface AssertionResultSeed {
+  /** The trace the verdict is attached to — an experiment item's `trace_id`. */
+  traceId: string;
+  /** The assertion's name. Must be non-empty; see above. */
+  name: string;
+  status: 'passed' | 'failed';
+}
+
+/**
+ * One group of `GET /v1/private/experiments/groups/aggregations`, keyed in the
+ * answer by the grouped field's value (the item source's dataset id, under the
+ * Experiments page's default grouping).
+ *
+ * `aggregations` is kept as the server sent it rather than mapped onto named
+ * fields, because ABSENCE is part of the contract: the endpoint omits
+ * `pass_rate_avg` / `passed_count_sum` / `total_count_sum` entirely for a group
+ * holding no evaluation-suite experiment, and opik#9646 was a frontend reading
+ * three keys (`pass_rate`, `passed_count`, `total_count`) this endpoint has
+ * never answered. A mapped shape would turn "the key is not there" into
+ * `undefined` and lose the distinction a rename assertion needs.
+ */
+export interface ExperimentGroupAggregationRef {
+  /** The group's own label — the item source's name. Null when unlabelled. */
+  label: string | null;
+  /** The group's aggregation map, verbatim. */
+  aggregations: Record<string, unknown>;
+}
+
+/**
+ * One grouping level for the experiment group reads, as `GroupingFactory`
+ * parses it off the `groups` query param.
+ *
+ * `key` is the sub-path a dictionary grouping (Configuration) addresses and is
+ * the empty string for the scalar fields; it is required rather than optional
+ * so a caller cannot omit it and silently get a grouping the page would not
+ * produce.
+ */
+export interface ExperimentGroupBy {
+  field: string;
+  key: string;
+  type: 'string' | 'number' | 'list' | 'dictionary';
+}
+
+/**
+ * Grouping by item source — the one the Experiments page and the prompt detail
+ * page's Experiments tab both land on when the URL carries no `groups` param
+ * (`DEFAULT_GROUPS`, OPIK-8654).
+ */
+export const GROUP_BY_ITEM_SOURCE: ExperimentGroupBy = {
+  field: 'dataset_id',
+  key: '',
+  type: 'string',
+};
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -1662,6 +2049,39 @@ type RawEvaluator = {
  * helper that flattened all of them would disagree with the UI on exactly the
  * suite that has two evaluators, and report that disagreement as a product bug.
  */
+/**
+ * A `List<FeedbackScoreAverage>` from the wire, flattened to name -> average.
+ *
+ * `undefined` when the field was absent rather than an array: the backend omits
+ * an aggregate it has nothing to report, and "this group reports no scores" is a
+ * different answer from "this group reports an empty list of them". Collapsing
+ * the two to `{}` is the `?? 0` mistake in map form.
+ *
+ * Throws on a nameless entry or a non-finite value rather than dropping it. A
+ * dropped entry would make a downstream comparison against the rendered cell
+ * pass for having compared fewer scores than the page is showing, which is the
+ * one failure a spec reading this is here to catch.
+ */
+function toScoreAverages(raw: unknown, context: string): Record<string, number> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  for (const node of raw) {
+    const entry = (node ?? {}) as { name?: unknown; value?: unknown };
+    if (typeof entry.name !== 'string' || entry.name === '') {
+      throw new Error(`${context} carried a nameless feedback score: ${JSON.stringify(node)}`);
+    }
+    const value = Number(entry.value);
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `${context} score '${entry.name}' is not a finite number ` +
+          `(got ${JSON.stringify(entry.value)})`,
+      );
+    }
+    out[entry.name] = value;
+  }
+  return out;
+}
+
 function toAssertionNames(evaluators: unknown): string[] {
   const first = (Array.isArray(evaluators) ? evaluators : [])[0] as RawEvaluator | undefined;
   if (!first || first.type !== 'llm_judge') return [];
@@ -1833,6 +2253,39 @@ function toMetricSeries(json: unknown): MetricSeries[] {
 }
 
 /**
+ * The decoded body of a blocking chat completion, or null when the body is not
+ * one.
+ *
+ * "Not one" is every refusal: the endpoint answers an error envelope with the
+ * same content type, and a mapper that produced `{model: '', content: '', usage:
+ * {}}` for it would let a spec assert about an answer that was never given.
+ * `choices` carrying no `message` is the same case — a streamed chunk shape
+ * (`delta`) reaching this parser means the caller sent `stream: true`, and the
+ * blocking fields it would read are genuinely absent rather than empty.
+ */
+function toChatCompletionRef(json: unknown): ChatCompletionRef | null {
+  const body = json as
+    | {
+        model?: unknown;
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: Record<string, unknown>;
+      }
+    | null;
+  const message = body?.choices?.[0]?.message;
+  if (!message) return null;
+  const usage = body?.usage;
+  return {
+    model: typeof body?.model === 'string' ? body.model : null,
+    content: typeof message.content === 'string' ? message.content : null,
+    usage: usage
+      ? Object.fromEntries(
+          Object.entries(usage).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+        )
+      : null,
+  };
+}
+
+/**
  * A random OTLP id as lowercase hex — 16 bytes for a trace id, 8 for a span id.
  *
  * Hex rather than raw bytes because that is the form the OTLP/JSON spec and
@@ -1850,19 +2303,52 @@ function hexToBase64(hex: string): string {
 }
 
 /**
+ * An attribute value that must go on the wire as a proto3 `doubleValue`.
+ *
+ * Opt-in, and deliberately not "any non-integer number". The plain `number`
+ * case below is `intValue` because every numeric attribute Opik reads off an
+ * OTel span is a TOKEN COUNT and `extractUsageField` only reads
+ * `hasIntValue()` — so inferring the encoding from whether a number happens to
+ * be whole would silently change how a usage count is sent the first time a
+ * fixture passed `1_000_000.0`, and change it back when the arithmetic that
+ * produced it changed. The one attribute that genuinely needs a float is a
+ * REPORTED COST (`gen_ai.usage.cost[.amount]`), whose `extractCost` handles
+ * `DOUBLE_VALUE`, `INT_VALUE` and `STRING_VALUE` alike — and an amount sent as
+ * `intValue` would be truncated to whole dollars, which is a cost assertion
+ * passing for the wrong reason rather than a failure. Marking it at the call
+ * site keeps that distinction where a reader can see it.
+ */
+export interface OtelDoubleAttribute {
+  readonly otelDouble: number;
+}
+
+/** Marks an OTLP attribute value as a proto3 `doubleValue`. See {@link OtelDoubleAttribute}. */
+export function otelDouble(value: number): OtelDoubleAttribute {
+  return { otelDouble: value };
+}
+
+/** One OTLP attribute value a seed may carry. See {@link OtelDoubleAttribute}. */
+export type OtelAttributeValue = string | number | OtelDoubleAttribute;
+
+/**
  * One attribute value as proto3 JSON `AnyValue`, shared by both OTLP exporters
  * below so there is exactly one encoder to be right about.
  *
  * Numbers become `intValue` carrying a STRING, not a bare JSON number: proto3
  * JSON represents int64 as a string, and a large count sent as a number
- * overflows silently. There is no float case for the reason `OtelSpanSeed`
- * gives — every numeric attribute Opik reads off an OTel span is a token count,
- * and `extractUsageField` only reads `hasIntValue()`.
+ * overflows silently. A float is reachable only through the explicit
+ * {@link otelDouble} marker, for the reason that interface gives.
  */
-function toOtelAnyValue(value: string | number): { intValue: string } | { stringValue: string } {
-  return typeof value === 'number'
-    ? { intValue: String(Math.trunc(value)) }
-    : { stringValue: value };
+function toOtelAnyValue(
+  value: OtelAttributeValue,
+): { intValue: string } | { stringValue: string } | { doubleValue: number } {
+  if (typeof value === 'number') {
+    return { intValue: String(Math.trunc(value)) };
+  }
+  if (typeof value === 'string') {
+    return { stringValue: value };
+  }
+  return { doubleValue: value.otelDouble };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -1963,6 +2449,21 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
   };
 
   /**
+   * The trailing path segment of a create's `Location` header, as an id.
+   *
+   * `null` rather than `''` when there is no header or no segment to take, so a
+   * caller registering teardown can tell "the create did not report an id" from
+   * an id it could use — and so a failed create, which carries no `Location` at
+   * all, does not produce a plausible-looking empty id that a later delete would
+   * quietly 404 on.
+   */
+  const idFromLocation = (location: string | null | undefined): string | null => {
+    if (!location) return null;
+    const segment = location.split('?')[0].replace(/\/+$/, '').split('/').pop();
+    return segment ? segment : null;
+  };
+
+  /**
    * `rawFetch` plus request headers the endpoint reads as arguments.
    *
    * Only the OTLP endpoint needs this so far: it takes the project from a
@@ -2027,9 +2528,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    *
    * Retrying is safe only because these writes are keyed on a caller-supplied
    * id and are upserts on it: a request that actually landed before the gateway
-   * gave up is overwritten, not duplicated. Only 5xx is retried — a 4xx is this
+   * gave up is overwritten, not duplicated. 5xx is retried — a 4xx is this
    * suite sending something the API rejects, and repeating it would just delay
    * the message that says so.
+   *
+   * 429 is the one exception, and it is retried for the opposite reason to the
+   * rest of 4xx: it is not a rejection of the request but an instruction to
+   * come back, and the request is unchanged and idempotent, so repeating it is
+   * the correct response rather than a delayed error. It shows up on a shared
+   * cloud workspace when several workers seed at once — the per-user,
+   * per-workspace limit counts this suite's writes alongside everyone else's —
+   * and the heaviest seeds hit it first: `grouped-pass-rate-experiments` writes
+   * 200 assertion results in one batch and failed its seed this way on staging
+   * for 2.2.152. Without this it is unfixable flake in a fixture that is doing
+   * nothing wrong.
    *
    * The backoff exists because retrying instantly is no retry at all: the three
    * attempts land inside the same burst and all fail.
@@ -2042,6 +2554,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     // "the write landed", so the expectation is a parameter rather than a
     // second near-identical helper.
     expectedStatus = 201,
+    // `PUT` for the batch-ingest endpoints that upsert rather than create
+    // (`/assertion-results`). Same retry contract: those are idempotent on the
+    // ids in the body, which is what makes retrying a 5xx safe.
+    method: 'POST' | 'PUT' = 'POST',
   ): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
@@ -2053,10 +2569,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
       attempted++;
-      const { status, message, location } = await rawFetch('POST', path, { body });
+      const { status, message, location } = await rawFetch(method, path, { body });
       if (status === expectedStatus) return;
       last = { status, message, location };
-      if (status < 500) break;
+      if (status < 500 && status !== 429) break;
       if (attempt < backoffMs.length) {
         await new Promise((r) => setTimeout(r, backoffMs[attempt]));
       }
@@ -2257,6 +2773,64 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/dashboards/{id}`, flattened to every stored widget's
+     * type, section and own `config` — the read that says what a widget dialog
+     * actually SAVED, as opposed to what the page happens to be rendering.
+     *
+     * Through `rawFetch` because `config` is a `JsonNode` on the wire and the
+     * pinned SDK types it as an opaque value. The widget `config` is handed
+     * back as the record it is rather than decoded, because it is a per-type
+     * shape — a markdown widget's `content`, a time-series widget's metric and
+     * scope — that no single typed accessor can express; each caller reads its
+     * own field.
+     *
+     * Flattened ACROSS sections rather than per-section (unlike
+     * `getInsightsView`, which keeps the section structure because its callers
+     * assert section order): a widget's section is carried on the widget here
+     * so a caller can still tell "two widgets in one section" from "one in
+     * each", while the common question — how many widgets exist at all —
+     * stays a single length check. A dashboard whose `config` has no
+     * `sections` array throws rather than reading as empty: "saved nothing"
+     * and "this read cannot see what was saved" are different failures.
+     *
+     * Why a server-side read matters here at all: the dashboard page keeps its
+     * widgets in a client store and autosaves them, so a widget can render
+     * perfectly from memory while the write that was supposed to persist it
+     * silently dropped or mangled its config. A reload catches some of that;
+     * only this read can say the stored value is the exact string that was
+     * typed. Callers must wait for the page to report the save first — this
+     * read is otherwise racing it.
+     */
+    async getDashboardWidgets(
+      id: string,
+    ): Promise<Array<{ sectionId: string; type: string; config: Record<string, unknown> }>> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/dashboards/${id}`);
+      if (status !== 200) {
+        throw new Error(`getDashboardWidgets(${id}): answered ${status}: ${message}`);
+      }
+      const config = ((json ?? {}) as { config?: unknown }).config as
+        | { sections?: Array<{ id?: unknown; widgets?: Array<Record<string, unknown>> }> }
+        | undefined;
+      if (!Array.isArray(config?.sections)) {
+        throw new Error(
+          `getDashboardWidgets(${id}): 200 carried no config.sections array — ` +
+            'cannot tell a dashboard that saved no widgets from one this read cannot see.',
+        );
+      }
+      return config.sections.flatMap((section) =>
+        // A section the backend stored without `widgets` contributes nothing
+        // rather than throwing: an empty section is a legitimate state (every
+        // new dashboard opens with one), and only the whole-dashboard shape
+        // above is a sign this read is looking in the wrong place.
+        (section.widgets ?? []).map((widget) => ({
+          sectionId: String(section.id ?? ''),
+          type: String(widget.type ?? ''),
+          config: (widget.config ?? {}) as Record<string, unknown>,
+        })),
+      );
+    },
+
+    /**
      * A dashboard does not hang off a project, so no project delete reaches
      * it. `global-teardown` sweeps dashboards by run prefix, but only at the
      * end of the run — a spec that builds one deletes it per-test.
@@ -2267,6 +2841,112 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
+    },
+
+    /**
+     * `POST /v1/private/dashboards`, reporting the STATUS instead of throwing.
+     *
+     * `createDashboard` above throws on anything but a success, which is what a
+     * seed wants. A spec whose subject is which status a create answers cannot
+     * use it: the failure would arrive as a rejected promise carrying the SDK's
+     * own wording, and a test that must distinguish 201 from 409 would be
+     * asserting on an exception message. So this returns the status as data.
+     *
+     * The id comes out of the `Location` header rather than the body, because
+     * that is the one place a create is contractually required to put it
+     * (`createDashboard`'s OpenAPI declares the header `required = true`) — and
+     * because a caller needs the id to register teardown even for a response it
+     * is about to assert was NOT a success.
+     *
+     * `projectId` is optional, and its absence is a distinct case rather than a
+     * default: the resource stamps `scope: workspace` either way, so what
+     * `project_id` changes is which project the dashboard is FILED under while
+     * remaining workspace-scoped. A name-collision spec needs both — two
+     * dashboards in different projects, and two with no project at all.
+     */
+    async createDashboardRaw(args: {
+      name: string;
+      projectId?: string;
+      description?: string;
+    }): Promise<RawApiResult & { id: string | null }> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/dashboards', {
+        body: {
+          name: args.name,
+          ...(args.projectId ? { project_id: args.projectId } : {}),
+          ...(args.description ? { description: args.description } : {}),
+          config: {
+            version: 1,
+            layout: { type: 'grid', columns: 24, rowHeight: 10 },
+            widgets: [],
+          },
+        },
+      });
+      return { status, message, location, id: idFromLocation(location) };
+    },
+
+    /**
+     * `PATCH /v1/private/dashboards/{id}` with nothing but a new name — the
+     * rename, reporting its status rather than throwing, for the same reason
+     * `createDashboardRaw` does.
+     *
+     * A rename is worth driving separately from a create because it took the
+     * same uniqueness check and could regress on its own: `DashboardService`
+     * runs create and update through different statements, so a constraint
+     * restored on one would not show up in the other.
+     */
+    async renameDashboardRaw(id: string, name: string): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'PATCH',
+        `/v1/private/dashboards/${id}`,
+        { body: { name } },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * The top-level field names of `GET /v1/private/dashboards/{id}`.
+     *
+     * For asserting a field is ABSENT, which no typed accessor can express: the
+     * pinned SDK model simply has no `slug` property, so a read through it would
+     * report "no slug" for a payload that carried one. The wire keys are the
+     * only place that question can be answered.
+     *
+     * Throws on a non-200 rather than returning an empty list — "the dashboard
+     * has no fields" would otherwise satisfy an absence assertion.
+     */
+    async getDashboardFieldNames(id: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/dashboards/${id}`);
+      if (status !== 200) {
+        throw new Error(`getDashboardFieldNames(${id}): answered ${status}: ${message}`);
+      }
+      if (json === null || typeof json !== 'object' || Array.isArray(json)) {
+        throw new Error(
+          `getDashboardFieldNames(${id}): 200 carried ${JSON.stringify(json)}, not an object — ` +
+            'cannot tell an absent field from a body this read cannot see.',
+        );
+      }
+      return Object.keys(json as Record<string, unknown>);
+    },
+
+    /**
+     * `POST /v1/private/insights-views`, reporting the status — the
+     * project-scoped twin of `createDashboardRaw`, and raw for the same reason.
+     */
+    async createInsightsViewRaw(args: {
+      name: string;
+      projectId: string;
+    }): Promise<RawApiResult & { id: string | null }> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/insights-views', {
+        body: {
+          name: args.name,
+          project_id: args.projectId,
+          // The type the project page's own create dialog sends — see
+          // `createInsightsView` for why a seed should match it.
+          type: 'multi_project',
+          config: { version: 1, sections: [], lastModified: Date.now() },
+        },
+      });
+      return { status, message, location, id: idFromLocation(location) };
     },
 
     /**
@@ -2409,6 +3089,55 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Every widget an insights view's stored `config` holds, in section order
+     * and then in each section's own widget order, with each config raw.
+     *
+     * The companion to `getInsightsView` above: that one answers "which widgets
+     * are in which section", this one answers "what is stored IN a widget".
+     * They are separate reads rather than one wider mapper so that neither
+     * spec pays for the other's payload — a copy-of-a-template assertion
+     * compares a dozen widget titles across three sections and never looks at a
+     * config, while an auto-save assertion compares one config in full and does
+     * not care which section it is in.
+     *
+     * Flattened across sections rather than nested, because a widget id is
+     * unique within a view: the caller already knows which widget it seeded and
+     * wants that one, not a walk down the section tree. A widget stored without
+     * a `type` or `title` comes back with null rather than being skipped — a
+     * save that dropped a widget's type is a real failure, and it must be
+     * visible as one rather than as a missing list entry.
+     *
+     * Returns null for a view that is not there, the same as `getInsightsView`,
+     * so a caller can tell "the view is gone" from "the view holds no widgets".
+     */
+    async listInsightsViewWidgets(id: string): Promise<InsightsViewWidgetRef[] | null> {
+      try {
+        const view = await withReadRetry(() => opik.api.insightsViews.getInsightsViewById(id));
+        const config = (view.config ?? {}) as {
+          sections?: Array<{
+            widgets?: Array<{
+              id?: unknown;
+              type?: unknown;
+              title?: unknown;
+              config?: unknown;
+            }>;
+          }>;
+        };
+        return (config.sections ?? []).flatMap((section) =>
+          (section.widgets ?? []).map((widget) => ({
+            id: String(widget.id ?? ''),
+            type: typeof widget.type === 'string' ? widget.type : null,
+            title: typeof widget.title === 'string' ? widget.title : null,
+            config: (widget.config ?? {}) as Record<string, unknown>,
+          })),
+        );
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
      * Nothing cascades to an insights view: it outlives the project it names,
      * and `global-teardown`'s prefix sweep only knows the workspace-scoped
      * `/dashboards` collection. So a spec that seeds one must delete it.
@@ -2426,6 +3155,58 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         name,
         ...(description ? { description } : {}),
       });
+    },
+
+    /**
+     * `POST /v1/private/projects` reporting its own status and error envelope
+     * instead of throwing.
+     *
+     * The typed `createProject` above raises on any non-2xx and surfaces
+     * neither the status nor the body, so it cannot express a spec whose
+     * subject IS the refusal. And the refusal's envelope is the contract here:
+     * bean-validation failures answer `{"errors":[…]}` (opik#9308 put a
+     * `@Size` on `Project.name`), while the rest of this API answers
+     * `{"message":…}` — a difference the frontend's own error reader is
+     * sensitive to, so a spec about what the user is told has to be able to see
+     * which one came back.
+     *
+     * Neither `errors` nor `message` is defaulted, and both are `null` when the
+     * body did not carry that key — never `[]` and never `''`. "The response
+     * said nothing" and "the response said this" are different answers, and
+     * collapsing them would let the first satisfy a comparison; which of the two
+     * keys came back is itself the thing a spec about the user's feedback is
+     * asserting, because `useProjectCreateMutation` reads only `message`.
+     */
+    async createProjectRaw(
+      name: string,
+      description?: string,
+    ): Promise<{
+      status: number;
+      /** The `errors` array of a bean-validation refusal, or null. */
+      errors: string[] | null;
+      /** The body's own `message` field, or null when it carried none. */
+      message: string | null;
+      /** The raw response body, for a failure message that names what came back. */
+      body: string;
+      location: string | null;
+    }> {
+      const { status, message, json, location } = await rawFetch(
+        'POST',
+        '/v1/private/projects',
+        { body: { name, ...(description ? { description } : {}) } },
+      );
+      const raw = (json as { errors?: unknown } | null)?.errors;
+      const envelope = (json as { message?: unknown } | null)?.message;
+      return {
+        status,
+        errors:
+          Array.isArray(raw) && raw.every((e) => typeof e === 'string') ? (raw as string[]) : null,
+        message: typeof envelope === 'string' ? envelope : null,
+        // `rawFetch` falls back to the whole body text when there is no
+        // `message` field, which is exactly what a diagnostic wants here.
+        body: message,
+        location: location ?? null,
+      };
     },
 
     async deleteProject(id: string): Promise<void> {
@@ -3055,6 +3836,155 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments/{id}`'s `feedback_scores`, as name/value
+     * pairs sorted by name.
+     *
+     * The aggregate the experiment header renders, and the collection that says
+     * which scores were UPLOADED at all. That is the half a per-score read
+     * cannot answer: a score the evaluation engine marked failed is not sent to
+     * the backend, so its absence here — not merely a flag on the SDK's own
+     * result — is what proves it never reached the feedback batch (opik#9396).
+     *
+     * The WHOLE collection, sorted, rather than a lookup by name: a caller
+     * asserting "only this metric scored" needs the length pinned, and a
+     * by-name read would pass over a build that had also uploaded the failed
+     * ones under their own names.
+     *
+     * Through `rawFetch` because the value arrives as a decimal string on the
+     * wire for some scores and a number for others; parsing it in one place
+     * keeps every caller comparing numbers.
+     */
+    async experimentFeedbackScores(
+      experimentId: string,
+    ): Promise<Array<{ name: string; value: number }>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${experimentId}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `experimentFeedbackScores(${experimentId}): answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      // An experiment with no scores answers `[]`, so a missing key means this
+      // read is looking at something other than an experiment payload.
+      if (!Array.isArray(scores)) {
+        throw new Error(
+          `experimentFeedbackScores(${experimentId}): 200 carried no feedback_scores array — ` +
+            'cannot tell an experiment that scored nothing from a body this read cannot see.',
+        );
+      }
+      return scores
+        .map((raw) => {
+          const score = raw as { name?: unknown; value?: unknown };
+          return { name: String(score.name), value: Number(score.value) };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    /**
+     * The `execution_policy` of a suite's LATEST version — the exact read
+     * `AddToTestSuiteDialog` makes (`useDatasetVersionsList`, page 1 size 1).
+     *
+     * The same page and size on purpose: the dialog's criteria come from
+     * `content[0]`, so a spec asserting what the dialog should have shown has to
+     * be looking at the same row. A different page size could legitimately
+     * return a different version first and the two would disagree for reasons
+     * that have nothing to do with the product.
+     *
+     * `null` when the version carries no policy, which is distinct from a
+     * policy equal to the default — see `listSuiteItemPolicies`. Through
+     * `rawFetch` because `execution_policy` is not on the pinned SDK's version
+     * model.
+     */
+    async suiteVersionPolicy(datasetId: string): Promise<ExecutionPolicyRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/versions`,
+        { query: new URLSearchParams({ page: '1', size: '1' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`suiteVersionPolicy(${datasetId}): answered ${status}: ${message}`);
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content) || content.length === 0) {
+        throw new Error(
+          `suiteVersionPolicy(${datasetId}): 200 carried no versions — a suite always has at ` +
+            'least one, so this read is looking in the wrong place rather than finding nothing.',
+        );
+      }
+      const policy = (content[0] as { execution_policy?: unknown }).execution_policy;
+      if (policy === null || policy === undefined) return null;
+      const { runs_per_item: runs, pass_threshold: threshold } = policy as {
+        runs_per_item?: unknown;
+        pass_threshold?: unknown;
+      };
+      if (typeof runs !== 'number' || typeof threshold !== 'number') {
+        throw new Error(
+          `suiteVersionPolicy(${datasetId}): the latest version carries an execution_policy ` +
+            `this read cannot decode: ${JSON.stringify(policy)}.`,
+        );
+      }
+      return { runsPerItem: runs, passThreshold: threshold };
+    },
+
+    /**
+     * Every item of a test suite with its own `execution_policy`, in the order
+     * the items endpoint returns them.
+     *
+     * `null` means the item carries no policy of its own and so INHERITS the
+     * suite's — which is a distinct state from holding a policy that happens to
+     * equal the suite's, and the difference is the whole subject of opik#9482.
+     * A caller must be able to tell them apart, so an absent policy is reported
+     * as `null` rather than defaulted to anything.
+     *
+     * Through `rawFetch` because `execution_policy` is not on the pinned SDK's
+     * dataset-item model at all: read through it, every item would report no
+     * policy and an assertion that an override was stored could never fail.
+     * An item whose policy is present but malformed throws rather than reading
+     * as `null`, for the same reason.
+     */
+    async listSuiteItemPolicies(
+      datasetId: string,
+    ): Promise<Array<{ id: string; executionPolicy: ExecutionPolicyRef | null }>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/items`,
+        { query: new URLSearchParams({ size: '500' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`listSuiteItemPolicies(${datasetId}): answered ${status}: ${message}`);
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `listSuiteItemPolicies(${datasetId}): 200 carried no content array — cannot tell ` +
+            'a suite with no items from a read looking in the wrong place.',
+        );
+      }
+      return content.map((raw) => {
+        const item = raw as { id?: unknown; execution_policy?: unknown };
+        const policy = item.execution_policy;
+        if (policy === null || policy === undefined) {
+          return { id: String(item.id), executionPolicy: null };
+        }
+        const { runs_per_item: runs, pass_threshold: threshold } = policy as {
+          runs_per_item?: unknown;
+          pass_threshold?: unknown;
+        };
+        if (typeof runs !== 'number' || typeof threshold !== 'number') {
+          throw new Error(
+            `listSuiteItemPolicies(${datasetId}): item ${String(item.id)} carries an ` +
+              `execution_policy this read cannot decode: ${JSON.stringify(policy)}. ` +
+              'Reporting it as "inherited" would make a stored override look like an absent one.',
+          );
+        }
+        return { id: String(item.id), executionPolicy: { runsPerItem: runs, passThreshold: threshold } };
+      });
+    },
+
+    /**
      * Versions of a dataset, newest first — the rows the Version history tab
      * renders, including the item counters it shows in "Item count".
      */
@@ -3309,6 +4239,40 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The `columns` the dataset-items endpoint derives from what is stored —
+     * the field list the Records grid builds its data columns from, and the one
+     * the Add-to-dataset dialog's `useDatasetColumns` reads to decide which
+     * rows to list under "Additional fields".
+     *
+     * Through `rawFetch` rather than the pinned SDK: the SDK's page shape drops
+     * `columns` entirely, and the whole point of this read is the derived
+     * column list rather than the rows. `size: 1` and `truncate` for the same
+     * reason the FE hook sends them — the columns are a property of the version,
+     * not of the page, so fetching payloads to learn them is waste.
+     *
+     * Sorted by name so a caller can compare the whole set: the endpoint's own
+     * order is not specified, and a `find()` over it would pass just as well
+     * against a response that also carried a column it should not have.
+     */
+    async listDatasetItemColumns(datasetId: string): Promise<DatasetItemColumnRef[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/items`,
+        { query: new URLSearchParams({ page: '1', size: '1', truncate: 'true' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`listDatasetItemColumns: ${datasetId} answered ${status}: ${message}`);
+      }
+      const columns = (json as { columns?: Array<{ name?: unknown; types?: unknown }> }).columns ?? [];
+      return columns
+        .map((column) => ({
+          name: String(column.name ?? ''),
+          types: Array.isArray(column.types) ? column.types.map(String) : [],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    /**
      * Dataset items under `filters`, with their tags — `GET /v1/private/datasets/
      * {id}/items`. This is the read the filter-scoped mutations preview: whatever
      * this returns is exactly the set a delete or batch-update with the same
@@ -3499,6 +4463,121 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The same compare read, in the mode opik#9263 added: `experiment_ids`
+     * OMITTED, so the server resolves the dataset's own experiments instead of
+     * being told which ones to compare.
+     *
+     * A separate helper rather than an optional `experimentIds` on
+     * `compareItemsPage`, and sent through `rawFetch` rather than the pinned
+     * SDK client, for the same reason: the parameter has to be genuinely absent
+     * from the query string. `findDatasetItemsWithExperimentItems` takes
+     * `experimentIds` as a required argument, and an empty string or a `"[]"`
+     * is NOT the same request — both are rejected 400 ("experiment_ids cannot
+     * be empty"), which is the rejection a sibling here asserts. A helper that
+     * could be called either way would make "omitted" one typo away from
+     * "blank", and the two answers are different by design.
+     *
+     * `datasetVersion` travels verbatim as `dataset_version`, the second
+     * parameter 9263 added: a version hash or the `latest` tag, scoping the
+     * resolution to experiments run against that version. It is only legal with
+     * `experiment_ids` omitted, so it lives here and not on the supplied-ids
+     * readers.
+     *
+     * Throws on anything but a 200. The validation and not-found paths are the
+     * contract of `compareItemsReadStatus` below, which is built to report a
+     * status rather than to be asserted against a row set.
+     */
+    async compareItemsAllExperiments(args: {
+      datasetId: string;
+      page?: number;
+      size?: number;
+      datasetVersion?: string;
+    }): Promise<CompareExperimentSetRef> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'true',
+        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `compareItemsAllExperiments(${args.datasetId}` +
+            `${args.datasetVersion === undefined ? '' : `, version=${args.datasetVersion}`}) ` +
+            `-> ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `compareItemsAllExperiments: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      const content = body.content ?? [];
+      const experimentIds: string[] = [];
+      const experimentItemCounts: number[] = [];
+      for (const item of content) {
+        const items = (item.experiment_items ?? []) as Array<Record<string, unknown>>;
+        experimentItemCounts.push(items.length);
+        for (const ei of items) experimentIds.push(String(ei.experiment_id ?? ''));
+      }
+      return {
+        total: body.total,
+        ids: content.map((item) => String(item.id ?? '')),
+        // De-duplicated, since the caller is asking which experiments the read
+        // resolved, not how many rows each of them reached. Sorted so a
+        // comparison against the seed's own list does not depend on the order
+        // rows happened to come back in.
+        experimentIds: [...new Set(experimentIds)].sort(),
+        experimentItemCounts,
+      };
+    },
+
+    /**
+     * The status and message the compare read answers with, without throwing —
+     * for opik#9263's validation and not-found paths.
+     *
+     * Every argument is a raw string (or deliberately absent) rather than a
+     * typed value, because what is under test is precisely the shapes a typed
+     * signature would make unrepresentable: `experiment_ids` present but BLANK,
+     * `experiment_ids=[]`, a page size above the all-experiments cap, a
+     * `dataset_version` that no version carries, and `dataset_version` sent
+     * TOGETHER with `experiment_ids`. Each has its own message, and the message
+     * is the contract — a 400 for the wrong reason is a different defect from
+     * the one a caller is asserting.
+     */
+    async compareItemsReadStatus(args: {
+      datasetId: string;
+      /** Omitted entirely when absent — not sent as an empty value. */
+      experimentIds?: string;
+      datasetVersion?: string;
+      page?: number;
+      size?: number;
+    }): Promise<RawApiResult> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'true',
+        ...(args.experimentIds === undefined ? {} : { experiment_ids: args.experimentIds }),
+        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+      });
+      const { status, message } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      return { status, message };
+    },
+
+    /**
      * The compare read projected to each row's TRACE-SOURCED fields.
      *
      * `compareItemsPage` keeps the dataset item's `data` and
@@ -3517,6 +4596,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * `truncate: false`, unlike the two readers above: truncation shortens
      * string values, and a caller here is comparing an output against what it
      * seeded.
+     *
+     * `traceMetadata` rides here alongside `input` and `output` because
+     * opik#9402 late-materializes all THREE of them in one join per page — so a
+     * mis-join that paired a row with another row's payloads moves them
+     * together, and a projection that could only see two of the three would
+     * leave the one a user most often spots the discrepancy in unasserted.
      */
     async compareItemsTraceData(args: {
       datasetId: string;
@@ -3527,11 +4612,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       total: number;
       rows: Array<{
         id: string;
+        data: Record<string, unknown>;
         experimentItems: Array<{
           experimentId: string;
           traceId: string;
           input: unknown;
           output: unknown;
+          traceMetadata: unknown;
           duration: number | null;
           totalEstimatedCost: number | null;
         }>;
@@ -3567,6 +4654,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         total: body.total,
         rows: (body.content ?? []).map((item) => ({
           id: String(item.id ?? ''),
+          // The dataset item's own `data`, so a caller can pair the row's
+          // identity against the payloads below without a second read — which
+          // is the whole question when the two are joined separately.
+          data: (item.data ?? {}) as Record<string, unknown>,
           experimentItems: ((item.experiment_items ?? []) as Array<Record<string, unknown>>).map(
             (ei) => ({
               experimentId: String(ei.experiment_id ?? ''),
@@ -3576,6 +4667,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
               // here would hide it.
               input: ei.input ?? null,
               output: ei.output ?? null,
+              traceMetadata: ei.trace_metadata ?? null,
               duration: typeof ei.duration === 'number' ? ei.duration : null,
               totalEstimatedCost:
                 typeof ei.total_estimated_cost === 'number' ? ei.total_estimated_cost : null,
@@ -3636,6 +4728,70 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
               traceId: String(ei.traceId),
             })),
           };
+        }),
+      };
+    },
+
+    /**
+     * `GET /v1/private/datasets/{id}/items/experiments/items/stats` — the
+     * column statistics the compare grid renders in its own headers, for the
+     * same `filters` the grid's row read carries.
+     *
+     * A sibling of `compareItemsPage` rather than part of it, because the two
+     * are separate requests over separate queries that are allowed to
+     * disagree — and disagreeing is the defect opik#9618 fixed, where the
+     * stats query's filters sat in an INNER JOIN `ON` instead of a `WHERE`. A
+     * helper that returned both from one call could not express "the rows
+     * answered and the statistics did not".
+     *
+     * Raw fetch, and the status returned rather than thrown on, for the two
+     * usual reasons together: the pinned SDK has no binding for this path, and
+     * a stats call that answers 500 under one filter shape and 200 under
+     * another is precisely what a caller here is asserting — so the status is
+     * part of the answer, not an error to raise.
+     *
+     * `stats` is kept as the server's own `{name, type, value}` triples
+     * (`ProjectStatRef`), unflattened. A `Record<string, number>` would be
+     * easier to read and would lose two things a caller needs: `duration`
+     * arrives as a `{p50, p90, p99}` object rather than a scalar, and a stat
+     * being ABSENT (no `feedback_scores.<name>` under an `is empty` filter) is
+     * a different answer from one present and zero.
+     */
+    async compareItemsStats(args: {
+      datasetId: string;
+      experimentIds: string[];
+      filters?: BackendFilter[];
+    }): Promise<{ status: number; message: string; stats: ProjectStatRef[] }> {
+      const query = new URLSearchParams({
+        experiment_ids: JSON.stringify(args.experimentIds),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items/stats`,
+        { query },
+      );
+      if (status !== 200) return { status, message, stats: [] };
+
+      const body = (json ?? {}) as { stats?: unknown };
+      if (!Array.isArray(body.stats)) {
+        throw new Error(
+          `compareItemsStats: dataset ${args.datasetId} answered 200 without a \`stats\` array — ` +
+            `got ${JSON.stringify(body).slice(0, 200)}. An empty statistics row and a malformed ` +
+            'answer are different findings and must not read alike.',
+        );
+      }
+      return {
+        status,
+        message,
+        stats: body.stats.map((stat) => {
+          const item = (stat ?? {}) as { name?: unknown; type?: unknown; value?: unknown };
+          if (typeof item.name !== 'string' || item.name === '') {
+            throw new Error(
+              `compareItemsStats: a stat arrived with no name: ${JSON.stringify(stat)}`,
+            );
+          }
+          return { name: item.name, type: String(item.type), value: item.value };
         }),
       };
     },
@@ -4122,6 +5278,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(match.id),
         name: match.name as string,
         datasetId: match.datasetId ? String(match.datasetId) : null,
+        projectId: match.projectId ? String(match.projectId) : null,
       };
     },
 
@@ -4134,6 +5291,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           id: String(e.id),
           name: e.name as string,
           datasetId: e.datasetId ? String(e.datasetId) : null,
+          projectId: e.projectId ? String(e.projectId) : null,
         }));
     },
 
@@ -4154,7 +5312,86 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(e.id),
         name: e.name as string,
         datasetId: e.datasetId ? String(e.datasetId) : null,
+        projectId: e.projectId ? String(e.projectId) : null,
       }));
+    },
+
+    /**
+     * `GET /v1/private/experiments` under a `filters` payload, reporting the
+     * status and message rather than throwing on them.
+     *
+     * Its own method rather than an option on `listExperimentsForDataset`,
+     * which goes through the pinned SDK: that client has no `filters`
+     * parameter, and what opik#9456 added is a new filterable FIELD, so the two
+     * failure classes the repo's own filter checklist names are both HTTP
+     * answers rather than row sets — a missing `FIELD_TYPE_VALIDATION_MAP`
+     * entry is a 500 from an NPE, and a missing operator entry is a 400. A
+     * helper that threw on either could not tell them apart from each other, or
+     * from a read that simply returned nothing.
+     *
+     * `datasetId` travels as the endpoint's own camelCase `datasetId` param
+     * (every sibling on this resource is snake_case; this one is not), and it
+     * is required: the workspace is shared, so an unscoped read is a
+     * truncation test rather than a closed set.
+     *
+     * `total` and `ids` are both carried for the reason the compare readers
+     * give — a filter that leaked rows can move either one without the other —
+     * and `ids` is left in server order, since ordering is not what a filter
+     * assertion is about.
+     */
+    async listExperimentsFiltered(args: {
+      datasetId: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<RawApiResult & { total: number | null; ids: string[] }> {
+      const query = new URLSearchParams({
+        datasetId: args.datasetId,
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      const { status, message, location, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments',
+        { query },
+      );
+      if (status !== 200) return { status, message, location, total: null, ids: [] };
+      const body = (json ?? {}) as { total?: unknown; content?: Array<{ id?: unknown }> };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listExperimentsFiltered: dataset ${args.datasetId} answered 200 without a total — ` +
+            'cannot tell a filtered population from a partial read.',
+        );
+      }
+      return {
+        status,
+        message,
+        location,
+        total: body.total,
+        ids: (body.content ?? []).map((e) => String(e.id ?? '')),
+      };
+    },
+
+    /**
+     * The `evaluation_method` one experiment reads back as.
+     *
+     * Read, never assumed, by any spec about the filter opik#9456 added: an
+     * experiment created without the field is stored on the enum's default, and
+     * a spec that hard-coded a guess at which value that is would assert its
+     * own assumption. Returns the string verbatim, `null` only when the key is
+     * genuinely absent — collapsing an absent method into `'dataset'` is what
+     * would let a filter that matched nothing look like one that matched the
+     * default.
+     */
+    async getExperimentEvaluationMethod(id: string): Promise<string | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/experiments/${id}`);
+      if (status !== 200) {
+        throw new Error(`getExperimentEvaluationMethod: ${id} answered ${status}: ${message}`);
+      }
+      const method = (json as { evaluation_method?: unknown } | null)?.evaluation_method;
+      if (method === undefined || method === null) return null;
+      return String(method);
     },
 
     async deleteExperiment(id: string): Promise<void> {
@@ -4189,7 +5426,100 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(experiment.id),
         name,
         datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+        projectId: experiment.projectId ? String(experiment.projectId) : null,
       };
+    },
+
+    /**
+     * The experiment's AGGREGATED feedback scores — `feedback_scores` on
+     * `GET /v1/private/experiments/{id}`, a `List<FeedbackScoreAverage>` the
+     * backend computes as the mean per score name across the run's items.
+     *
+     * Raw rather than through the pinned SDK because the subject is the average
+     * the server computed, and these are the numbers the Experiments table's
+     * score columns render. Not derivable from the per-item scores a caller
+     * already has: those come from the SDK's own `evaluate()` return, so
+     * comparing them to each other would never leave the client — this is the
+     * read that says the scores were STORED under the right names.
+     *
+     * Flattened to name -> value, and the array is required rather than
+     * defaulted to `[]`: an experiment that aggregated nothing is the failure a
+     * caller is here to catch, and an empty map compares equal to "no scores
+     * were expected" in every assertion that follows. Throws rather than
+     * asserting so this module stays free of test-runner imports.
+     */
+    async getExperimentFeedbackScores(id: string): Promise<Record<string, number>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getExperimentFeedbackScores: experiment ${id} read answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      if (!Array.isArray(scores)) {
+        throw new Error(
+          `getExperimentFeedbackScores: experiment ${id} carried no feedback_scores array ` +
+            `(got ${scores === undefined ? 'nothing' : typeof scores})`,
+        );
+      }
+      return Object.fromEntries(
+        scores.map((entry) => {
+          const score = (entry ?? {}) as { name?: unknown; value?: unknown };
+          if (typeof score.name !== 'string' || score.name === '') {
+            throw new Error(
+              `getExperimentFeedbackScores: experiment ${id} carried a nameless score: ${JSON.stringify(entry)}`,
+            );
+          }
+          const value = Number(score.value);
+          if (!Number.isFinite(value)) {
+            throw new Error(
+              `getExperimentFeedbackScores: score '${score.name}' on experiment ${id} is not ` +
+                `a finite number (got ${JSON.stringify(score.value)})`,
+            );
+          }
+          return [score.name, value];
+        }),
+      );
+    },
+
+    /**
+     * The same read as `getExperimentFeedbackScores`, for a caller whose
+     * subject IS an experiment with no scores: `null` when the payload carried
+     * no `feedback_scores` array at all.
+     *
+     * A separate method rather than an option, because the two contracts are
+     * opposite and both are right for their callers. `getExperimentFeedbackScores`
+     * throws on an absent array on purpose — nearly every caller has just run an
+     * `evaluate()` and "nothing aggregated" is the failure it is there to catch,
+     * which an empty map would silently pass. A caller seeding a DELIBERATELY
+     * unscored experiment needs the absence reported rather than thrown, and
+     * reaching for the strict helper there is what makes the seed's own proof
+     * fail as a fixture error.
+     *
+     * `null` and `{}` are kept apart for the reason the group aggregates are:
+     * the server omitting the array and the server reporting an empty one are
+     * different answers, and a spec asserting "this experiment has no score"
+     * should say which one it saw.
+     */
+    async getExperimentFeedbackScoresOrNone(
+      id: string,
+    ): Promise<Record<string, number> | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getExperimentFeedbackScoresOrNone: experiment ${id} read answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      return (
+        toScoreAverages(scores, `GET /v1/private/experiments/${id}`) ?? null
+      );
     },
 
     /**
@@ -4372,6 +5702,110 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           .sort((a, b) => a.promptIndex - b.promptIndex),
         totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
       };
+    },
+
+    /**
+     * `PUT /v1/private/assertion-results` — the batch a test-suite run's judge
+     * writes, with the verdicts chosen rather than judged.
+     *
+     * The only way to put a suite experiment on a KNOWN pass rate. See
+     * `AssertionResultSeed`.
+     *
+     * One request, not chunked: the endpoint caps a batch at 1000 and a seed
+     * that silently became two writes is no longer atomic, which is the worst
+     * possible input to a spec whose subject is an aggregate over all of them.
+     */
+    async writeAssertionResults(args: {
+      projectName: string;
+      results: AssertionResultSeed[];
+    }): Promise<void> {
+      if (args.results.length < 1 || args.results.length > 1000) {
+        throw new Error(
+          `writeAssertionResults: the endpoint accepts 1..1000 results, got ${args.results.length}`,
+        );
+      }
+      const blank = args.results.find((result) => result.name === '');
+      if (blank) {
+        throw new Error(
+          `writeAssertionResults: trace ${blank.traceId} was given a blank assertion name — ` +
+            "the pass-rate query counts assertions with `name != ''`, so such a row is invisible " +
+            'to the very aggregate a caller writes these for',
+        );
+      }
+      await postSeedWrite(
+        '/v1/private/assertion-results',
+        `writeAssertionResults of ${args.results.length} into '${args.projectName}'`,
+        {
+          entity_type: 'trace',
+          assertion_results: args.results.map((result) => ({
+            entity_id: result.traceId,
+            project_name: args.projectName,
+            name: result.name,
+            status: result.status,
+            // `sdk` is what a real `opik.run_tests` run writes, and the
+            // pass-rate query does not filter on source — so this keeps the
+            // seeded rows indistinguishable from judged ones rather than
+            // exercising a path no run takes.
+            source: 'sdk',
+          })),
+        },
+        204,
+        'PUT',
+      );
+    },
+
+    /**
+     * `GET /v1/private/experiments/groups/aggregations` — the read behind every
+     * aggregated cell on an Experiments group row.
+     *
+     * Keyed in the answer by the grouped value, so under the default item-source
+     * grouping the key is the dataset id. `types` mirrors what the frontend
+     * sends (`["regular"]`), so what a spec reads here is the same population
+     * the page renders rather than a superset that happened to agree.
+     */
+    async experimentGroupAggregations(args: {
+      projectId: string;
+      groupBy?: ExperimentGroupBy[];
+      types?: string[];
+    }): Promise<Record<string, ExperimentGroupAggregationRef>> {
+      const query = new URLSearchParams({
+        groups: JSON.stringify(args.groupBy ?? [GROUP_BY_ITEM_SOURCE]),
+        project_id: args.projectId,
+        types: JSON.stringify(args.types ?? ['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups/aggregations',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `experimentGroupAggregations(${args.projectId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: Record<string, unknown> } | null)?.content;
+      if (typeof content !== 'object' || content === null) {
+        throw new Error(
+          `experimentGroupAggregations(${args.projectId}): the answer carried no 'content' map: ` +
+            JSON.stringify(json),
+        );
+      }
+      const groups: Record<string, ExperimentGroupAggregationRef> = {};
+      for (const [value, node] of Object.entries(content)) {
+        const group = node as { label?: unknown; aggregations?: unknown };
+        const aggregations = group.aggregations;
+        groups[value] = {
+          label: typeof group.label === 'string' ? group.label : null,
+          // `{}` only for a group the server sent no aggregations for at all,
+          // which is a different answer from one whose aggregations omit the
+          // pass-rate keys — both are readable here, neither is invented.
+          aggregations:
+            typeof aggregations === 'object' && aggregations !== null
+              ? (aggregations as Record<string, unknown>)
+              : {},
+        };
+      }
+      return groups;
     },
 
     async findTestSuiteByName(name: string, projectName?: string): Promise<TestSuiteRef | null> {
@@ -4564,6 +5998,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         provider: s.provider ?? null,
         totalEstimatedCost: s.totalEstimatedCost ?? null,
         usage: s.usage ?? null,
+        totalEstimatedCostVersion: s.totalEstimatedCostVersion ?? null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
       }));
     },
 
@@ -4821,6 +6257,63 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/spans/exists` — the LIMIT-1 existence probe behind the
+     * Logs page's empty state (opik#9599, OPIK-9219).
+     *
+     * This is not "the project has spans" read through a cheaper door, and a
+     * caller must not treat it as interchangeable with a size-1 listing. The
+     * Logs Spans tab decides between two visually different empty states from
+     * exactly this answer and nothing else: `showEmptyState` in
+     * `TracesSpansTab` is `!hasProjectData && rows.length === 0`, so a `false`
+     * here renders the SDK onboarding panel ("No spans yet", Quickstart guide)
+     * while a `true` over an empty list renders "No matching results". A probe
+     * that wrongly answered `false` therefore tells a user whose project is
+     * full of spans that they have never logged one — which reads as data loss
+     * rather than as a filter that matched nothing.
+     *
+     * `source` is the parameter that makes it non-trivial, and it is omitted
+     * rather than defaulted: `source=sdk` (what the page sends, matching its
+     * own `logsSource: LOGS_SOURCE.sdk` listing) and no `source` at all are
+     * different questions, and a project whose only spans are
+     * experiment/playground/optimization/evaluator rows answers `true` to the
+     * second and `false` to the first. Defaulting either way here would hide
+     * that from the caller. Note `Source.legacyFallbackDbValue`: `sdk` also
+     * matches legacy `unknown` rows, so `sdk` is not simply "source = 'sdk'".
+     *
+     * Returns the boolean the envelope carries, and throws on anything that is
+     * not a 200 with a boolean `exists` — an endpoint that answered 404, or
+     * 200 with a differently-shaped body, would otherwise come back as a
+     * perfectly plausible `false` and satisfy every "this project is empty"
+     * assertion in the suite.
+     */
+    async spansExist(args: {
+      projectId: string;
+      /** Omit to probe ANY source; `'sdk'` is what the Logs page sends. */
+      source?: 'sdk' | 'experiment' | 'playground' | 'optimization' | 'evaluator';
+    }): Promise<boolean> {
+      const query = new URLSearchParams({ project_id: args.projectId });
+      if (args.source !== undefined) query.set('source', args.source);
+      const { status, message, json } = await rawFetch('GET', '/v1/private/spans/exists', {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/spans/exists (project ${args.projectId}` +
+            `${args.source ? `, source ${args.source}` : ', any source'}) -> ${status}: ${message}`,
+        );
+      }
+      const exists = (json as { exists?: unknown } | null)?.exists;
+      if (typeof exists !== 'boolean') {
+        throw new Error(
+          `GET /v1/private/spans/exists (project ${args.projectId}) answered 200 with no ` +
+            `boolean 'exists' (body: ${JSON.stringify(json)}) — a missing field must not be ` +
+            'read as "no spans".',
+        );
+      }
+      return exists;
+    },
+
+    /**
      * `PATCH /v1/private/spans/{id}`, reporting the status instead of throwing.
      *
      * The rejection IS the contract: `SpanService.update` refuses an update
@@ -4935,6 +6428,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/spans/{id}` with its STATUS returned rather than thrown
+     * on — `{ status, message, span }`.
+     *
+     * The sibling of `getSpanPayload`, and it exists because for one question
+     * the status IS the claim: a span id written under more than one project
+     * makes the by-ids query fan out to a row per project, and before
+     * opik#9311 the single-item reducer behind `SpanDAO.getById` answered that
+     * with `IndexOutOfBoundsException` — a hard 500 on a span detail read.
+     * `getSpanPayload` throws for any non-200/404, which turns "the endpoint
+     * answered 500" into an exception indistinguishable from a transport
+     * failure and gives a spec no way to say which it saw. Same choice
+     * `postOtelExport` makes, for the same reason.
+     *
+     * `span` is the parsed payload on a 200 and `null` on anything else, so a
+     * caller asserts the status first and only then reads the body — never the
+     * other way round, where an absent payload would read as an absent field.
+     */
+    async readSpanById(
+      spanId: string,
+    ): Promise<{ status: number; message: string; span: SpanPayload | null }> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status !== 200) return { status, message, span: null };
+      const s = (json ?? {}) as Record<string, unknown>;
+      return {
+        status,
+        message,
+        span: {
+          id: String(s.id ?? ''),
+          name: typeof s.name === 'string' ? s.name : '',
+          type: typeof s.type === 'string' ? s.type : null,
+          traceId: typeof s.trace_id === 'string' ? s.trace_id : null,
+          projectId: typeof s.project_id === 'string' ? s.project_id : null,
+          input: (s.input ?? null) as Record<string, unknown> | null,
+          output: (s.output ?? null) as Record<string, unknown> | null,
+          metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+          tags: Array.isArray(s.tags) ? s.tags.map(String) : null,
+        },
+      };
+    },
+
+    /**
      * `POST /v1/private/spans/batch` — many spans in one request.
      *
      * The only way to seed a span population large enough to page. Writing them
@@ -4979,6 +6513,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(span.model === undefined ? {} : { model: span.model }),
             ...(span.provider === undefined ? {} : { provider: span.provider }),
             ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.tags === undefined ? {} : { tags: span.tags }),
+            ...(span.totalEstimatedCost === undefined
+              ? {}
+              : { total_estimated_cost: span.totalEstimatedCost }),
             ...(span.metadata === undefined ? {} : { metadata: span.metadata }),
             ...(span.errorInfo === undefined
               ? {}
@@ -5328,6 +6866,103 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One trace's feedback scores projected to `value_by_author` — the MAP KEY
+     * each entry is stored under, and the `author` the entry itself reports.
+     *
+     * The two are different things, and that is the whole point. A queue-scoped
+     * score is keyed `<author>_<sourceQueueId>` while a plain one is keyed
+     * `<author>`, so one person who scored a trace both ways holds TWO keys and
+     * one author — which is exactly what opik#9474 fixed the annotator count to
+     * see (`getDistinctAnnotatorCount` now reads `entry.author` instead of
+     * counting keys). A reader that returned only the keys could not state that
+     * claim at all, and one that returned only the authors could not show the
+     * composite key was ever produced.
+     *
+     * `author` and `sourceQueueId` are nullable, never defaulted: an entry the
+     * server sent without an author is the regression a caller is here to
+     * catch, and substituting the key's prefix for it would reproduce the old
+     * behaviour inside the test.
+     */
+    async getTraceScoreAuthors(traceId: string): Promise<
+      Array<{
+        name: string;
+        entries: Array<{
+          key: string;
+          author: string | null;
+          value: number | null;
+          sourceQueueId: string | null;
+        }>;
+      }>
+    > {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status !== 200) {
+        throw new Error(`getTraceScoreAuthors: ${traceId} answered ${status}: ${message}`);
+      }
+      const scores = ((json as { feedback_scores?: unknown } | null)?.feedback_scores ??
+        []) as Array<{ name?: unknown; value_by_author?: Record<string, unknown> }>;
+      return scores.map((score) => {
+        const byAuthor = score.value_by_author ?? {};
+        return {
+          name: String(score.name ?? ''),
+          entries: Object.entries(byAuthor)
+            .map(([key, raw]) => {
+              const entry = (raw ?? {}) as {
+                author?: unknown;
+                value?: unknown;
+                source_queue_id?: unknown;
+              };
+              const queueId = entry.source_queue_id;
+              return {
+                key,
+                author: typeof entry.author === 'string' && entry.author !== '' ? entry.author : null,
+                value: entry.value === undefined || entry.value === null ? null : Number(entry.value),
+                // The backend stores a FixedString(36), so an unscoped entry
+                // arrives as the empty string rather than as a missing key —
+                // folded to `null` here so "no queue" is one value and not two.
+                sourceQueueId:
+                  typeof queueId === 'string' && queueId !== '' ? queueId : null,
+              };
+            })
+            // Sorted by key so a caller can compare the whole collection
+            // instead of hunting its own entry inside it.
+            .sort((a, b) => a.key.localeCompare(b.key)),
+        };
+      });
+    },
+
+    /**
+     * Every comment on one trace, with the user each was created by.
+     *
+     * `getTraceComment` answers one comment by id, which a caller only has when
+     * it wrote the comment over REST itself. A comment left through a UI never
+     * surfaces its id, so "the person who scored also commented" — half of what
+     * makes one reviewer look like two to a key-counting annotator tally — is
+     * only observable by listing.
+     *
+     * `createdBy` is nullable for the usual reason: a comment the server
+     * returned with no author is a different answer from one by the test's own
+     * user, and defaulting it would collapse them.
+     */
+    async listTraceComments(
+      traceId: string,
+    ): Promise<Array<{ id: string; text: string; createdBy: string | null }>> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status !== 200) {
+        throw new Error(`listTraceComments: ${traceId} answered ${status}: ${message}`);
+      }
+      const comments = ((json as { comments?: unknown } | null)?.comments ?? []) as Array<{
+        id?: unknown;
+        text?: unknown;
+        created_by?: unknown;
+      }>;
+      return comments.map((c) => ({
+        id: String(c.id ?? ''),
+        text: String(c.text ?? ''),
+        createdBy: typeof c.created_by === 'string' && c.created_by !== '' ? c.created_by : null,
+      }));
+    },
+
+    /**
      * The trace feedback score names a project has, sorted.
      *
      * This is the endpoint behind the score picker in a `trace:feedback_score`
@@ -5392,6 +7027,73 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return id;
     },
 
+    /**
+     * Comment on a THREAD, returning the comment's id.
+     *
+     * Separate from `addComment` rather than a third `entity` value, because
+     * the path is not the same shape: thread comments hang off
+     * `POST /v1/private/traces/threads/{id}/comments`, under the TRACES
+     * resource, and the `{id}` is the thread's `thread_model_id` — the UUID the
+     * backend minted for the materialised thread — not the producer-chosen
+     * `thread_id` string every other thread call takes. Passing the wrong one of
+     * those two answers 404 (or, worse, 500 on a non-UUID), so the argument is
+     * named for the id it actually wants and callers resolve it through
+     * `getThread(...).threadModelId`.
+     *
+     * Through `rawFetch` for the reason `addComment` is: the id comes back in
+     * `Location` and the server ignores any id the caller sends.
+     */
+    async addThreadComment(args: { threadModelId: string; text: string }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        `/v1/private/traces/threads/${args.threadModelId}/comments`,
+        { body: { text: args.text } },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `addThreadComment on thread model ${args.threadModelId}: expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `addThreadComment on thread model ${args.threadModelId}: 201 carried no usable ` +
+            `Location header (got ${location ?? '<none>'})`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * Delete thread comments by id — `POST /v1/private/traces/threads/comments/delete`.
+     *
+     * A thread comment is the one annotation in this area that NOTHING
+     * cascades. Deleting a trace fires `TraceDeletedListener`, which prunes its
+     * feedback scores, its attachments, its spans and its TRACE comments, and
+     * `SpanService` prunes SPAN comments the same way — but no listener
+     * subscribes for the thread's side, and a thread is not an entity you can
+     * delete at all: it is materialised from the traces that share a
+     * `thread_id`. So a comment written against a `thread_model_id` outlives
+     * every trace it was about, and a fixture that created one has to come back
+     * for it.
+     *
+     * Answers 204, and takes the comment ids rather than the thread's — there
+     * is no delete-by-entity route for these.
+     */
+    async deleteThreadComments(commentIds: string[]): Promise<void> {
+      if (commentIds.length === 0) return;
+      const { status, message } = await rawFetch(
+        'POST',
+        '/v1/private/traces/threads/comments/delete',
+        { body: { ids: commentIds } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `deleteThreadComments(${commentIds.join(', ')}): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
     /** One trace comment by id, or null once it is no longer readable. */
     async getTraceComment(traceId: string, commentId: string): Promise<string | null> {
       try {
@@ -5401,6 +7103,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return null;
         throw err;
       }
+    },
+
+    /**
+     * One thread comment by id, or null once it is no longer readable.
+     *
+     * The sibling of `getTraceComment`/`getSpanComment`, through `rawFetch`
+     * because the pinned SDK has no binding for the thread route. `threadId`
+     * here is the `thread_model_id` the write took, not the producer's
+     * `thread_id` string — see `addThreadComment`.
+     */
+    async getThreadComment(threadModelId: string, commentId: string): Promise<string | null> {
+      const { status, json, message } = await rawFetch(
+        'GET',
+        `/v1/private/traces/threads/${threadModelId}/comments/${commentId}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(
+          `getThreadComment(${threadModelId}, ${commentId}): expected 200 or 404, got ${status}: ${message}`,
+        );
+      }
+      const text = (json as { text?: unknown } | null)?.text;
+      return typeof text === 'string' ? text : '';
     },
 
     /** One span comment by id, or null once it is no longer readable. */
@@ -5853,6 +7578,90 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * because the backend types it as a bare `JsonNode`.
      */
     /**
+     * Write one judge rule verbatim, reporting the status and message instead
+     * of throwing on them.
+     *
+     * The counterpart of `createLlmJudgeRule` for the rejection side of
+     * `DecisionModelRuleValidator` (opik#9357): a caller there is asserting the
+     * 400 AND its message, so a helper that threw on a non-201 would turn the
+     * answer under test into a thrown error, and one that filled in defaults
+     * could not express the payloads being refused — see `JudgeRuleWrite`.
+     *
+     * `location` is returned with the status so an accepted rule can be read
+     * back and deleted: the create answers 201 with an empty body, and the id
+     * exists nowhere else.
+     */
+    async writeJudgeRuleStatus(
+      args: JudgeRuleWrite,
+    ): Promise<RawApiResult & { ruleId: string | null }> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: args.type,
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate ?? 1,
+            enabled: args.enabled ?? false,
+            code: {
+              model: {
+                name: args.model.name,
+                ...(args.model.temperature === undefined
+                  ? {}
+                  : { temperature: args.model.temperature }),
+                ...(args.model.api === undefined ? {} : { api: args.model.api }),
+              },
+              messages: args.messages.map((m) => ({ role: m.role, content: m.content })),
+              ...(args.variables === undefined ? {} : { variables: args.variables }),
+              schema: args.schema,
+              ...(args.maxCostUsd === undefined ? {} : { max_cost_usd: args.maxCostUsd }),
+            },
+          },
+        },
+      );
+      const ruleId = location?.split('/').filter(Boolean).pop() ?? null;
+      return { status, message, location, ruleId: status === 201 ? ruleId : null };
+    },
+
+    /**
+     * The `api` one judge rule's model block carries, with ABSENT reported as
+     * `undefined` rather than normalised away.
+     *
+     * Its own reader rather than a field on `LlmJudgeModelRef` because the
+     * question is about absence: a decisions-only model resolves to the
+     * Decisions API carrying no `api` key, so "reads back as decisions" and
+     * "reads back absent" are both correct answers for different models, and a
+     * shape that defaulted either way would make one of them unobservable.
+     *
+     * Throws when the key is present but is not a string the enum declares — a
+     * value this suite cannot name is a response it cannot assert on, not a
+     * missing one.
+     */
+    async getLlmJudgeModelApi(ruleId: string): Promise<JudgeModelApi | undefined> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModelApi: ${ruleId} answered ${status}: ${message}`);
+      }
+      const model = (json as { code?: { model?: { api?: unknown } } } | null)?.code?.model;
+      if (model === undefined) {
+        throw new Error(`getLlmJudgeModelApi: ${ruleId} returned no code.model`);
+      }
+      if (model.api === undefined || model.api === null) return undefined;
+      if (model.api !== 'decisions') {
+        throw new Error(
+          `getLlmJudgeModelApi: ${ruleId} returned code.model.api as ` +
+            `${JSON.stringify(model.api)}, which is not a value LlmAsJudgeModelApi declares`,
+        );
+      }
+      return 'decisions';
+    },
+
+    /**
      * The `type` of every score an `llm_as_judge` rule declares, in order.
      *
      * A sibling of `getLlmJudgeModel` and `getLlmJudgeMessages` rather than a
@@ -6304,14 +8113,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * through.** A caller probing the gate must therefore send an effort the
      * row cannot accept, which is refused for free; see
      * `probeAnthropicEffortGate` for the sentinel that makes that reliable.
+     *
+     * `completion` is the decoded body of a request that DID reach a provider —
+     * the other half of this endpoint, which a gate assertion never sees. Null
+     * whenever the body is not a completion (every refusal, whose text is in
+     * `message`), so a caller asserting about an answer has to establish it got
+     * one before reading it.
      */
     async postChatCompletion(args: {
       model: string;
       /** Lowercase roles — this endpoint deserializes langchain4j's own enum. */
       messages?: Array<{ role: string; content: string }>;
       customParameters?: Record<string, unknown>;
-    }): Promise<RawApiResult> {
-      const { status, message, location } = await rawFetch(
+    }): Promise<RawApiResult & { completion: ChatCompletionRef | null }> {
+      const { status, message, location, json } = await rawFetch(
         'POST',
         '/v1/private/chat/completions',
         {
@@ -6324,7 +8139,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           },
         },
       );
-      return { status, message, location };
+      return { status, message, location, completion: toChatCompletionRef(json) };
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
@@ -6366,6 +8181,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * filter on `first_message`/`last_message` sends the read down the full-scan
      * copy instead. Both copies carry their own rendering of the search clause,
      * so a spec that only ever read unsorted has exercised one of them.
+     *
+     * `truncate` is a FIFTH branch, and the one the Threads TABLE actually asks
+     * for (`ThreadsTab` passes the workspace's `truncation_on_tables`, default
+     * on). It selects a different pair of columns — `truncated_first_message` /
+     * `truncated_last_message` plus the `*_length >= *_truncation_threshold`
+     * flags — and those flags change the SHAPE of what comes back: a message at
+     * or over the threshold is serialised as a JSON *string* holding the capped
+     * prefix, while a shorter one comes back as the parsed object. Not defaulted
+     * here, so sending nothing stays a distinguishable request from sending
+     * `false`.
      */
     async listThreads(
       args: {
@@ -6375,6 +8200,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sorting?: BackendSort[];
         page?: number;
         size?: number;
+        truncate?: boolean;
       } & ReadWindow,
     ): Promise<{ total: number; threads: ThreadRowRef[] }> {
       const page = await opik.api.traces.getTraceThreads({
@@ -6384,6 +8210,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
         ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+        ...(args.truncate === undefined ? {} : { truncate: args.truncate }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
@@ -6522,9 +8349,50 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One page of `GET /v1/private/traces` under `filters`, as the envelope's
+     * `total` plus the row ids — the full answer, not just the rows.
+     *
+     * The counterpart to `listTraceIds`, which drops `total` on the floor. A
+     * filter can fail in two ways that look alike from the ids alone: it can
+     * return the wrong rows, and it can return the right rows beside a `total`
+     * that counted more of them (the listing and the count are separate
+     * queries over the same clause). A spec asserting a filter is EXACT wants
+     * both pinned, so this returns both and the caller compares each.
+     *
+     * `total` is asserted to be a number rather than defaulted: an envelope
+     * that stopped carrying it would otherwise compare as 0 against a seed that
+     * expected 0, which is the one case where the bug and the expectation agree.
+     */
+    async listTracePage(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<{ total: number; ids: string[] }> {
+      const page = await withRateLimitRetry(() =>
+        opik.api.traces.getTracesByProject({
+          projectId: args.projectId,
+          size: args.size ?? 200,
+          page: 1,
+          truncate: true,
+          ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+          ...(args.toTime ? { toTime: args.toTime } : {}),
+        }),
+      );
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          'listTracePage: the traces listing carried no numeric `total` — that field is ' +
+            'half of what an exactness assertion compares, so it cannot be assumed.',
+        );
+      }
+      return { total: page.total, ids: (page.content ?? []).map((t) => String(t.id)) };
+    },
+
+    /**
      * Trace ids visible for a project under `filters` and an optional window —
      * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
      * traces a scoped view is entitled to, never their content.
+     *
+     * Use `listTracePage` above when the envelope's `total` is part of the
+     * question — a filter can return the right rows beside a wrong count.
      */
     async listTraceIds(
       args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
@@ -6649,9 +8517,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      *
      * The endpoint answers 200 with an empty body, not 201: it is an OTLP
      * collector endpoint, and `ExportTraceServiceResponse` is the shape a real
-     * exporter expects. Asserted rather than defaulted, because an export the
-     * backend refused stores nothing and would otherwise surface as an empty
-     * read further down the fixture.
+     * exporter expects. Thrown on by default, because an export the backend
+     * refused stores nothing and would otherwise surface as an empty read
+     * further down the fixture — unless the caller asks for the answer with
+     * `tolerateRefusal`, for which see below.
+     *
+     * The answer is also RETURNED, so a caller that set `tolerateRefusal` can
+     * assert the acceptance itself. Callers that did not can ignore it.
      */
     async postOtelSpans(args: {
       projectName: string;
@@ -6670,7 +8542,27 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * claiming an integration it is not changes which attribute rules apply.
        */
       scopeName?: string;
-    }): Promise<void> {
+      /**
+       * Return a non-200 instead of throwing on it, so the ACCEPTANCE of the
+       * export is a thing the spec asserts rather than a precondition the seed
+       * enforces on its behalf.
+       *
+       * Set by a seed whose export is under test for being accepted at all —
+       * `otel-reported-cost-spans` carries string-valued
+       * `gen_ai.usage.cost.currency`/`.source`, which before opik#9499 reached
+       * the `gen_ai.usage.` prefix rule and had the WHOLE export rejected. A
+       * throwing seed would surface that regression as a fixture error, which
+       * reads like broken test plumbing rather than the product refusing a
+       * valid export; and an `expect(200).toBe(200)` written after a helper
+       * that already threw on anything else is a tautology. Returning the
+       * answer is what makes the assertion real.
+       *
+       * Off by default: for every other caller an export that did not land is
+       * a seeding failure, and failing at the seed is where it is cheapest to
+       * read.
+       */
+      tolerateRefusal?: boolean;
+    }): Promise<{ status: number; message: string }> {
       if (args.spans.length === 0) {
         throw new Error('postOtelSpans: an export with no spans is a no-op the backend answers 200 for');
       }
@@ -6719,12 +8611,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           ],
         },
       );
-      if (status !== 200) {
+      if (status !== 200 && args.tolerateRefusal !== true) {
         throw new Error(
           `postOtelSpans: expected 200 for ${args.spans.length} span(s) into ` +
             `'${args.projectName}', got ${status}: ${message}`,
         );
       }
+      return { status, message };
     },
 
     /**
@@ -6764,8 +8657,28 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       /** The `projectName` header — the fallback every unrouted span must follow. */
       projectNameHeader: string;
       /** Export-wide attributes, on `resource.attributes`. */
-      resourceAttributes?: Record<string, string | number>;
+      resourceAttributes?: Record<string, OtelAttributeValue>;
       spans: OtelExportSpanSeed[];
+      /**
+       * The millisecond every span of this export starts at. Absent means
+       * `Date.now()`, which is what a real exporter sends.
+       *
+       * Stated only when the Opik trace id this export derives has to collide
+       * with ANOTHER export's. `OpenTelemetryService` maps an OTLP trace id to
+       * an Opik one through Redis under a key that includes the PROJECT
+       * (`otelTraceId:<workspace>:<project>:<id>`), so a second export into the
+       * same project reuses the mapping whatever its timestamps are — but a
+       * second export into a DIFFERENT project finds no mapping and derives the
+       * id afresh, from `convertOtelIdToUUIDv7(otelTraceId, minStartMs)`. The
+       * derived UUID therefore collides only when the two exports agree on the
+       * millisecond as well as on the OTLP id, which is the precondition for
+       * the cross-project refusal being a shape rather than a coin toss. See
+       * `otel-batch-onto-existing-trace.spec.ts`.
+       *
+       * Spans are still staggered by one nanosecond each, as below, so this
+       * pins the derived millisecond without making every span identical.
+       */
+      startTimeMs?: number;
     }): Promise<{ status: number; message: string }> {
       if (args.spans.length === 0) {
         throw new Error(
@@ -6774,7 +8687,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
       // The export's shared id, used by every span that did not state its own.
       const sharedOtelTraceId = randomOtelId(16);
-      const startNanos = BigInt(Date.now()) * 1_000_000n;
+      const startNanos = BigInt(args.startTimeMs ?? Date.now()) * 1_000_000n;
 
       return rawFetchWithHeaders(
         'POST',
@@ -7078,6 +8991,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             source: 'sdk' as const,
             ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.environment === undefined ? {} : { environment: trace.environment }),
+            ...(trace.tags === undefined ? {} : { tags: trace.tags }),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
             ...(trace.metadata === undefined ? {} : { metadata: trace.metadata }),
@@ -7348,6 +9262,138 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments/groups/aggregations` — the per-group
+     * statistics the Experiments table renders on its GROUP rows (opik#9374).
+     *
+     * This is the read behind the aggregation cells, and it is a separate call
+     * from the experiments listing: the list answers rows, this answers the
+     * numbers above them. `GeneralDatasetsTab` puts it into the table as
+     * `meta.aggregationMap` keyed by group row id, and every `aggregatedCell`
+     * renders out of that map and nothing else — so what this returns IS what a
+     * group row says, and a spec comparing a rendered cell against it is
+     * comparing the two halves of one claim rather than restating the UI.
+     *
+     * Two things about the shape are load-bearing, and both are kept verbatim:
+     *
+     *  - The response is keyed by GROUP VALUE, which for the default grouping
+     *    is the dataset id. `label` beside it is the dataset's name.
+     *  - An aggregate with nothing to report is ABSENT, not zero. A group whose
+     *    experiments carry no priced span has no `total_estimated_cost_avg`
+     *    key, which is exactly why its rendered cost cell is blank rather than
+     *    a dash. A helper that defaulted it to 0 would erase the distinction
+     *    this is read for, so `ExperimentGroupAggregations` keeps every field
+     *    optional and a caller that needs one must assert it.
+     *
+     * `groups` is passed as the frontend serialises it, because the parameter is
+     * not a field list: `GroupingFactory.newGrouping` parses the whole JSON
+     * array and a differently-shaped one is a 400. `DEFAULT_EXPERIMENT_GROUPS`
+     * is the default the page itself sends.
+     */
+    async getExperimentGroupAggregations(args: {
+      projectId: string;
+      /** The `groups` array, already JSON. Defaults to the page's own default. */
+      groups?: string;
+      /** `types`, as JSON. Defaults to `["regular"]`, which is what the page sends. */
+      types?: string;
+    }): Promise<Record<string, ExperimentGroupAggregationsEntry>> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        groups: args.groups ?? DEFAULT_EXPERIMENT_GROUPS,
+        types: args.types ?? JSON.stringify(['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups/aggregations',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/experiments/groups/aggregations (project ${args.projectId}) -> ` +
+            `${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (content === null || typeof content !== 'object') {
+        throw new Error(
+          `GET /v1/private/experiments/groups/aggregations (project ${args.projectId}) answered ` +
+            `200 with no 'content' object (body: ${JSON.stringify(json)}) — an absent envelope ` +
+            'must not be read as "this project has no groups".',
+        );
+      }
+      const out: Record<string, ExperimentGroupAggregationsEntry> = {};
+      for (const [groupValue, node] of Object.entries(content as Record<string, unknown>)) {
+        const entry = (node ?? {}) as Record<string, unknown>;
+        const aggregations = (entry.aggregations ?? {}) as Record<string, unknown>;
+        const duration = (aggregations.duration ?? null) as Record<string, unknown> | null;
+        const num = (v: unknown): number | undefined =>
+          typeof v === 'number' ? v : undefined;
+        out[groupValue] = {
+          label: typeof entry.label === 'string' ? entry.label : null,
+          experimentCount: num(aggregations.experiment_count),
+          traceCount: num(aggregations.trace_count),
+          totalEstimatedCost: num(aggregations.total_estimated_cost),
+          totalEstimatedCostAvg: num(aggregations.total_estimated_cost_avg),
+          durationP50: duration ? num(duration.p50) : undefined,
+          durationP90: duration ? num(duration.p90) : undefined,
+          durationP99: duration ? num(duration.p99) : undefined,
+          feedbackScores: toScoreAverages(
+            aggregations.feedback_scores,
+            `GET /v1/private/experiments/groups/aggregations group '${groupValue}'`,
+          ),
+        };
+      }
+      return out;
+    },
+
+    /**
+     * `GET /v1/private/experiments/groups` — the group TREE the Experiments
+     * table renders its group rows from (opik#9374).
+     *
+     * The sibling of `getExperimentGroupAggregations`: that one answers the
+     * numbers on a group row, this one answers which group rows exist at all.
+     * `GeneralDatasetsTab` fires both on every load of the page's default
+     * state, and opik#9492 newly gated BOTH behind `EXPERIMENT_VIEW` — so a
+     * spec about that state has to drive both, not just the one whose numbers
+     * it compares.
+     *
+     * Returns the status rather than throwing on it, unlike every other read
+     * here. The subject is the status: a permission-gated endpoint answering
+     * 200 for a permitted caller is the claim, and a helper that threw would
+     * turn "the gate named a permission nobody holds" into a seeding error
+     * attributed to the fixture rather than an assertion failure that names the
+     * endpoint. `groups` is still parsed so the same call can say the rows are
+     * the right ones.
+     */
+    async getExperimentGroups(args: {
+      projectId: string;
+      /** The `groups` array, already JSON. Defaults to the page's own default. */
+      groups?: string;
+      /** `types`, as JSON. Defaults to `["regular"]`, which is what the page sends. */
+      types?: string;
+    }): Promise<ExperimentGroupsResponse> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        groups: args.groups ?? DEFAULT_EXPERIMENT_GROUPS,
+        types: args.types ?? JSON.stringify(['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups',
+        { query },
+      );
+      const content = (json as { content?: unknown } | null)?.content;
+      if (content === null || content === undefined || typeof content !== 'object') {
+        return { status, message, groups: null };
+      }
+      const groups: Record<string, string | null> = {};
+      for (const [groupValue, node] of Object.entries(content as Record<string, unknown>)) {
+        const entry = (node ?? {}) as Record<string, unknown>;
+        groups[groupValue] = typeof entry.label === 'string' ? entry.label : null;
+      }
+      return { status, message, groups };
+    },
+
+    /**
      * Link existing traces to an experiment. This is what puts a trace inside an
      * experiment's scope, and therefore what the entity-scoped Logs views read.
      */
@@ -7604,6 +9650,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       projectId: string;
       scope: string;
       instructions: string | null;
+      /**
+       * `annotators_per_item`, or `null` when the queue carries none.
+       *
+       * Nullable rather than defaulted to 1 because the ceiling is what decides
+       * whether an item reads Reviewed or Completed: a queue that silently
+       * stored no ceiling would, under a defaulting read, be indistinguishable
+       * from one configured for a single annotator — and the second is the
+       * state in which "the item is not Completed yet" can never hold.
+       */
+      annotatorsPerItem: number | null;
+      /** The score names the reviewer flow offers, or `null` when absent. */
+      feedbackDefinitionNames: string[] | null;
     }> {
       const { status, message, json } = await rawFetch(
         'GET',
@@ -7619,6 +9677,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         project_id?: unknown;
         scope?: unknown;
         instructions?: unknown;
+        annotators_per_item?: unknown;
+        feedback_definition_names?: unknown;
       } | null;
       if (typeof raw?.name !== 'string' || typeof raw.project_id !== 'string') {
         throw new Error(
@@ -7631,6 +9691,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectId: raw.project_id,
         scope: typeof raw.scope === 'string' ? raw.scope : '',
         instructions: typeof raw.instructions === 'string' ? raw.instructions : null,
+        annotatorsPerItem:
+          typeof raw.annotators_per_item === 'number' ? raw.annotators_per_item : null,
+        feedbackDefinitionNames: Array.isArray(raw.feedback_definition_names)
+          ? raw.feedback_definition_names.map((n) => String(n))
+          : null,
       };
     },
 
@@ -7660,6 +9725,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           name: queue.name,
           scope: queue.scope,
           ...(queue.instructions === undefined ? {} : { instructions: queue.instructions }),
+          ...(queue.annotatorsPerItem === undefined
+            ? {}
+            : { annotators_per_item: queue.annotatorsPerItem }),
           ...(queue.feedbackDefinitionNames
             ? { feedback_definition_names: queue.feedbackDefinitionNames }
             : {}),
