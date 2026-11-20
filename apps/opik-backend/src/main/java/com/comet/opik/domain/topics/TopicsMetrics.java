@@ -197,7 +197,7 @@ public class TopicsMetrics {
     }
 
     void retired(@NonNull String workspaceId, @NonNull NightState.RetiredReason reason) {
-        retired.add(1, workspace(workspaceId).put(REASON, reason.value()).build());
+        retired.add(1, workspace(workspaceId).put(REASON, reason.getValue()).build());
     }
 
     void churn(@NonNull String workspaceId, @NonNull TopicChurn.Churn value) {

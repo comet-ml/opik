@@ -5,6 +5,8 @@ import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,8 +18,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -305,6 +309,16 @@ class TopicsNightlyRulesTest {
         }
     }
 
+    private final LocalDate firstBuild = LocalDate.now(ZoneOffset.UTC)
+            .minusDays(RandomUtils.secure().randomInt(20, 365));
+    private final LocalDate night = firstBuild.plusDays(RandomUtils.secure().randomInt(1, 30));
+    private final Instant nightStart = night.atStartOfDay(ZoneOffset.UTC).toInstant();
+    /** Inside the night's recent days. */
+    private final Instant recentDay = nightStart.minus(Duration.ofHours(
+            RandomUtils.secure().randomLong(1, CONFIG.getRecentDays() * 24L)));
+    /** In the window, before its recent days. */
+    private final Instant oldDay = nightStart.minus(Duration.ofDays(CONFIG.getRecentDays() + 1L));
+
     @Nested
     @DisplayName("lifecycle")
     class Lifecycles {
@@ -312,16 +326,17 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("a third low night retires, a good night resets the streak")
         void lowShare() {
-            var low = topic("Low").toBuilder().lowNights(2).build();
-            var reset = topic("Reset").toBuilder().lowNights(2).build();
-            var state = state(0, low, reset, topic("Big"));
+            var state = state(
+                    topic().lowNights(CONFIG.getRetireNights() - 1).build(),
+                    topic().lowNights(CONFIG.getRetireNights() - 1).build(),
+                    topic().build());
             var labels = new int[300];
             Arrays.fill(labels, 2);
             labels[0] = 0;
             labels[1] = 1;
             labels[2] = 1;
 
-            Lifecycle.retire(state, window(300, Instant.parse("2026-10-15T00:00:00Z")), labels);
+            state.retireLowShare(labels, CONFIG.getRetireShare(), CONFIG.getRetireNights());
 
             assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.LOW_SHARE);
             assertThat(state.topic(1).getLowNights()).isZero();
@@ -333,19 +348,19 @@ class TopicsNightlyRulesTest {
         @DisplayName("a topic that holds no trace retires the same night; a small one that holds a trace needs three "
                 + "low nights")
         void lowNightsByHeldTraces(int held, int nights) {
-            var state = state(0, topic("Small"), topic("Big"));
+            var state = state(topic().build(), topic().build());
             var labels = new int[300];
             Arrays.fill(labels, 1);
             Arrays.fill(labels, 0, held, 0);
 
             for (int night = 1; night < nights; night++) {
-                Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
+                state.retireLowShare(labels, CONFIG.getRetireShare(), CONFIG.getRetireNights());
 
                 assertThat(state.topic(0).getLowNights()).isEqualTo(night);
                 assertThat(state.live()).containsExactly(0, 1);
             }
 
-            Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
+            state.retireLowShare(labels, CONFIG.getRetireShare(), CONFIG.getRetireNights());
 
             assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.LOW_SHARE);
             assertThat(state.live()).containsExactly(1);
@@ -354,33 +369,28 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("a topic born after the first build is measured on the whole window, as any other")
         void newborn() {
-            var state = state(0, topic("Old"), topic("New", LocalDate.parse("2026-10-18")));
-            var createdAt = new Instant[300];
-            Arrays.fill(createdAt, 0, 299, Instant.parse("2026-10-01T00:00:00Z"));
-            createdAt[299] = Instant.parse("2026-10-19T00:00:00Z");
+            var state = state(topic().build(), topic().born(night.minusDays(2)).build());
             var labels = new int[300];
             labels[299] = 1;
 
-            Lifecycle.retire(state, window(createdAt), labels);
+            state.retireLowShare(labels, CONFIG.getRetireShare(), CONFIG.getRetireNights());
 
             assertThat(state.topic(1).getLowNights()).isEqualTo(1);
             assertThat(state.topic(0).getLowNights()).isZero();
         }
 
         @Test
-        @DisplayName("a topic's size is its count in the labels, and a topic retired tonight ends at 0")
+        @DisplayName("a live topic's size is its count in the labels")
         void sizes() {
-            var state = state(0, topic("Quiet"), topic("Busy"), topic("Retired"));
-            state.topic(2).setSize(5);
-            state.retire(2, NightState.RetiredReason.LOW_SHARE);
-            var labels = new int[100];
+            int busy = RandomUtils.secure().randomInt(1, 100);
+            var state = state(topic().size(RandomUtils.secure().randomInt(1, 100)).build(), topic().build());
+            var labels = new int[busy];
             Arrays.fill(labels, 1);
 
-            Lifecycle.sizes(state, labels);
+            state.recordSizes(labels);
 
             assertThat(state.topic(0).getSize()).isZero();
-            assertThat(state.topic(1).getSize()).isEqualTo(100);
-            assertThat(state.topic(2).getSize()).isZero();
+            assertThat(state.topic(1).getSize()).isEqualTo(busy);
         }
     }
 
@@ -440,30 +450,26 @@ class TopicsNightlyRulesTest {
     class Candidates {
 
         @Test
-        @DisplayName("a group's share and last-7-days share are counted over the whole window, not the Other traces")
+        @DisplayName("a group's share and recent share are counted over the whole window, not the Other traces")
         void sharesOfWholeWindow() {
             // 60 East traces have an owner; 20 South and 20 West are Other. Recent: 40 East, 10 South, 20 West.
             var vectors = three(60, 20, 20);
-            var old = Instant.parse("2026-09-25T00:00:00Z");
             var createdAt = new Instant[100];
             for (int i = 0; i < createdAt.length; i++) {
                 boolean recent = i < 40 || (i >= 60 && i < 70) || i >= 80;
-                createdAt[i] = recent ? WINDOW_DAY : old;
+                createdAt[i] = recent ? recentDay : oldDay;
             }
+            var window = window(vectors, createdAt);
             var unassigned = IntStream.range(60, 100).toArray();
 
-            var grouping = CandidateGrouper.group(window(vectors, createdAt), unassigned, 1,
-                    TopicsTestAlgorithm.config());
+            var grouping = CandidateGrouper.group(window, unassigned, 1, CONFIG);
 
-            assertThat(grouping.candidates()).hasSize(2);
-            var south = grouping.groups().get(grouping.labels()[0]);
-            var west = grouping.groups().get(grouping.labels()[39]);
-            assertThat(south.size()).isEqualTo(20);
-            assertThat(south.share()).isEqualTo(0.2);
-            assertThat(south.recentShare()).isEqualTo(10.0 / 70);
-            assertThat(west.size()).isEqualTo(20);
-            assertThat(west.share()).isEqualTo(0.2);
-            assertThat(west.recentShare()).isEqualTo(20.0 / 70);
+            var labels = grouping.labels();
+            var south = NightGroup.builder().group(labels[0]).size(20).share(0.2).recentShare(10.0 / 70).tightness(1)
+                    .examples(List.of(window.texts(IntStream.range(60, 65).toArray()))).build();
+            var west = NightGroup.builder().group(labels[39]).size(20).share(0.2).recentShare(20.0 / 70).tightness(1)
+                    .examples(List.of(window.texts(IntStream.range(80, 85).toArray()))).build();
+            assertThat(grouping.candidates()).containsExactlyInAnyOrder(south, west);
         }
     }
 
@@ -588,7 +594,7 @@ class TopicsNightlyRulesTest {
             var result = NightlyUpdate.run(state, window(vectors), 10, CONFIG, NO_LLM);
 
             assertThat(state.liveCount()).isZero();
-            assertThat(state.getTopics()).extracting(NightState.Topic::getRetiredReason)
+            assertThat(state.getTopics()).extracting(NightTopic::getRetiredReason)
                     .containsOnly(RetiredReason.LOW_SHARE);
             assertThat(result.labels()).containsOnly(TopicAlgorithm.OTHER);
             NightInvariants.check(state, 2);
@@ -1020,11 +1026,11 @@ class TopicsNightlyRulesTest {
                     base.share(), base.recentShare(), base.examples());
             var groups = List.of(group(0, 40, 0.9));
 
-            var naming = TopicPrompts.namingGroup(List.of(topic), groups, true);
+            var naming = TopicPrompts.namingGroup(List.of(topic), groups, true, CONFIG.getRecentDays());
 
             assertThat(naming).contains("Asks about {candidates} and {clusters}");
             assertThat(naming.split("cluster 0:", -1)).hasSize(2);
-            assertThat(TopicPrompts.namingGroup(List.of(), groups, false)).contains("  (none)")
+            assertThat(TopicPrompts.namingGroup(List.of(), groups, false, CONFIG.getRecentDays())).contains("  (none)")
                     .doesNotContain("{topics}", "{clusters}");
         }
 
@@ -1045,11 +1051,11 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("fails the run, so a full list's weakest topic is not retired for nothing")
         void failsTheRun() {
-            var live = new ArrayList<NightState.Topic>();
+            var live = new ArrayList<NightTopic>();
             for (int i = 0; i < 10; i++) {
                 live.add(topic("T" + i));
             }
-            var state = state(0, live.toArray(NightState.Topic[]::new));
+            var state = state(0, live.toArray(NightTopic[]::new));
             var map = new LinkedHashMap<Integer, Integer>();
             NightLlm failing = (tag, prompt, schema, maxTokens) -> {
                 throw new TopicsRunException(RunError.LLM_ERROR, "down");
@@ -1061,7 +1067,27 @@ class TopicsNightlyRulesTest {
         }
     }
 
-    private static NightState state(int rebuilds, NightState.Topic... topics) {
+    private NightState state(NightTopic... topics) {
+        return NightState.builder()
+                .topics(List.of(topics))
+                .otherPrototypes(List.of())
+                .rebuilds(RandomUtils.secure().randomInt(0, 100))
+                .night(night)
+                .ids(TopicsTestAlgorithm.ID_GENERATOR::generateId)
+                .build();
+    }
+
+    /** A topic born on the first build, with a random id, name and definition and no prototypes. */
+    private NightTopic.NightTopicBuilder topic() {
+        return NightTopic.builder()
+                .id(TopicsTestAlgorithm.ID_GENERATOR.generateId())
+                .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                .definition(RandomStringUtils.secure().nextAlphanumeric(30))
+                .born(firstBuild)
+                .prototypes(List.of());
+    }
+
+    private static NightState state(int rebuilds, NightTopic... topics) {
         var ids = new AtomicLong(100);
         return NightState.builder()
                 .topics(List.of(topics))
@@ -1072,12 +1098,12 @@ class TopicsNightlyRulesTest {
                 .build();
     }
 
-    private static NightState.Topic topic(String name, float[]... prototypes) {
+    private static NightTopic topic(String name, float[]... prototypes) {
         return topic(name, FIRST_BUILD, prototypes);
     }
 
-    private static NightState.Topic topic(String name, LocalDate born, float[]... prototypes) {
-        return NightState.Topic.builder()
+    private static NightTopic topic(String name, LocalDate born, float[]... prototypes) {
+        return NightTopic.builder()
                 .id(UUID.nameUUIDFromBytes(name.getBytes()))
                 .name(name)
                 .definition(name + " def")
@@ -1089,8 +1115,8 @@ class TopicsNightlyRulesTest {
     private static List<TopicPrompts.PromptTopic> shown(NightState state) {
         var out = new ArrayList<TopicPrompts.PromptTopic>();
         var live = state.live();
-        for (int p = 0; p < live.size(); p++) {
-            out.add(prompt(p + 1, live.get(p), 0.1));
+        for (int p = 0; p < live.length; p++) {
+            out.add(prompt(p + 1, live[p], 0.1));
         }
         return out;
     }
@@ -1119,22 +1145,23 @@ class TopicsNightlyRulesTest {
                 .build();
     }
 
-    private static GroupSummary group(int group, int size, double tightness) {
+    private static NightGroup group(int group, int size, double tightness) {
         return group(group, size, tightness, 0.1);
     }
 
-    private static GroupSummary group(int group, int size, double tightness, double recentShare) {
-        return new GroupSummary(group, size, 0.1, recentShare, tightness, List.of("a", "b"));
+    private static NightGroup group(int group, int size, double tightness, double recentShare) {
+        return new NightGroup(group, size, 0.1, recentShare, tightness, List.of("a", "b"));
     }
 
     /** A group with this share of the window. */
-    private static GroupSummary sized(int group, int size, double tightness, double share) {
-        return new GroupSummary(group, size, share, share, tightness, List.of("a", "b"));
+    private static NightGroup sized(int group, int size, double tightness, double share) {
+        return new NightGroup(group, size, share, share, tightness, List.of("a", "b"));
     }
 
-    private static List<ForcedBirth.Outcome> force(NightState state, List<GroupSummary> ordered,
+    private static List<ForcedBirth.Outcome> force(NightState state, List<NightGroup> ordered,
             Map<Integer, TopicPrompts.PromptTopic> topics, Map<Integer, Integer> map, int maxTopics, NightLlm llm) {
-        return ForcedBirth.apply(state, ordered, map, () -> List.copyOf(topics.values()), maxTopics, llm);
+        return ForcedBirth.apply(state, ordered, map, () -> List.copyOf(topics.values()), maxTopics,
+                CONFIG.getRecentDays(), llm);
     }
 
     /** A grouped naming answer with these {@code new} entries and no assign. */
@@ -1172,7 +1199,7 @@ class TopicsNightlyRulesTest {
         }
         var createdAt = new Instant[n];
         Arrays.fill(createdAt, at);
-        return window(vectors, createdAt);
+        return fixedWindow(vectors, createdAt);
     }
 
     private static NightWindow window(Instant[] createdAt) {
@@ -1180,16 +1207,17 @@ class TopicsNightlyRulesTest {
         for (int i = 0; i < createdAt.length; i++) {
             vectors.add(EAST);
         }
-        return window(vectors, createdAt);
+        return fixedWindow(vectors, createdAt);
     }
 
     private static NightWindow window(List<float[]> vectors) {
         var createdAt = new Instant[vectors.size()];
         Arrays.fill(createdAt, WINDOW_DAY);
-        return window(vectors, createdAt);
+        return fixedWindow(vectors, createdAt);
     }
 
-    private static NightWindow window(List<float[]> vectors, Instant[] createdAt) {
+    /** One window trace per vector, texts {@code t<i>}, on the fixed night {@link #NIGHT_START}. */
+    private static NightWindow fixedWindow(List<float[]> vectors, Instant[] createdAt) {
         int n = vectors.size();
         var texts = new String[n];
         var rows = new float[n * 2];
@@ -1199,6 +1227,19 @@ class TopicsNightlyRulesTest {
         }
         return NightWindow.builder().texts(texts).vectors(rows).createdAt(createdAt)
                 .from(Instant.parse("2026-09-20T00:00:00Z")).night(NIGHT_START).dimensions(2).build();
+    }
+
+    /** One window trace per vector, each with its own random text. */
+    private NightWindow window(List<float[]> vectors, Instant[] createdAt) {
+        int n = vectors.size();
+        var texts = new String[n];
+        var rows = new float[n * 2];
+        for (int i = 0; i < n; i++) {
+            texts[i] = UUID.randomUUID() + " " + RandomStringUtils.secure().nextAlphanumeric(10);
+            System.arraycopy(vectors.get(i), 0, rows, i * 2, 2);
+        }
+        return NightWindow.builder().texts(texts).vectors(rows).createdAt(createdAt)
+                .from(nightStart.minus(Duration.ofDays(30))).night(nightStart).dimensions(2).build();
     }
 
     private static JsonNode json(String text) {

@@ -109,7 +109,8 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
                 tickIfDue(start),
                 Mono.fromRunnable(() -> {
                     count(LOCK_HELD);
-                    log.debug("Topic vectors tick skipped, lock '{}' is held by another instance", LEADER_LOCK.key());
+                    log.debug("Topic vectors tick skipped, another instance holds the lock, lock '{}'",
+                            LEADER_LOCK.key());
                 }),
                 leaderLease(),
                 Duration.ZERO)
@@ -136,8 +137,8 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
                         ? tickService.tick(start).doOnSuccess(__ -> count(RAN)).then()
                         : Mono.<Void>fromRunnable(() -> {
                             count(NOT_DUE);
-                            log.debug("Topic vectors tick skipped, lock '{}' is held: a tick ran less than one "
-                                    + "interval ago", TICK_LOCK.key());
+                            log.debug("Topic vectors tick skipped, a tick ran less than one interval ago, lock '{}'",
+                                    TICK_LOCK.key());
                         }))
                 .onErrorResume(exception -> {
                     count(FAILED);

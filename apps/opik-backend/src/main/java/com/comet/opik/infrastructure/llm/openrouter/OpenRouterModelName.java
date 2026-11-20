@@ -983,6 +983,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             GOOGLE_GEMINI_4_CARBON_BATCH,
             GOOGLE_GEMINI_4_HYDROGEN,
             GOOGLE_GEMINI_4_HYDROGEN_BATCH,
+            GOOGLE_GEMINI_4_NEON,
+            GOOGLE_GEMINI_4_NEON_BATCH,
             GOOGLE_GEMINI_FLASH_LATEST,
             GOOGLE_GEMINI_NANO_BANANA_2_1,
             GOOGLE_GEMINI_PRO_LATEST,

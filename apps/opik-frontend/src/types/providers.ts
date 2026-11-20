@@ -108,6 +108,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_LIVE_1_1 = "gpt-live-1.1",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -1007,6 +1008,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_4_ARGON = "gemini-4-argon",
   GEMINI_4_CARBON = "gemini-4-carbon",
   GEMINI_4_HYDROGEN = "gemini-4-hydrogen",
+  GEMINI_4_NEON = "gemini-4-neon",
   GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
   GEMINI_NANO_BANANA_2_1 = "gemini-nano-banana-2.1",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
@@ -1020,7 +1022,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_4_NEON = "gemini-4-neon",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -1048,6 +1049,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_4_CARBON = "vertex_ai/gemini-4-carbon",
   VERTEX_AI_GEMINI_4_CARBON_CYBER_PERMISSIVE = "vertex_ai/gemini-4-carbon-cyber-permissive",
   VERTEX_AI_GEMINI_4_HYDROGEN = "vertex_ai/gemini-4-hydrogen",
+  VERTEX_AI_GEMINI_4_NEON = "vertex_ai/gemini-4-neon",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH = "vertex_ai/gemini-omni-1.1-flash",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH_PREVIEW = "vertex_ai/gemini-omni-1.1-flash-preview",
   VERTEX_AI_GEMINI_OMNI_1_2_FLASH = "vertex_ai/gemini-omni-1.2-flash",
