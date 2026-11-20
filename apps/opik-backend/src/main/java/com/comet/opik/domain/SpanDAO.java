@@ -39,6 +39,7 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -2043,21 +2044,13 @@ public class SpanDAO {
             """;
 
     /**
-     * Fingerprint of the stored values a bulk cost recalculation depends on. {@link #SELECT_COST_INPUTS_BY_IDS} reads
-     * it next to the cost inputs and {@link #BULK_UPDATE} recomputes it on the row it writes over, so a recalculated
-     * cost is applied only when the span hasn't changed in between (no stale cost, no overwritten manual cost).
+     * The {@code spans} read carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}.
+     * <p>
+     * With {@code recalculated_cost}, a span gets the cost recalculated by {@link #getRecalculatedCosts} only when the
+     * fingerprint of its stored cost inputs still matches the one {@link #SELECT_COST_INPUTS_BY_IDS} read, so the
+     * span hasn't changed in between (no stale cost, no overwritten manual cost). Both queries spell out the same
+     * fingerprint expression.
      */
-    private static String costInputsFingerprint(String alias) {
-        return "toString(cityHash64(%1$smodel, %1$sprovider, toString(%1$susage), toString(%1$stotal_estimated_cost), %1$stotal_estimated_cost_version, %1$smetadata))"
-                .formatted(alias);
-    }
-
-    private static final String APPLY_RECALCULATED_COST = """
-            has(:recalculated_cost_ids, toString(stored_span.id))
-                AND arrayElement(:recalculated_cost_fingerprints, indexOf(:recalculated_cost_ids, toString(stored_span.id))) = """
-            + costInputsFingerprint("stored_span.");
-
-    /** The {@code spans} read carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String BULK_UPDATE = """
             INSERT INTO spans (
                 id,
@@ -2105,18 +2098,20 @@ public class SpanDAO {
                 <if(model)> :model <else> stored_span.model <endif> as model,
                 <if(provider)> :provider <else> stored_span.provider <endif> as provider,
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12)
-                <elseif(recalculated_cost)> if("""
-            + APPLY_RECALCULATED_COST
-            + """
-                    , toDecimal128(arrayElement(:recalculated_costs, indexOf(:recalculated_cost_ids, toString(stored_span.id))), 12), stored_span.total_estimated_cost)
-                    <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
-                    <if(total_estimated_cost_version)> :total_estimated_cost_version
-                    <elseif(recalculated_cost)> if("""
-            + APPLY_RECALCULATED_COST
-            + """
-                    , :recalculated_cost_version, stored_span.total_estimated_cost_version)
-                    <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
-                    """
+                <elseif(recalculated_cost)> if(
+                    (
+                        has(:recalculated_cost_ids, toString(stored_span.id))
+                        AND arrayElement(:recalculated_cost_fingerprints, indexOf(:recalculated_cost_ids, toString(stored_span.id)))
+                            = toString(cityHash64(stored_span.model, stored_span.provider, toString(stored_span.usage), toString(stored_span.total_estimated_cost), stored_span.total_estimated_cost_version, stored_span.metadata))
+                    ) AS apply_recalculated_cost,
+                    toDecimal128(arrayElement(:recalculated_costs, indexOf(:recalculated_cost_ids, toString(stored_span.id))), 12),
+                    stored_span.total_estimated_cost
+                )
+                <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
+                <if(total_estimated_cost_version)> :total_estimated_cost_version
+                <elseif(recalculated_cost)> if(apply_recalculated_cost, :recalculated_cost_version, stored_span.total_estimated_cost_version)
+                <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                """
             + TagOperations.tagUpdateFragment("stored_span.tags")
             + """
                         as tags,
@@ -2157,18 +2152,15 @@ public class SpanDAO {
                 total_estimated_cost,
                 total_estimated_cost_version,
                 metadata,
-                """
-            + costInputsFingerprint("")
-            + """
-                        AS cost_inputs_fingerprint
-                    FROM spans
-                    WHERE id IN :ids AND workspace_id = :workspace_id
-                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    SETTINGS log_comment = '<log_comment>'
-                    ;
-                    """;
+                toString(cityHash64(model, provider, toString(usage), toString(total_estimated_cost), total_estimated_cost_version, metadata)) AS cost_inputs_fingerprint
+            FROM spans
+            WHERE id IN :ids AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
 
     // ESTIMATED COST CHANGE
     // 1.1 - Added cached tokens for OpenAI
@@ -3658,7 +3650,8 @@ public class SpanDAO {
     }
 
     /** A recalculated cost and the fingerprint of the stored cost inputs it was priced from. */
-    private record RecalculatedCost(BigDecimal cost, String costInputsFingerprint) {
+    @Builder(toBuilder = true)
+    private record RecalculatedCost(@NonNull BigDecimal cost, @NonNull String costInputsFingerprint) {
     }
 
     /**
@@ -3710,8 +3703,10 @@ public class SpanDAO {
                                         row.get("total_estimated_cost_version", String.class), null))
                                 .build())))
                 .filter(stored -> !isManualCost(stored.getValue()))
-                .collectMap(stored -> stored.getValue().id(), stored -> new RecalculatedCost(
-                        calculateCost(mergeCostInputs(stored.getValue(), update)), stored.getKey()))
+                .collectMap(stored -> stored.getValue().id(), stored -> RecalculatedCost.builder()
+                        .cost(calculateCost(mergeCostInputs(stored.getValue(), update)))
+                        .costInputsFingerprint(stored.getKey())
+                        .build())
                 .map(costs -> costs.entrySet().stream()
                         .filter(entry -> entry.getValue().cost().compareTo(BigDecimal.ZERO) > 0)
                         .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue)));
