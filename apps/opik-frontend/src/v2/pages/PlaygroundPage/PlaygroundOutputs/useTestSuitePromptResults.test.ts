@@ -49,6 +49,36 @@ describe("areAllRowItemsScored", () => {
     });
   });
 
+  describe("suite-level assertions", () => {
+    it("should wait for the suite's assertions though the row carries none", () => {
+      const row = makeRow({ experiment_items: [makeItem()] });
+      expect(areAllRowItemsScored(row, 1)).toBe(false);
+    });
+
+    it("should count the suite's assertion results", () => {
+      const row = makeRow({
+        experiment_items: [
+          makeItem({
+            assertion_results: [{ value: "is_correct", passed: true }],
+          }),
+        ],
+      });
+      expect(areAllRowItemsScored(row, 1)).toBe(true);
+    });
+
+    it("should expect the item's and the suite's assertions together", () => {
+      const row = makeRow({
+        evaluators: [makeLLMJudgeEvaluator(["item_check"])],
+        experiment_items: [
+          makeItem({
+            assertion_results: [{ value: "item_check", passed: true }],
+          }),
+        ],
+      });
+      expect(areAllRowItemsScored(row, 1)).toBe(false);
+    });
+  });
+
   describe("no evaluators defined", () => {
     it("should return true when evaluators is an empty array", () => {
       const row = makeRow({

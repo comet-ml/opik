@@ -79,7 +79,7 @@ const SKIPPED_RESULT = (reason: string): StatusInfo => ({
   runsPerItem: undefined,
 });
 
-const ERROR_RESULT = (reason: string): StatusInfo => ({
+export const ERROR_RESULT = (reason: string): StatusInfo => ({
   status: RunStatus.SKIPPED,
   evaluating: false,
   assertionsByRun: [],
@@ -93,9 +93,12 @@ function resolveSkippedStatus(
   status: RunStatus | undefined,
   row: ExperimentsCompare,
   experimentFinished?: boolean,
+  suiteHasAssertions = false,
 ): StatusInfo | null {
   if (!status) {
-    const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
+    // The row only carries the item's own assertions; the suite's apply to it too.
+    const hasEvaluators =
+      (row.evaluators?.length ?? 0) > 0 || suiteHasAssertions;
     if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTION_RESULTS_REASON);
     if (experimentFinished) return ERROR_RESULT(SCORING_ERROR_REASON);
   }
@@ -105,6 +108,7 @@ function resolveSkippedStatus(
 export function getStatusFromExperimentItems(
   row: ExperimentsCompare,
   experimentFinished?: boolean,
+  suiteHasAssertions = false,
 ): StatusInfo {
   const items = row.experiment_items;
   if (!items?.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
@@ -128,7 +132,12 @@ export function getStatusFromExperimentItems(
     status = items[0].status;
   }
 
-  const skipped = resolveSkippedStatus(status, row, experimentFinished);
+  const skipped = resolveSkippedStatus(
+    status,
+    row,
+    experimentFinished,
+    suiteHasAssertions,
+  );
   if (skipped) return skipped;
 
   // Item-level execution_policy overrides the dataset-level one

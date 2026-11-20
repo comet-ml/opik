@@ -4,6 +4,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { cn } from "@/lib/utils";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
+import { OnlineScoringStatus } from "@/types/automations";
 import MetricTag from "./MetricTag";
 
 const MAX_VISIBLE_METRICS = 3;
@@ -21,6 +22,9 @@ export interface ScoreData {
 interface PlaygroundOutputScoresProps {
   metricNames: string[]; // Expected metric names from rules
   metricScores: Record<string, ScoreData>; // Actual scores from trace (keyed by name)
+  metricRuleIds?: Record<string, string>;
+  metricStatuses?: Record<string, OnlineScoringStatus>;
+  waitOver?: boolean;
   notRun?: boolean;
   className?: string;
 }
@@ -28,6 +32,9 @@ interface PlaygroundOutputScoresProps {
 const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   metricNames,
   metricScores,
+  metricRuleIds = {},
+  metricStatuses = {},
+  waitOver = false,
   notRun = false,
   className,
 }) => {
@@ -62,6 +69,9 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
           metricName={metricName}
           color={metricColors[metricName]}
           score={metricScores[metricName]}
+          ruleId={metricRuleIds[metricName]}
+          status={metricStatuses[metricName]}
+          waitOver={waitOver}
           notRun={notRun}
         />
       ))}
@@ -87,6 +97,9 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
                   metricName={metricName}
                   color={metricColors[metricName]}
                   score={metricScores[metricName]}
+                  ruleId={metricRuleIds[metricName]}
+                  status={metricStatuses[metricName]}
+                  waitOver={waitOver}
                   notRun={notRun}
                 />
               ))}

@@ -29,8 +29,8 @@ package com.comet.opik.infrastructure.redis;
  * <p>
  * Two caveats, stated rather than glossed.
  * <p>
- * Retirement depends on {@code getDeliveryCount}, which maps a failed {@code listPending} to
- * {@code 0}. While a PEL lookup is failing persistently the count never reaches {@code maxRetries} and
+ * Retirement depends on {@code getDeliveryCount}, which yields no count when {@code listPending} fails.
+ * While a PEL lookup is failing persistently the count never reaches {@code maxRetries} and
  * the entry keeps being redelivered, so "always terminates" is really "terminates while the PEL is
  * readable". Pre-existing behaviour for every retryable failure, not specific to this one.
  * <p>
