@@ -2,21 +2,24 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 /**
@@ -29,9 +32,11 @@ class TopicsAlgorithmFixtureTest {
 
     private static final int D = TopicsFixture.DIMENSIONS;
     private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
-    private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final String WORKSPACE_ID = RandomStringUtils.secure().nextAlphanumeric(10);
+    private static final UUID PROJECT_ID = TopicsTestAlgorithm.ID_GENERATOR.generateId();
     /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
-    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm.algorithm(fixedGroups(15));
+    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm
+            .algorithm(TopicsTestAlgorithm.fixedGroups(15));
 
     private TopicsFixture fixture;
     private MergedIntents merged;
@@ -192,19 +197,25 @@ class TopicsAlgorithmFixtureTest {
         assertThat(groups)
                 .as("k-means changed: put %s in java_kmeans.json and run generate.py", Arrays.toString(groups))
                 .containsExactly(fixture.javaGroups);
-        var context = new TopicsTestAlgorithm.StubContext(fixture.firstBuildAnswer);
+        var clustering = FIRST_BUILD.cluster(window(), 10);
 
-        var build = FIRST_BUILD.firstBuild(window(), 10, context);
+        var build = clustering.finish(AuthorAnswer.parse(fixture.firstBuildAnswer));
 
         var want = fixture.expected.get("first_build");
         var prototypes = want.get("prototypes");
-        assertThat(context.stats().get("k").asInt()).isEqualTo(fixture.k());
-        var topics = new ArrayList<NewTopic>();
-        want.get("topics").forEach(topic -> topics.add(NewTopic.builder().name(topic.get("name").asText())
-                .definition(topic.get("definition").asText()).build()));
-        assertThat(build.topics()).containsExactlyElementsOf(topics);
-        assertThat(build.owners()).containsExactly(boxed(TopicsFixture.ints(prototypes.get("owners"))));
-        assertCentres(build.topicPrototypes(), TopicsFixture.ints(prototypes.get("topic_prototypes")));
+        assertThat(clustering.stats().get("k").asInt()).isEqualTo(fixture.k());
+        var names = new ArrayList<Tuple>();
+        want.get("topics").forEach(topic -> names.add(tuple(topic.get("name").asText(),
+                topic.get("definition").asText())));
+        assertThat(build.topics()).extracting(NewTopic::name, NewTopic::definition).containsExactlyElementsOf(names);
+        // The reference lists the prototypes flat, each with the index of its topic.
+        var owners = new ArrayList<Integer>();
+        for (int t = 0; t < build.topics().size(); t++) {
+            owners.addAll(Collections.nCopies(build.topics().get(t).prototypes().size(), t));
+        }
+        assertThat(owners).containsExactly(boxed(TopicsFixture.ints(prototypes.get("owners"))));
+        assertCentres(build.topics().stream().flatMap(topic -> topic.prototypes().stream()).toList(),
+                TopicsFixture.ints(prototypes.get("topic_prototypes")));
         assertCentres(build.otherPrototypes(), TopicsFixture.ints(prototypes.get("other_prototypes")));
         assertThat(build.labels()).containsExactly(TopicsFixture.ints(want.get("labels")));
     }
@@ -212,20 +223,12 @@ class TopicsAlgorithmFixtureTest {
     @Test
     @DisplayName("the labeller over a saved first build labels the window as the build did")
     void labellerMatchesFirstBuild() {
-        var build = FIRST_BUILD.firstBuild(window(), 10,
-                new TopicsTestAlgorithm.StubContext(fixture.firstBuildAnswer));
+        var build = FIRST_BUILD.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.firstBuildAnswer));
         var topics = IntStream.range(0, build.topics().size())
-                .mapToObj(t -> Topic.builder()
-                        .id(UUID.randomUUID())
-                        .workspaceId("ws-1")
-                        .projectId(PROJECT_ID)
+                .mapToObj(t -> TopicsTestAlgorithm.topic(WORKSPACE_ID, PROJECT_ID)
                         .name(build.topics().get(t).name())
                         .definition(build.topics().get(t).definition())
-                        .born(LocalDate.of(2026, 11, 19))
-                        .vectors(new PrototypeVectors(IntStream.range(0, build.owners().size())
-                                .filter(p -> build.owners().get(p) == t)
-                                .mapToObj(build.topicPrototypes()::get)
-                                .toList()))
+                        .vectors(new PrototypeVectors(build.topics().get(t).prototypes()))
                         .build())
                 .toList();
         assertThat(build.otherPrototypes()).isNotEmpty();
@@ -280,13 +283,6 @@ class TopicsAlgorithmFixtureTest {
         double expected = rowSum * colSum / choose2(a.length);
         double max = (rowSum + colSum) / 2;
         return max == expected ? 1.0 : (index - expected) / (max - expected);
-    }
-
-    private static TopicsConfig.AlgorithmConfig fixedGroups(int k) {
-        var config = TopicsTestAlgorithm.config();
-        config.setMinGroups(k);
-        config.setMaxGroups(k);
-        return config;
     }
 
     private static double choose2(long n) {

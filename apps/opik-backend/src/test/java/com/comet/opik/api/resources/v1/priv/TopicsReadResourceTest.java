@@ -26,8 +26,8 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
+import com.comet.opik.domain.topics.TopicProjectDAO;
 import com.comet.opik.domain.topics.TopicReadService;
-import com.comet.opik.domain.topics.TopicRunDAO;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.domain.topics.TraceTopic;
@@ -199,10 +199,9 @@ class TopicsReadResourceTest {
             var firstRun = ID_GENERATOR.generateId();
             saveRun(handle, caller.workspaceId(), projectId, firstRun,
                     firstBuild.atTime(2, 0).toInstant(ZoneOffset.UTC));
-            var dao = handle.attach(TopicDAO.class);
-            dao.saveList(caller.workspaceId(), projectId, firstRun, saved, lastRun,
+            handle.attach(TopicProjectDAO.class).saveList(caller.workspaceId(), projectId, firstRun, saved, lastRun,
                     today.atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
-            dao.insertTopics(List.of(first, newborn, largest));
+            handle.attach(TopicDAO.class).insertTopics(List.of(first, newborn, largest));
             return null;
         });
         var rows = new ArrayList<TraceTopic>();
@@ -574,8 +573,8 @@ class TopicsReadResourceTest {
     private void attempt(String workspaceId, UUID projectId, TopicProject.RunStatus status, Instant startedAt) {
         var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, startedAt);
+            var runDAO = handle.attach(TopicProjectDAO.class);
+            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, startedAt);
             if (status == TopicProject.RunStatus.FAILED) {
                 runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
                         TopicProject.RunError.ABANDONED);

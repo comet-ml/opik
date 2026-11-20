@@ -7,6 +7,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -63,9 +64,10 @@ class TopicReadServiceTest {
     private final UUID projectId = UUID.randomUUID();
     private final UUID lastRunId = UUID.randomUUID();
 
-    private TopicsTestMeter meter;
+    private InMemoryMetricReader metricReader;
     private TopicWorkspaceService workspaces;
     private TopicDAO topicDAO;
+    private TopicProjectDAO projectDAO;
     private ProjectService projectService;
     private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
@@ -74,19 +76,21 @@ class TopicReadServiceTest {
 
     @BeforeEach
     void setUp() {
-        meter = new TopicsTestMeter();
+        metricReader = InMemoryMetricReader.create();
         workspaces = mock(TopicWorkspaceService.class);
         topicDAO = mock(TopicDAO.class);
+        projectDAO = mock(TopicProjectDAO.class);
         projectService = mock(ProjectService.class);
         windowDAO = mock(TopicWindowDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
-        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
+        when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
         service = service(NOW);
     }
 
@@ -121,7 +125,7 @@ class TopicReadServiceTest {
         assertThat(body.totalTraces()).isEqualTo(7L);
         assertThat(body.lastRunAt()).isEqualTo(NOW);
         assertThat(body.attempt()).isNull();
-        assertThat(meter.points(DURATION)).singleElement()
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("ready"));
         verify(projectService).get(projectId, WORKSPACE_ID);
     }
@@ -138,7 +142,7 @@ class TopicReadServiceTest {
         assertThat(body.topics()).isEmpty();
         assertThat(body.attempt()).isNull();
         verifyNoInteractions(topicDAO, windowDAO, traceTopicsDAO);
-        assertThat(meter.points(DURATION)).singleElement()
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
 
@@ -160,7 +164,7 @@ class TopicReadServiceTest {
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
                         exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
                         .isEqualTo(TopicsReadErrors.RETRY_AFTER_SECONDS));
-        assertThat(meter.points(DURATION)).singleElement()
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
 
@@ -186,7 +190,7 @@ class TopicReadServiceTest {
                     assertThat(exception.getResponse().getEntity()).isEqualTo(
                             new ErrorMessage(List.of(TopicReadService.TOO_LARGE_MESSAGE)));
                 });
-        assertThat(meter.points(DURATION)).singleElement()
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
 
@@ -198,7 +202,7 @@ class TopicReadServiceTest {
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isNotInstanceOf(ServiceUnavailableException.class)
                 .hasRootCauseInstanceOf(ServerException.class);
-        assertThat(meter.points(DURATION)).singleElement()
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
 
@@ -211,17 +215,17 @@ class TopicReadServiceTest {
                 .isInstanceOf(NotFoundException.class);
         verifyNoInteractions(workspaces, topicDAO, traceTopicsDAO);
         verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
-        assertThat(meter.points(DURATION)).isEmpty();
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).isEmpty();
     }
 
     private TopicReadService service(Instant now) {
         return new TopicReadService(config, template, workspaces, projectService, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(meter.meter), Clock.fixed(now, ZoneOffset.UTC));
+                TopicsMetricsReader.metrics(metricReader), Clock.fixed(now, ZoneOffset.UTC));
     }
 
     /** The project's row, its list saved by {@code lastRunId}, and its live topics. */
     private void saved(List<Topic> live) {
-        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
+        when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
                 .projectId(projectId)
                 .workspaceId(WORKSPACE_ID)
                 .savedRuns(1)
