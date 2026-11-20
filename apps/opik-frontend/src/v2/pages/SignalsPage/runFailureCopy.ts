@@ -29,6 +29,12 @@ export const getRunFailureCopy = (reason?: string): RunFailureCopy => {
         description:
           "The run was never picked up (the service may have been restarting). Try again.",
       };
+    case "no_api_key":
+      return {
+        title: "Diagnostics couldn't start",
+        description:
+          "Diagnostics runs with the workspace owner's API key, and neither the owner nor an organization admin has one. Ask the workspace owner to create an API key, then try again.",
+      };
     case "timed_out":
       return {
         title: "Diagnostics timed out",

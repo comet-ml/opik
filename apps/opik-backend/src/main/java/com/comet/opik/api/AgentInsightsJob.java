@@ -51,6 +51,9 @@ public record AgentInsightsJob(
         // An automatic run claimed longer ago than the timeout, with neither a result nor a failure: it died
         // without reporting. Retryable.
         public static final String TIMED_OUT = "timed_out";
+        // Neither the workspace owner nor any organization admin has an API key for the run to use. Retrying cannot
+        // fix it; someone has to create a key.
+        public static final String NO_API_KEY = "no_api_key";
     }
 
     @RequiredArgsConstructor

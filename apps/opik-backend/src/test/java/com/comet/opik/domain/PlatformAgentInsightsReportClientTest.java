@@ -95,7 +95,7 @@ class PlatformAgentInsightsReportClientTest {
     @DisplayName("A 402 for Comet's free budget is named as such, so the rollout is cancelled rather than the customer blamed")
     void triggerAgentInsights__paymentRequiredForFreeBudget__namesFreePoolExhausted() {
         stubTriggerResponse(402, "application/json", JsonUtils.writeValueAsString(
-                new PlatformAgentInsightsReportClient.PaymentRequiredBody("Free diagnostics budget unavailable",
+                new PlatformAgentInsightsReportClient.ErrorBody("Free diagnostics budget unavailable",
                         AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED)));
 
         assertThatExceptionOfType(AgentInsightsTriggerException.class)
@@ -114,6 +114,30 @@ class PlatformAgentInsightsReportClientTest {
                 .isThrownBy(this::trigger)
                 .extracting(AgentInsightsTriggerException::getReason)
                 .isEqualTo(AgentInsightsJob.FailureReason.OUT_OF_CREDITS);
+    }
+
+    @Test
+    @DisplayName("A 409 for a missing API key is named as such, so the user is told to create a key, not to retry")
+    void triggerAgentInsights__conflictWithNoApiKey__namesNoApiKey() {
+        stubTriggerResponse(409, "application/json", JsonUtils.writeValueAsString(
+                new PlatformAgentInsightsReportClient.ErrorBody("No API key found",
+                        AgentInsightsJob.FailureReason.NO_API_KEY)));
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.NO_API_KEY);
+    }
+
+    @Test
+    @DisplayName("A 409 without the code is still a run that did not start")
+    void triggerAgentInsights__conflictWithoutCode__namesDidNotStart() {
+        stubTriggerStatus(409);
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.DID_NOT_START);
     }
 
     @Test

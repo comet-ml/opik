@@ -59,9 +59,20 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(payload))) {
             if (response.getStatus() == Response.Status.PAYMENT_REQUIRED.getStatusCode()) {
-                throw new AgentInsightsTriggerException(readPaymentRequiredReason(response),
+                // An unreadable body is still a credits rejection: reading it as free_pool_exhausted instead would
+                // cancel the whole rollout over a malformed response.
+                String reason = AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(readErrorCode(response))
+                        ? AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED
+                        : AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
+                throw new AgentInsightsTriggerException(reason,
                         "Agent Insights trigger rejected for report '%s': insufficient credits"
                                 .formatted(reportId));
+            }
+            if (response.getStatus() == Response.Status.CONFLICT.getStatusCode()
+                    && AgentInsightsJob.FailureReason.NO_API_KEY.equals(readErrorCode(response))) {
+                throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.NO_API_KEY,
+                        ("Agent Insights trigger rejected for report '%s': no API key for the workspace owner or any "
+                                + "organization admin").formatted(reportId));
             }
             if (response.getStatus() >= 300) {
                 // Signal failure to the subscriber, which logs and drops the run (at-most-once).
@@ -73,24 +84,20 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
         }
     }
 
-    private String readPaymentRequiredReason(Response response) {
+    // Null when the body is missing or unreadable; callers decide what that means for their status.
+    private String readErrorCode(Response response) {
         try {
-            // A 402 with no body reads as null, and counts as a plain credits rejection.
-            var body = response.readEntity(PaymentRequiredBody.class);
-            return body != null && AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(body.errorCode())
-                    ? AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED
-                    : AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
+            var body = response.readEntity(ErrorBody.class);
+            return body == null ? null : body.errorCode();
         } catch (ProcessingException | IllegalStateException e) {
-            // An unreadable body is still a credits rejection: reading it as free_pool_exhausted instead would
-            // cancel the whole rollout over a malformed response.
-            log.warn("Could not read the error code off an Agent Insights 402", e);
-            return AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
+            log.warn("Could not read the error code off an Agent Insights {}", response.getStatus(), e);
+            return null;
         }
     }
 
-    // The platform's 402 body. Only the error code decides anything here.
+    // The platform's error body. Only the error code decides anything here.
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    record PaymentRequiredBody(String error, String errorCode) {
+    record ErrorBody(String error, String errorCode) {
     }
 }
