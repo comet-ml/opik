@@ -72,7 +72,7 @@ public class GroupSummaries {
             double simSum = 0;
             for (int m = groups.start()[j]; m < groups.start()[j + 1]; m++) {
                 int u = groups.order()[m];
-                sims[u] = dot(merged.vectors(), u, centres, j, d);
+                sims[u] = VectorMath.dot(merged.vectors(), u * d, centres, j * d, d);
                 size += counts[u];
                 simSum += counts[u] * sims[u];
             }
@@ -120,7 +120,7 @@ public class GroupSummaries {
         for (int j = 0; j < k; j++) {
             for (int m = groups.start()[j]; m < groups.start()[j + 1]; m++) {
                 int u = groups.order()[m];
-                sims[u] = dot(merged.vectors(), u, centres, j, d);
+                sims[u] = VectorMath.dot(merged.vectors(), u * d, centres, j * d, d);
             }
             out.add(pick(merged, groups.order(), groups.start()[j], groups.start()[j + 1], merged.weights(), sims,
                     frequent, frequent + extra));
@@ -241,19 +241,5 @@ public class GroupSummaries {
             }
             return new Members(order, start);
         }
-    }
-
-    /**
-     * Row {@code i} of {@code a} dotted with row {@code j} of {@code b}. One sum on purpose: it runs once per text, off
-     * the fit's hot loop, and reads float rows, not the fit's double centres as {@code KMeans}' eight-sum dot does.
-     */
-    static double dot(float[] a, int i, float[] b, int j, int dimensions) {
-        double s = 0;
-        int ai = i * dimensions;
-        int bj = j * dimensions;
-        for (int t = 0; t < dimensions; t++) {
-            s += (double) a[ai + t] * b[bj + t];
-        }
-        return s;
     }
 }

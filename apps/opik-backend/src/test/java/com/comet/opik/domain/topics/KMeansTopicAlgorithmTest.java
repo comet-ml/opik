@@ -2,13 +2,13 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.UUID;
@@ -21,10 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KMeansTopicAlgorithmTest {
 
     private static final int D = TopicEmbedding.DIMENSIONS;
-    private static final String WORKSPACE_ID = "ws-1";
-
     private final KMeansTopicAlgorithm algorithm = TopicsTestAlgorithm.algorithm();
-    private final UUID projectId = UUID.randomUUID();
+    private final String workspaceId = RandomStringUtils.secure().nextAlphanumeric(10);
+    private final UUID projectId = TopicsTestAlgorithm.ID_GENERATOR.generateId();
 
     @ParameterizedTest(name = "{0} unique texts make {1} groups with {2} examples each")
     @CsvSource({"1068, 35, 7", "481, 30, 8", "4622, 50, 5", "20, 20, 10"})
@@ -109,15 +108,7 @@ class KMeansTopicAlgorithmTest {
     }
 
     private Topic topic(float[]... vectors) {
-        return Topic.builder()
-                .id(UUID.randomUUID())
-                .workspaceId(WORKSPACE_ID)
-                .projectId(projectId)
-                .name("t")
-                .definition("d")
-                .born(LocalDate.of(2026, 11, 19))
-                .vectors(vectors(vectors))
-                .build();
+        return TopicsTestAlgorithm.topic(workspaceId, projectId).vectors(vectors(vectors)).build();
     }
 
     private static PrototypeVectors vectors(float[]... vectors) {

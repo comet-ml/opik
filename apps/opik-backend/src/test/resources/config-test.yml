@@ -1012,12 +1012,55 @@ workspaceFeatures:
   # Off in tests, like the auth cache: a test that needs it turns it on.
   cacheTtl: 0s
 
-aiLabels:
-  inference:
-    # The synchronous decide calls guardrail checks make, on a client of their own.
-    maxConcurrentDecides: 256
-    decideKeepAlive: 30s
-    decideTimeToLive: 5m
+inference:
+  # Same values as config.yml's inference block; see it for what each key means.
+  connectTimeout: 5s
+  readTimeout: 30s
+  maxConcurrentDecides: 48
+  maxResponseBytes: 33554432
+  limits:
+    maxEmbedInputs: 256
+    maxEmbedDeadline: 60s
+    maxBatchItems: 10000
+    maxStatusJobIds: 1000
+  retry:
+    maxRetries: 2
+    baseBackoff: 100ms
+    submitBytesPerSecond: 1048576
+
+topics:
+  # Same values as config.yml's topics block; see it for what each key means.
+  vectors:
+    tickInterval: 1m
+    tickBudget: 50s
+    window: 24h
+    longWindow: 7d
+    longWindowInterval: 1d
+    backfillWindow: 0s
+    maxTracesPerTick: 5000
+    embedBatchSize: 256
+    embedConcurrency: 1
+    embedTimeout: 10s
+    find:
+      maxRowsToRead: 30000000
+      maxMemoryUsage: 1073741824
+      maxExecutionTime: 30s
+      maxThreads: 2
+      createdAtSlack: 1d
+      sliceSize: 1d
+      discoverySliceSize: 7d
+  algorithm:
+    minGroups: 30
+    maxGroups: 50
+    textsPerGroup: 30
+    kmeansMaxIterations: 150
+    kmeansRestarts: 3
+    authorFrequent: 5
+    authorBudget: 250
+    authorMinExamples: 5
+    authorMaxExamples: 10
+    assignMinCosine: 0.75
+    otherGate: 0.95
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1045,6 +1088,9 @@ jerseyClient:
   # Default: 5m
   # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
   timeToLive: 5m
+  # Default: 30s
+  # Description: How long an idle connection is kept for reuse.
+  keepAlive: 30s
   # Default: 256
   # Description: The maximum number of concurrent open connections.
   maxConnections: 256
@@ -1492,17 +1538,3 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
-
-topics:
-  algorithm:
-    minGroups: 30
-    maxGroups: 50
-    textsPerGroup: 30
-    kmeansMaxIterations: 150
-    kmeansRestarts: 3
-    authorFrequent: 5
-    authorBudget: 250
-    authorMinExamples: 5
-    authorMaxExamples: 10
-    assignMinCosine: 0.75
-    otherGate: 0.95

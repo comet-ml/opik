@@ -111,9 +111,9 @@ class GuardrailsValidationsResourceTest {
                                 "true"),
                         // Caching on, so the tests see how often the platform is really asked.
                         new TestDropwizardAppExtensionUtils.CustomConfig("workspaceFeatures.cacheTtl", "60s"),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("inference.url",
                                 wireMock.runtimeInfo().getHttpBaseUrl()),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("inference.credential",
                                 INFERENCE_API_KEY)))
                 .build());
     }
