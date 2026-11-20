@@ -84,7 +84,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     protected Mono<Void> processEvent(@NonNull TopicsRunMessage message) {
         var limit = runLimit(message.mode());
         var deadline = Instant.now().plus(limit);
-        return store.claim(message, deadline)
+        return claim(message, deadline)
                 .flatMap(claimed -> {
                     if (!claimed) {
                         log.info("Topics run '{}' not claimed, project '{}': another pod has it, or it ended",
@@ -121,18 +121,29 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         return mode == RunMode.LABELS ? timeout : timeout.plus(TopicRunStore.insertBound(build));
     }
 
+    /** A nightly update's claim also re-checks that its night is still to do (see {@link TopicRunStore#claimNightly}). */
+    private Mono<Boolean> claim(TopicsRunMessage message, Instant deadline) {
+        return message.mode() == RunMode.NIGHTLY_UPDATE
+                ? store.claimNightly(message, deadline).map(claim -> claim == TopicRunStore.NightClaim.CLAIMED)
+                : store.claim(message, deadline);
+    }
+
     private Mono<Void> run(TopicsRunMessage message, Instant deadline) {
         return switch (message.mode()) {
-            case FIRST_BUILD -> rebuildService.firstBuild(message.runId(), message.workspaceId(),
-                    message.projectId(), message.night(), message.windowTraces())
-                    .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
-                    // The saved list's labelling pass is a run of its own: one place keeps it apart from a build.
-                    .flatMap(outcome -> planner.queueOne(new TopicsRunPlanner.Planned(message.workspaceId(),
-                            message.projectId(), RunMode.LABELS, null, 0)))
-                    .then();
+            case FIRST_BUILD -> labelsAfter(message, rebuildService.firstBuild(message.runId(),
+                    message.workspaceId(), message.projectId(), message.night(), message.windowTraces()));
+            case NIGHTLY_UPDATE -> labelsAfter(message, rebuildService.nightlyUpdate(message.runId(),
+                    message.workspaceId(), message.projectId(), message.night(), message.windowTraces()));
             case LABELS -> label(message, deadline);
-            case NIGHTLY_UPDATE -> fail(message, RunError.INTERNAL);
         };
+    }
+
+    /** The saved list's labelling pass is a run of its own: one place keeps it apart from a build. */
+    private Mono<Void> labelsAfter(TopicsRunMessage message, Mono<TopicsRebuildService.Outcome> build) {
+        return build.filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
+                .flatMap(outcome -> planner.queueOne(new TopicsRunPlanner.Planned(message.workspaceId(),
+                        message.projectId(), RunMode.LABELS, null, 0)))
+                .then();
     }
 
     /**

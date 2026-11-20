@@ -19,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -86,6 +87,51 @@ class TopicRunStore {
     Mono<Boolean> claim(@NonNull TopicsRunMessage message, @NonNull Instant deadline) {
         return write(dao -> dao.claim(message.workspaceId(), message.projectId(), message.runId(), Instant.now(),
                 deadline));
+    }
+
+    /** What a nightly update's claim found. */
+    enum NightClaim {
+        CLAIMED,
+        /** Another pod claimed it, or it ended. */
+        LOST,
+        /** The project has no list any more: the run ended without a save. */
+        NO_LIST,
+        /** The project's list already covers the night: the run ended without a save. */
+        ALREADY_SAVED
+    }
+
+    /**
+     * {@code queued -> running} for a nightly update, re-checking the night's skips on the row: a run that finds its
+     * project without a list, or its list already covering the night, ends {@code failed} with {@code cancelled} (not
+     * counted in {@code failed_runs}) and is counted as that skip in {@code topics.nightly.decisions}.
+     */
+    Mono<NightClaim> claimNightly(@NonNull TopicsRunMessage message, @NonNull Instant deadline) {
+        var windowTo = message.night().atStartOfDay(ZoneOffset.UTC).toInstant();
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            var now = Instant.now();
+            if (dao.claimNightly(message.workspaceId(), message.projectId(), message.runId(), now, deadline,
+                    windowTo) == 1) {
+                return NightClaim.CLAIMED;
+            }
+            if (dao.skipNightly(message.workspaceId(), message.projectId(), message.runId(), now, windowTo) != 1) {
+                return NightClaim.LOST;
+            }
+            return dao.findProjects(message.workspaceId(), List.of(message.projectId())).stream()
+                    .anyMatch(project -> project.listRunId() != null) ? NightClaim.ALREADY_SAVED : NightClaim.NO_LIST;
+        })).doOnNext(claim -> {
+            var reason = switch (claim) {
+                case NO_LIST -> TopicsNightPass.SkipReason.NO_LIST;
+                case ALREADY_SAVED -> TopicsNightPass.SkipReason.ALREADY_SAVED;
+                case CLAIMED, LOST -> null;
+            };
+            if (reason != null) {
+                log.info("Topics run '{}' skipped at its claim, project '{}', night '{}', reason '{}'",
+                        message.runId(), message.projectId(), message.night(), reason.value());
+                metrics.nightlyDecision(workspace(message.workspaceId()), TopicsNightPass.Decision.SKIP.value(),
+                        reason.value(), 1);
+            }
+        });
     }
 
     /** False when the run is no longer running: cancelled, abandoned or requeued, so it stops. */

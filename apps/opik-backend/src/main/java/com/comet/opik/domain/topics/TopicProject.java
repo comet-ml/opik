@@ -174,7 +174,10 @@ public record TopicProject(
         INTERNAL("internal"),
         /** The pod running the attempt stopped writing its heartbeat: it died, or lost MySQL. */
         ABANDONED("abandoned"),
-        /** Cancelled for a reason that is not the run's fault: its project was deleted or its workspace opted out. */
+        /**
+         * Cancelled for a reason that is not the run's fault: its project was deleted or its workspace opted out, or a
+         * queued nightly update found, at its claim, its night already saved or no list ({@code cancel_reason} null).
+         */
         CANCELLED("cancelled");
 
         private final String value;
