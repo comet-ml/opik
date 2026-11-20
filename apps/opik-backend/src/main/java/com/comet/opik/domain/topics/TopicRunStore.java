@@ -66,10 +66,10 @@ class TopicRunStore {
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int abandoned = template.inTransaction(WRITE, handle -> {
-                var runDAO = handle.attach(TopicRunDAO.class);
+                var runDAO = handle.attach(TopicProjectDAO.class);
                 var now = Instant.now();
                 int recorded = runDAO.recordAbandoned(workspaceId, projectId, abandonedBefore, now);
-                runDAO.start(workspaceId, projectId, runId, mode, now);
+                runDAO.startRun(workspaceId, projectId, runId, mode, now);
                 return recorded;
             });
             if (abandoned > 0) {
@@ -90,7 +90,7 @@ class TopicRunStore {
     Mono<Boolean> fail(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
             @NonNull RunError code) {
         return jdbi(() -> {
-            int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
+            int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                     .markFailed(workspace.id(), projectId, runId, Instant.now(), code));
             if (updated == 1) {
                 metrics.run(workspace, TopicProject.RunStatus.FAILED, code.getValue());
@@ -101,7 +101,7 @@ class TopicRunStore {
 
     /** Whether the project's attempt is the run, saved. */
     Mono<Boolean> isSaved(@NonNull TopicRun run) {
-        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .findProjects(run.workspaceId(), Set.of(run.projectId()))).stream()
                 .anyMatch(project -> run.runId().equals(project.runId())
                         && project.runStatus() == TopicProject.RunStatus.SAVED));
@@ -122,15 +122,16 @@ class TopicRunStore {
             var now = Instant.now();
             template.inTransaction(WRITE, handle -> {
                 var topicDAO = handle.attach(TopicDAO.class);
+                var projectDAO = handle.attach(TopicProjectDAO.class);
                 // First, so a run that saved this project meanwhile fails the save before anything else.
-                if (topicDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), now, run.to(),
+                if (projectDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), now, run.to(),
                         otherVectors, TopicEmbedding.MODEL) != 1) {
                     throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
                 }
                 if (!topics.isEmpty()) {
                     topicDAO.insertTopics(topics);
                 }
-                if (handle.attach(TopicRunDAO.class).markSaved(run.workspaceId(), run.projectId(), run.runId(),
+                if (projectDAO.markSaved(run.workspaceId(), run.projectId(), run.runId(),
                         now) != 1) {
                     throw new TopicsRunException(RunError.TIMEOUT, "the run ended before its save committed");
                 }

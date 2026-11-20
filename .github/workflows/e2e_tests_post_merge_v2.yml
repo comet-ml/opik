@@ -78,7 +78,7 @@ jobs:
       # PHASE 1: Checkout & Environment Setup
       # ========================================
       - name: "📥 Checkout repository"
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: "🔍 Get PR/commit information"
         id: get-pr-info
@@ -100,14 +100,14 @@ jobs:
           echo "📝 Author: $AUTHOR"
 
       - name: "📦 Setup Node.js"
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
           cache: 'npm'
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: "🐍 Setup uv & Python"
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.12'
 
@@ -122,7 +122,7 @@ jobs:
         run: uv sync
 
       - name: "📊 Install allurectl"
-        uses: allure-framework/setup-allurectl@v1
+        uses: allure-framework/setup-allurectl@2d89ee0b7ba2f59dbe9849b6df5763cab78e14db # v1
 
       # ========================================
       # PHASE 2: Build & Start Opik
@@ -354,7 +354,7 @@ jobs:
       # ========================================
       - name: "📤 Upload Allure results"
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: allure-results-v2
           path: tests_end_to_end/e2e/allure-results
@@ -362,7 +362,7 @@ jobs:
 
       - name: "📤 Upload Playwright report"
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: playwright-report-v2
           path: tests_end_to_end/e2e/playwright-report
@@ -370,7 +370,7 @@ jobs:
 
       - name: "📤 Upload test results JSON"
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results-json-v2
           path: tests_end_to_end/e2e/test-results/results.json
@@ -395,7 +395,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
