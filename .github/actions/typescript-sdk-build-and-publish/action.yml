@@ -50,7 +50,7 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
       with:
         # npm trusted publishing (OIDC) needs npm >= 11.5.1, which Node 26 bundles.
         node-version: "26"
@@ -275,7 +275,7 @@ runs:
 
     - name: Push changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
-      uses: ad-m/github-push-action@v1.3.0
+      uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1.3.0
       with:
         github_token: ${{ inputs.github_token }}
         branch: ${{ github.ref }}

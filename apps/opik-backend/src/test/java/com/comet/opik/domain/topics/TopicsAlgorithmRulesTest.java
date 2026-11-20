@@ -90,7 +90,7 @@ class TopicsAlgorithmRulesTest {
                 "Weekly Sales Summaries, false"})
         @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
         void catchAllName(String name, boolean expected) {
-            var groups = List.of(GroupSummary.builder().group(0).size(1).examples(List.of()).build());
+            var groups = List.of(GroupSummary.builder().group(0).size(1).build());
             var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(0))));
 
             var applied = AuthorApplier.apply(answer, groups, 10);
@@ -123,8 +123,8 @@ class TopicsAlgorithmRulesTest {
             assertThat(answer.topics()).extracting(AuthorTopic::name).containsExactly("A", "B");
             assertThat(answer.topics().get(0).clusters()).containsExactly(1);
             assertThat(answer.topics().get(1).clusters()).containsExactly(0);
-            var groups = IntStream.range(0, 4)
-                    .mapToObj(j -> GroupSummary.builder().group(j).size(10).examples(List.of()).build()).toList();
+            var groups = IntStream.range(0, 4).mapToObj(j -> GroupSummary.builder().group(j).size(10).build())
+                    .toList();
             assertThat(AuthorApplier.apply(answer, groups, 10).other()).containsExactly(2, 3);
         }
 
@@ -259,9 +259,9 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("the prompt lists the groups largest first with a whole-percent share and the given examples")
         void prompt() {
             var groups = List.of(
-                    GroupSummary.builder().group(0).size(10).share(0.1).examples(List.of("own")).build(),
-                    GroupSummary.builder().group(1).size(40).share(0.4).examples(List.of()).build(),
-                    GroupSummary.builder().group(2).size(0).examples(List.of()).build());
+                    GroupSummary.builder().group(0).size(10).share(0.1).build(),
+                    GroupSummary.builder().group(1).size(40).share(0.4).build(),
+                    GroupSummary.builder().group(2).size(0).build());
 
             var prompt = TopicPrompts.author(new TopicTasks().author(), groups, 10,
                     List.of(List.of("zero"), List.of("one", "uno"), List.of()));
@@ -271,8 +271,7 @@ class TopicsAlgorithmRulesTest {
                     .contains(
                             "  cluster 1: 40% of traffic\n    - one\n    - uno\n  cluster 0: 10% of traffic\n    - zero")
                     .contains("\"assignment\"")
-                    .doesNotContain("cluster 2:", "- own", "tightness", TopicTasks.CLUSTERS_PLACEHOLDER,
-                            TopicTasks.MAX_TOPICS_PLACEHOLDER);
+                    .doesNotContain("cluster 2:", TopicTasks.CLUSTERS_PLACEHOLDER, TopicTasks.MAX_TOPICS_PLACEHOLDER);
         }
     }
 
@@ -281,7 +280,7 @@ class TopicsAlgorithmRulesTest {
     class Apply {
 
         private final List<GroupSummary> groups = IntStream.range(0, 14)
-                .mapToObj(j -> GroupSummary.builder().group(j).size(100 - j).examples(List.of()).build())
+                .mapToObj(j -> GroupSummary.builder().group(j).size(100 - j).build())
                 .toList();
 
         @Test
@@ -320,7 +319,7 @@ class TopicsAlgorithmRulesTest {
                     new AuthorTopic(" B ", " b ", List.of(3)),
                     new AuthorTopic("A", "a", List.of(4, -5))));
             var flat = IntStream.range(0, 6)
-                    .mapToObj(j -> GroupSummary.builder().group(j).size(10).examples(List.of()).build()).toList();
+                    .mapToObj(j -> GroupSummary.builder().group(j).size(10).build()).toList();
             var applied = AuthorApplier.apply(answer, flat, 10);
             assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("B", "A");
             assertThat(applied.topics().getFirst().definition()).isEqualTo("b");
