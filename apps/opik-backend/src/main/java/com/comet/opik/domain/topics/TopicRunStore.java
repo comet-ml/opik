@@ -4,6 +4,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -11,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -172,23 +172,26 @@ class TopicRunStore {
     }
 
     /**
-     * Inserts the saved run's trace topics, retried up to {@code topics.build.insertRetries} times: a repeat writes the
-     * same rows, one per trace. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
+     * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted ok or failed. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
      * the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
+        var backoff = build.getInsertBackoff().toJavaDuration();
         return traceTopicsDAO.insert(traceTopics)
                 .timeout(build.getReadTimeout().toJavaDuration())
-                .retryWhen(Retry.backoff(build.getInsertRetries(), build.getInsertBackoff().toJavaDuration())
+                .retryWhen(RetryUtils.handleClickHouseErrors(build.getInsertRetries(), backoff,
+                        backoff.multipliedBy(1L << build.getInsertRetries()))
                         .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
-                                signal.totalRetries() + 2, signal.failure()))
-                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                                signal.totalRetries() + 2, signal.failure())))
                 .map(__ -> {
                     metrics.saved(run.workspaceId(), "trace_topics", traceTopics.size());
+                    metrics.traceTopicsInsert(run.workspaceId(), "ok");
                     return true;
                 })
                 .onErrorResume(exception -> {
+                    metrics.traceTopicsInsert(run.workspaceId(), "failed");
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
                     return Mono.just(false);

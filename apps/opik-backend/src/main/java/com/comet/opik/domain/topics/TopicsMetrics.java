@@ -40,6 +40,7 @@ public class TopicsMetrics {
     private final DoubleHistogram runDuration;
     private final LongCounter qwenCalls;
     private final LongCounter saveRows;
+    private final LongCounter traceTopicsInserts;
     private final DoubleHistogram otherShare;
 
     @Inject
@@ -67,6 +68,10 @@ public class TopicsMetrics {
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
+        this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
+                .setDescription("A saved run's trace_topics insert after its commit, by outcome: ok, failed (after "
+                        + "its retries; the labelling pass gives the traces their topics)")
+                .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
@@ -92,6 +97,10 @@ public class TopicsMetrics {
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
         saveRows.add(rows, workspace(workspaceId).put(TABLE, table).build());
+    }
+
+    void traceTopicsInsert(@NonNull String workspaceId, @NonNull String outcome) {
+        traceTopicsInserts.add(1, workspace(workspaceId).put(OUTCOME, outcome).build());
     }
 
     void otherShare(@NonNull String workspaceId, double share) {

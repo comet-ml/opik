@@ -26,6 +26,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
+import java.net.SocketException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -267,7 +268,7 @@ class TopicsRebuildServiceTest {
     void insertAfterCommitIsRetried() {
         var attempts = new AtomicInteger();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
-                ? Mono.error(new IllegalStateException("ClickHouse down"))
+                ? Mono.error(new SocketException("Connection reset"))
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
@@ -282,12 +283,13 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("an insert that fails after its 3 retries leaves the run saved, with no trace_topics rows counted")
+    @DisplayName("an insert whose transient error outlasts its 3 retries leaves the run saved, with no trace_topics rows "
+            + "counted and the insert counted failed")
     void insertThatKeepsFailingLeavesTheRunSaved() {
         var attempts = new AtomicInteger();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> {
             attempts.incrementAndGet();
-            return Mono.error(new IllegalStateException("ClickHouse down"));
+            return Mono.error(new SocketException("Connection reset"));
         }));
         answer(FIXTURE.answer);
 
@@ -300,6 +302,25 @@ class TopicsRebuildServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
         assertThat(meter.sum("topics.save.rows", "table", "topics")).isPositive();
+        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("an insert that fails with a permanent error is not retried and is counted failed")
+    void permanentInsertErrorIsNotRetried() {
+        var attempts = new AtomicInteger();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> {
+            attempts.incrementAndGet();
+            return Mono.error(new IllegalArgumentException("bad row"));
+        }));
+        answer(FIXTURE.answer);
+
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(attempts).hasValue(1);
+        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
+        assertThat(meter.sum("topics.trace_topics.inserts", "outcome", "ok")).isZero();
     }
 
     @Test
