@@ -96,6 +96,30 @@ export interface InsightsViewDetail extends InsightsViewRef {
   sections: InsightsViewSectionRef[];
 }
 
+/**
+ * One widget out of an insights view's stored `config`, with its `config`
+ * handed back RAW.
+ *
+ * `InsightsViewSectionRef` above reduces a widget to its title, which is all a
+ * "which widgets landed where" assertion needs. This is the other question: a
+ * spec asserting what the dashboard auto-save actually wrote into one widget —
+ * a table widget's `sorting` and `columnsWidth` — has to see the whole config
+ * object, including the parts it expects to be untouched. Reducing it would
+ * defeat the point: the failure worth catching is the auto-save dropping
+ * `rows` or `version` while storing the sort correctly, and a mapper that only
+ * kept the keys the spec names could not see that.
+ *
+ * So the config is `Record<string, unknown>` rather than a typed widget shape.
+ * It is whatever the dashboards API stored, which is the subject, and a caller
+ * compares it whole against what it seeded.
+ */
+export interface InsightsViewWidgetRef {
+  id: string;
+  type: string | null;
+  title: string | null;
+  config: Record<string, unknown>;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -2476,6 +2500,55 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ),
           })),
         };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * Every widget an insights view's stored `config` holds, in section order
+     * and then in each section's own widget order, with each config raw.
+     *
+     * The companion to `getInsightsView` above: that one answers "which widgets
+     * are in which section", this one answers "what is stored IN a widget".
+     * They are separate reads rather than one wider mapper so that neither
+     * spec pays for the other's payload — a copy-of-a-template assertion
+     * compares a dozen widget titles across three sections and never looks at a
+     * config, while an auto-save assertion compares one config in full and does
+     * not care which section it is in.
+     *
+     * Flattened across sections rather than nested, because a widget id is
+     * unique within a view: the caller already knows which widget it seeded and
+     * wants that one, not a walk down the section tree. A widget stored without
+     * a `type` or `title` comes back with null rather than being skipped — a
+     * save that dropped a widget's type is a real failure, and it must be
+     * visible as one rather than as a missing list entry.
+     *
+     * Returns null for a view that is not there, the same as `getInsightsView`,
+     * so a caller can tell "the view is gone" from "the view holds no widgets".
+     */
+    async listInsightsViewWidgets(id: string): Promise<InsightsViewWidgetRef[] | null> {
+      try {
+        const view = await withReadRetry(() => opik.api.insightsViews.getInsightsViewById(id));
+        const config = (view.config ?? {}) as {
+          sections?: Array<{
+            widgets?: Array<{
+              id?: unknown;
+              type?: unknown;
+              title?: unknown;
+              config?: unknown;
+            }>;
+          }>;
+        };
+        return (config.sections ?? []).flatMap((section) =>
+          (section.widgets ?? []).map((widget) => ({
+            id: String(widget.id ?? ''),
+            type: typeof widget.type === 'string' ? widget.type : null,
+            title: typeof widget.title === 'string' ? widget.title : null,
+            config: (widget.config ?? {}) as Record<string, unknown>,
+          })),
+        );
       } catch (err) {
         if (isNotFoundError(err)) return null;
         throw err;

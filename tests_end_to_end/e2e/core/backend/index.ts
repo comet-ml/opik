@@ -6,6 +6,7 @@ export {
   type InsightsViewRef,
   type InsightsViewSectionRef,
   type InsightsViewDetail,
+  type InsightsViewWidgetRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
