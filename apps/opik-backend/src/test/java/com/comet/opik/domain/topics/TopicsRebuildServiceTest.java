@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -95,8 +94,6 @@ class TopicsRebuildServiceTest {
         windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
-        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(Set.of(projectId)), any(), any(), anyLong()))
-                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, TRACES)));
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
         when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
@@ -171,7 +168,7 @@ class TopicsRebuildServiceTest {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertThat(meter.points("topics.qwen.calls")).singleElement().satisfies(point -> {
@@ -192,7 +189,7 @@ class TopicsRebuildServiceTest {
                 .thenReturn(Flux.error(new IllegalStateException(
                         "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("window_read");
@@ -211,7 +208,7 @@ class TopicsRebuildServiceTest {
         when(topicDAO.lockProject(anyString(), any())).thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -228,7 +225,7 @@ class TopicsRebuildServiceTest {
         when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(0);
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(topicDAO).saveList(eq(WORKSPACE_ID), eq(projectId), isNull(), eq(runId), any(), any(), any(),
@@ -249,7 +246,7 @@ class TopicsRebuildServiceTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -269,7 +266,7 @@ class TopicsRebuildServiceTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + TopicRunStore.INSERT_RETRIES);
@@ -294,7 +291,7 @@ class TopicsRebuildServiceTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicsRebuildService.Outcome outcome;
         try {
-            var run = service.firstBuild(runId, WORKSPACE_ID, projectId, night).toFuture();
+            var run = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(java.time.Duration.ofSeconds(30)).until(() -> {
                 scheduler.advanceTimeBy(java.time.Duration.ofSeconds(TopicWindowReader.READ_SECONDS));
@@ -324,7 +321,7 @@ class TopicsRebuildServiceTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicsRebuildService.Outcome outcome;
         try {
-            var run = service.firstBuild(runId, WORKSPACE_ID, projectId, night).toFuture();
+            var run = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
@@ -342,13 +339,11 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a run's stats say how many traces its window had and how many it read")
+    @DisplayName("a run's stats say how many traces its window had, as the caller counted, and how many it read")
     void statsSayWindowAndSample() throws Exception {
-        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(Set.of(projectId)), any(), any(), anyLong()))
-                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, 250_000)));
         answer(FIXTURE.answer);
 
-        var json = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block().stats();
+        var json = service.firstBuild(runId, WORKSPACE_ID, projectId, night, 250_000).block().stats();
 
         assertThat(json.get("window_traces").asLong()).isEqualTo(250_000);
         assertThat(json.get("sample_traces").asLong()).isEqualTo(TRACES);
@@ -360,7 +355,7 @@ class TopicsRebuildServiceTest {
     void otherShareIsTheSavedValue() throws Exception {
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
@@ -415,7 +410,7 @@ class TopicsRebuildServiceTest {
             return Mono.just(response(output));
         });
 
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -514,7 +509,7 @@ class TopicsRebuildServiceTest {
         };
         answer(FIXTURE.answer);
 
-        var outcome = serviceWith.apply(stub).firstBuild(runId, WORKSPACE_ID, projectId, night).block();
+        var outcome = serviceWith.apply(stub).firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         @SuppressWarnings("unchecked")

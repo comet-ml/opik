@@ -88,17 +88,18 @@ public class TopicsRebuildService {
     }
 
     /**
-     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window. The save
+     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces. The save
      * leaves the labels incomplete. Never errors: a failure is recorded on the run and returned. A run that outlasts
      * {@code topics.build.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber
      * is failed with {@code timeout} too.
      */
     public Mono<Outcome> firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull LocalDate night) {
+            @NonNull LocalDate night, long windowTraces) {
         return Mono.defer(() -> {
             var run = TopicRun.of(runId, workspaceId, projectId, night, config.getBuild().getWindowDays());
             var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-            return build(run)
+            return build(run, windowTraces)
                     .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
                             .thenReturn(built))
                     .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
@@ -109,8 +110,8 @@ public class TopicsRebuildService {
         });
     }
 
-    private Mono<Built> build(TopicRun run) {
-        return timed(run, "window", reader.read(run)).flatMap(window -> {
+    private Mono<Built> build(TopicRun run, long windowTraces) {
+        return timed(run, "window", reader.read(run, windowTraces)).flatMap(window -> {
             int n = window.texts().length;
             var stats = run.stats();
             var versionShares = stats.putObject("task_version_shares");
