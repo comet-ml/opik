@@ -2042,6 +2042,21 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Fingerprint of the stored values a bulk cost recalculation depends on. {@link #SELECT_COST_INPUTS_BY_IDS} reads
+     * it next to the cost inputs and {@link #BULK_UPDATE} recomputes it on the row it writes over, so a recalculated
+     * cost is applied only when the span hasn't changed in between (no stale cost, no overwritten manual cost).
+     */
+    private static String costInputsFingerprint(String alias) {
+        return "toString(cityHash64(%1$smodel, %1$sprovider, toString(%1$susage), toString(%1$stotal_estimated_cost), %1$stotal_estimated_cost_version, %1$smetadata))"
+                .formatted(alias);
+    }
+
+    private static final String APPLY_RECALCULATED_COST = """
+            has(:recalculated_cost_ids, toString(stored_span.id))
+                AND arrayElement(:recalculated_cost_fingerprints, indexOf(:recalculated_cost_ids, toString(stored_span.id))) = """
+            + costInputsFingerprint("stored_span.");
+
     /** The {@code spans} read carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String BULK_UPDATE = """
             INSERT INTO spans (
@@ -2090,12 +2105,18 @@ public class SpanDAO {
                 <if(model)> :model <else> stored_span.model <endif> as model,
                 <if(provider)> :provider <else> stored_span.provider <endif> as provider,
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12)
-                <elseif(recalculated_cost)> if(has(:recalculated_cost_ids, toString(stored_span.id)), toDecimal128(arrayElement(:recalculated_costs, indexOf(:recalculated_cost_ids, toString(stored_span.id))), 12), stored_span.total_estimated_cost)
-                <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
-                <if(total_estimated_cost_version)> :total_estimated_cost_version
-                <elseif(recalculated_cost)> if(has(:recalculated_cost_ids, toString(stored_span.id)), :recalculated_cost_version, stored_span.total_estimated_cost_version)
-                <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
-                """
+                <elseif(recalculated_cost)> if("""
+            + APPLY_RECALCULATED_COST
+            + """
+                    , toDecimal128(arrayElement(:recalculated_costs, indexOf(:recalculated_cost_ids, toString(stored_span.id))), 12), stored_span.total_estimated_cost)
+                    <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
+                    <if(total_estimated_cost_version)> :total_estimated_cost_version
+                    <elseif(recalculated_cost)> if("""
+            + APPLY_RECALCULATED_COST
+            + """
+                    , :recalculated_cost_version, stored_span.total_estimated_cost_version)
+                    <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                    """
             + TagOperations.tagUpdateFragment("stored_span.tags")
             + """
                         as tags,
@@ -2134,15 +2155,20 @@ public class SpanDAO {
                 provider,
                 usage,
                 total_estimated_cost,
-                total_estimated_cost_version
-            FROM spans
-            WHERE id IN :ids AND workspace_id = :workspace_id
-            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                total_estimated_cost_version,
+                metadata,
+                """
+            + costInputsFingerprint("")
+            + """
+                        AS cost_inputs_fingerprint
+                    FROM spans
+                    WHERE id IN :ids AND workspace_id = :workspace_id
+                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    SETTINGS log_comment = '<log_comment>'
+                    ;
+                    """;
 
     // ESTIMATED COST CHANGE
     // 1.1 - Added cached tokens for OpenAI
@@ -3631,13 +3657,19 @@ public class SpanDAO {
                 .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
     }
 
+    /** A recalculated cost and the fingerprint of the stored cost inputs it was priced from. */
+    private record RecalculatedCost(BigDecimal cost, String costInputsFingerprint) {
+    }
+
     /**
      * Mirrors the single-span {@link #update(UUID, SpanUpdate, Connection, Span)} cost logic for a bulk update. When
      * the update changes model, provider or usage and carries no explicit cost, each span is priced on its merged
-     * model, provider and usage (the update's value, else the stored one). Spans with a manually set cost, and spans
-     * the merged inputs don't price, keep their stored cost. Returns the new cost per span id.
+     * model, provider, usage and metadata (the update's value, else the stored one; a blank model falls back to
+     * {@code metadata.model} as on insert). Spans with a manually set cost, and spans the merged inputs don't price,
+     * keep their stored cost. Returns the new cost per span id, with the fingerprint {@link #BULK_UPDATE} checks so
+     * the cost is only written if the stored span is unchanged.
      */
-    private Mono<Map<UUID, BigDecimal>> getRecalculatedCosts(Set<UUID> ids, SpanUpdate update) {
+    private Mono<Map<UUID, RecalculatedCost>> getRecalculatedCosts(Set<UUID> ids, SpanUpdate update) {
         if (update.totalEstimatedCost() != null
                 || (update.model() == null && update.provider() == null && update.usage() == null)) {
             return Mono.just(Map.of());
@@ -3659,29 +3691,42 @@ public class SpanDAO {
                     return Flux.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment));
                 }))
-                .flatMap(result -> result.map((row, rowMetadata) -> Span.builder()
-                        .id(row.get("id", UUID.class))
-                        .model(StringUtils.defaultIfBlank(row.get("model", String.class), null))
-                        .provider(StringUtils.defaultIfBlank(row.get("provider", String.class), null))
-                        .usage(UsageUtils.toIntegerUsage(row.get("usage", Map.class)))
-                        .totalEstimatedCost(Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
-                                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                                .orElse(null))
-                        .totalEstimatedCostVersion(StringUtils.defaultIfBlank(
-                                row.get("total_estimated_cost_version", String.class), null))
-                        .build()))
-                .filter(storedSpan -> !isManualCost(storedSpan))
-                .collectMap(Span::id, storedSpan -> CostService.calculateCost(
-                        update.model() != null ? update.model() : storedSpan.model(),
-                        update.provider() != null ? update.provider() : storedSpan.provider(),
-                        update.usage() != null ? update.usage() : storedSpan.usage(),
-                        update.metadata()))
+                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                        row.get("cost_inputs_fingerprint", String.class),
+                        Span.builder()
+                                .id(row.get("id", UUID.class))
+                                .model(StringUtils.defaultIfBlank(row.get("model", String.class), null))
+                                .provider(StringUtils.defaultIfBlank(row.get("provider", String.class), null))
+                                .usage(UsageUtils.toIntegerUsage(row.get("usage", Map.class)))
+                                .metadata(Optional.ofNullable(row.get("metadata", String.class))
+                                        .filter(StringUtils::isNotBlank)
+                                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                                        .orElse(null))
+                                .totalEstimatedCost(
+                                        Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                                                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                                                .orElse(null))
+                                .totalEstimatedCostVersion(StringUtils.defaultIfBlank(
+                                        row.get("total_estimated_cost_version", String.class), null))
+                                .build())))
+                .filter(stored -> !isManualCost(stored.getValue()))
+                .collectMap(stored -> stored.getValue().id(), stored -> new RecalculatedCost(
+                        calculateCost(mergeCostInputs(stored.getValue(), update)), stored.getKey()))
                 .map(costs -> costs.entrySet().stream()
-                        .filter(entry -> entry.getValue().compareTo(BigDecimal.ZERO) > 0)
+                        .filter(entry -> entry.getValue().cost().compareTo(BigDecimal.ZERO) > 0)
                         .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
-    private static void bindRecalculatedCosts(Statement statement, Map<UUID, BigDecimal> recalculatedCosts) {
+    private static Span mergeCostInputs(Span storedSpan, SpanUpdate update) {
+        return storedSpan.toBuilder()
+                .model(update.model() != null ? update.model() : storedSpan.model())
+                .provider(update.provider() != null ? update.provider() : storedSpan.provider())
+                .usage(update.usage() != null ? update.usage() : storedSpan.usage())
+                .metadata(update.metadata() != null ? update.metadata() : storedSpan.metadata())
+                .build();
+    }
+
+    private static void bindRecalculatedCosts(Statement statement, Map<UUID, RecalculatedCost> recalculatedCosts) {
         if (recalculatedCosts.isEmpty()) {
             return;
         }
@@ -3690,7 +3735,10 @@ public class SpanDAO {
                 .map(entry -> entry.getKey().toString())
                 .toArray(String[]::new));
         statement.bind("recalculated_costs", entries.stream()
-                .map(entry -> entry.getValue().toPlainString())
+                .map(entry -> entry.getValue().cost().toPlainString())
+                .toArray(String[]::new));
+        statement.bind("recalculated_cost_fingerprints", entries.stream()
+                .map(entry -> entry.getValue().costInputsFingerprint())
                 .toArray(String[]::new));
         statement.bind("recalculated_cost_version", ESTIMATED_COST_VERSION);
     }

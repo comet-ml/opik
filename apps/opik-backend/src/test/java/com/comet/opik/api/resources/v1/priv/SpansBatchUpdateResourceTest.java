@@ -20,7 +20,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -428,6 +427,9 @@ class SpansBatchUpdateResourceTest {
         private static final Map<String, Integer> USAGE = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
         private static final Map<String, Integer> NEW_USAGE = Map.of("prompt_tokens", 4000, "completion_tokens",
                 2000);
+        // gpt-4o-2024-05-13 list price: $5 per 1M input tokens, $15 per 1M output tokens.
+        private static final BigDecimal USAGE_COST = new BigDecimal("0.0125");
+        private static final BigDecimal NEW_USAGE_COST = new BigDecimal("0.05");
         private static final String ESTIMATED_COST_VERSION = "1.1";
 
         private UUID traceId;
@@ -442,11 +444,16 @@ class SpansBatchUpdateResourceTest {
         }
 
         private UUID createSpan(String model, String provider, Map<String, Integer> usage, BigDecimal manualCost) {
+            return createSpan(model, provider, usage, manualCost, null);
+        }
+
+        private UUID createSpan(String model, String provider, Map<String, Integer> usage, BigDecimal manualCost,
+                JsonNode metadata) {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .traceId(traceId)
                     .parentSpanId(null)
-                    .metadata(null)
+                    .metadata(metadata)
                     .model(model)
                     .provider(provider)
                     .usage(usage)
@@ -467,36 +474,29 @@ class SpansBatchUpdateResourceTest {
                     .build(), API_KEY, TEST_WORKSPACE);
         }
 
-        private static BigDecimal expectedCost(String model, String provider, Map<String, Integer> usage) {
-            var cost = CostService.calculateCost(model, provider, usage, null);
-            assertThat(cost).as("fixture must be priceable").isGreaterThan(BigDecimal.ZERO);
-            return cost;
-        }
-
         Stream<Arguments> recalculateCostTestCases() {
             return Stream.of(
                     Arguments.of("an unpriced span gets model, provider and usage",
                             null, null, null,
                             SpanUpdate.builder().model(MODEL).provider(PROVIDER).usage(USAGE).build(),
-                            MODEL, PROVIDER, USAGE),
+                            MODEL, PROVIDER, USAGE, USAGE_COST),
                     Arguments.of("an unpriced model is corrected with the model only",
                             UNPRICED_MODEL, PROVIDER, USAGE,
                             SpanUpdate.builder().model(MODEL).build(),
-                            MODEL, PROVIDER, USAGE),
+                            MODEL, PROVIDER, USAGE, USAGE_COST),
                     Arguments.of("an auto-priced span gets new usage only",
                             MODEL, PROVIDER, USAGE,
                             SpanUpdate.builder().usage(NEW_USAGE).build(),
-                            MODEL, PROVIDER, NEW_USAGE));
+                            MODEL, PROVIDER, NEW_USAGE, NEW_USAGE_COST));
         }
 
         @ParameterizedTest(name = "Success: batch update recalculates the estimated cost when {0}")
         @MethodSource("recalculateCostTestCases")
         void batchUpdate__whenPricingFieldsChange__thenRecalculateCost(String scenario, String storedModel,
                 String storedProvider, Map<String, Integer> storedUsage, SpanUpdate update, String expectedModel,
-                String expectedProvider, Map<String, Integer> expectedUsage) {
+                String expectedProvider, Map<String, Integer> expectedUsage, BigDecimal expectedCost) {
             var id = createSpan(storedModel, storedProvider, storedUsage, null);
             var costBefore = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).totalEstimatedCost();
-            var expectedCost = expectedCost(expectedModel, expectedProvider, expectedUsage);
             assertThat(costBefore).as("the update must change the cost").isNotEqualTo(expectedCost);
 
             batchUpdate(Set.of(id), update);
@@ -526,8 +526,24 @@ class SpansBatchUpdateResourceTest {
 
             var priced = spanResourceClient.getById(unpricedId, TEST_WORKSPACE, API_KEY);
             assertThat(priced.model()).isEqualTo(MODEL);
-            assertThat(priced.totalEstimatedCost()).isEqualByComparingTo(expectedCost(MODEL, PROVIDER, USAGE));
+            assertThat(priced.totalEstimatedCost()).isEqualByComparingTo(USAGE_COST);
             assertThat(priced.totalEstimatedCostVersion()).isEqualTo(ESTIMATED_COST_VERSION);
+        }
+
+        @Test
+        @DisplayName("Success: batch update prices a span whose model is only in its stored metadata")
+        void batchUpdate__whenModelIsOnlyInStoredMetadata__thenRecalculateCostFromMetadataModel() {
+            var metadata = JsonUtils.getJsonNodeFromString("{\"model\": \"" + MODEL + "\"}");
+            var id = createSpan(null, PROVIDER, null, null, metadata);
+            var costBefore = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).totalEstimatedCost();
+            assertThat(costBefore).as("the update must change the cost").isNotEqualTo(USAGE_COST);
+
+            batchUpdate(Set.of(id), SpanUpdate.builder().usage(USAGE).build());
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.usage()).isEqualTo(USAGE);
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(USAGE_COST);
+            assertThat(actual.totalEstimatedCostVersion()).isEqualTo(ESTIMATED_COST_VERSION);
         }
 
         @Test
