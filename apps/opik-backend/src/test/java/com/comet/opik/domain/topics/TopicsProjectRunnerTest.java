@@ -32,8 +32,7 @@ class TopicsProjectRunnerTest {
         when(lockService.lockUsingToken(eq(lock), any())).thenReturn(reply.asMono());
         when(lockService.unlockUsingToken(lock)).thenReturn(Mono.empty());
         var runner = new TopicsProjectRunner(TestConfigUtils.loadConfigTest().getTopics(),
-                mock(TransactionTemplate.class), mock(TopicsRebuildService.class), mock(TopicsMetrics.class),
-                lockService);
+                mock(TransactionTemplate.class), mock(TopicsRebuildService.class), lockService);
         runner.lockWait = Duration.ofMillis(50);
 
         assertThatThrownBy(() -> runner.lockByHand(lock)).isInstanceOf(ServiceUnavailableException.class);

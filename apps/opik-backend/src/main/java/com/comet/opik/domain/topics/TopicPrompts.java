@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
@@ -18,28 +18,17 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * The Qwen prompts: the templates under {@code topics/prompts/} with their placeholders filled in. Numbers use the
- * fixed formats of {@link TopicText}, so the same groups always give the same prompt text.
+ * Fills the placeholders of the {@link TopicTasks} prompts and of the nightly update's prompts in
+ * {@code topics/prompts}. Numbers use the fixed formats of {@link TopicText}, so the
+ * same groups always give the same prompt text.
  */
 @UtilityClass
 public class TopicPrompts {
 
-    private static final String AUTHOR = load("author_v2.md");
     private static final String VERIFY = load("verify_batch.md");
     private static final String NAMING_GROUP = load("naming_group.md");
     private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
-
-    public static final JsonNode AUTHOR_SCHEMA = parse("""
-            {"type": "object", "properties": {
-              "topics": {"type": "array", "items": {"type": "object", "properties": {
-                "name": {"type": "string"}, "definition": {"type": "string"}},
-                "required": ["name", "definition"]}},
-              "assignment": {"type": "array", "items": {"type": "object", "properties": {
-                "cluster": {"type": "integer"}, "topic": {"type": "integer"}},
-                "required": ["cluster", "topic"]}}},
-             "required": ["topics", "assignment"]}
-            """);
 
     public static final JsonNode VERIFY_SCHEMA = parse("""
             {"type": "object", "properties": {
@@ -76,9 +65,10 @@ public class TopicPrompts {
      * The author prompt: the groups largest first (ties by group id), empty ones left out, each with its share as a
      * whole percent and its examples.
      *
+     * @param task     {@link TopicTasks#author()}
      * @param examples per group index, {@link GroupSummaries#authorExamples}
      */
-    public static String author(@NonNull List<GroupSummary> groups, int maxTopics,
+    public static String author(@NonNull AiLabelTask task, @NonNull List<GroupSummary> groups, int maxTopics,
             @NonNull List<List<String>> examples) {
         var body = groups.stream()
                 .filter(group -> group.size() > 0)
@@ -87,7 +77,9 @@ public class TopicPrompts {
                         + examples.get(group.group()).stream().map(example -> "    - " + example)
                                 .collect(Collectors.joining("\n")))
                 .collect(Collectors.joining("\n"));
-        return AUTHOR.replace("{max_topics}", String.valueOf(maxTopics)).replace("{clusters}", body);
+        return task.prompt().user()
+                .replace(TopicTasks.MAX_TOPICS_PLACEHOLDER, String.valueOf(maxTopics))
+                .replace(TopicTasks.CLUSTERS_PLACEHOLDER, body);
     }
 
     /** The batched verify prompt: per pair the topic's first 3 examples and the group's first 5. */

@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -38,6 +38,6 @@ public class NightInvariants {
     }
 
     private static TopicsRunException invariant(String message) {
-        return new TopicsRunException(Code.INVARIANT, message);
+        return new TopicsRunException(RunError.INVARIANT, message);
     }
 }

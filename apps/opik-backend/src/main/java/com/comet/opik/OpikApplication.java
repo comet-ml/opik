@@ -87,9 +87,17 @@ public class OpikApplication extends Application<OpikConfiguration> {
         return "Opik";
     }
 
+    /**
+     * Fills {@code ${VAR:-default}} in the config from the environment. Substitution in variables lets a default be
+     * another variable, {@code ${NEW_NAME:-${OLD_NAME:-}}}, so a renamed variable can fall back to its old name.
+     */
+    public static EnvironmentVariableSubstitutor newSubstitutor() {
+        return new EnvironmentVariableSubstitutor(false, true);
+    }
+
     @Override
     public void initialize(Bootstrap<OpikConfiguration> bootstrap) {
-        var substitutor = new EnvironmentVariableSubstitutor(false);
+        var substitutor = newSubstitutor();
         var provider = new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(), substitutor);
         bootstrap.setConfigurationSourceProvider(provider);
         bootstrap.addBundle(new MultiPartBundle());

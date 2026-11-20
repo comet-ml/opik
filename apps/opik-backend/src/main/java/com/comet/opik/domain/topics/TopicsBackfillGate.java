@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -22,23 +23,23 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * The first build's gate: a project's first list waits until the topic vectors backfill of that project has drained,
- * so the list is not built from the part of the window that has vectors so far. Read from
- * {@code topic_vector_backfills}, which only the vectors tick writes: one MySQL read for all the workspaces asked, and
- * no ClickHouse read. Nothing is kept between reads.
+ * so the list is not built from the part of the window that has vectors so far. Read from the {@code backfill_*}
+ * columns of {@code topic_projects} and {@code topic_workspaces.vectors_checked_at}, which only the vectors tick writes:
+ * two MySQL reads for all the workspaces asked, and no ClickHouse read. Nothing is kept between reads. A workspace is
+ * fresh when the tick checked it within twice {@code topics.vectors.longWindowInterval}: the tick still runs for it.
  *
- * <p>A project's state, from its row:
+ * <p>A project's state, from its backfill:
  * <ul>
- * <li>{@link State#OPEN}: the row is drained, and checked within twice {@code topics.vectors.longWindowInterval}, so
- * the tick still runs for the workspace.</li>
+ * <li>{@link State#OPEN}: the backfill is drained, and its workspace is fresh.</li>
  * <li>{@link State#TIMED_OUT_OPEN}: not so, but the backfill started more than
  * {@code topics.firstBuild.backfillMaxWait} ago and at least {@link #TIMED_OUT_SHARE} of its traces have a vector.</li>
  * <li>{@link State#TIMED_OUT_WAITING}: the backfill started more than {@code backfillMaxWait} ago and fewer have one,
  * or none is counted: a list is never built from clearly partial data, and an operator is told.</li>
  * <li>{@link State#WAITING}: any other row.</li>
  * </ul>
- * A project with no row is open when its workspace has a row checked within twice the interval: the tick has seen the
- * workspace, and gives a row to every project it finds done statuses of, so it found none to backfill for this one.
- * With no such row in the workspace, the tick has not seen it yet, and the project waits.
+ * A project with no backfill is open when its workspace is fresh: the tick has seen the workspace, and starts a
+ * backfill for every project it finds done statuses of, so it found none to backfill for this one. When the workspace
+ * is not fresh, the tick has not seen it lately, and the project waits.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -63,53 +64,63 @@ public class TopicsBackfillGate {
         private final boolean open;
     }
 
-    /** The backfill rows of some workspaces as read at {@code now}, by workspace and project. */
+    /**
+     * The backfills of some workspaces as read at {@code now}, by workspace and project, and the time the tick last
+     * checked each workspace.
+     */
     @Builder(toBuilder = true)
     public record Gate(@NonNull Instant now, @NonNull Instant freshSince, @NonNull Duration maxWait,
-            @NonNull Map<String, Map<UUID, TopicVectorBackfill>> rows) {
+            @NonNull Map<String, Map<UUID, TopicVectorBackfillDAO.Backfill>> backfills,
+            @NonNull Map<String, Instant> checkedAt) {
 
         public State state(@NonNull String workspaceId, @NonNull UUID projectId) {
-            var workspace = rows.getOrDefault(workspaceId, Map.of());
-            var row = workspace.get(projectId);
-            if (row == null) {
-                return workspace.values().stream().anyMatch(this::fresh) ? State.OPEN : State.WAITING;
+            boolean fresh = Optional.ofNullable(checkedAt.get(workspaceId)).filter(at -> !at.isBefore(freshSince))
+                    .isPresent();
+            var backfill = backfills.getOrDefault(workspaceId, Map.of()).get(projectId);
+            if (backfill == null) {
+                return fresh ? State.OPEN : State.WAITING;
             }
-            if (row.drainedAt() != null && fresh(row)) {
+            if (backfill.backfillDrainedAt() != null && fresh) {
                 return State.OPEN;
             }
-            if (Duration.between(row.startedAt(), now).compareTo(maxWait) <= 0) {
+            if (Duration.between(backfill.backfillStartedAt(), now).compareTo(maxWait) <= 0) {
                 return State.WAITING;
             }
-            return row.tracesTotal() > 0 && row.tracesDone() >= TIMED_OUT_SHARE * row.tracesTotal()
-                    ? State.TIMED_OUT_OPEN
-                    : State.TIMED_OUT_WAITING;
+            return backfill.backfillTracesTotal() > 0
+                    && backfill.backfillTracesDone() >= TIMED_OUT_SHARE * backfill.backfillTracesTotal()
+                            ? State.TIMED_OUT_OPEN
+                            : State.TIMED_OUT_WAITING;
         }
 
-        /** How long the project's backfill has run: zero for a project with no row, which has no start. */
+        /** How long the project's backfill has run: zero for a project with none, which has no start. */
         public Duration waited(@NonNull String workspaceId, @NonNull UUID projectId) {
-            var row = rows.getOrDefault(workspaceId, Map.of()).get(projectId);
-            return row == null || row.startedAt().isAfter(now) ? Duration.ZERO : Duration.between(row.startedAt(), now);
-        }
-
-        private boolean fresh(TopicVectorBackfill row) {
-            return !row.checkedAt().isBefore(freshSince);
+            var backfill = backfills.getOrDefault(workspaceId, Map.of()).get(projectId);
+            return backfill == null || backfill.backfillStartedAt().isAfter(now)
+                    ? Duration.ZERO
+                    : Duration.between(backfill.backfillStartedAt(), now);
         }
     }
 
     public Gate read(@NonNull Collection<String> workspaceIds, @NonNull Instant now) {
-        Map<String, Map<UUID, TopicVectorBackfill>> rows = workspaceIds.isEmpty()
-                ? Map.of()
-                : template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(TopicVectorBackfillDAO.class).findByWorkspaceIds(workspaceIds))
-                        .stream()
-                        .collect(Collectors.groupingBy(TopicVectorBackfill::workspaceId,
-                                Collectors.toMap(TopicVectorBackfill::projectId, Function.identity())));
         var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
-        return Gate.builder()
+        var gate = Gate.builder()
                 .now(now)
                 .freshSince(now.minus(interval.multipliedBy(2)))
-                .maxWait(config.getFirstBuild().getBackfillMaxWait().toJavaDuration())
-                .rows(rows)
-                .build();
+                .maxWait(config.getFirstBuild().getBackfillMaxWait().toJavaDuration());
+        if (workspaceIds.isEmpty()) {
+            return gate.backfills(Map.of()).checkedAt(Map.of()).build();
+        }
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(TopicVectorBackfillDAO.class);
+            return gate
+                    .backfills(dao.findByWorkspaceIds(workspaceIds).stream()
+                            .collect(Collectors.groupingBy(TopicVectorBackfillDAO.Backfill::workspaceId,
+                                    Collectors.toMap(TopicVectorBackfillDAO.Backfill::projectId,
+                                            Function.identity()))))
+                    .checkedAt(dao.findWorkspaces(workspaceIds).stream()
+                            .collect(Collectors.toMap(TopicVectorBackfillDAO.Workspace::workspaceId,
+                                    TopicVectorBackfillDAO.Workspace::vectorsCheckedAt)))
+                    .build();
+        });
     }
 }

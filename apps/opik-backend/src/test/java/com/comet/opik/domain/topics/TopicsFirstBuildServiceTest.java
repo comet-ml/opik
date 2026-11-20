@@ -33,8 +33,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,9 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -77,58 +78,59 @@ class TopicsFirstBuildServiceTest {
 
     private TopicsTestMeter meter;
     private TopicWorkspaceService workspaceService;
-    private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
     private final List<TopicDAO.ProjectKey> listless = new ArrayList<>();
     private final Map<UUID, Long> vectors = new HashMap<>();
-    private final List<TopicRunDAO.FirstBuildFailures> failures = new ArrayList<>();
+    /** The projects' {@code topic_projects} rows, as {@code findProjects} reads them. */
+    private final Map<UUID, TopicProject> rows = new ConcurrentHashMap<>();
     private final Set<UUID> withList = Collections.synchronizedSet(new HashSet<>());
     private TopicVectorBackfillDAO backfillDAO;
-    private final List<TopicVectorBackfill> backfills = new ArrayList<>();
+    private final List<TopicVectorBackfillDAO.Backfill> backfills = new ArrayList<>();
+    private final Set<String> checkedWorkspaces = new HashSet<>();
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
     private TopicWindowLabelService labelService;
     private final List<TopicDAO.ProjectKey> unlabelled = new ArrayList<>();
     private LockService lockService;
     private TopicsConfig config;
-    private TopicsFirstBuildService service;
     private TopicsProjectRunner runner;
+    private TopicsFirstBuildService service;
 
     @BeforeEach
     void setUp() {
         meter = new TopicsTestMeter();
         workspaceService = mock(TopicWorkspaceService.class);
-        runDAO = mock(TopicRunDAO.class);
         topicDAO = mock(TopicDAO.class);
         var handle = mock(Handle.class);
-        when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
-        // The vectors tick has seen both workspaces and found no backlog: one drained row each, of another project,
-        // so a project with no row of its own is open.
+        // The vectors tick has just checked both workspaces, so a project with no backfill of its own is open.
         backfillDAO = mock(TopicVectorBackfillDAO.class);
         when(handle.attach(TopicVectorBackfillDAO.class)).thenReturn(backfillDAO);
-        backfills.add(backfill(WORKSPACE_ID, UUID.randomUUID()).drainedAt(Instant.now()).build());
-        backfills.add(backfill(OTHER_WORKSPACE_ID, UUID.randomUUID()).drainedAt(Instant.now()).build());
+        checkedWorkspaces.addAll(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
         when(backfillDAO.findByWorkspaceIds(any())).thenAnswer(invocation -> backfills.stream()
                 .filter(row -> invocation.<Collection<String>>getArgument(0).contains(row.workspaceId())).toList());
+        when(backfillDAO.findWorkspaces(any())).thenAnswer(invocation -> checkedWorkspaces.stream()
+                .filter(invocation.<Collection<String>>getArgument(0)::contains)
+                .map(workspaceId -> TopicVectorBackfillDAO.Workspace.builder().workspaceId(workspaceId)
+                        .vectorsCheckedAt(Instant.now()).build())
+                .toList());
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
 
-        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
-        when(workspaceService.isEligible(WORKSPACE_ID)).thenReturn(true);
-        when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
+        when(workspaceService.enabledWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+        when(workspaceService.isEnabled(WORKSPACE_ID)).thenReturn(true);
         when(topicDAO.findListlessProjects(any(), any())).thenAnswer(invocation -> listless.stream()
                 .filter(key -> invocation.<Collection<String>>getArgument(0).contains(key.workspaceId())).toList());
         when(topicDAO.findLabelsIncomplete(any())).thenAnswer(invocation -> unlabelled.stream()
                 .filter(key -> invocation.<Collection<String>>getArgument(0).contains(key.workspaceId())).toList());
-        when(topicDAO.findStates(anyString(), any())).thenAnswer(invocation -> invocation
-                .<Collection<UUID>>getArgument(1).stream().filter(withList::contains)
-                .map(projectId -> TopicProjectState.builder().projectId(projectId)
-                        .workspaceId(invocation.getArgument(0)).build())
-                .toList());
-        when(runDAO.findFirstBuildFailures(anyString(), any())).thenAnswer(invocation -> failures.stream()
-                .filter(failure -> invocation.<Collection<UUID>>getArgument(1).contains(failure.projectId()))
+        when(topicDAO.findProjects(anyString(), any())).thenAnswer(invocation -> invocation
+                .<Collection<UUID>>getArgument(1).stream()
+                .map(projectId -> withList.contains(projectId)
+                        ? Optional.ofNullable(rows.get(projectId)).orElseGet(() -> row(projectId).build())
+                                .toBuilder().listRunId(UUID.randomUUID()).build()
+                        : rows.get(projectId))
+                .filter(Objects::nonNull)
                 .toList());
         windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.countByProject(anyString(), any(), any(), any(), anyLong())).thenAnswer(invocation -> Flux
@@ -141,10 +143,10 @@ class TopicsFirstBuildServiceTest {
         when(lockService.unlockUsingToken(any())).thenReturn(Mono.empty());
 
         rebuildService = mock(TopicsRebuildService.class);
-        when(rebuildService.startRun(anyString(), any(), any())).thenAnswer(invocation -> UUID.randomUUID());
+        when(rebuildService.startRun(anyString(), any(), any(), any())).thenAnswer(invocation -> UUID.randomUUID());
         when(rebuildService.firstBuild(any(), anyString(), any(), any()))
                 .thenAnswer(invocation -> TopicsRebuildService.Outcome.builder().runId(invocation.getArgument(0))
-                        .status(TopicRun.Status.SAVED).build());
+                        .status(TopicProject.RunStatus.SAVED).build());
 
         labelService = mock(TopicWindowLabelService.class);
         when(labelService.labelWindow(anyString(), any(), any(), any()))
@@ -152,7 +154,7 @@ class TopicsFirstBuildServiceTest {
 
         config = TestConfigUtils.loadConfigTest().getTopics();
         var metrics = new TopicsMetrics(meter.meter);
-        runner = spy(new TopicsProjectRunner(config, template, rebuildService, metrics, lockService));
+        runner = spy(new TopicsProjectRunner(config, template, rebuildService, lockService));
         service = new TopicsFirstBuildService(config, template, workspaceService, windowDAO, rebuildService, runner,
                 metrics, new TopicsBackfillGate(config, template), labelService);
     }
@@ -168,7 +170,7 @@ class TopicsFirstBuildServiceTest {
         var tiedHigh = new UUID(0, 2);
         var broken = UUID.randomUUID();
         var besideBroken = UUID.randomUUID();
-        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID, "ws-3"));
+        when(workspaceService.enabledWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID, "ws-3"));
         project(WORKSPACE_ID, small, 99);
         project(WORKSPACE_ID, tiedHigh, 100);
         project(WORKSPACE_ID, largest, 500);
@@ -176,7 +178,7 @@ class TopicsFirstBuildServiceTest {
         project(OTHER_WORKSPACE_ID, otherWorkspace, 300);
         project("ws-3", broken, 900);
         project("ws-3", besideBroken, 200);
-        backfills.add(backfill("ws-3", UUID.randomUUID()).drainedAt(Instant.now()).build());
+        checkedWorkspaces.add("ws-3");
         when(windowDAO.countByProject(eq("ws-3"), argThat(ids -> ids.contains(broken)), any(), any(), anyLong()))
                 .thenReturn(Flux.error(new IllegalStateException("ClickHouse guard tripped")));
 
@@ -203,7 +205,7 @@ class TopicsFirstBuildServiceTest {
         service.run(START);
 
         verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
-        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(rebuildService, never()).startRun(any(), any(), any(), any());
     }
 
     @Test
@@ -221,7 +223,7 @@ class TopicsFirstBuildServiceTest {
         var twiceDue = failed(2, Duration.ofHours(7), Duration.ofHours(9));
         failed(5, Duration.ofHours(23), Duration.ofDays(4));
         var oftenDue = failed(5, Duration.ofHours(25), Duration.ofDays(5));
-        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
+        when(workspaceService.enabledWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
 
         assertThat(service.candidates(NIGHT, START)).extracting(TopicsFirstBuildService.Candidate::projectId)
                 .containsExactlyInAnyOrder(onceDue, twiceDue, oftenDue);
@@ -229,6 +231,21 @@ class TopicsFirstBuildServiceTest {
         assertThat(meter.observe(TopicsMetrics.FIRST_BUILD_WAITING))
                 .extracting(point -> point.get("workspace_id"), TopicsTestMeter.Point::value)
                 .containsExactlyInAnyOrder(tuple(WORKSPACE_ID, 2.0), tuple(OTHER_WORKSPACE_ID, 0.0));
+    }
+
+    @Test
+    @DisplayName("an attempt left running past a lock's lease counts as a failed build that ended at its start; one "
+            + "still within the lease is no failure")
+    void abandonedAttemptCountsAsAFailure() {
+        var lease = runner.projectLease();
+        assertThat(lease).isLessThan(Duration.ofMinutes(50));
+        var live = running(lease.minusMinutes(1));
+        var abandonedWaits = running(Duration.ofMinutes(50));
+        var abandonedDue = running(Duration.ofMinutes(70));
+
+        assertThat(service.candidates(NIGHT, START)).extracting(TopicsFirstBuildService.Candidate::projectId)
+                .containsExactlyInAnyOrder(live, abandonedDue)
+                .doesNotContain(abandonedWaits);
     }
 
     @Test
@@ -241,9 +258,9 @@ class TopicsFirstBuildServiceTest {
         project(WORKSPACE_ID, waiting, 2300);
         project(WORKSPACE_ID, drained, 400);
         project(WORKSPACE_ID, noRow, 150);
-        backfills.add(backfill(WORKSPACE_ID, waiting).startedAt(START.minus(Duration.ofHours(5)))
-                .tracesTotal(90_000).tracesDone(2300).build());
-        backfills.add(backfill(WORKSPACE_ID, drained).drainedAt(START).build());
+        backfills.add(backfill(WORKSPACE_ID, waiting).backfillStartedAt(START.minus(Duration.ofHours(5)))
+                .backfillTracesTotal(90_000).backfillTracesDone(2300).build());
+        backfills.add(backfill(WORKSPACE_ID, drained).backfillDrainedAt(START).build());
 
         assertThat(service.candidates(NIGHT, START)).extracting(TopicsFirstBuildService.Candidate::projectId)
                 .containsExactly(drained, noRow);
@@ -260,8 +277,8 @@ class TopicsFirstBuildServiceTest {
         });
 
         backfills.removeIf(row -> row.projectId().equals(waiting));
-        backfills.add(backfill(WORKSPACE_ID, waiting).drainedAt(START).tracesTotal(90_000).tracesDone(88_000)
-                .build());
+        backfills.add(backfill(WORKSPACE_ID, waiting).backfillDrainedAt(START).backfillTracesTotal(90_000)
+                .backfillTracesDone(88_000).build());
 
         assertThat(service.candidates(NIGHT, START)).extracting(TopicsFirstBuildService.Candidate::projectId)
                 .containsExactly(waiting, drained, noRow);
@@ -279,11 +296,11 @@ class TopicsFirstBuildServiceTest {
         project(WORKSPACE_ID, nearlyDone, 990);
         project(WORKSPACE_ID, stuck, 500);
         project(WORKSPACE_ID, stuckToo, 300);
-        backfills.add(backfill(WORKSPACE_ID, nearlyDone).startedAt(START.minus(Duration.ofHours(80)))
-                .tracesTotal(1000).tracesDone(990).build());
-        backfills.add(backfill(WORKSPACE_ID, stuck).startedAt(START.minus(Duration.ofHours(90)))
-                .tracesTotal(1000).tracesDone(500).build());
-        backfills.add(backfill(WORKSPACE_ID, stuckToo).startedAt(START.minus(Duration.ofHours(75))).build());
+        backfills.add(backfill(WORKSPACE_ID, nearlyDone).backfillStartedAt(START.minus(Duration.ofHours(80)))
+                .backfillTracesTotal(1000).backfillTracesDone(990).build());
+        backfills.add(backfill(WORKSPACE_ID, stuck).backfillStartedAt(START.minus(Duration.ofHours(90)))
+                .backfillTracesTotal(1000).backfillTracesDone(500).build());
+        backfills.add(backfill(WORKSPACE_ID, stuckToo).backfillStartedAt(START.minus(Duration.ofHours(75))).build());
         var appender = new ListAppender<ILoggingEvent>();
         var logger = (Logger) LoggerFactory.getLogger(TopicsFirstBuildService.class);
         appender.start();
@@ -307,17 +324,22 @@ class TopicsFirstBuildServiceTest {
 
     @Test
     @DisplayName("a run builds the drained projects after a gated one: the gated project starts no run and does not "
-            + "stop the run")
+            + "stop the run; a start records an attempt left running for longer than a lock's lease")
     void runsPastAGatedProject() {
         var gated = UUID.randomUUID();
         project(WORKSPACE_ID, gated, 5000);
         project(WORKSPACE_ID, started, 140);
         backfills.add(backfill(WORKSPACE_ID, gated).build());
+        var before = Instant.now();
 
         service.run(START);
 
-        verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
-        verify(rebuildService, never()).startRun(any(), eq(gated), any());
+        var after = Instant.now();
+        var lease = runner.projectLease();
+        verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(started), eq(TopicProject.RunMode.FIRST_BUILD),
+                argThat(abandonedBefore -> !abandonedBefore.isBefore(before.minus(lease))
+                        && !abandonedBefore.isAfter(after.minus(lease))));
+        verify(rebuildService, never()).startRun(any(), eq(gated), any(), any());
     }
 
     @Test
@@ -339,9 +361,9 @@ class TopicsFirstBuildServiceTest {
 
         service.run(START);
 
-        verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
-        verify(rebuildService, never()).startRun(any(), eq(locked), any());
-        verify(rebuildService, never()).startRun(any(), eq(built), any());
+        verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(started), eq(TopicProject.RunMode.FIRST_BUILD), any());
+        verify(rebuildService, never()).startRun(any(), eq(locked), any(), any());
+        verify(rebuildService, never()).startRun(any(), eq(built), any(), any());
         verify(lockService, never()).unlockUsingToken(TopicsProjectRunner.projectLock(locked));
         verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(built));
     }
@@ -376,7 +398,8 @@ class TopicsFirstBuildServiceTest {
                             && !deadline.isAfter(after.plus(halfBudget))),
                     eq(TopicWindowLabelService.Trigger.RESUME));
         }
-        order.verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        order.verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(started), eq(TopicProject.RunMode.FIRST_BUILD),
+                any());
         verify(labelService, never()).labelWindow(any(), eq(locked), any(), any());
         verify(labelService, times(2)).labelWindow(any(), any(), any(), any());
         verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(oldest));
@@ -397,7 +420,7 @@ class TopicsFirstBuildServiceTest {
         service.run(START);
 
         verify(labelService, never()).labelWindow(any(), any(), any(), any());
-        verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(started), eq(TopicProject.RunMode.FIRST_BUILD), any());
 
         listless.clear();
         var before = Instant.now();
@@ -415,8 +438,8 @@ class TopicsFirstBuildServiceTest {
     void startFailure() {
         project(WORKSPACE_ID, started, 140);
         project(WORKSPACE_ID, next, 120);
-        doThrow(new IllegalStateException("MySQL down")).when(rebuildService).startRun(WORKSPACE_ID, started,
-                TopicRun.Mode.FIRST_BUILD);
+        doThrow(new IllegalStateException("MySQL down")).when(rebuildService).startRun(eq(WORKSPACE_ID), eq(started),
+                eq(TopicProject.RunMode.FIRST_BUILD), any());
 
         service.run(START);
 
@@ -425,7 +448,7 @@ class TopicsFirstBuildServiceTest {
             assertThat(point.get("error_code")).isEqualTo("start_failed");
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
         });
-        verify(rebuildService).startRun(WORKSPACE_ID, next, TopicRun.Mode.FIRST_BUILD);
+        verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(next), eq(TopicProject.RunMode.FIRST_BUILD), any());
         verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(started));
     }
 
@@ -434,15 +457,15 @@ class TopicsFirstBuildServiceTest {
     void buildThatThrowsIsInternal() {
         var runId = UUID.randomUUID();
         project(WORKSPACE_ID, started, 140);
-        doReturn(runId).when(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        doReturn(runId).when(rebuildService).startRun(eq(WORKSPACE_ID), eq(started),
+                eq(TopicProject.RunMode.FIRST_BUILD), any());
         doThrow(new IllegalStateException("a bug in the build"))
                 .when(rebuildService).firstBuild(eq(runId), anyString(), any(), any());
-        when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(true);
+        when(rebuildService.fail(any(), anyString(), any(), any())).thenReturn(true);
 
         service.run(START);
 
-        verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.INTERNAL),
-                contains("a bug in the build"), isNull());
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.INTERNAL);
     }
 
     @Test
@@ -456,42 +479,29 @@ class TopicsFirstBuildServiceTest {
             return Mono.empty();
         });
         config.getBuild().setProjectTimeout(io.dropwizard.util.Duration.milliseconds(200));
-        doReturn(runId).when(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        doReturn(runId).when(rebuildService).startRun(eq(WORKSPACE_ID), eq(started),
+                eq(TopicProject.RunMode.FIRST_BUILD), any());
         // The commit is done; the trace_topics insert outlasts the timeout and goes on through the interrupt.
         doAnswer(invocation -> {
+            rows.put(started, row(started).listRunId(runId).runId(runId).runStatus(TopicProject.RunStatus.SAVED)
+                    .runStartedAt(START).build());
             Uninterruptibles.sleepUninterruptibly(Duration.ofMillis(600));
             events.add("insert done");
-            return TopicsRebuildService.Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
+            return TopicsRebuildService.Outcome.builder().runId(runId).status(TopicProject.RunStatus.SAVED).build();
         }).when(rebuildService).firstBuild(eq(runId), anyString(), any(), any());
-        when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(false);
-        when(runDAO.findById(WORKSPACE_ID, runId)).thenReturn(TopicRun.builder().runId(runId)
-                .workspaceId(WORKSPACE_ID).projectId(started).mode(TopicRun.Mode.FIRST_BUILD)
-                .status(TopicRun.Status.SAVED).startedAt(START).build());
+        when(rebuildService.fail(any(), anyString(), any(), any())).thenReturn(false);
 
         service.run(Instant.now());
 
-        verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.TIMEOUT), anyString(),
-                isNull());
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.TIMEOUT);
         assertThat(events).containsExactly("insert done", "unlock");
     }
 
     @Test
-    @DisplayName("housekeeping counts each run it fails as abandoned, with the run's workspace")
-    void abandonedRuns() {
-        when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of(WORKSPACE_ID, WORKSPACE_ID, "ws-2"));
-        when(runDAO.failAbandoned(any(), any())).thenReturn(3);
-
-        service.run(START);
-
-        assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", WORKSPACE_ID)).isEqualTo(2);
-        assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", "ws-2")).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("a run deletes the topic data of the opted-in workspaces' deleted projects, reading the workspaces "
+    @DisplayName("a run deletes the topics of the opted-in workspaces' deleted projects, reading the workspaces "
             + "once; a failed delete does not stop the run")
     void deletesDeletedProjectsData() {
-        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
+        when(workspaceService.enabledWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
         when(topicDAO.deleteTopicsOfMissingProjects(any())).thenThrow(new IllegalStateException("MySQL down"));
         vectors.put(started, 140L);
         listless.add(new TopicDAO.ProjectKey(WORKSPACE_ID, started));
@@ -499,14 +509,14 @@ class TopicsFirstBuildServiceTest {
         service.run(START);
 
         verify(topicDAO).deleteTopicsOfMissingProjects(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
-        verify(workspaceService).eligibleWorkspaceIds();
+        verify(workspaceService).enabledWorkspaceIds();
         verify(rebuildService).firstBuild(any(), eq(WORKSPACE_ID), eq(started), any());
     }
 
     @Test
     @DisplayName("while another run on the pod holds the run slot past its wait, the job skips the project before its "
-            + "lock and its run row, and a run by hand answers 409; once the slot is free, the project is built and the "
-            + "slot is given back")
+            + "lock and its attempt, and a run by hand answers 409; once the slot is free, the project is built and "
+            + "the slot is given back")
     void runSlotHeld() {
         doReturn(Duration.ofMillis(50)).when(runner).runLimit();
         project(WORKSPACE_ID, started, 140);
@@ -518,7 +528,7 @@ class TopicsFirstBuildServiceTest {
         } finally {
             runner.releaseRun();
         }
-        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(rebuildService, never()).startRun(any(), any(), any(), any());
         verify(lockService, never()).lockUsingToken(eq(TopicsProjectRunner.projectLock(started)), any());
 
         service.run(START);
@@ -561,14 +571,15 @@ class TopicsFirstBuildServiceTest {
         var runId = UUID.randomUUID();
         vectors.put(started, 140L);
         backfills.add(backfill(WORKSPACE_ID, started).build());
-        failures.add(new TopicRunDAO.FirstBuildFailures(started, 1, Instant.now(), Instant.now()));
-        doReturn(runId).when(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        rows.put(started, failedRow(started, 1, Instant.now(), Instant.now()));
+        doReturn(runId).when(rebuildService).startRun(eq(WORKSPACE_ID), eq(started),
+                eq(TopicProject.RunMode.FIRST_BUILD), any());
 
         assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
                 .isInstanceOfSatisfying(ConflictException.class, exception -> assertThat(
                         ((ErrorMessage) exception.getResponse().getEntity()).getMessage())
                         .contains("vectors backfill", "gate 'waiting'", "ignore_backfill=true"));
-        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(rebuildService, never()).startRun(any(), any(), any(), any());
         verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(started));
         verify(lockService).unlockUsingToken(TopicsFirstBuildService.BY_HAND_LOCK);
 
@@ -588,18 +599,35 @@ class TopicsFirstBuildServiceTest {
     private UUID failed(int count, Duration lastFinishedAgo, Duration firstStartedAgo) {
         var projectId = UUID.randomUUID();
         project(WORKSPACE_ID, projectId, 500);
-        failures.add(new TopicRunDAO.FirstBuildFailures(projectId, count, START.minus(firstStartedAgo),
-                START.minus(lastFinishedAgo)));
+        rows.put(projectId, failedRow(projectId, count, START.minus(firstStartedAgo), START.minus(lastFinishedAgo)));
         return projectId;
     }
 
-    /** A backfill row started and checked now, not drained, nothing counted. */
-    private static TopicVectorBackfill.TopicVectorBackfillBuilder backfill(String workspaceId, UUID projectId) {
-        return TopicVectorBackfill.builder()
+    /** A project of the workspace with 500 vectors whose attempt started {@code startedAgo} before START, running. */
+    private UUID running(Duration startedAgo) {
+        var projectId = UUID.randomUUID();
+        project(WORKSPACE_ID, projectId, 500);
+        rows.put(projectId, row(projectId).runId(UUID.randomUUID()).runStatus(TopicProject.RunStatus.RUNNING)
+                .runStartedAt(START.minus(startedAgo)).build());
+        return projectId;
+    }
+
+    private TopicProject failedRow(UUID projectId, int count, Instant firstFailedAt, Instant lastFinishedAt) {
+        return row(projectId).runId(UUID.randomUUID()).runStatus(TopicProject.RunStatus.FAILED)
+                .runStartedAt(lastFinishedAt.minusSeconds(60)).runFinishedAt(lastFinishedAt).failedRuns(count)
+                .firstFailedAt(firstFailedAt).build();
+    }
+
+    private static TopicProject.TopicProjectBuilder row(UUID projectId) {
+        return TopicProject.builder().workspaceId(WORKSPACE_ID).projectId(projectId);
+    }
+
+    /** A backfill started now, not drained, nothing counted. */
+    private static TopicVectorBackfillDAO.Backfill.BackfillBuilder backfill(String workspaceId, UUID projectId) {
+        return TopicVectorBackfillDAO.Backfill.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
-                .startedAt(Instant.now())
-                .checkedAt(Instant.now())
-                .lastDoneAt(Instant.now());
+                .backfillStartedAt(Instant.now())
+                .backfillLastDoneAt(Instant.now());
     }
 }
