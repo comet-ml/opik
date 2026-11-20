@@ -527,6 +527,14 @@ class TraceDAOImpl implements TraceDAO {
      *
      * <p>Both {@code spans} accesses are bounded to {@code trace_span_weeks}, sourced as described in
      * {@link #SELECT_TRACES_SPANS_STATS}.
+     *
+     * <p>A trace id can exist in more than one project. The trace row returned is the one with the highest
+     * {@code project_id}, and every joined subquery (spans, comments, feedback scores, span feedback scores,
+     * guardrails and annotation queues) is keyed on {@code (id, project_id)}, so the aggregates come from that same
+     * project. The project lookups by trace id ({@link #SELECT_PROJECT_ID_FROM_TRACE} and
+     * {@link #SELECT_DETAILS_BY_ID}) resolve the highest {@code project_id} in the same way.
+     * {@code experiments_agg} is keyed on {@code trace_id} only, because {@code experiment_items.project_id} holds
+     * the project the item named, which can differ from the trace's project.
      */
     private static final String SELECT_BY_IDS = """
             WITH <if(spans_partitioned)>trace_span_weeks AS (
@@ -541,7 +549,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
             ), <endif>target_spans AS (
-                SELECT id, trace_id, type
+                SELECT project_id, id, trace_id, type
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -673,7 +681,7 @@ class TraceDAOImpl implements TraceDAO {
                            fs.last_updated_by AS author,
                            CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores AS fs
-                    INNER JOIN target_spans s ON fs.entity_id = s.id
+                    INNER JOIN target_spans s ON fs.entity_id = s.id AND fs.project_id = s.project_id
                     WHERE fs.entity_type = 'span'
                     AND fs.workspace_id = :workspace_id
                     <if(has_target_projects)>AND fs.project_id IN :target_project_ids<endif>
@@ -695,7 +703,7 @@ class TraceDAOImpl implements TraceDAO {
                            afs.author,
                            afs.source_queue_id
                     FROM authored_feedback_scores AS afs
-                    INNER JOIN target_spans s ON afs.entity_id = s.id
+                    INNER JOIN target_spans s ON afs.entity_id = s.id AND afs.project_id = s.project_id
                     WHERE afs.entity_type = 'span'
                     AND afs.workspace_id = :workspace_id
                     <if(has_target_projects)>AND afs.project_id IN :target_project_ids<endif>
@@ -949,6 +957,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY project_id, entity_id, id
@@ -961,12 +970,14 @@ class TraceDAOImpl implements TraceDAO {
 
     /** Carries the {@code <id_weeks>} bound, see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES}. */
     private static final String SELECT_DETAILS_BY_ID = """
-            SELECT DISTINCT
+            SELECT
                 workspace_id,
                 project_id
             FROM traces
             WHERE id = :id
             <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+            ORDER BY workspace_id DESC, project_id DESC
+            LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2531,11 +2542,13 @@ class TraceDAOImpl implements TraceDAO {
     /** Carries the {@code <id_weeks>} bound, see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES}. */
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
-                DISTINCT project_id
+                project_id
             FROM traces
             WHERE id = :id
             <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             AND workspace_id = :workspace_id
+            ORDER BY project_id DESC
+            LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;

@@ -17,8 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -85,38 +83,27 @@ class CommentServiceImpl implements CommentService {
         };
     }
 
-    // Resolves the (single) project for a comment's entity refs so CommentsUpdated can prune by project;
-    // empty when there are no refs or the entity's project can't be resolved.
-    private Mono<Optional<UUID>> resolveProjectIdForRefs(List<CommentEntityRef> refs) {
-        if (CollectionUtils.isEmpty(refs)) {
-            return Mono.just(Optional.empty());
-        }
-        var ref = refs.getFirst();
-        return resolveProjectId(ref.entityType(), ref.entityId())
-                .map(Optional::of)
-                .defaultIfEmpty(Optional.empty());
-    }
-
     @Override
     public Mono<Void> update(@NonNull UUID commentId, @NonNull Comment comment) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
+            // The project comes from the comment row itself, not from its entity: a trace id can exist in more
+            // than one project, and the comment belongs to exactly one of them.
             return commentDAO.getEntityRefsByCommentIds(Set.of(commentId))
                     .collectList()
-                    .flatMap(refs -> resolveProjectIdForRefs(refs)
-                            .flatMap(projectId -> commentDAO.findById(null, commentId)
-                                    .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)))
-                                    .then(Mono.defer(() -> commentDAO.updateComment(commentId, comment)))
-                                    .doOnSuccess(__ -> {
-                                        if (CollectionUtils.isNotEmpty(refs)) {
-                                            var ref = refs.getFirst();
-                                            eventBus.post(new CommentsUpdated(
-                                                    Set.of(ref.entityId()), toEntityType(ref.entityType()),
-                                                    workspaceId, userName, projectId.orElse(null)));
-                                        }
-                                    })));
+                    .flatMap(refs -> commentDAO.findById(null, commentId)
+                            .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)))
+                            .then(Mono.defer(() -> commentDAO.updateComment(commentId, comment)))
+                            .doOnSuccess(__ -> {
+                                if (CollectionUtils.isNotEmpty(refs)) {
+                                    var ref = refs.getFirst();
+                                    eventBus.post(new CommentsUpdated(
+                                            Set.of(ref.entityId()), toEntityType(ref.entityType()),
+                                            workspaceId, userName, ref.projectId()));
+                                }
+                            }));
         });
     }
 
