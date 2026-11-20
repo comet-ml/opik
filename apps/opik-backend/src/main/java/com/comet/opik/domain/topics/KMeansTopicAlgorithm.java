@@ -33,11 +33,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     @Inject
     public KMeansTopicAlgorithm(@NonNull @Config("topics") TopicsConfig topics, @NonNull TopicTasks tasks) {
-        this(topics.getAlgorithm(), tasks);
-    }
-
-    KMeansTopicAlgorithm(@NonNull AlgorithmConfig config, @NonNull TopicTasks tasks) {
-        this.config = config;
+        this.config = topics.getAlgorithm();
         this.tasks = tasks;
     }
 

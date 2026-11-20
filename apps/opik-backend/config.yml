@@ -2689,7 +2689,8 @@ aiLabels:
 
 # Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
 # trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
-# The k-means topic algorithm's tunables; its LLM call is the author task in topics/tasks/author.yaml.
+# Calls opik-inference's /v1/embed through the inference block. The k-means topic algorithm's tunables are under
+# algorithm; its LLM call is the author task in topics/tasks/author.yaml.
 topics:
   algorithm:
     #  Default: 30
