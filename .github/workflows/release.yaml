@@ -69,12 +69,27 @@ jobs:
       preflight_only: true
       preflight_non_blocking: ${{ inputs.ignore_pypi_preflight_failure }}
 
+  # Same check for the generative UI engine: its PyPI publisher is a separate
+  # registration, which the SDK preflight above does not prove.
+  genui-pypi-preflight:
+    needs:
+      - set-version
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/genui_publish.yml
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      preflight_only: true
+      preflight_non_blocking: ${{ inputs.ignore_pypi_preflight_failure }}
+
   create-git-tag:
     permissions:
       contents: write
     needs:
       - set-version
       - sdk-pypi-preflight
+      - genui-pypi-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -174,6 +189,19 @@ jobs:
       is_release: true
       skip_commit_push: true
 
+  release-genui:
+    needs:
+      - set-version
+      - create-git-tag
+    # id-token: write for npm and PyPI trusted publishing; see release-typescript-sdk.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/genui_publish.yml
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      is_release: true
+
   publish-helm-chart:
     permissions:
       contents: write
@@ -195,6 +223,7 @@ jobs:
       - release-sdk
       - release-typescript-sdk
       - release-typescript-sdk-integrations
+      - release-genui
       - publish-helm-chart
     runs-on: ubuntu-latest
     steps:
@@ -258,6 +287,17 @@ jobs:
             fi
           done
 
+      - name: Update generative UI engine version
+        shell: bash
+        working-directory: sdks/genui
+        # --no-workspaces-update skips the install a workspace version bump
+        # triggers; the lockfile is then synced without touching node_modules.
+        env:
+          RELEASE_VERSION: ${{ needs.set-version.outputs.version }}
+        run: |
+          npm version "${RELEASE_VERSION}" -w opik-genui --no-git-tag-version --allow-same-version --no-workspaces-update
+          npm install --package-lock-only --ignore-scripts --no-audit
+
       - name: Update Chart.yaml with release version
         shell: bash
         run: |
@@ -308,6 +348,7 @@ jobs:
           # Add all modified version files
           git add sdks/typescript/package.json sdks/typescript/package-lock.json
           git add sdks/typescript/src/opik/integrations/*/package.json sdks/typescript/src/opik/integrations/*/package-lock.json
+          git add sdks/genui/js/package.json sdks/genui/package-lock.json
           git add deployment/helm_chart/opik/Chart.yaml
           git add deployment/helm_chart/opik/README.md
           git add version.txt
