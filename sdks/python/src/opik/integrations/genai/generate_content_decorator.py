@@ -102,6 +102,8 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             genai_types.GenerateContentResponse,
         ), f"{output}"
 
+        original_response = output
+
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(
             result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
@@ -122,7 +124,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         total_cost = None
         if self._cost_callback is not None:
-            total_cost = self._cost_callback(output)
+            total_cost = self._cost_callback(original_response)
 
         span_name_without_model = current_span_data.name.split(":")[0]  # type: ignore
         result = arguments_helpers.EndSpanParameters(
