@@ -11,7 +11,7 @@
     "test:debug": "playwright test --debug"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^22.0.0",
     "allure-playwright": "^3.0.0",
     "typescript": "^5.6.0"

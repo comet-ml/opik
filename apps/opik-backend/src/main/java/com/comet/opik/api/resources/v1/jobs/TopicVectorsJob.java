@@ -18,15 +18,13 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.quartz.UnableToInterruptJobException;
 import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -36,13 +34,15 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * second (Quartz starts the trigger at boot). Two locks make that one tick per interval across the cluster:
  * <ul>
  * <li>the leader lock, held for the tick and released when it ends, so two ticks never overlap; its lease
- * ({@link TopicVectorsTickService#leaderLease()}) only matters when the pod dies mid-tick;</li>
+ * ({@link #leaderLease()}) only matters when the pod dies mid-tick, because a tick that runs longer is cancelled;</li>
  * <li>the tick lock, taken by the leader before it ticks and never released: it expires one interval (less a small
  * margin for trigger jitter) after the tick started, so a pod that fires sooner skips.</li>
  * </ul>
  * Holding the leader lock until expiry instead would stretch the interval to the lease, which is longer than the
  * interval; a lease of one interval would let a long tick overlap the next. The tick itself is
- * {@link TopicVectorsTickService#tick(Instant)}.
+ * {@link TopicVectorsTickService#tick(Instant)}. A pod shutdown interrupts the job (the lifecycle listener does it
+ * before it stops the scheduler): it cancels every tick in flight, which frees the leader lock at once, and the job
+ * starts no new tick.
  *
  * <p>Across the cluster, {@code topics.vectors.ticks} counts about one {@value #RAN} per interval.
  */
@@ -62,8 +62,8 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
     static final String FAILED = "failed";
     static final List<String> OUTCOMES = List.of(RAN, NOT_DUE, LOCK_HELD, FAILED);
 
-    private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    private final AtomicReference<Disposable> subscription = new AtomicReference<>();
+    // Every tick in flight, not only the last one: a tick can outlast the interval, and the next fire must not detach it.
+    private final Disposable.Composite inFlight = Disposables.composite();
     private final TopicsConfig config;
     private final TopicVectorsTickService tickService;
     private final LockService lockService;
@@ -94,56 +94,73 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!config.isEnabled() || interrupted.get()) {
+        if (!config.isEnabled() || inFlight.isDisposed()) {
+            return;
+        }
+        // The tick is added before it is subscribed: an interrupt that comes first disposes it, and the update below
+        // then cancels the subscription.
+        var tick = Disposables.swap();
+        if (!inFlight.add(tick)) {
             return;
         }
         var start = Instant.now();
-        Disposable disposable = lockService.bestEffortLock(
+        tick.update(lockService.bestEffortLock(
                 LEADER_LOCK,
-                Mono.fromRunnable(() -> tickIfDue(start)),
+                tickIfDue(start),
                 Mono.fromRunnable(() -> {
                     count(LOCK_HELD);
                     log.debug("Topic vectors tick skipped, lock '{}' is held by another instance", LEADER_LOCK.key());
                 }),
-                tickService.leaderLease(),
+                leaderLease(),
                 Duration.ZERO)
+                // Started before the lease is set, so it fires first: a hung insert, which has no deadline of its
+                // own, never holds the tick past the lease, and the cancel frees the lock.
+                .timeout(leaderLease())
+                .doFinally(signal -> inFlight.remove(tick))
                 .subscribe(
                         __ -> {
                         },
                         error -> {
                             count(FAILED);
                             log.error("Topic vectors tick failed", error);
-                        });
-        subscription.set(disposable);
-        // An interrupt between subscribe() and set() found nothing to dispose: dispose here. Whichever of the two
-        // threads takes the subscription out disposes it, so it is disposed exactly once.
-        if (interrupted.get()) {
-            Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
-        }
+                        }));
     }
 
     /**
      * Runs the tick unless one started, on any pod, less than one interval ago. A failure is counted and logged here,
      * so it never reaches the lock service, which would take a Redis error for a lock held by another pod.
      */
-    void tickIfDue(Instant start) {
-        try {
-            if (Boolean.TRUE.equals(lockService.lockUsingToken(TICK_LOCK, tickSlot()).block())) {
-                tickService.tick(start);
-                count(RAN);
-            } else {
-                count(NOT_DUE);
-                log.debug("Topic vectors tick skipped, lock '{}' is held: a tick ran less than one interval ago",
-                        TICK_LOCK.key());
-            }
-        } catch (RuntimeException exception) {
-            count(FAILED);
-            log.error("Topic vectors tick failed", exception);
-        }
+    Mono<Void> tickIfDue(Instant start) {
+        return Mono.defer(() -> lockService.lockUsingToken(TICK_LOCK, tickSlot()))
+                .flatMap(due -> due
+                        ? tickService.tick(start).doOnSuccess(__ -> count(RAN)).then()
+                        : Mono.<Void>fromRunnable(() -> {
+                            count(NOT_DUE);
+                            log.debug("Topic vectors tick skipped, lock '{}' is held: a tick ran less than one "
+                                    + "interval ago", TICK_LOCK.key());
+                        }))
+                .onErrorResume(exception -> {
+                    count(FAILED);
+                    log.error("Topic vectors tick failed", exception);
+                    return Mono.empty();
+                });
     }
 
     private void count(String outcome) {
         ticks.add(1, Attributes.of(OUTCOME, outcome));
+    }
+
+    /**
+     * How long the leader lock lasts, and the tick with it: the tick budget, plus what can run past its end: an embed
+     * call started with {@code embedTimeout} left, a window read started just before it, and {@code leaseSlack} for
+     * the insert after the last call. The same shape as {@code AiLabelsTickService.leaderLease()}.
+     */
+    Duration leaderLease() {
+        var vectors = config.getVectors();
+        return vectors.getTickBudget().toJavaDuration()
+                .plus(vectors.getEmbedTimeout().toJavaDuration())
+                .plus(vectors.getFind().getMaxExecutionTime().toJavaDuration())
+                .plus(vectors.getLeaseSlack().toJavaDuration());
     }
 
     /** One interval, less a margin for trigger jitter, so the pod whose trigger comes next is never one tick late. */
@@ -155,8 +172,7 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
 
     @Override
     public void interrupt() throws UnableToInterruptJobException {
-        interrupted.set(true);
-        Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
+        inFlight.dispose();
         log.info("TopicVectorsJob interrupted, cancelling any in-flight tick");
     }
 }

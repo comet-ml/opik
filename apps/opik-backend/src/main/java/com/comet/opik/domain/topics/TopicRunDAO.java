@@ -1,191 +1,117 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.db.AbstractEnumColumnMapper;
+import com.comet.opik.infrastructure.db.HasValue;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import jakarta.annotation.Nullable;
-import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
-import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
-import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code topic_runs}: a run is inserted {@code running} when it starts and moves once, to {@code saved} in the save
- * transaction or to {@code failed}. Only a {@code running} row moves.
+ * The attempt fields of a project's {@code topic_projects} row: the current or last run, first build or nightly
+ * update. A run starts {@code running} and moves once, to {@code saved} or {@code failed}; only a {@code running}
+ * attempt moves. {@code failed_runs} and {@code first_failed_at} count the failed attempts since the last saved one.
+ * Each run logs itself; the row keeps no history.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterArgumentFactory(TopicRunDAO.ModeMapper.class)
-@RegisterArgumentFactory(TopicRunDAO.StatusMapper.class)
-@RegisterColumnMapper(TopicRunDAO.ModeMapper.class)
-@RegisterColumnMapper(TopicRunDAO.StatusMapper.class)
-@RegisterConstructorMapper(TopicRun.class)
-@RegisterConstructorMapper(TopicRunDAO.FirstBuildFailures.class)
+@RegisterArgumentFactory(TopicRunDAO.RunModeMapper.class)
+@RegisterArgumentFactory(TopicRunDAO.RunErrorMapper.class)
 public interface TopicRunDAO {
 
+    /**
+     * Starts {@code runId}, creating the project's row when it has none. The caller holds the project's lock and has
+     * recorded an attempt its pod left {@code running} first ({@link #recordAbandoned}).
+     */
     @SqlUpdate("""
-            INSERT INTO topic_runs (run_id, workspace_id, project_id, mode, status, started_at, finished_at, error_code,
-                error_message, stats)
-            VALUES (:runId, :workspaceId, :projectId, :mode, :status, :startedAt, :finishedAt, :errorCode,
-                :errorMessage, :stats)
+            INSERT INTO topic_projects (workspace_id, project_id, run_id, run_mode, run_status, run_started_at)
+            VALUES (:workspaceId, :projectId, :runId, :mode, 'running', :startedAt)
+            ON DUPLICATE KEY UPDATE run_id = :runId, run_mode = :mode, run_status = 'running',
+                run_started_at = :startedAt, run_finished_at = NULL, run_error_code = NULL
             """)
-    void insert(@BindMethods TopicRun run);
+    void start(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId, @Bind("runId") UUID runId,
+            @Bind("mode") TopicProject.RunMode mode, @Bind("startedAt") Instant startedAt);
 
+    /** In the save transaction: 0 when the run ended meanwhile, by its timeout, so the save rolls back. */
     @SqlUpdate("""
-            UPDATE topic_runs SET status = 'saved', finished_at = :finishedAt, stats = :stats
-            WHERE workspace_id = :workspaceId AND run_id = :runId AND status = 'running'
+            UPDATE topic_projects
+            SET run_status = 'saved', run_finished_at = :finishedAt, failed_runs = 0, first_failed_at = NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'running'
             """)
-    int markSaved(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId,
-            @Bind("finishedAt") Instant finishedAt, @Bind("stats") String stats);
+    int markSaved(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt);
 
+    /** 0 when the run had ended already: saved, or failed by its own thread or its timeout. */
     @SqlUpdate("""
-            UPDATE topic_runs SET status = 'failed', finished_at = :finishedAt, error_code = :errorCode,
-                error_message = :errorMessage, stats = :stats
-            WHERE workspace_id = :workspaceId AND run_id = :runId AND status = 'running'
+            UPDATE topic_projects
+            SET run_status = 'failed', run_finished_at = :finishedAt, run_error_code = :code,
+                failed_runs = failed_runs + 1, first_failed_at = COALESCE(first_failed_at, run_started_at)
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'running'
             """)
-    int markFailed(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId,
-            @Bind("finishedAt") Instant finishedAt,
-            @Bind("errorCode") String errorCode, @Bind("errorMessage") String errorMessage,
-            @Bind("stats") String stats);
+    int markFailed(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt,
+            @Bind("code") TopicProject.RunError code);
 
     /**
-     * The workspace of each run {@link #failAbandoned} is about to fail, one per run: none of them is counted yet, as a
-     * run is counted by the write that ends its row. Locks the runs' rows, so the update in the same transaction fails
-     * these.
+     * Records the project's attempt as failed with {@code abandoned} when it is still {@code running} and started
+     * before {@code startedBefore}, the project's lock lease ago: its pod died mid-run. 1 when it did, for the caller
+     * to count.
      */
-    @SqlQuery("""
-            SELECT r.workspace_id FROM topic_runs r
-            WHERE r.status = 'running' AND r.started_at < :startedBefore
-            FOR UPDATE
-            """)
-    List<String> findAbandonedWorkspaceIds(@Bind("startedBefore") Instant startedBefore);
-
-    /** Runs left {@code running} by a pod that died mid-run: failed with {@code abandoned}. */
     @SqlUpdate("""
-            UPDATE topic_runs SET status = 'failed', finished_at = :now, error_code = 'abandoned',
-                error_message = 'the run did not finish; its pod stopped or the lock expired'
-            WHERE status = 'running' AND started_at < :startedBefore
+            UPDATE topic_projects
+            SET run_status = 'failed', run_finished_at = :now, run_error_code = 'abandoned',
+                failed_runs = failed_runs + 1, first_failed_at = COALESCE(first_failed_at, run_started_at)
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_status = 'running'
+            AND run_started_at < :startedBefore
             """)
-    int failAbandoned(@Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
+    int recordAbandoned(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
 
     /**
-     * Of {@code projectIds}, those whose last {@code failures} runs all failed ({@code abandoned} included), the latest
-     * started at or after {@code since}: the night pauses them. A saved or running run among the last {@code failures}
-     * ends the streak.
+     * Of {@code projectIds}, those whose last {@code failures} attempts or more failed in a row, the latest started at
+     * or after {@code since}: the night pauses them. An attempt still {@code running} that started before
+     * {@code abandonedBefore} counts as failed: its pod died, and only the project's next attempt records it.
      */
     @SqlQuery("""
-            SELECT project_id FROM (
-                SELECT project_id, status, started_at,
-                    ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY started_at DESC, run_id DESC) AS recency
-                FROM topic_runs
-                WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            ) latest
-            WHERE recency <= :failures
-            GROUP BY project_id
-            HAVING COUNT(*) = :failures AND SUM(status = 'failed') = :failures AND MAX(started_at) >= :since
+            SELECT project_id FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND run_started_at >= :since
+            AND failed_runs + (run_status = 'running' AND run_started_at < :abandonedBefore) >= :failures
             """)
     Set<UUID> findPausedProjectIds(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds,
-            @Bind("failures") int failures, @Bind("since") Instant since);
+            @BindList("projectIds") Collection<UUID> projectIds, @Bind("failures") int failures,
+            @Bind("since") Instant since, @Bind("abandonedBefore") Instant abandonedBefore);
 
-    /**
-     * Of {@code projectIds}, those with a failed {@code first_build} run since their last saved run, {@code abandoned}
-     * included: how many, when the first started and when the last ended. The first-build job's retries wait from the
-     * last.
-     */
-    @SqlQuery("""
-            SELECT r.project_id, COUNT(*) AS failures, MIN(r.started_at) AS first_started_at,
-                MAX(r.finished_at) AS last_finished_at
-            FROM topic_runs r
-            WHERE r.workspace_id = :workspaceId AND r.project_id IN (<projectIds>)
-            AND r.mode = 'first_build' AND r.status = 'failed'
-            AND NOT EXISTS (
-                SELECT 1 FROM topic_runs s
-                WHERE s.workspace_id = r.workspace_id AND s.project_id = r.project_id AND s.status = 'saved'
-                AND s.started_at > r.started_at
-            )
-            GROUP BY r.project_id
-            """)
-    List<FirstBuildFailures> findFirstBuildFailures(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds);
-
-    /**
-     * Sets the run's {@code stats.topic_counts} to {@code topicCounts}, a JSON object, and leaves the other keys of
-     * {@code stats} as the save wrote them. 0 when the workspace has no such run.
-     */
-    @SqlUpdate("""
-            UPDATE topic_runs SET stats = JSON_SET(stats, '$.topic_counts', CAST(:topicCounts AS JSON))
-            WHERE workspace_id = :workspaceId AND run_id = :runId
-            """)
-    int setTopicCounts(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId,
-            @Bind("topicCounts") String topicCounts);
-
-    @SqlUpdate("DELETE FROM topic_runs WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
-    int deleteByProjects(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds);
-
-    /** As {@link TopicDAO#deleteTopicsOfMissingProjects}, for {@code topic_runs}. */
-    @SqlUpdate("""
-            DELETE r FROM topic_runs r
-            LEFT JOIN projects p ON p.id = r.project_id AND p.workspace_id = r.workspace_id
-            WHERE r.workspace_id IN (<workspaceIds>) AND p.id IS NULL
-            """)
-    int deleteOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
-    int deleteStartedBefore(@Bind("before") Instant before);
-
-    @SqlQuery("""
-            SELECT * FROM topic_runs
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-            ORDER BY started_at DESC, run_id DESC
-            LIMIT 1
-            """)
-    Optional<TopicRun> findNewest(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
-
-    @SqlQuery("SELECT * FROM topic_runs WHERE workspace_id = :workspaceId AND run_id = :runId")
-    @Nullable TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);
-
-    @SqlQuery("""
-            SELECT * FROM topic_runs
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-            ORDER BY started_at, run_id
-            """)
-    List<TopicRun> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
-
-    record FirstBuildFailures(@NonNull UUID projectId, int failures, @NonNull Instant firstStartedAt,
-            @NonNull Instant lastFinishedAt) {
-    }
-
-    class ModeMapper extends AbstractEnumColumnMapper<TopicRun.Mode> {
-        public ModeMapper() {
-            super(value -> Arrays.stream(TopicRun.Mode.values())
-                    .filter(mode -> mode.getValue().equals(value))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run mode '%s'".formatted(value))),
-                    "topic_run_mode");
+    class RunModeMapper extends AbstractEnumColumnMapper<TopicProject.RunMode> {
+        public RunModeMapper() {
+            super(value -> byValue(TopicProject.RunMode.values(), value), "topic_run_mode");
         }
     }
 
-    class StatusMapper extends AbstractEnumColumnMapper<TopicRun.Status> {
-        public StatusMapper() {
-            super(value -> Arrays.stream(TopicRun.Status.values())
-                    .filter(status -> status.getValue().equals(value))
-                    .findFirst()
-                    .orElseThrow(
-                            () -> new IllegalArgumentException("Unknown topic run status '%s'".formatted(value))),
-                    "topic_run_status");
+    class RunStatusMapper extends AbstractEnumColumnMapper<TopicProject.RunStatus> {
+        public RunStatusMapper() {
+            super(value -> byValue(TopicProject.RunStatus.values(), value), "topic_run_status");
         }
+    }
+
+    class RunErrorMapper extends AbstractEnumColumnMapper<TopicProject.RunError> {
+        public RunErrorMapper() {
+            super(value -> byValue(TopicProject.RunError.values(), value), "topic_run_error");
+        }
+    }
+
+    private static <T extends HasValue> T byValue(T[] values, String value) {
+        return Arrays.stream(values)
+                .filter(candidate -> candidate.getValue().equals(value))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown value '%s'".formatted(value)));
     }
 }

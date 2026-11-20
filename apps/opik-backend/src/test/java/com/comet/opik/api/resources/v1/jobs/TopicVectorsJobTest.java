@@ -5,31 +5,58 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.topics.TickResult;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
+import com.comet.opik.infrastructure.DistributedLockConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.redis.RedisModule;
+import com.google.inject.Injector;
+import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jobs.GuiceJobManager;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongCounterBuilder;
 import io.opentelemetry.api.metrics.Meter;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.quartz.Scheduler;
+import org.redisson.Redisson;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.config.Config;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
+import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
+import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -39,7 +66,9 @@ import static org.mockito.Mockito.when;
 @DisplayName("topic vectors job")
 class TopicVectorsJobTest {
 
+    // config-test.yml's tickBudget 50s + embedTimeout 10s + find.maxExecutionTime 30s + leaseSlack 5s.
     private static final Duration LEASE = Duration.ofSeconds(95);
+    private static final Mono<TickResult> TICKED = Mono.just(new TickResult(1, Map.of()));
 
     private final TopicsConfig config = TestConfigUtils.loadConfigTest().getTopics();
     private final TopicVectorsTickService tickService = mock(TopicVectorsTickService.class);
@@ -52,7 +81,6 @@ class TopicVectorsJobTest {
     @BeforeEach
     void setUp() {
         config.setEnabled(true);
-        when(tickService.leaderLease()).thenReturn(LEASE);
         job = new TopicVectorsJob(config, tickService, lockService, meterOf(ticks));
         // Only the firings' own counts matter below; the start values have their own test.
         clearInvocations(ticks);
@@ -106,12 +134,13 @@ class TopicVectorsJobTest {
         when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
                 .thenReturn(Mono.just(true), Mono.just(false));
         var start = Instant.parse("2026-11-20T12:00:00Z");
+        when(tickService.tick(start)).thenReturn(TICKED);
 
-        job.tickIfDue(start);
+        job.tickIfDue(start).block();
         verify(tickService).tick(start);
         verify(ticks).add(1, outcome(TopicVectorsJob.RAN));
 
-        job.tickIfDue(start.plusSeconds(30));
+        job.tickIfDue(start.plusSeconds(30)).block();
         verify(tickService).tick(start);
         verifyNoMoreInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.NOT_DUE));
@@ -121,7 +150,7 @@ class TopicVectorsJobTest {
             assertThat(event.getFormattedMessage()).contains("lock 'topics:vectors:tick'");
         });
 
-        // doJob takes the leader lock for the tick's lease, then runs the same check.
+        // doJob takes the leader lock for the lease the config gives, then runs the same check.
         job.doJob(null);
         verify(lockService).bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), eq(action.get()), any(Mono.class),
                 eq(LEASE), eq(Duration.ZERO));
@@ -134,8 +163,7 @@ class TopicVectorsJobTest {
 
         job.doJob(null);
 
-        verify(tickService).leaderLease();
-        verifyNoMoreInteractions(tickService);
+        verifyNoInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.LOCK_HELD));
         verifyNoMoreInteractions(ticks);
         assertThat(appender.list).anySatisfy(event -> {
@@ -162,7 +190,7 @@ class TopicVectorsJobTest {
     }
 
     @Test
-    @DisplayName("a tick that throws is counted once as failed and logged at ERROR; the lock fallback does not run")
+    @DisplayName("a tick that fails is counted once as failed and logged at ERROR; the lock fallback does not run")
     void tickFails() {
         var fallbackRan = new AtomicBoolean();
         when(leaderLock()).thenAnswer(invocation -> {
@@ -175,7 +203,7 @@ class TopicVectorsJobTest {
                 .thenReturn(Mono.just(true));
         // The tick's start is the job's own clock reading, so only its type is known here.
         when(tickService.tick(any(Instant.class)))
-                .thenThrow(new IllegalStateException("ai-labels has no task 'trace_summary'"));
+                .thenReturn(Mono.error(new IllegalStateException("ai-labels has no task 'trace_summary'")));
 
         job.doJob(null);
 
@@ -197,8 +225,7 @@ class TopicVectorsJobTest {
 
         job.doJob(null);
 
-        verify(tickService).leaderLease();
-        verifyNoMoreInteractions(tickService);
+        verifyNoInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.FAILED));
 
         when(leaderLock()).thenReturn(Mono.error(new IllegalStateException("lock service broke")));
@@ -209,8 +236,35 @@ class TopicVectorsJobTest {
         verifyNoMoreInteractions(ticks);
     }
 
+    @Test
+    @DisplayName("a tick still running when the lease ends is cancelled, counted once as failed and logged at ERROR")
+    void tickOutlivesTheLease() {
+        var vectors = config.getVectors();
+        vectors.setTickBudget(io.dropwizard.util.Duration.milliseconds(200));
+        vectors.setEmbedTimeout(io.dropwizard.util.Duration.milliseconds(0));
+        vectors.getFind().setMaxExecutionTime(io.dropwizard.util.Duration.milliseconds(0));
+        vectors.setLeaseSlack(io.dropwizard.util.Duration.milliseconds(0));
+        var cancelled = new AtomicBoolean();
+        when(lockService.bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(Mono.class), any(Mono.class),
+                eq(Duration.ofMillis(200)), eq(Duration.ZERO))).thenAnswer(invocation -> invocation.getArgument(1));
+        when(lockService.lockUsingToken(eq(TopicVectorsJob.TICK_LOCK), any())).thenReturn(Mono.just(true));
+        when(tickService.tick(any(Instant.class))).thenReturn(Mono.<TickResult>never()
+                .doOnCancel(() -> cancelled.set(true)));
+
+        job.doJob(null);
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(cancelled).isTrue());
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> verify(ticks).add(1, outcome(TopicVectorsJob.FAILED)));
+        verifyNoMoreInteractions(ticks);
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+            assertThat(event.getFormattedMessage()).isEqualTo("Topic vectors tick failed");
+        });
+    }
+
     /**
-     * The leader lock call as the job makes it: the lock, the tick's lease and no wait are exact; the action and the
+     * The leader lock call as the job makes it: the lock, the lease and no wait are exact; the action and the
      * fallback are the job's own Monos, so only their type is known here.
      */
     @SuppressWarnings("unchecked")
@@ -244,6 +298,131 @@ class TopicVectorsJobTest {
             job.interrupt();
         } catch (org.quartz.UnableToInterruptJobException exception) {
             throw new IllegalStateException(exception);
+        }
+    }
+
+    /**
+     * A pod shutdown through the lifecycle listener's {@code ApplicationShutdown} event, with a tick in flight on a real
+     * Redis lock. The tick is detached from its Quartz fire, so only the listener's interrupt reaches it. Its fields
+     * shadow the outer ones: here the job runs on a real lock service.
+     */
+    @Nested
+    @DisplayName("on shutdown")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class Shutdown {
+
+        // Its own Redis database: the container is reused across classes, and this class flushes it before each test.
+        private static final int DATABASE = 10;
+
+        private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+        private RedissonReactiveClient redisClient;
+
+        private OpikConfiguration opikConfig;
+        private TopicVectorsTickService tickService;
+        private LockService lockService;
+        private TopicVectorsJob job;
+        private Injector injector;
+        private Scheduler scheduler;
+        private OpikGuiceyLifecycleEventListener listener;
+
+        @BeforeAll
+        void beforeAll() {
+            redis.start();
+            var config = new Config();
+            config.useSingleServer().setAddress(redis.getRedisURI()).setDatabase(DATABASE);
+            redisClient = Redisson.create(config).reactive();
+        }
+
+        @AfterAll
+        void afterAll() {
+            redisClient.shutdown();
+        }
+
+        @BeforeEach
+        void setUp() throws Exception {
+            redisClient.getKeys().flushdb().block();
+            var redisModule = new RedisModule();
+            lockService = spy(redisModule.lockService(redisClient,
+                    DistributedLockConfig.builder().lockTimeoutMS(5_000).ttlInSeconds(60).build(),
+                    redisModule.lockMetrics()));
+            opikConfig = TestConfigUtils.loadConfigTest();
+            opikConfig.getTopics().setEnabled(true);
+            tickService = mock(TopicVectorsTickService.class);
+            job = new TopicVectorsJob(opikConfig.getTopics(), tickService, lockService,
+                    meterOf(mock(LongCounter.class)));
+
+            injector = mock(Injector.class);
+            var jobManager = mock(GuiceJobManager.class);
+            scheduler = mock(Scheduler.class);
+            when(injector.getInstance(GuiceJobManager.class)).thenReturn(jobManager);
+            when(injector.getInstance(OpikConfiguration.class)).thenReturn(opikConfig);
+            when(injector.getInstance(TopicVectorsJob.class)).thenReturn(job);
+            when(jobManager.getScheduler()).thenReturn(scheduler);
+            when(scheduler.getJobKeys(any())).thenReturn(Set.of());
+
+            listener = new OpikGuiceyLifecycleEventListener();
+            var run = mock(InjectorPhaseEvent.class);
+            when(run.getType()).thenReturn(GuiceyLifecycle.ApplicationRun);
+            when(run.getInjector()).thenReturn(injector);
+            listener.onEvent(run);
+        }
+
+        @AfterEach
+        void tearDown() throws Exception {
+            job.interrupt();
+        }
+
+        @Test
+        @DisplayName("cancels the tick in flight, frees the leader lock at once and starts no new tick; a fire during the "
+                + "tick does not detach it")
+        void shutdownCancelsTheTickInFlight() throws Exception {
+            var started = new CountDownLatch(1);
+            var cancelled = new CountDownLatch(1);
+            // The lease (95s) is far longer than any wait below: a lock still held after the shutdown fails the test.
+            when(tickService.tick(any())).thenReturn(Mono.<TickResult>never()
+                    .doOnSubscribe(__ -> started.countDown())
+                    .doOnCancel(cancelled::countDown));
+
+            job.doJob(null);
+            assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
+            // A fire during the tick skips on the leader lock: it must not take the tick's place in the job.
+            job.doJob(null);
+            assertThat(tryLeaderLock()).isFalse();
+
+            shutdown();
+
+            assertThat(cancelled.await(10, TimeUnit.SECONDS)).isTrue();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(tryLeaderLock()).isTrue());
+            verify(scheduler).shutdown(false);
+
+            // A fire Quartz still delivers after the shutdown takes no lock and starts no tick.
+            verify(tickService).tick(any());
+            clearInvocations(lockService, tickService);
+            job.doJob(null);
+            verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
+            verify(tickService, never()).tick(any());
+        }
+
+        @Test
+        @DisplayName("disabled topics do not create the job at shutdown, and the scheduler still shuts down")
+        void disabledJobIsNotCreated() throws Exception {
+            opikConfig.getTopics().setEnabled(false);
+
+            shutdown();
+
+            verify(injector, never()).getInstance(TopicVectorsJob.class);
+            verify(scheduler).shutdown(false);
+        }
+
+        private void shutdown() {
+            var event = mock(GuiceyLifecycleEvent.class);
+            when(event.getType()).thenReturn(GuiceyLifecycle.ApplicationShutdown);
+            listener.onEvent(event);
+        }
+
+        private boolean tryLeaderLock() {
+            return Boolean.TRUE.equals(lockService.bestEffortLock(TopicVectorsJob.LEADER_LOCK, Mono.just(true),
+                    Mono.empty(), Duration.ofSeconds(5), Duration.ZERO).block());
         }
     }
 }

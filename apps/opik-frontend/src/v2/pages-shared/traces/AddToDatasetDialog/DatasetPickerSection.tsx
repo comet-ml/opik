@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { MessageCircleWarning, Plus } from "lucide-react";
+import capitalize from "lodash/capitalize";
 
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { DropdownOption } from "@/types/shared";
@@ -96,9 +97,9 @@ const DatasetPickerSection: React.FunctionComponent<
           {...EXPLAINERS_MAP[noSelectionExplainerId]}
         />
       )}
-      <div className="my-2">
+      <div className="mb-4">
         <Label className="comet-body-s-accented mb-1">
-          Select a {entityName}
+          {capitalize(entityName)}
         </Label>
         <LoadableSelectBox
           open={openPicker}
