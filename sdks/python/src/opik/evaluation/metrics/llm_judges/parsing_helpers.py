@@ -1,6 +1,11 @@
-from typing import Any
+from typing import Any, List, Optional
 import json
+import re
+import logging
+
 import opik.exceptions as exceptions
+
+LOGGER = logging.getLogger(__name__)
 
 
 def normalize_verdict(verdict: str) -> str:
@@ -19,6 +24,82 @@ def normalize_verdict(verdict: str) -> str:
     drift, it does not interpret the verdict.
     """
     return verdict.strip().lower().rstrip(".,!?;:").strip()
+
+
+# Characters a judge wraps a verdict in: markdown emphasis/code and quotes.
+_VERDICT_WRAPPERS = "*_`\"'\u201c\u201d\u2018\u2019 "
+# The verdict word must end the word: no letter or digit follows it (any
+# script), so "yes1", "no_foo" or "noé" stay unreadable. Underscores right
+# after it must close the same number of opening ones ("_no_", "__yes__"), so a
+# bare "yes_" or "no__" stays unreadable too.
+_LEADING_YES_NO = re.compile(r"(yes|no)(_*)(?!\w)")
+# Positions listed in the ignored-verdict warning; the counts are always full.
+_MAX_LOGGED_POSITIONS = 20
+
+
+def read_yes_no(verdict: Any) -> Optional[str]:
+    """Read a judge ``verdict`` as ``"yes"``, ``"no"`` or ``None``.
+
+    Folds case and surrounding whitespace like :func:`normalize_verdict`, but
+    reads only the leading verdict word instead of trimming trailing
+    punctuation, so every verdict that :func:`normalize_verdict` reduces to a
+    bare ``yes`` or ``no`` reads the same here. It also reads the word when a
+    judge wraps it in markdown or quotes (``"**No**"``, ``"`no`"``,
+    ``'"no"'``) or explains it after the word (``"No, the reply ignores the
+    request"``). The word must end there: underscores right after it count
+    only when they close the same number of opening ones (``"_no_"``,
+    ``"__yes__"``), so ``"yes_"``, ``"no__"`` or ``"_no__"`` return ``None``,
+    as do glued words such as ``"yes1"`` or ``"no_foo"``. Anything else
+    returns ``None``, so a caller can tell an unreadable verdict apart from a
+    negative or positive one instead of counting it on either side.
+    """
+    if not isinstance(verdict, str):
+        return None
+    folded = verdict.strip().lower()
+    text = folded.lstrip(_VERDICT_WRAPPERS)
+    match = _LEADING_YES_NO.match(text)
+    if match is None:
+        return None
+    closing = match.group(2)
+    opening = folded[: len(folded) - len(text)].count("_")
+    if closing and len(closing) != opening:
+        return None
+    return match.group(1)
+
+
+def yes_share_of_readable_verdicts(verdicts: List[Any], metric_name: str) -> float:
+    """Share of ``"yes"`` among the verdicts that read as ``"yes"`` or ``"no"``.
+
+    Unreadable verdicts are left out of both counts, so they no longer count
+    as positive: ``["no", "N/A"]`` scores 0.0, not 0.5. A warning gives their
+    count and their 1-based verdict numbers (the first
+    ``_MAX_LOGGED_POSITIONS``) only, never the verdict text, which is free-form
+    judge output and can quote the conversation. When no verdict is readable,
+    a ``MetricComputationError`` is raised: an empty read must not turn into a
+    perfect or a zero score.
+    """
+    readings = [read_yes_no(verdict) for verdict in verdicts]
+    readable = [reading for reading in readings if reading is not None]
+    ignored = [
+        number for number, reading in enumerate(readings, start=1) if reading is None
+    ]
+    if ignored:
+        not_listed = len(ignored) - _MAX_LOGGED_POSITIONS
+        LOGGER.warning(
+            "%s: ignored %d of %d judge verdict(s) that are neither yes nor no "
+            "(verdict numbers, 1-based: %s%s)",
+            metric_name,
+            len(ignored),
+            len(readings),
+            ignored[:_MAX_LOGGED_POSITIONS],
+            f" and {not_listed} more" if not_listed > 0 else "",
+        )
+    if not readable:
+        raise exceptions.MetricComputationError(
+            f"{metric_name}: none of the {len(readings)} judge verdict(s) "
+            "reads as yes or no"
+        )
+    return readable.count("yes") / len(readable)
 
 
 def extract_json_content_or_raise(content: str) -> Any:
