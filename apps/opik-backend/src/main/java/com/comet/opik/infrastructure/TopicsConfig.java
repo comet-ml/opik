@@ -151,6 +151,20 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration readTimeout;
 
+        /** The labelling pass's count of its window, which also takes the slice bounds. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration countTimeout;
+
+        /** The labelling pass's page: traces read, labelled and inserted at once. */
+        @JsonProperty
+        @Min(1) @Max(100_000) private int labelPageTraces;
+
+        /** The labelling pass's slice of the window: a page's read costs about one slice of keys. */
+        @JsonProperty
+        @Min(1) @Max(1_000_000) private int labelSliceTraces;
+
         /** Retries of the {@code trace_topics} insert after the save's commit. */
         @JsonProperty
         @Min(0) @Max(10) private int insertRetries;

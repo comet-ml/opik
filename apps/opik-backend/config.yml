@@ -2770,6 +2770,18 @@ topics:
     #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
     #  attempt of its trace_topics insert. At most 30m
     readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 60s
+    #  Description: The labelling pass's count of its run's window, with its slice bounds, stops after this (or the
+    #  pass's deadline, when sooner). At most 30m
+    countTimeout: ${TOPICS_BUILD_COUNT_TIMEOUT:-60s}
+    #  Default: 10000
+    #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
+    #  Between 1 and 100000
+    labelPageTraces: ${TOPICS_BUILD_LABEL_PAGE_TRACES:-10000}
+    #  Default: 50000
+    #  Description: Traces per slice of the window the labelling pass reads in pages; a page's read costs about one
+    #  slice of keys. Between 1 and 1000000
+    labelSliceTraces: ${TOPICS_BUILD_LABEL_SLICE_TRACES:-50000}
     #  Default: 3
     #  Description: Retries of the trace_topics insert after the save's commit. At most 10
     insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
