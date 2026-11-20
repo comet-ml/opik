@@ -12,10 +12,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -247,6 +249,8 @@ public abstract class FilterEvaluationServiceBase<E> {
             case NOT_EQUAL -> !evaluateEquals(fieldValue, filterValue);
             case CONTAINS -> evaluateContains(fieldValue, filterValue);
             case NOT_CONTAINS -> !evaluateContains(fieldValue, filterValue);
+            case STARTS_WITH -> evaluateStartsWith(fieldValue, filterValue);
+            case ENDS_WITH -> evaluateEndsWith(fieldValue, filterValue);
             case GREATER_THAN -> evaluateGreaterThan(fieldValue, filterValue);
             case GREATER_THAN_EQUAL -> evaluateGreaterThanEqual(fieldValue, filterValue);
             case LESS_THAN -> evaluateLessThan(fieldValue, filterValue);
@@ -314,6 +318,20 @@ public abstract class FilterEvaluationServiceBase<E> {
 
         // Handle string fields
         return fieldValue.toString().toLowerCase().contains(filterValue.toLowerCase());
+    }
+
+    protected boolean evaluateStartsWith(Object fieldValue, String filterValue) {
+        if (fieldValue instanceof Collection<?> values) {
+            return values.stream().anyMatch(item -> Strings.CI.startsWith(Objects.toString(item, null), filterValue));
+        }
+        return Strings.CI.startsWith(Objects.toString(fieldValue, null), filterValue);
+    }
+
+    protected boolean evaluateEndsWith(Object fieldValue, String filterValue) {
+        if (fieldValue instanceof Collection<?> values) {
+            return values.stream().anyMatch(item -> Strings.CI.endsWith(Objects.toString(item, null), filterValue));
+        }
+        return Strings.CI.endsWith(Objects.toString(fieldValue, null), filterValue);
     }
 
     protected boolean evaluateGreaterThan(Object fieldValue, String filterValue) {
