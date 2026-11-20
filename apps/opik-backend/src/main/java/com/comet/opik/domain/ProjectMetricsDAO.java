@@ -310,6 +310,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             """;
 
+    // Statements on this prefix set use_skip_indexes_if_final_exact_mode = 1: production turns it off (Helm profile),
+    // and then a skip index on source, environment or thread_id could hide a trace's newest row from FINAL, which
+    // would return an older row that passes the chips. Exact mode keeps the chart counting what the thread list does.
     private static final String THREAD_FILTERED_PREFIX = """
             WITH traces_final AS (
                 SELECT
@@ -986,7 +989,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN = """
@@ -1012,7 +1015,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM thread_feedback_scores
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     /**
@@ -1107,7 +1110,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_COUNT_WITH_BREAKDOWN = """
@@ -1118,7 +1121,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM threads_filtered t
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_DURATION = """
@@ -1141,7 +1144,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_DURATION_WITH_BREAKDOWN = """
@@ -1166,7 +1169,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
               GROUP BY bucket, group_name
             )
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_TRACE_AVERAGE_DURATION = """
@@ -1261,7 +1264,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_COST = """
@@ -1301,7 +1304,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1;
             """
             .formatted(THREAD_FILTERED_PREFIX);
 

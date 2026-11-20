@@ -92,6 +92,8 @@ class ThreadDAOImpl implements ThreadDAO {
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    // Exact mode keeps that true in production, which turns it off (Helm profile): a skip index on source,
+    // environment or thread_id could otherwise hide a trace's newest row from FINAL.
     // The truncated copies are aliased *_preview so the thread filters read the full messages, as the count does.
     /**
      * OPIK-7035: resolves one page of thread ids from a narrow scan of the window's traces and the thread rows, so
@@ -214,7 +216,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(trace_thread_filters)> AND <trace_thread_filters> <endif>
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC, id <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC, id <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1
             ;
             """;
 
@@ -818,7 +820,8 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC, thread_model_id DESC, id <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC, thread_model_id DESC, id <endif>
             <endif>
             LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
-            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
+            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>',
+                use_skip_indexes_if_final_exact_mode = 1
             ;
             """;
 
@@ -830,6 +833,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * The traces_final_ids references and the search follow {@link #SELECT_TRACES_THREADS_BY_PROJECT_IDS}.
      ***/
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    // Exact mode keeps that true in production, which turns it off (Helm profile): a skip index on source,
+    // environment or thread_id could otherwise hide a trace's newest row from FINAL.
     @VisibleForTesting
     static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
@@ -1142,7 +1147,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(annotation_queue_narrows)> AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
             ) AS t
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>', use_skip_indexes_if_final_exact_mode = 1
             """;
 
     /***
@@ -1513,6 +1518,8 @@ class ThreadDAOImpl implements ThreadDAO {
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    // Exact mode keeps that true in production, which turns it off (Helm profile): a skip index on source,
+    // environment or thread_id could otherwise hide a trace's newest row from FINAL.
     /**
      * The traces_final_ids references and the search follow {@link #SELECT_TRACES_THREADS_BY_PROJECT_IDS}.
      */
@@ -1909,7 +1916,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
-            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
+            SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>',
+                use_skip_indexes_if_final_exact_mode = 1
             ;
             """;
 
@@ -2050,7 +2058,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                 // The page's threads are the search's, and the list aggregates all their traces
                                 var threadAggregationCriteria = criteria.toBuilder().searchText(null).build();
                                 return findPageThreadIds(criteria, sortFields, size, offset, connection,
-                                        workspaceId)
+                                        workspaceId, userName)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
@@ -2069,11 +2077,11 @@ class ThreadDAOImpl implements ThreadDAO {
     }
 
     private Mono<List<String>> findPageThreadIds(TraceSearchCriteria criteria, String sortFields, int size,
-            int offset, Connection connection, String workspaceId) {
+            int offset, Connection connection, String workspaceId, String userName) {
         var template = newTraceThreadFindTemplate(SELECT_PAGE_THREAD_IDS, criteria, THREAD_SEARCH_CLAUSE,
                 traceColumnsNonNullable())
                 .add("offset", offset)
-                .add("log_comment", getLogComment("find_thread_page_ids", workspaceId, null,
+                .add("log_comment", getLogComment("find_thread_page_ids", workspaceId, userName,
                         "offset:" + offset + ":size:" + size));
         addTracesPartitionedFlag(template);
         Optional.ofNullable(sortFields).ifPresent(fields -> template.add("sort_fields", fields));
