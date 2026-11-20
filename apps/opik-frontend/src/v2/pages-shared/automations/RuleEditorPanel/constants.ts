@@ -173,6 +173,11 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
 
 export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   { id: "status", label: "Status", type: COLUMN_TYPE.string },
+  {
+    id: "number_of_messages",
+    label: "Message count",
+    type: COLUMN_TYPE.number,
+  },
   { id: "created_at", label: "Created at", type: COLUMN_TYPE.time },
   { id: "last_updated_at", label: "Last updated at", type: COLUMN_TYPE.time },
   { id: "duration", label: "Duration (s)", type: COLUMN_TYPE.duration },
