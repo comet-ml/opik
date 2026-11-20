@@ -79,11 +79,12 @@ class TopicEmbedder {
                         }
                         // What is left is invalid_request or input_too_long, a refusal of the inputs. The window read
                         // sends no blank summary, trace_summary caps one at 160 characters, and /v1/embed has no
-                        // per-input length limit, so this is a service-side change that needs a look: the next tick
-                        // sends the same chunk.
+                        // per-input length limit, so this is a service-side change that needs a look. Sending the same
+                        // chunk every tick would get the same answer, so the watermark passes it; the daily pass tries
+                        // it again.
                         log.error("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'",
                                 workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), exception);
-                        return Mono.just(ChunkOutcome.skipped(SkipReason.EMBED_FAILED, chunk.size()));
+                        return Mono.just(ChunkOutcome.refused(chunk));
                     });
         });
     }
@@ -118,12 +119,18 @@ class TopicEmbedder {
         if (result.dimensions() != TopicEmbedding.DIMENSIONS) {
             log.error("Topic vectors embed answered dimensions '{}', expected '{}', workspace '{}'",
                     result.dimensions(), TopicEmbedding.DIMENSIONS, workspaceId);
+            // The model, not the inputs: a later tick, once the service is fixed, embeds them.
             return ChunkOutcome.skipped(SkipReason.INVALID_VECTOR, chunk.size());
         }
         var vectors = new ArrayList<TopicVector>(chunk.size());
+        var zero = new ArrayList<Candidate>();
         for (int i = 0; i < chunk.size(); i++) {
             var candidate = chunk.get(i);
-            normalize(result.embeddings()[i]).ifPresent(vector -> vectors.add(
+            var normalized = normalize(result.embeddings()[i]);
+            if (normalized.isEmpty()) {
+                zero.add(candidate);
+            }
+            normalized.ifPresent(vector -> vectors.add(
                     TopicVector.builder()
                             .workspaceId(candidate.workspaceId())
                             .projectId(candidate.projectId())
@@ -137,12 +144,14 @@ class TopicEmbedder {
                             .vector(vector)
                             .build()));
         }
-        int invalid = chunk.size() - vectors.size();
+        int invalid = zero.size();
         if (invalid > 0) {
             log.error("Topic vectors embed answered '{}' zero or non-finite vectors, workspace '{}'", invalid,
                     workspaceId);
         }
-        return new ChunkOutcome(vectors, invalid > 0 ? Map.of(SkipReason.INVALID_VECTOR, invalid) : Map.of());
+        // The same summary gets the same vector, so these keys are settled.
+        return new ChunkOutcome(vectors, invalid > 0 ? Map.of(SkipReason.INVALID_VECTOR, invalid) : Map.of(),
+                ChunkOutcome.keys(zero));
     }
 
     /** Scaled to length 1, so the nightly job's dot product is the cosine; empty for a zero or non-finite vector. */

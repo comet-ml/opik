@@ -17,6 +17,7 @@ import { cn, getTextWidth } from "@/lib/utils";
 import { Spinner } from "@/ui/spinner";
 import FeedbackScoresChartContent, {
   ChartData,
+  ChartLegendPosition,
 } from "./FeedbackScoresChartContent";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { DropdownOption } from "@/types/shared";
@@ -27,11 +28,19 @@ type FeedbackScoresChartContainerProps = {
   chartId: string;
   chartName?: string | DropdownOption<string>[];
   subtitle?: string;
+  legendPosition?: ChartLegendPosition;
 };
 
 const FeedbackScoresChartContainer: React.FC<
   FeedbackScoresChartContainerProps
-> = ({ className, chartData, chartId, chartName, subtitle }) => {
+> = ({
+  className,
+  chartData,
+  chartId,
+  chartName,
+  subtitle,
+  legendPosition,
+}) => {
   const isPending = !chartData;
   const noData = useMemo(() => {
     if (isPending) return false;
@@ -168,9 +177,10 @@ const FeedbackScoresChartContainer: React.FC<
         chartId={chartId}
         chartData={chartData}
         containerWidth={width}
+        legendPosition={legendPosition}
       />
     );
-  }, [isPending, noData, chartData, chartId, width]);
+  }, [isPending, noData, chartData, chartId, width, legendPosition]);
 
   return (
     <Card className={cn("group/chart min-w-[400px]", className)} ref={ref}>

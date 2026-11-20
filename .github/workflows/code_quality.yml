@@ -58,7 +58,7 @@ jobs:
       to: ${{ steps.range.outputs.to }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Diff refs (base/head, push before/after) must be reachable.
           fetch-depth: 0
@@ -129,7 +129,7 @@ jobs:
     name: "lint (${{ matrix.leg.name }})"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Shallow: the leg lints explicit files (paths come from detect's
           # matrix value, not a git diff here), so it needs the worktree content
@@ -141,7 +141,7 @@ jobs:
 
       - name: Set up JDK 25
         if: matrix.leg.toolchain == 'java'
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           java-version: "25"
           distribution: "corretto"
@@ -149,7 +149,7 @@ jobs:
 
       - name: Set up Node.js
         if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "26"
           cache: npm
@@ -166,10 +166,10 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -214,7 +214,7 @@ jobs:
 
       - name: Upload timing fragment
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: /tmp/${{ steps.artifact.outputs.name }}.log
@@ -247,14 +247,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Only needs the render scripts + shared description TSV, not history.
           fetch-depth: 1
 
       - name: Download timing fragments
         if: needs.detect.outputs.has_legs == 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: /tmp/fragments
           pattern: timing-*
@@ -324,7 +324,7 @@ jobs:
       - name: Find prior timing comment
         id: find_comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/find-comment@v4
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
@@ -332,7 +332,7 @@ jobs:
 
       - name: Post or update timing comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/create-or-update-comment@v5
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}

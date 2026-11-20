@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
+import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

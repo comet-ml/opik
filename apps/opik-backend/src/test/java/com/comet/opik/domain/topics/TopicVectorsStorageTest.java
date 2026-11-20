@@ -14,8 +14,8 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Progress;
+import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
+import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -113,15 +113,13 @@ class TopicVectorsStorageTest {
     private TopicVectorsTables tables;
     private TransactionTemplate template;
     private TopicVectorBackfillService backfillService;
-    private TopicsBackfillGate backfillGate;
 
     @BeforeAll
     void beforeAll(TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit TopicVectorsDAO vectorsDAO, @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
-            @Jit TopicVectorBackfillService backfillService, @Jit TopicsBackfillGate backfillGate) {
+            @Jit TopicVectorBackfillService backfillService) {
         this.template = template;
         this.backfillService = backfillService;
-        this.backfillGate = backfillGate;
         this.templateAsync = templateAsync;
         this.vectorsDAO = vectorsDAO;
         this.statusDAO = statusDAO;
@@ -592,11 +590,6 @@ class TopicVectorsStorageTest {
                 third, found.projectId(third).backfillStartedAt(t3).backfillDrainedAt(null).backfillTracesTotal(7)
                         .backfillTracesDone(7).build()));
         assertThat(vectorsCheckedAt(workspaceId)).isEqualTo(t3);
-        // The first build's gate reads the same state: drained, not drained, and no backfill in a fresh workspace.
-        var gate = backfillGate.read(List.of(workspaceId), t3);
-        assertThat(gate.state(workspaceId, first)).isEqualTo(TopicsBackfillGate.State.OPEN);
-        assertThat(gate.state(workspaceId, third)).isEqualTo(TopicsBackfillGate.State.WAITING);
-        assertThat(gate.state(workspaceId, ID_GENERATOR.generateId())).isEqualTo(TopicsBackfillGate.State.OPEN);
 
         // The tick comes back long after t3: every backfill starts again.
         var t4 = t3.plus(3, ChronoUnit.DAYS);
