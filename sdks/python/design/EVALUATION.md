@@ -130,10 +130,7 @@ def execute(
         futures = [pool.submit(task) for task in evaluation_tasks]
 
         # Collect as they complete (with progress bar)
-        return [
-            future.result()
-            for future in tqdm(as_completed(futures))
-        ]
+        return [future.result() for future in tqdm(as_completed(futures))]
 ```
 
 **Design Decision**: Thread pool (not process pool or asyncio) because:
@@ -239,10 +236,7 @@ def evaluate_prompt(
 ```python
 def _prompt_evaluation_task(dataset_item):
     # Format prompt with item values
-    formatted_messages = prompt_template.format(
-        messages,
-        **dataset_item
-    )
+    formatted_messages = prompt_template.format(messages, **dataset_item)
 
     # Call model
     response = model.generate(input=formatted_messages)
@@ -251,7 +245,7 @@ def _prompt_evaluation_task(dataset_item):
     return {
         "input": formatted_messages,
         "output": response,
-        **dataset_item  # Include other fields
+        **dataset_item,  # Include other fields
     }
 ```
 
@@ -426,10 +420,7 @@ class LevenshteinRatio(BaseMetric):
         distance = compute_levenshtein(output, reference)
         ratio = 1 - (distance / max(len(output), len(reference)))
 
-        return ScoreResult(
-            value=ratio,
-            name="levenshtien_ratio_metric"
-        )
+        return ScoreResult(value=ratio, name="levenshtien_ratio_metric")
 ```
 
 **Characteristics**:
@@ -451,32 +442,21 @@ class Hallucination(BaseMetric):
         self.model = model or OpikOpenAIModel()
 
     def score(
-        self,
-        input: str,
-        output: str,
-        context: List[str],
-        **kwargs
+        self, input: str, output: str, context: List[str], **kwargs
     ) -> ScoreResult:
         # 1. Format prompt template
         prompt = format_template(
-            HALLUCINATION_TEMPLATE,
-            input=input,
-            output=output,
-            context=context
+            HALLUCINATION_TEMPLATE, input=input, output=output, context=context
         )
 
         # 2. Call LLM judge
-        response = self.model.generate(
-            input=[{"role": "user", "content": prompt}]
-        )
+        response = self.model.generate(input=[{"role": "user", "content": prompt}])
 
         # 3. Parse response
         parsed = parse_llm_response(response)
 
         return ScoreResult(
-            value=parsed["score"],
-            name=self.name,
-            reason=parsed["reason"]
+            value=parsed["score"], name=self.name, reason=parsed["reason"]
         )
 ```
 
@@ -505,17 +485,12 @@ class ConversationThreadMetric(BaseMetric):
     """Base class for conversation metrics"""
 
     @abc.abstractmethod
-    def score_conversation(
-        self,
-        conversation: List[Dict[str, str]]
-    ) -> ScoreResult:
+    def score_conversation(self, conversation: List[Dict[str, str]]) -> ScoreResult:
         """Score entire conversation"""
 
+
 class ConversationalCoherence(ConversationThreadMetric):
-    def score_conversation(
-        self,
-        conversation: List[Dict[str, str]]
-    ) -> ScoreResult:
+    def score_conversation(self, conversation: List[Dict[str, str]]) -> ScoreResult:
         # Conversation format:
         # [
         #   {"role": "user", "content": "Hi"},
@@ -526,10 +501,7 @@ class ConversationalCoherence(ConversationThreadMetric):
         # Call LLM judge with full conversation
         score = self._evaluate_coherence(conversation)
 
-        return ScoreResult(
-            value=score,
-            name="conversational_coherence_metric"
-        )
+        return ScoreResult(value=score, name="conversational_coherence_metric")
 ```
 
 **Characteristics**:
@@ -549,6 +521,7 @@ class AnswerRelevance(BaseMetric):
     def score(self, input: str, output: str, **kwargs) -> ScoreResult:
         # Validation happens automatically
         pass
+
 
 # Validator checks:
 # 1. Extract function signature
@@ -590,19 +563,14 @@ Main Thread
 # Create partial functions (capture dataset_item and task)
 evaluation_tasks = [
     functools.partial(
-        self._evaluate_llm_task,
-        item=dataset_item,
-        task=user_task,
-        trial_id=0
+        self._evaluate_llm_task, item=dataset_item, task=user_task, trial_id=0
     )
     for dataset_item in dataset_items
 ]
 
 # Execute in parallel
 test_results = evaluation_tasks_executor.execute(
-    evaluation_tasks,
-    workers=self._workers,
-    verbose=self._verbose
+    evaluation_tasks, workers=self._workers, verbose=self._verbose
 )
 ```
 
@@ -620,10 +588,10 @@ Each evaluation task runs in isolated context:
 ```python
 @contextlib.contextmanager
 def evaluate_llm_task_context(
-    experiment: Experiment,              # From api_objects/experiment/
+    experiment: Experiment,  # From api_objects/experiment/
     dataset_item_id: str,
-    trace_data: TraceData,               # From api_objects/trace/
-    client: Opik                         # From api_objects/opik_client.py
+    trace_data: TraceData,  # From api_objects/trace/
+    client: Opik,  # From api_objects/opik_client.py
 ) -> Iterator[None]:
     """
     Creates trace context for task execution.
@@ -664,8 +632,7 @@ def evaluate_llm_task_context(
         # Link trace to experiment
         # [api_objects/experiment/experiment_item.py]
         experiment_item = ExperimentItemReferences(
-            dataset_item_id=dataset_item_id,
-            trace_id=trace_data.id
+            dataset_item_id=dataset_item_id, trace_id=trace_data.id
         )
 
         # [api_objects/experiment/experiment.py]
@@ -915,10 +882,10 @@ This is the core function executed for each dataset item.
 @opik.track(name="metrics_calculation")  # Creates span for observability
 def _evaluate_llm_task(
     self,
-    item: DatasetItem,               # From api_objects/dataset/dataset_item.py
-    task: LLMTask,                   # User-provided function
+    item: DatasetItem,  # From api_objects/dataset/dataset_item.py
+    task: LLMTask,  # User-provided function
     trial_id: int,
-) -> TestResult:                     # From evaluation/test_result.py
+) -> TestResult:  # From evaluation/test_result.py
     """
     Evaluate a single dataset item.
 
@@ -929,14 +896,14 @@ def _evaluate_llm_task(
     # 1. Create trace for this evaluation
     # [api_objects/trace/trace_client.py]
     trace_data = TraceData(
-        id=generate_id(),                        # [id_helpers.py]
+        id=generate_id(),  # [id_helpers.py]
         name=f"evaluation_{item.id}",
         metadata={
             "experiment_id": self._experiment.id,
             "dataset_item_id": item.id,
-            "trial_id": trial_id
+            "trial_id": trial_id,
         },
-        project_name=self._project_name
+        project_name=self._project_name,
     )
 
     # 2. Execute task in trace context
@@ -945,7 +912,7 @@ def _evaluate_llm_task(
         experiment=self._experiment,
         dataset_item_id=item.id,
         trace_data=trace_data,
-        client=self._client
+        client=self._client,
     ):
         # User's task function runs here
         # Any @track decorated functions create nested spans
@@ -958,9 +925,7 @@ def _evaluate_llm_task(
         # Map task output keys to metric expected keys
         # [evaluation/engine/helpers.py: prepare_scoring_input]
         scoring_input = prepare_scoring_input(
-            task_output,
-            item.content,
-            self._scoring_key_mapping
+            task_output, item.content, self._scoring_key_mapping
         )
 
         # Validate metric has required arguments
@@ -986,7 +951,7 @@ def _evaluate_llm_task(
         feedback_scores=[
             {"name": score.name, "value": score.value, "reason": score.reason}
             for score in scores
-        ]
+        ],
     )
 
     # Note: experiment.insert() called in context manager cleanup
@@ -1000,7 +965,7 @@ def _evaluate_llm_task(
         output=task_output.get("output"),
         scores=scores,
         trace_id=trace_data.id,
-        experiment_item_id=experiment_item.id
+        experiment_item_id=experiment_item.id,
     )
 ```
 
@@ -1014,9 +979,9 @@ Maps task output and dataset item to metric-expected format.
 
 ```python
 def prepare_scoring_input(
-    task_output: Dict[str, Any],                    # User task return value
-    dataset_item: Dict[str, Any],                   # Original dataset item
-    scoring_key_mapping: Optional[ScoringKeyMappingType]  # Optional key remapping
+    task_output: Dict[str, Any],  # User task return value
+    dataset_item: Dict[str, Any],  # Original dataset item
+    scoring_key_mapping: Optional[ScoringKeyMappingType],  # Optional key remapping
 ) -> Dict[str, Any]:
     """
     Combine task output and dataset item, apply key mapping.
@@ -1058,10 +1023,10 @@ def prepare_scoring_input(
 
 # Result for metrics
 {
-    "input": "What is AI?",      # From user_question
-    "output": "AI is...",         # From task output
-    "reference": "...",           # From expected_answer
-    "context": [...]              # From task output
+    "input": "What is AI?",  # From user_question
+    "output": "AI is...",  # From task output
+    "reference": "...",  # From expected_answer
+    "context": [...],  # From task output
 }
 ```
 
@@ -1122,6 +1087,7 @@ except Exception as e:
 class MetricComputationError(OpikException):
     """Raised when metric computation fails"""
 
+
 # Metric implementation
 # [evaluation/metrics/heuristics/ or llm_judges/]
 class CustomMetric(BaseMetric):
@@ -1130,9 +1096,7 @@ class CustomMetric(BaseMetric):
             result = compute_score(**kwargs)
         except Exception as e:
             # DON'T hide errors - raise explicit exception
-            raise MetricComputationError(
-                f"Failed to compute {self.name}: {e}"
-            ) from e
+            raise MetricComputationError(f"Failed to compute {self.name}: {e}") from e
 ```
 
 **Design Principle**: Metrics must raise `MetricComputationError` on failure.
@@ -1169,6 +1133,7 @@ def is_llm_provider_rate_limit_error(exception: Exception) -> bool:
     # Check exception type and attributes
     return isinstance(exception, (...))
 
+
 # Usage in engine (could be implemented)
 # [evaluation/engine/engine.py]
 try:
@@ -1191,13 +1156,13 @@ except Exception as e:
 # Experiment always linked to dataset
 experiment = client.create_experiment(
     name="exp_1",
-    dataset_name="dataset_1"  # Required
+    dataset_name="dataset_1",  # Required
 )
 
 # Experiment items reference dataset items
 experiment_item = ExperimentItem(
     dataset_item_id=dataset_item.id,  # Links to dataset item
-    trace_id=trace_data.id,            # Links to trace
+    trace_id=trace_data.id,  # Links to trace
     # ... data
 )
 ```
@@ -1211,14 +1176,13 @@ trace_data = TraceData(
     metadata={
         "experiment_id": experiment.id,
         "dataset_item_id": dataset_item.id,
-        "trial_id": trial_id
-    }
+        "trial_id": trial_id,
+    },
 )
 
 # Experiment item references trace
 experiment_item = ExperimentItemReferences(
-    dataset_item_id=item.id,
-    trace_id=trace_data.id
+    dataset_item_id=item.id, trace_id=trace_data.id
 )
 ```
 

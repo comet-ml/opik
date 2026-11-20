@@ -23,7 +23,7 @@ repos:
         exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.17.3
     hooks:
       - id: ruff
         name: 🐍 ruff — python sdk
@@ -36,7 +36,7 @@ repos:
         exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.4.1
     hooks:
       - id: mypy
         name: 🐍 mypy — python sdk
@@ -88,7 +88,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
         name: 🤖 pyupgrade — optimizer
@@ -96,7 +96,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.17.3
     hooks:
       - id: ruff
         name: 🤖 ruff — optimizer
@@ -107,7 +107,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.4.1
     hooks:
       - id: mypy
         name: 🤖 mypy — optimizer
@@ -117,14 +117,14 @@ repos:
         additional_dependencies: [types-requests, types-PySocks, types-Pygments, types-pexpect, types-protobuf, types-setuptools, types-ujson, pytest, pyrate_limiter, modal]
 
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.9.0
+    rev: 0.9.1
     hooks:
       - id: nbstripout
         name: 📓 nbstripout — optimizer notebooks
         files: ^sdks/opik_optimizer/.*\.ipynb$
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.47.0
+    rev: v0.50.0
     hooks:
       - id: markdownlint
         name: 📝 markdownlint — optimizer
@@ -133,7 +133,7 @@ repos:
         args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.3
     hooks:
       - id: codespell
         name: 🔤 codespell — optimizer
@@ -177,7 +177,7 @@ repos:
         additional_dependencies: [lizard==1.19.0]
 
   - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.14
+    rev: v2.16
     hooks:
       - id: vulture
         name: 🧹 vulture — optimizer
@@ -198,7 +198,7 @@ repos:
         files: ^apps/opik-guardrails-backend
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.17.3
     hooks:
       - id: ruff
         name: 🛡️ ruff — guardrails
@@ -209,7 +209,7 @@ repos:
         files: ^apps/opik-guardrails-backend
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.4.1
     hooks:
       - id: mypy
         name: 🛡️ mypy — guardrails
@@ -390,6 +390,10 @@ repos:
     hooks:
       - id: hadolint-docker
         name: 🐳 hadolint — dockerfiles
+        # Upstream's entry is the untagged image, so `rev:` alone would float
+        # hadolint to :latest. The tag here is what pins the version; the weekly
+        # autobump (scripts/precommit-bumped-hooks.py) keeps it equal to rev.
+        entry: ghcr.io/hadolint/hadolint:v2.15.1 hadolint
         # Explicit files: regex (not the upstream `types: [dockerfile]`) so the
         # CI matrix builder in scripts/precommit-detect-hooks.py can route a
         # changed Dockerfile to this leg — it matches on paths, not content type.
@@ -407,7 +411,7 @@ repos:
   # zizmor==1.27.0). See OPIK-6366.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.27.0
+    rev: v1.31.1
     hooks:
       - id: zizmor
         name: 🌈 zizmor — github workflows security
@@ -430,7 +434,7 @@ repos:
   # so pre-existing code is surfaced as tech debt rather than blocking work.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/semgrep/pre-commit
-    rev: v1.172.0
+    rev: v1.183.0
     hooks:
       - id: semgrep
         name: 🛡️ semgrep — java backend sql

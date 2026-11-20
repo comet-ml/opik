@@ -1470,8 +1470,8 @@ class TestVersionReplayAuditLog:
             raise AssertionError(f"unexpected list_dataset_versions id={id}")
 
         rest_client.datasets.list_dataset_versions.side_effect = _list_versions
-        rest_client.datasets.apply_dataset_item_changes.side_effect = (
-            lambda *a, **kw: next(applied_iter)
+        rest_client.datasets.apply_dataset_item_changes.side_effect = lambda *a, **kw: (
+            next(applied_iter)
         )
         rest_client.datasets.create_or_update_dataset_items.return_value = None
 

@@ -127,13 +127,13 @@ def print_performance_report(stats: Dict[str, Any]):
     print(f"  Successful:         {stats['successful_requests']}")
     print(f"  Failed:             {stats['failed_requests']}")
     print(
-        f"  Success Rate:       {stats['successful_requests']/stats['total_requests']*100:.2f}%"
+        f"  Success Rate:       {stats['successful_requests'] / stats['total_requests'] * 100:.2f}%"
     )
 
     print("\nTiming Statistics:")
     print(f"  Total Time:         {stats['total_time']:.2f} seconds")
     print(f"  Throughput:         {stats['throughput']:.2f} requests per second")
-    print(f"  Average Speed:      {stats['average_speed']*1000:.2f} ms per request")
+    print(f"  Average Speed:      {stats['average_speed'] * 1000:.2f} ms per request")
     print(f"  Concurrent Workers: {stats['concurrent_workers']}")
 
     if "latency" in stats:

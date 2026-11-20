@@ -143,11 +143,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="f_outer",
-        spans=[
-            SpanModel(name="f_outer", spans=[
-                SpanModel(name="f_inner", spans=[])
-            ])
-        ]
+        spans=[SpanModel(name="f_outer", spans=[SpanModel(name="f_inner", spans=[])])],
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -193,8 +189,7 @@ def test_openai_client_responses_create__happyflow(fake_backend):
 
     # Real OpenAI API call
     response = wrapped_client.responses.create(
-        model=MODEL_FOR_TESTS,
-        input=[{"role": "user", "content": "Hello"}]
+        model=MODEL_FOR_TESTS, input=[{"role": "user", "content": "Hello"}]
     )
 
     opik.flush_tracker()
@@ -246,6 +241,7 @@ def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
     yield opik_client_
     opik_client_.end()
 
+
 @pytest.fixture
 def dataset_name(opik_client):
     """Generate unique dataset name"""
@@ -258,9 +254,7 @@ def dataset_name(opik_client):
 def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
     # Create trace
     trace_id = opik_client.trace(
-        name="test_trace",
-        input={"query": "test"},
-        project_name=temporary_project_name
+        name="test_trace", input={"query": "test"}, project_name=temporary_project_name
     )
     opik_client.flush()
 
@@ -270,7 +264,7 @@ def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
         trace_id=trace_id,
         name="test_trace",
         input={"query": "test"},
-        project_name=temporary_project_name
+        project_name=temporary_project_name,
     )
 ```
 
@@ -327,8 +321,7 @@ def test_litellm_chat_model_e2e(opik_client_unique_project_name):
 
     # Real LiteLLM call (which calls real LLM provider)
     response = completion(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": "Hello"}]
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": "Hello"}]
     )
 
     opik.flush_tracker()
@@ -368,6 +361,7 @@ Domain-specific models for test assertions:
 @dataclasses.dataclass
 class SpanModel:
     """Represents expected span structure"""
+
     id: str
     name: Optional[str] = None
     input: Any = None
@@ -377,9 +371,11 @@ class SpanModel:
     spans: List["SpanModel"] = dataclasses.field(default_factory=list)
     # ... more fields
 
+
 @dataclasses.dataclass
 class TraceModel:
     """Represents expected trace structure"""
+
     id: str
     name: Optional[str]
     input: Any = None
@@ -387,9 +383,11 @@ class TraceModel:
     spans: List[SpanModel] = dataclasses.field(default_factory=list)
     # ... more fields
 
+
 @dataclasses.dataclass
 class FeedbackScoreModel:
     """Represents expected feedback score"""
+
     id: str
     name: str
     value: float
@@ -458,9 +456,9 @@ assert_equal(
         id=ANY_BUT_NONE,  # Don't care about ID, but must exist
         name="test",
         start_time=ANY_BUT_NONE,  # Don't care about time but must exist
-        input={"key": "value"}  # Exact match
+        input={"key": "value"},  # Exact match
     ),
-    actual=fake_backend.trace_trees[0]
+    actual=fake_backend.trace_trees[0],
 )
 
 # String matchers
@@ -481,6 +479,7 @@ def assert_equal(expected, actual):
     - Provides detailed diff on mismatch
     """
 
+
 def assert_dict_has_keys(dict_obj, required_keys):
     """Verify dict contains all required keys"""
 ```
@@ -496,6 +495,7 @@ def clear_context_storage():
     yield
     context_storage.clear_all()
 
+
 @pytest.fixture(autouse=True)
 def shutdown_cached_client_after_test():
     """Clean up cached Opik client after each test"""
@@ -504,6 +504,7 @@ def shutdown_cached_client_after_test():
         opik_client.get_client_cached().end()
         opik_client.get_client_cached.cache_clear()
 
+
 @pytest.fixture
 def fake_backend(patch_streamer):
     """Fake backend for unit/library integration tests"""
@@ -511,6 +512,7 @@ def fake_backend(patch_streamer):
     # ... setup
     yield fake_message_processor
     # ... cleanup
+
 
 @pytest.fixture
 def patch_streamer():
@@ -522,7 +524,7 @@ def patch_streamer():
         n_consumers=1,
         use_batching=True,
         file_uploader=fake_upload_manager,
-        max_queue_size=None
+        max_queue_size=None,
     )
     yield streamer, fake_processor
     streamer.close(timeout=5)
@@ -538,11 +540,13 @@ def opik_client(configure_e2e_tests_env):
     yield client
     client.end()
 
+
 @pytest.fixture
 def dataset_name(opik_client):
     """Generate unique dataset name for test"""
     name = f"e2e-tests-dataset-{random_chars()}"
     yield name
+
 
 @pytest.fixture
 def temporary_project_name(opik_client):
@@ -565,6 +569,7 @@ def reset_tracing_to_config_default():
     yield
     opik.reset_tracing_to_config_default()
 
+
 # tests/library_integration/openai/conftest.py
 @pytest.fixture
 def ensure_openai_configured():
@@ -585,6 +590,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
     Test naming convention:
     test_WHAT__CASE_DESCRIPTION__EXPECTED_RESULT
     """
+
     @opik.track
     def f_inner(x):
         return "inner-output"
@@ -615,11 +621,11 @@ def test_track__one_nested_function__happyflow(fake_backend):
                         name="f_inner",
                         input={"x": "inner-input"},
                         output={"output": "inner-output"},
-                        spans=[]
+                        spans=[],
                     )
-                ]
+                ],
             )
-        ]
+        ],
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -649,7 +655,7 @@ def test_openai_client_responses_create__happyflow(
     response = wrapped_client.responses.create(
         model=MODEL_FOR_TESTS,
         input=[{"role": "user", "content": "Tell a fact"}],
-        max_output_tokens=50
+        max_output_tokens=50,
     )
 
     opik.flush_tracker()
@@ -677,9 +683,9 @@ def test_openai_client_responses_create__happyflow(
                 tags=["openai"],
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[]
+                spans=[],
             )
-        ]
+        ],
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -687,8 +693,7 @@ def test_openai_client_responses_create__happyflow(
 
     # Optional: Verify specific metadata keys if needed
     assert_dict_has_keys(
-        fake_backend.trace_trees[0].spans[0].metadata,
-        ["created_from", "model"]
+        fake_backend.trace_trees[0].spans[0].metadata, ["created_from", "model"]
     )
 ```
 
@@ -702,21 +707,14 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
     trace_id = opik_client.trace(
         name="parent_trace",
         input={"query": "test"},
-        project_name=temporary_project_name
+        project_name=temporary_project_name,
     )
 
     # Create spans
-    span_id_1 = opik_client.span(
-        name="span_1",
-        trace_id=trace_id,
-        input={"step": 1}
-    )
+    span_id_1 = opik_client.span(name="span_1", trace_id=trace_id, input={"step": 1})
 
     span_id_2 = opik_client.span(
-        name="span_2",
-        trace_id=trace_id,
-        parent_span_id=span_id_1,
-        input={"step": 2}
+        name="span_2", trace_id=trace_id, parent_span_id=span_id_1, input={"step": 2}
     )
 
     opik_client.flush()
@@ -727,7 +725,7 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         trace_id=trace_id,
         name="parent_trace",
         input={"query": "test"},
-        project_name=temporary_project_name
+        project_name=temporary_project_name,
     )
 
     verify_span(
@@ -735,7 +733,7 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         span_id=span_id_1,
         name="span_1",
         trace_id=trace_id,
-        parent_span_id=None
+        parent_span_id=None,
     )
 
     verify_span(
@@ -743,7 +741,7 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         span_id=span_id_2,
         name="span_2",
         trace_id=trace_id,
-        parent_span_id=span_id_1
+        parent_span_id=span_id_1,
     )
 ```
 
@@ -775,11 +773,11 @@ def test_track__function_raises_exception__error_info_captured(fake_backend):
                 error_info={
                     "exception_type": "ValueError",
                     "message": ANY_STRING.containing("Test error"),
-                    "traceback": ANY_BUT_NONE
+                    "traceback": ANY_BUT_NONE,
                 },
-                spans=[]
+                spans=[],
             )
-        ]
+        ],
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -797,7 +795,7 @@ def test_openai_streaming_response(fake_backend):
     stream = wrapped_client.chat.completions.create(
         model=MODEL_FOR_TESTS,
         messages=[{"role": "user", "content": "Count to 5"}],
-        stream=True
+        stream=True,
     )
 
     # Consume stream
@@ -823,9 +821,9 @@ def test_openai_streaming_response(fake_backend):
                 output=ANY_BUT_NONE,  # Output accumulated from chunks
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[]
+                spans=[],
             )
-        ]
+        ],
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -841,7 +839,7 @@ def test_hallucination_metric__happyflow():
     result = metric.score(
         input="What is the capital of France?",
         output="Paris is the capital of France.",
-        context=["Paris is the capital and largest city of France."]
+        context=["Paris is the capital and largest city of France."],
     )
 
     assert isinstance(result, ScoreResult)
@@ -896,9 +894,9 @@ def test_my_feature(fake_backend):
                 output={"output": 10},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[]
+                spans=[],
             )
-        ]
+        ],
     )
 
     # 3. Assert
@@ -911,10 +909,7 @@ def test_my_feature(fake_backend):
 ```python
 def test_my_e2e_feature(opik_client, temporary_project_name):
     # 1. Create resources
-    trace_id = opik_client.trace(
-        name="test_trace",
-        project_name=temporary_project_name
-    )
+    trace_id = opik_client.trace(name="test_trace", project_name=temporary_project_name)
     opik_client.flush()
 
     # 2. Verify using verifiers
@@ -922,7 +917,7 @@ def test_my_e2e_feature(opik_client, temporary_project_name):
         opik_client,
         trace_id=trace_id,
         name="test_trace",
-        project_name=temporary_project_name
+        project_name=temporary_project_name,
     )
 ```
 

@@ -109,6 +109,7 @@ async def test_openai_async_responses_stream__consumer_breaks_early__no_error_lo
     assert responses_span.end_time is not None
     assert logging.ERROR not in _levels(aggregator_log_records)
 
+
 def test_aggregate__terminal_response_failed_event__returns_response():
     fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
         input_tokens=15,

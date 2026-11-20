@@ -216,7 +216,7 @@ When used within `@track` decorated functions or existing Opik trace context:
 
 Example:
 ```python
-@opik.track                          # Opik trace + span
+@opik.track  # Opik trace + span
 def my_function():
     chain.invoke(..., callbacks=[OpikTracer()])  # LangChain spans as children
 ```
@@ -412,7 +412,9 @@ track_crewai(project_name="my-project")
 
 # For CrewAI v1.0.0+ (direct provider clients)
 crew = Crew(agents=[...], tasks=[...])
-track_crewai(project_name="my-project", crew=crew)  # crew argument enables LLM client tracking
+track_crewai(
+    project_name="my-project", crew=crew
+)  # crew argument enables LLM client tracking
 ```
 
 ## Streaming Strategies

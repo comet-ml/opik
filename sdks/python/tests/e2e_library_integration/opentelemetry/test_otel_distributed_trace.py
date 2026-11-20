@@ -117,12 +117,14 @@ def test_otel_distributed_trace_roundtrip__happyflow(opik_client: opik.Opik):
     )
 
     if not synchronization.until(
-        lambda: len(
-            opik_client.search_spans(
-                project_name=opik_client.config.project_name, trace_id=trace_id
+        lambda: (
+            len(
+                opik_client.search_spans(
+                    project_name=opik_client.config.project_name, trace_id=trace_id
+                )
             )
-        )
-        == 3,
+            == 3
+        ),
         max_try_seconds=10,
     ):
         raise AssertionError(
@@ -194,12 +196,14 @@ def test_opik_track_with_otel_spans__single_merged_trace__happyflow(
     )
 
     if not synchronization.until(
-        lambda: len(
-            opik_client.search_spans(
-                project_name=opik_client.config.project_name, trace_id=trace_id
+        lambda: (
+            len(
+                opik_client.search_spans(
+                    project_name=opik_client.config.project_name, trace_id=trace_id
+                )
             )
-        )
-        == 3,
+            == 3
+        ),
         max_try_seconds=15,
     ):
         raise AssertionError(
