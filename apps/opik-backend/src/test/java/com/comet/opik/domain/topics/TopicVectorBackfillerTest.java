@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("topic vectors backfiller")
 class TopicVectorBackfillerTest {
 
-    private final Instant now = Instant.ofEpochSecond(RandomUtils.secure().randomLong(0, 4_000_000_000L));
+    private final Instant now = TopicsTestClock.randomInstant();
 
     @Test
     @DisplayName("projects that drain in one read go first, smallest first, then the large ones, the most recently "
