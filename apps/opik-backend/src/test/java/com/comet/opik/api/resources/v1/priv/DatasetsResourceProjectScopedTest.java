@@ -30,6 +30,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -369,7 +370,7 @@ class DatasetsResourceProjectScopedTest {
         String workspaceName = UUID.randomUUID().toString();
         mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
 
-        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName);
+        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName).getFirst().name();
 
         try (var response = datasetResourceClient.callGetDatasetByIdentifier(
                 DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName)) {
@@ -384,22 +385,16 @@ class DatasetsResourceProjectScopedTest {
         String workspaceName = UUID.randomUUID().toString();
         mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
 
-        String projectNameA = "project-" + UUID.randomUUID();
-        String projectNameB = "project-" + UUID.randomUUID();
-        var projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
-        var projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
-        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
-        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
-        var idA = datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
-        var idB = datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
+        var datasets = createDatasetInTwoProjects(apiKey, workspaceName);
+        String datasetName = datasets.getFirst().name();
 
         try (var response = datasetResourceClient.callDeleteDatasetByIdentifier(
-                DatasetIdentifier.builder().datasetName(datasetA.name()).build(), apiKey, workspaceName)) {
-            assertConflictForAmbiguousName(response, datasetA.name());
+                DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName)) {
+            assertConflictForAmbiguousName(response, datasetName);
         }
 
-        assertDataset(datasetResourceClient.getDatasetById(idA, apiKey, workspaceName), datasetA);
-        assertDataset(datasetResourceClient.getDatasetById(idB, apiKey, workspaceName), datasetB);
+        datasets.forEach(dataset -> assertDataset(
+                datasetResourceClient.getDatasetById(dataset.id(), apiKey, workspaceName), dataset));
     }
 
     @Test
@@ -409,7 +404,7 @@ class DatasetsResourceProjectScopedTest {
         String workspaceName = UUID.randomUUID().toString();
         mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
 
-        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName);
+        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName).getFirst().name();
         String otherProjectName = "project-" + UUID.randomUUID();
         var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
 
@@ -430,14 +425,19 @@ class DatasetsResourceProjectScopedTest {
         assertThat(page.content()).isEmpty();
     }
 
-    private String createDatasetInTwoProjects(String apiKey, String workspaceName) {
-        var projectIdA = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-        var projectIdB = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
-        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
-        datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
-        datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
-        return datasetA.name();
+    /**
+     * Creates two datasets sharing one name, each in its own new project, and returns them with their ids.
+     */
+    private List<Dataset> createDatasetInTwoProjects(String apiKey, String workspaceName) {
+        String name = "dataset-" + UUID.randomUUID();
+        return Stream.generate(() -> projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName))
+                .limit(2)
+                .map(projectId -> buildDataset().toBuilder().id(null).name(name).projectId(projectId).build())
+                .map(dataset -> dataset.toBuilder()
+                        .id(datasetResourceClient.createDataset(dataset, apiKey, workspaceName))
+                        .build())
+                .toList();
     }
 
     private void assertConflictForAmbiguousName(Response response, String datasetName) {

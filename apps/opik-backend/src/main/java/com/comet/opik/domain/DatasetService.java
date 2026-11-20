@@ -181,9 +181,9 @@ class DatasetServiceImpl implements DatasetService {
             UUID projectId) {
         var dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var result = findSingleByName(dao, workspaceId, name, projectId);
+            var result = findSingleByName(dao, workspaceId, name, projectId, null);
             if (result.isEmpty() && projectId != null) {
-                result = findSingleByName(dao, workspaceId, name, null);
+                result = findSingleByName(dao, workspaceId, name, null, null);
             }
             return result;
         });
@@ -335,13 +335,14 @@ class DatasetServiceImpl implements DatasetService {
     /**
      * Finds the dataset with this name in the given project, or anywhere in the workspace when {@code projectId} is
      * null. Dataset names are unique per project, so a workspace-wide lookup can match datasets in several projects:
-     * that case is ambiguous and is rejected with a conflict instead of picking one of them.
+     * that case is ambiguous and is rejected with a conflict instead of picking one of them. Only datasets the caller
+     * can see count, so a public-only request never conflicts with a private dataset.
      */
-    private Optional<Dataset> findSingleByName(DatasetDAO dao, String workspaceId, String name, UUID projectId) {
-        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId);
+    private Optional<Dataset> findSingleByName(DatasetDAO dao, String workspaceId, String name, UUID projectId,
+            Visibility visibility) {
+        Visibility visibilityFilter = visibility == Visibility.PUBLIC ? Visibility.PUBLIC : null;
+        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId, visibilityFilter);
         if (datasets.size() > 1) {
-            log.info("Found '{}' datasets with name '{}', workspaceId '{}', projectId '{}'", datasets.size(), name,
-                    workspaceId, projectId);
             throw new ConflictException(
                     "Multiple datasets with this name exist in different projects, specify the project. Dataset name: '%s'"
                             .formatted(name));
@@ -353,8 +354,8 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset d = findSingleByName(dao, workspaceId, name, projectId)
-                    .or(() -> findSingleByName(dao, workspaceId, name, null))
+            Dataset d = findSingleByName(dao, workspaceId, name, projectId, visibility)
+                    .or(() -> findSingleByName(dao, workspaceId, name, null, visibility))
                     .orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
@@ -368,12 +369,12 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            return findSingleByName(dao, workspaceId, name, projectId)
+            return findSingleByName(dao, workspaceId, name, projectId, visibility)
                     .or(() -> {
                         if (projectId == null) {
                             return Optional.empty();
                         }
-                        return findSingleByName(dao, workspaceId, name, null).map(d -> {
+                        return findSingleByName(dao, workspaceId, name, null, visibility).map(d -> {
                             requestContext.get().setWorkspaceFallbackFor("Dataset", name);
                             return d;
                         });
