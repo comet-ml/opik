@@ -326,3 +326,15 @@ def test_jsonable_encoder__dict_with_tuple_and_frozenset_keys__keys_stringified_
         "frozenset({3})": "set-value",
         "regular_key": 42,
     }
+
+
+def test_jsonable_encoder__tuple_key_colliding_with_str_key__both_kept():
+    encoded = jsonable_encoder.encode({(1, 2): "t", "(1, 2)": "s"})
+
+    assert encoded == {"(1, 2)": "s", "(1, 2) [tuple]": "t"}
+
+
+def test_jsonable_encoder__frozenset_key__stringified_in_sorted_order():
+    encoded = jsonable_encoder.encode({frozenset({"b", "a", "c"}): 1})
+
+    assert encoded == {"frozenset({'a', 'b', 'c'})": 1}
