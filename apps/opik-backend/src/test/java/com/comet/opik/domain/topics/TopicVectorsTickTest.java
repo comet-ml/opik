@@ -394,12 +394,12 @@ class TopicVectorsTickTest {
         assertThat(rows.get(first)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
                 .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(first)
                         .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(3)
-                        .backfillTracesDone(3).build());
+                        .backfillTracesDone(3).backfillLastDoneAt(written).build());
         assertThat(rows.get(first).backfillLastDoneAt()).isCloseTo(written, within(1, ChronoUnit.SECONDS));
         assertThat(rows.get(second)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
                 .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(second)
                         .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(2)
-                        .backfillTracesDone(2).build());
+                        .backfillTracesDone(2).backfillLastDoneAt(written).build());
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
 
         var later = labelTraces(workspaceId, first, 1, 1);
