@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class TruncationUtilsTest {
+public class TruncationUtilsTest {
 
     @Nested
     @DisplayName("createSlimJson with JsonNode")
@@ -244,7 +245,7 @@ class TruncationUtilsTest {
 
     @Nested
     @DisplayName("toJsonWithSlim")
-    class ToJsonWithSlimTests {
+    public class ToJsonWithSlimTests {
 
         private static final int MAX = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
 
@@ -268,18 +269,18 @@ class TruncationUtilsTest {
                     .build();
         }
 
-        static Stream<JsonNode> parsedPayloads() {
+        public static Stream<JsonNode> parsedPayloads() {
             var emojiAtBoundary = "%s\uD83D\uDE00%s".formatted("a".repeat(MAX - 1), randomAscii(10));
             return Stream.of(
                     parse("{}"),
                     parse("[]"),
                     parse("null"),
                     parse("true"),
-                    parse("42"),
+                    parse(String.valueOf(RandomUtils.secure().randomInt())),
                     parse("\"%s\"".formatted(randomAscii(10))),
                     parse("\"%s\"".formatted(randomAscii(MAX))),
                     parse("\"%s\"".formatted(randomAscii(MAX + 1))),
-                    parse("{\"short\":\"%s\",\"n\":1}".formatted(randomAscii(20))),
+                    parse("{\"short\":\"%s\",\"n\":%d}".formatted(randomAscii(20), RandomUtils.secure().randomInt())),
                     parse(JsonUtils.writeValueAsString(Map.of("text", randomText(MAX + 500)))),
                     parse(JsonUtils.writeValueAsString(Map.of("text", randomText(MAX - 1)))),
                     parse(JsonUtils.writeValueAsString(Map.of("emoji", emojiAtBoundary))),
@@ -290,7 +291,8 @@ class TruncationUtilsTest {
                             {"messages":[{"role":"user","content":"%s"},{"role":"assistant","content":"%s"}],
                              "model":"%s","usage":{"prompt_tokens":%d,"completion_tokens":%d},
                              "tools":[],"meta":{"nested":{"deeper":["%s",null,true,false,1.5,-0.0,1e300]}}}
-                            """.formatted(randomAscii(5000), randomAscii(30), randomAscii(8), 100, 500,
+                            """.formatted(randomAscii(5000), randomAscii(30), randomAscii(8),
+                            RandomUtils.secure().randomInt(), RandomUtils.secure().randomInt(),
                             randomAscii(MAX + 1))),
                     parse("""
                             {"numbers":[0,-1,2147483648,9223372036854775808,123456789012345678901234567890,
@@ -329,7 +331,7 @@ class TruncationUtilsTest {
             assertThat(actual).isEqualTo(expectedFromReparse(node));
         }
 
-        static Stream<JsonNode> builtPayloads() {
+        public static Stream<JsonNode> builtPayloads() {
             var factory = JsonNodeFactory.instance;
             return Stream.of(
                     factory.objectNode()
@@ -342,7 +344,8 @@ class TruncationUtilsTest {
                             .put("binary", randomAscii(MAX * 2).getBytes())
                             .put("text", randomAscii(10)),
                     factory.objectNode()
-                            .putPOJO("pojo", Map.of("text", randomAscii(MAX + 1))),
+                            .put("long_decimal", new BigDecimal("1".repeat(1001)))
+                            .put("text", randomAscii(MAX + 1)),
                     factory.objectNode()
                             .put("big_integer", new BigInteger("123456789012345678901234567890"))
                             .put("short", (short) 7)
@@ -355,20 +358,15 @@ class TruncationUtilsTest {
 
         @ParameterizedTest
         @MethodSource("builtPayloads")
-        @DisplayName("should match serializing and reparsing for programmatically built payloads")
-        void shouldMatchReparseForBuiltPayloads(JsonNode node) {
+        @DisplayName("should truncate the strings of programmatically built payloads, keeping every other value")
+        void shouldTruncateStringsOfBuiltPayloads(JsonNode node) {
             JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
 
-            assertThat(actual).isEqualTo(expectedFromReparse(node));
-        }
-
-        @ParameterizedTest
-        @MethodSource({"parsedPayloads", "builtPayloads"})
-        @DisplayName("should stream the same slim json it returns as a string")
-        void shouldStreamTheSameSlimJson(JsonNode node) {
-            String actual = JsonUtils.writeValueAsString(TruncationUtils.toSlimJson(node));
-
-            assertThat(actual).isEqualTo(expectedFromReparse(node).slim());
+            var expected = JsonWithSlim.builder()
+                    .json(TruncationUtils.toJsonString(node))
+                    .slim(JsonUtils.writeValueAsString(TruncationUtils.createSlimJson(node)))
+                    .build();
+            assertThat(actual).isEqualTo(expected);
         }
 
         @Test

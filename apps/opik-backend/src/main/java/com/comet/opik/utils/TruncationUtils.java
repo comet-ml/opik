@@ -2,8 +2,8 @@ package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.io.SegmentedStringWriter;
-import com.fasterxml.jackson.core.util.BufferRecycler;
+import com.fasterxml.jackson.core.SerializableString;
+import com.fasterxml.jackson.core.util.JsonGeneratorDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Iterator;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -151,16 +150,10 @@ public final class TruncationUtils {
      * Serializes a payload node into the strings stored in its full column ({@code input}, {@code output}) and
      * its slim column ({@code input_slim}, {@code output_slim}), with the default max length.
      *
-     * <p>The result is identical to {@code toJsonString(node)} and {@code createSlimJsonString(toJsonString(node))},
-     * without reparsing the serialized JSON:
-     * <ul>
-     *   <li>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
-     *   {@code String} instance, so nothing is serialized twice.</li>
-     *   <li>When one does, the slim JSON is written by a single walk of the node, without building a slim tree.</li>
-     *   <li>When the node holds a value whose reparse would change it ({@code float}, {@code BigDecimal},
-     *   binary or POJO nodes, which a request body never produces), the slim JSON comes from the reparse, as
-     *   before.</li>
-     * </ul>
+     * <p>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
+     * {@code String} instance. Otherwise it is {@link #toSlimJson(JsonNode)}, written in one walk of the node.
+     * For a node parsed from JSON, both match {@code toJsonString(node)} and
+     * {@code createSlimJsonString(toJsonString(node))}.
      *
      * @param node the payload node (may be null)
      * @return the full and slim JSON strings, both empty if the node is null
@@ -171,53 +164,64 @@ public final class TruncationUtils {
         }
 
         String json = node.toString();
-        if (json.isEmpty()) {
+        if (json.isEmpty() || !hasLongString(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
             return JsonWithSlim.builder().json(json).slim(json).build();
         }
 
-        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
-            case UNCHANGED -> json;
-            case TRUNCATED -> writeSlimJsonString(node, DEFAULT_SLIM_STRING_MAX_LENGTH);
-            case REPARSE -> createSlimJsonString(json);
-        };
-
-        return JsonWithSlim.builder().json(json).slim(slim).build();
+        return JsonWithSlim.builder().json(json).slim(JsonUtils.writeValueAsString(toSlimJson(node))).build();
     }
 
     /**
      * The full and slim JSON strings of a payload node.
      *
      * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
-     * @param slim the slim JSON, as {@link #createSlimJsonString(String)} renders it from {@code json}
+     * @param slim the slim JSON, as {@link #toSlimJson(JsonNode)} writes it
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record JsonWithSlim(@NonNull String json, @NonNull String slim) {
 
         public static final JsonWithSlim EMPTY = JsonWithSlim.builder().json("").slim("").build();
     }
 
     /**
-     * The slim JSON of a payload node as a value that writes itself into the caller's generator, for a row that
-     * embeds the payload as raw JSON rather than as a string. Writes the same text
-     * {@link #toJsonWithSlim(JsonNode)} returns as {@code slim}, without materializing it as a {@code String}
-     * except on the reparse path.
+     * The full JSON of a payload node, as a value that writes itself into the caller's generator: the same text as
+     * {@link #toJsonString(JsonNode)}, without materializing it.
+     *
+     * <p>Written with the serializer provider {@code node.toString()} uses, not the caller's, so the text does not
+     * depend on the configuration of the mapper that writes the enclosing value.
+     *
+     * @param node the payload node
+     * @return the full JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable toFullJson(@NonNull JsonNode node) {
+        return PayloadJson.builder().node(node).slim(false).build();
+    }
+
+    /**
+     * The slim JSON of a payload node, as a value that writes itself into the caller's generator: every string
+     * value longer than the default max length is cut to it and followed by {@code "..."}, keys and structure are
+     * kept. Like {@link #toFullJson(JsonNode)}, it does not depend on the caller's mapper configuration.
      *
      * @param node the payload node
      * @return the slim JSON, written when the enclosing value is serialized
      */
     public static JsonSerializable toSlimJson(@NonNull JsonNode node) {
-        return new SlimJson(node, inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH));
+        return PayloadJson.builder().node(node).slim(true).build();
     }
 
-    private record SlimJson(JsonNode node, SlimShape shape) implements JsonSerializable {
+    @Builder(toBuilder = true)
+    private record PayloadJson(@NonNull JsonNode node, boolean slim) implements JsonSerializable {
+
+        /** The provider {@code JsonNode.toString()} serializes with: a default mapper's. */
+        private static final SerializerProvider NODE_PROVIDER = new ObjectMapper().getSerializerProviderInstance();
 
         @Override
         public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
-            switch (shape) {
-                case UNCHANGED -> node.serialize(generator, provider);
-                case TRUNCATED -> writeSlimJson(generator, node, DEFAULT_SLIM_STRING_MAX_LENGTH, provider);
-                case REPARSE -> generator.writeRawValue(createSlimJsonString(node.toString()));
+            if (slim) {
+                node.serialize(new TruncatingGenerator(generator, DEFAULT_SLIM_STRING_MAX_LENGTH), NODE_PROVIDER);
+                return;
             }
+            node.serialize(generator, NODE_PROVIDER);
         }
 
         @Override
@@ -227,102 +231,75 @@ public final class TruncationUtils {
         }
     }
 
-    private enum SlimShape {
-        UNCHANGED,
-        TRUNCATED,
-        REPARSE
+    /**
+     * Truncates string values as Jackson writes them, to the same chars {@link #truncateString} returns. Field
+     * names are written through {@code writeFieldName}, so they are kept whole.
+     */
+    private static class TruncatingGenerator extends JsonGeneratorDelegate {
+
+        private final int maxLength;
+
+        /**
+         * One buffer per walk for every truncated string, rather than a substring and a concatenation each. Allocated
+         * on the first one, as most payloads have none.
+         */
+        private char[] truncated;
+
+        private TruncatingGenerator(JsonGenerator delegate, int maxLength) {
+            super(delegate, false);
+            this.maxLength = maxLength;
+        }
+
+        private char[] truncated() {
+            if (truncated == null) {
+                truncated = new char[maxLength + TRUNCATION_SUFFIX.length()];
+                TRUNCATION_SUFFIX.getChars(0, TRUNCATION_SUFFIX.length(), truncated, maxLength);
+            }
+            return truncated;
+        }
+
+        @Override
+        public void writeString(String text) throws IOException {
+            if (text == null || text.length() <= maxLength) {
+                delegate.writeString(text);
+                return;
+            }
+            char[] buffer = truncated();
+            text.getChars(0, maxLength, buffer, 0);
+            delegate.writeString(buffer, 0, buffer.length);
+        }
+
+        @Override
+        public void writeString(char[] text, int offset, int length) throws IOException {
+            if (length <= maxLength) {
+                delegate.writeString(text, offset, length);
+                return;
+            }
+            char[] buffer = truncated();
+            System.arraycopy(text, offset, buffer, 0, maxLength);
+            delegate.writeString(buffer, 0, buffer.length);
+        }
+
+        @Override
+        public void writeString(SerializableString text) throws IOException {
+            writeString(text.getValue());
+        }
     }
 
-    /**
-     * Walks the node without allocating copies, and reports whether any value needs the reparse path, or else
-     * whether any string value exceeds the max length.
-     */
-    private static SlimShape inspect(JsonNode node, int maxStringLength) {
+    /** Whether any string value is longer than the max length; stops at the first one. */
+    private static boolean hasLongString(JsonNode node, int maxStringLength) {
         return switch (node.getNodeType()) {
-            case OBJECT, ARRAY -> inspectChildren(node.elements(), maxStringLength);
-            case STRING -> node.textValue().length() > maxStringLength ? SlimShape.TRUNCATED : SlimShape.UNCHANGED;
-            case NUMBER -> node.isFloat() || node.isBigDecimal() ? SlimShape.REPARSE : SlimShape.UNCHANGED;
-            case BOOLEAN, NULL -> SlimShape.UNCHANGED;
-            case BINARY, MISSING, POJO -> SlimShape.REPARSE;
+            case OBJECT, ARRAY -> {
+                for (JsonNode child : node) {
+                    if (hasLongString(child, maxStringLength)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            case STRING -> node.textValue().length() > maxStringLength;
+            case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> false;
         };
-    }
-
-    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength) {
-        SlimShape shape = SlimShape.UNCHANGED;
-        while (children.hasNext()) {
-            switch (inspect(children.next(), maxStringLength)) {
-                // Nothing found later outranks a reparse, so the rest of the tree need not be walked.
-                case REPARSE -> {
-                    return SlimShape.REPARSE;
-                }
-                case TRUNCATED -> shape = SlimShape.TRUNCATED;
-                case UNCHANGED -> {
-                }
-            }
-        }
-        return shape;
-    }
-
-    /**
-     * Writes the slim JSON of a node in one pass, with the generator and settings
-     * {@link JsonUtils#writeValueAsString(Object)} uses, so the output matches serializing
-     * {@link #createSlimJson(JsonNode, int)}.
-     */
-    private static String writeSlimJsonString(JsonNode node, int maxStringLength) {
-        ObjectMapper mapper = JsonUtils.getMapper();
-        BufferRecycler recycler = mapper.getFactory()._getBufferRecycler();
-        try (var writer = new SegmentedStringWriter(recycler)) {
-            try (JsonGenerator generator = mapper.createGenerator(writer)) {
-                writeSlimJson(generator, node, maxStringLength, mapper.getSerializerProviderInstance());
-            }
-            return writer.getAndClear();
-        } catch (IOException exception) {
-            throw new UncheckedIOException(exception);
-        } finally {
-            recycler.releaseToPool();
-        }
-    }
-
-    private static void writeSlimJson(JsonGenerator generator, JsonNode node, int maxStringLength,
-            SerializerProvider provider) throws IOException {
-        // One buffer per walk for every truncated string, rather than a substring and a concatenation each.
-        char[] truncated = new char[maxStringLength + TRUNCATION_SUFFIX.length()];
-        TRUNCATION_SUFFIX.getChars(0, TRUNCATION_SUFFIX.length(), truncated, maxStringLength);
-        writeSlimJson(generator, node, truncated, provider);
-    }
-
-    private static void writeSlimJson(JsonGenerator generator, JsonNode node, char[] truncated,
-            SerializerProvider provider) throws IOException {
-        switch (node.getNodeType()) {
-            case OBJECT -> {
-                generator.writeStartObject(node, node.size());
-                for (var property : node.properties()) {
-                    generator.writeFieldName(property.getKey());
-                    writeSlimJson(generator, property.getValue(), truncated, provider);
-                }
-                generator.writeEndObject();
-            }
-            case ARRAY -> {
-                generator.writeStartArray(node, node.size());
-                for (JsonNode element : node) {
-                    writeSlimJson(generator, element, truncated, provider);
-                }
-                generator.writeEndArray();
-            }
-            case STRING -> writeSlimString(generator, node.textValue(), truncated);
-            case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> node.serialize(generator, provider);
-        }
-    }
-
-    /** Writes the text, or its first max length chars and the suffix, the same chars {@link #truncateString} returns. */
-    private static void writeSlimString(JsonGenerator generator, String text, char[] truncated) throws IOException {
-        int maxLength = truncated.length - TRUNCATION_SUFFIX.length();
-        if (text.length() <= maxLength) {
-            generator.writeString(text);
-            return;
-        }
-        text.getChars(0, maxLength, truncated, 0);
-        generator.writeString(truncated, 0, truncated.length);
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {
