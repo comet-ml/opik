@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -60,6 +61,7 @@ public class TopicWindowLabelService {
     private final @NonNull TopicWindowDAO windowDAO;
     private final @NonNull TraceTopicsDAO traceTopicsDAO;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull WorkspaceNameService workspaceNames;
     private final @NonNull TopicAlgorithm algorithm;
 
     /** Who called a pass: the run right after its save, or the first-build job going on with an unfinished one. */
@@ -108,18 +110,19 @@ public class TopicWindowLabelService {
     Pass labelWindow(String workspaceId, UUID projectId, Instant deadline, Trigger trigger, int chunk,
             int sliceTraces) {
         long started = System.nanoTime();
+        var workspace = workspace(workspaceId);
         Optional<Saved> saved;
         try {
             saved = readSaved(workspaceId, projectId);
         } catch (RuntimeException exception) {
             log.warn("Topics labelling pass could not read the saved list, project '{}'", projectId, exception);
-            metrics.labelPass(workspaceId, trigger, false);
+            metrics.labelPass(workspace, trigger, false);
             return Pass.builder().complete(false).build();
         }
         if (saved.isEmpty()) {
             return Pass.builder().complete(true).build();
         }
-        var pass = new Labelling(workspaceId, projectId, saved.get(), deadline, chunk);
+        var pass = new Labelling(workspace, projectId, saved.get(), deadline, chunk);
         try {
             pass.complete = pass.label(sliceTraces);
         } catch (CutException exception) {
@@ -136,8 +139,8 @@ public class TopicWindowLabelService {
             markComplete(workspaceId, projectId, saved.get().runId());
         }
         var duration = Duration.ofNanos(System.nanoTime() - started);
-        metrics.phase(workspaceId, "label", duration);
-        metrics.labelPass(workspaceId, trigger, pass.complete);
+        metrics.phase(workspace, "label", duration);
+        metrics.labelPass(workspace, trigger, pass.complete);
         var result = pass.result();
         log.info(
                 "Topics labelling pass ended, run '{}', project '{}', trigger '{}', window traces '{}', labelled '{}', "
@@ -152,6 +155,15 @@ public class TopicWindowLabelService {
      * Sets {@code labels_complete} for the run, only while the project still names it. A failed write leaves it unset:
      * the job's next run calls the pass again, which finds nothing left and marks it.
      */
+    /** The metrics' workspace; its name falls back to the id, so the pass goes on. */
+    private TopicsMetrics.Workspace workspace(String workspaceId) {
+        try {
+            return new TopicsMetrics.Workspace(workspaceId, workspaceNames.nameOrId(workspaceId));
+        } catch (RuntimeException exception) {
+            return new TopicsMetrics.Workspace(workspaceId, workspaceId);
+        }
+    }
+
     private void markComplete(String workspaceId, UUID projectId, UUID runId) {
         int updated;
         try {
@@ -161,7 +173,7 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
                     + "first-build job runs the pass again", runId, projectId,
                     ExceptionUtils
-                            .getThrowableList(exception).stream().map(TopicsRebuildService::formatError).toList());
+                            .getThrowableList(exception).stream().map(TopicsErrors::formatError).toList());
             return;
         }
         if (updated == 0) {
@@ -197,13 +209,14 @@ public class TopicWindowLabelService {
 
     /** The labels of a list with no topic: every trace is Other, as its run labelled them. */
     private static UUID[] allOther(float[] vectors) {
-        var out = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
+        var out = new UUID[vectors.length / TopicEmbedding.DIMENSIONS];
         Arrays.fill(out, TraceTopic.OTHER);
         return out;
     }
 
     private final class Labelling {
 
+        private final TopicsMetrics.Workspace workspace;
         private final String workspaceId;
         private final UUID projectId;
         private final Saved saved;
@@ -215,8 +228,9 @@ public class TopicWindowLabelService {
         private int skipped;
         private boolean complete;
 
-        Labelling(String workspaceId, UUID projectId, Saved saved, Instant deadline, int chunk) {
-            this.workspaceId = workspaceId;
+        Labelling(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Instant deadline, int chunk) {
+            this.workspace = workspace;
+            this.workspaceId = workspace.id();
             this.projectId = projectId;
             this.saved = saved;
             this.deadline = deadline;
@@ -227,7 +241,7 @@ public class TopicWindowLabelService {
         boolean label(int sliceTraces) {
             var left = timeLeft();
             var window = windowDAO.countAndBounds(workspaceId, projectId, saved.from(), saved.to(), sliceTraces,
-                    Math.min(TopicsRebuildService.COUNT_SECONDS, left.toSeconds()))
+                    seconds(config.getBuild().getCountTimeout().toJavaDuration(), left))
                     .block(left);
             windowTraces = window.traces();
             var bounds = new ArrayList<Instant>();
@@ -255,7 +269,7 @@ public class TopicWindowLabelService {
             for (int pages = 0; pages < maxPages; pages++) {
                 var left = timeLeft();
                 var page = windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), from, to, after, chunk,
-                        Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds()))
+                        seconds(config.getBuild().getReadTimeout().toJavaDuration(), left))
                         .collectList()
                         .block(left);
                 if (page.isEmpty()) {
@@ -279,7 +293,7 @@ public class TopicWindowLabelService {
         }
 
         private List<TraceTopic> assign(List<TopicWindowDAO.WindowVector> page) {
-            int dimensions = TopicsRebuildService.DIMENSIONS;
+            int dimensions = TopicEmbedding.DIMENSIONS;
             var kept = new ArrayList<TopicWindowDAO.WindowVector>(page.size());
             for (var row : page) {
                 if (row.vector().length == dimensions) {
@@ -314,13 +328,18 @@ public class TopicWindowLabelService {
                 return;
             }
             var left = timeLeft();
+            var build = config.getBuild();
             traceTopicsDAO.insert(rows)
-                    .timeout(Duration.ofSeconds(Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds())))
-                    .retryWhen(Retry.backoff(TopicsRebuildService.INSERT_RETRIES, TopicsRebuildService.INSERT_BACKOFF))
+                    .timeout(Duration.ofSeconds(seconds(build.getReadTimeout().toJavaDuration(), left)))
+                    .retryWhen(Retry.backoff(build.getInsertRetries(), build.getInsertBackoff().toJavaDuration()))
                     .block(left);
             labelled += rows.size();
             other += rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-            metrics.saved(workspaceId, "trace_topics", rows.size());
+            metrics.saved(workspace, "trace_topics", rows.size());
+        }
+
+        private static long seconds(Duration timeout, Duration left) {
+            return Math.min(timeout.toSeconds(), left.toSeconds());
         }
 
         /** The time to the deadline; throws when a page should not start. */

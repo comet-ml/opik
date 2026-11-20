@@ -1017,10 +1017,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
@@ -1054,7 +1057,11 @@ topics:
     minVectors: 100
     windowDays: 30
     maxVectors: 100000
-    qwenDeadline: 120s
+    llmDeadline: 120s
+    readTimeout: 120s
+    countTimeout: 60s
+    insertRetries: 3
+    insertBackoff: 500ms
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1067,6 +1074,8 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    maxTopics: 10
+    provisionalBelow: 1000
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -440,6 +440,13 @@
             <version>3.8.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- In-memory metric reader for metric tests; the version of the opentelemetry-api the instrumentation brings. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>1.66.0</version>
+            <scope>test</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.wiremock</groupId>

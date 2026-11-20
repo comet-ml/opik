@@ -1,6 +1,8 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.domain.WorkspaceNameService;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,7 +51,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("topics labelling pass")
 class TopicWindowLabelServiceTest {
 
-    private static final int DIMENSIONS = TopicsRebuildService.DIMENSIONS;
+    private static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
     private static final String WORKSPACE_ID = "ws-1";
     private static final Instant NIGHT = Instant.parse("2026-10-15T00:00:00Z");
     private static final int WINDOW_DAYS = 30;
@@ -90,9 +92,12 @@ class TopicWindowLabelServiceTest {
         windowDAO = mock(TopicWindowDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         var config = TestConfigUtils.loadConfigTest().getTopics();
+        var workspaceNames = mock(WorkspaceNameService.class);
+        when(workspaceNames.nameOrId(WORKSPACE_ID)).thenReturn("Acme");
         config.getBuild().setWindowDays(WINDOW_DAYS);
         service = new TopicWindowLabelService(config, template, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(new TopicsTestMeter().meter, workspaceId -> "Acme"), TopicsTestAlgorithm.algorithm());
+                TopicsMetricsReader.metrics(InMemoryMetricReader.create()), workspaceNames,
+                TopicsTestAlgorithm.algorithm());
 
         billingPrototype = unit(random);
         refundsPrototype = unit(random);
