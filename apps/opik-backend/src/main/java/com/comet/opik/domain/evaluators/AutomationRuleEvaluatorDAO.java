@@ -38,12 +38,19 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
     @SqlUpdate("""
             UPDATE automation_rule_evaluators
-            SET `type` = :rule.type,
-                code = :rule.code,
+            SET code = :rule.code,
                 last_updated_by = :rule.lastUpdatedBy
             WHERE id = :id
             """)
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
+
+    @SqlQuery("""
+            SELECT evaluator.type
+            FROM automation_rule_evaluators evaluator
+            JOIN automation_rules rule ON rule.id = evaluator.id
+            WHERE evaluator.id = :id AND rule.workspace_id = :workspaceId
+            """)
+    Optional<String> findTypeById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     /**
      * Query 1: Find rules WITHOUT project associations (clean, no duplication).

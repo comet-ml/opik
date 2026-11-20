@@ -482,18 +482,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     /**
-     * A rule keeps its type for life: changing it means deleting the rule and creating a new one. The current type
-     * is the one reads resolve, so a rule stored with a mismatched code accepts the type it is served as, and the
-     * update then writes that type back to the row.
+     * A rule keeps its type for life: changing it means deleting the rule and creating a new one.
      */
     private void validateTypeUnchanged(AutomationRuleEvaluatorDAO dao, UUID id, String workspaceId,
             AutomationRuleEvaluatorType requestedType) {
-        var criteria = AutomationRuleEvaluatorCriteria.builder().ids(Set.of(id)).build();
-        var currentType = dao.findRulesWithoutProjects(workspaceId, null, criteria.action(), null, criteria.ids(),
-                null, null, null, null, Map.of(), null, null)
-                .stream()
-                .findFirst()
-                .map(AutomationRuleEvaluatorModel::type)
+        var currentType = dao.findTypeById(id, workspaceId)
+                .map(AutomationRuleEvaluatorType::fromString)
                 .orElseThrow(this::newNotFoundException);
         if (currentType != requestedType) {
             throw new ConflictException(
