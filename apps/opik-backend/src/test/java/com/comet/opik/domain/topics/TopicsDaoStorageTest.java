@@ -40,6 +40,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -48,6 +49,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.RUN_ID;
@@ -995,6 +997,45 @@ class TopicsDaoStorageTest {
 
     private static Instant to() {
         return NIGHT;
+    }
+
+    @Test
+    @DisplayName("one query reads the topics of several projects of one workspace, each project's in (born, id) "
+            + "order, and nothing of a project not asked or of another workspace")
+    void topicsOfSeveralProjects() {
+        var workspaceId = UUID.randomUUID().toString();
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        var notAsked = UUID.randomUUID();
+        var otherWorkspace = UUID.randomUUID();
+        data.savedList(workspaceId, first, NIGHT, 10);
+        data.savedList(workspaceId, second, NIGHT, 10);
+        data.savedList(workspaceId, notAsked, NIGHT, 10);
+        data.savedList(UUID.randomUUID().toString(), otherWorkspace, NIGHT, 10);
+        // Born a night before the saved topic: first in its project.
+        var older = Topic.builder()
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .projectId(second)
+                .name("Refunds")
+                .definition("Requests to get money back")
+                .born(LocalDate.ofInstant(NIGHT.minus(Duration.ofDays(1)), ZoneOffset.UTC))
+                .size(5)
+                .vectors(new PrototypeVectors(List.of(TopicsTestData.unit(2))))
+                .build();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertTopics(List.of(older));
+            return null;
+        });
+
+        var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findByProjects(workspaceId, List.of(first, second, otherWorkspace)));
+
+        assertThat(rows).containsExactlyElementsOf(Stream.of(first, second)
+                .sorted(Comparator.comparing(UUID::toString))
+                .flatMap(projectId -> data.topics(projectId).stream()).toList());
+        assertThat(rows).filteredOn(topic -> topic.projectId().equals(second)).hasSize(2).first()
+                .isEqualTo(older);
     }
 
     @Test

@@ -1034,6 +1034,9 @@ inference:
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
+  arrival:
+    enabled: true
+    timeout: 5s
   vectors:
     tickInterval: 1m
     tickBudget: 50s

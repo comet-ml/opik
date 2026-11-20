@@ -156,6 +156,8 @@ class TopicsNightlyIntegrationTest {
     private TopicsTestData data;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
     private ClientSupport client;
     private String baseUrl;
     /** The nightly run each project got from the test's plans, by project. */
@@ -169,7 +171,10 @@ class TopicsNightlyIntegrationTest {
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicWindowDAO windowDAO,
+            @Jit TopicAlgorithm algorithm) {
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.opikConfig = opikConfig;
@@ -319,6 +324,7 @@ class TopicsNightlyIntegrationTest {
     void nightlyUpdate() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
+        assertArrivalEqualsTheRun(workspaceId, projectId, data.topicProject(projectId).listRunId());
         var before = data.topics(projectId);
         plant(workspaceId, projectId);
         stubNightly(NAMED, sameAnswers());
@@ -364,6 +370,7 @@ class TopicsNightlyIntegrationTest {
             assertThat(project.lastNight()).isEqualTo(today());
             assertThat(project.notReachedNights()).isZero();
         });
+        assertArrivalEqualsTheRun(workspaceId, projectId, update.runId());
     }
 
     @Test
@@ -994,6 +1001,31 @@ class TopicsNightlyIntegrationTest {
     }
 
     /** The trace_topics rows the run wrote. */
+    /**
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
+     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
+     * {@code trace_topics}.
+     */
+    private void assertArrivalEqualsTheRun(String workspaceId, UUID projectId, UUID runId) {
+        var labels = labels(workspaceId, projectId, runId).stream()
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        // Wider than any window of these tests: only the run's traces are compared.
+        var from = today().minusDays(90).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var to = today().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var window = windowDAO.readWindow(workspaceId, projectId, from, to, 100_000, 120).collectList().block()
+                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
+        assertThat(window).hasSize(labels.size()).isNotEmpty();
+
+        var project = data.topicProject(projectId);
+        assertThat(project.listRunId()).isEqualTo(runId);
+        var arrived = algorithm.labeller(data.topics(projectId), project.otherVectors())
+                .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
+        for (int i = 0; i < window.size(); i++) {
+            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
+                    .isEqualTo(labels.get(window.get(i).traceId()));
+        }
+    }
+
     private List<TraceTopic> labels(String workspaceId, UUID projectId, UUID runId) {
         return data.traceTopics(workspaceId, projectId).stream()
                 .filter(row -> runId.equals(row.runId())).toList();

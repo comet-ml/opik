@@ -49,6 +49,11 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private NightlyConfig nightly;
+
+    @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
+
+    @Valid @NotNull @JsonProperty
     private FilterConfig filter;
 
     /**
@@ -159,6 +164,24 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. Off: the tick reads no list and writes no rows. */
+        @JsonProperty
+        private boolean enabled;
+
+        /**
+         * All the arrival steps of one vectors tick (the prototypes read and the insert after each vectors insert) end
+         * within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
+    }
 
     /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
     @Data

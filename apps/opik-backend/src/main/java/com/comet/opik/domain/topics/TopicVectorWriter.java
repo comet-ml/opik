@@ -16,7 +16,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/** Embeds one read's candidates with {@link TopicEmbedder} and writes each chunk's vectors as it arrives. */
+/**
+ * Embeds one read's candidates with {@link TopicEmbedder} and writes each chunk's vectors as it arrives, then gives the
+ * chunk's traces their topic on arrival.
+ */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -29,28 +32,30 @@ class TopicVectorWriter {
     /**
      * @param missedBefore with the long-window pass, the short window's start: the vectors written for statuses before it
      *        are rows the fresh reads missed, and are counted as such
+     * @param arrival the tick's arrival steps
      */
     Mono<TickResult> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
-            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore) {
-        return embedAndWrite(workspace, candidates, budget, missedBefore, ConcurrentHashMap.newKeySet());
+            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
+            @NonNull TopicsArrivalService.Tick arrival) {
+        return embedAndWrite(workspace, candidates, budget, missedBefore, arrival, ConcurrentHashMap.newKeySet());
     }
 
     /** As above, adding to {@code written} the key of each vector written and of each trace never to be embedded. */
     Mono<TickResult> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
             @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
-            @NonNull Set<VectorKey> written) {
+            @NonNull TopicsArrivalService.Tick arrival, @NonNull Set<VectorKey> written) {
         var missed = missedBefore == null
                 ? Set.<VectorKey>of()
                 : candidates.stream().filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
                         .map(VectorKey::of)
                         .collect(Collectors.toUnmodifiableSet());
         return embedder.embed(workspace, candidates, budget)
-                .concatMap(outcome -> write(workspace, outcome, missed, written))
+                .concatMap(outcome -> write(workspace, outcome, missed, budget, arrival, written))
                 .reduce(TickResult.EMPTY, TickResult::plus);
     }
 
     private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome, Set<VectorKey> missed,
-            Set<VectorKey> written) {
+            TickBudget budget, TopicsArrivalService.Tick arrival, Set<VectorKey> written) {
         return Mono.defer(() -> {
             written.addAll(outcome.settled());
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
@@ -67,6 +72,8 @@ class TopicVectorWriter {
                                 (int) vectors.stream().filter(vector -> missed.contains(VectorKey.of(vector))).count());
                         return skipped.plus(TickResult.written(vectors.size()));
                     }))
+                    // Only after the insert; arrival never fails, so the handler below sees only insert errors.
+                    .flatMap(result -> arrival.label(workspace.id(), vectors, budget.deadline()).thenReturn(result))
                     .onErrorResume(exception -> {
                         log.warn("Topic vectors insert failed, embedding them again next tick, workspace '{}', rows "
                                 + "'{}'", workspace.id(), vectors.size(), exception);

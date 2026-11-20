@@ -490,6 +490,10 @@ When that fails, the next plan cancels its runs, the job's sweep (every `TOPICS_
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
 
+When a trace is deleted while the vectors tick embeds it, its arrival row (see "Topic on arrival") can be written after
+the delete cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that
+exist), and retention removes it.
+
 ## Topics nightly updates
 
 A nightly update changes the saved list of a project once a night: it births topics, retires topics and labels the
@@ -1002,3 +1006,78 @@ cache runs no query. No alert reads these metrics.
 
 The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
 stay.
+
+## Topic on arrival
+
+A new trace gets a topic within about a minute, before the next run of its project. Right after the vectors tick
+inserts a chunk of vectors, each trace of the chunk gets the topic of the nearest saved prototype of its project. The
+rule is the algorithm's labeller (`TopicAlgorithm.labeller`), the same rule the labelling pass uses. Code:
+`TopicsArrivalService`, called from `TopicVectorWriter` after each insert, in the fresh phase and in the backfill
+phase.
+
+### What it writes
+
+- One `trace_topics` row per trace: `source = 'arrival'`, `run_id` null, the topic's id or the all-zeros id for Other.
+- The list comes from MySQL, in one read-only transaction for the chunk's projects, once per project per tick: the
+  projects' `topics` rows (their `vectors`) and `topic_projects.other_vectors`. There is no cache.
+- A project with no saved list (`list_run_id` null), or a list with no topic, has no labeller. Its traces get no row
+  and wait for the project's next run.
+
+### Why a run's row wins
+
+Readers take the latest row per trace by `last_updated_at`. A run writes its rows with `source = 'run'` and its run
+id, later than the arrival row, so the run's row wins. On an equal `last_updated_at`, the run's row still wins:
+readers then take the row with `source = 'run'`.
+
+One race is left. A tick that read the old list just before a run saves can insert a few rows after the run's rows.
+These rows hold the old list's topic until the next run of the project.
+
+### Turning it off
+
+- `TOPICS_ARRIVAL_ENABLED` (`topics.arrival.enabled`, default `true`). Off: the tick reads no list and writes no
+  `trace_topics` row. It needs `topics.enabled`: without the vectors tick there is no arrival.
+- `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). All the arrival steps of one
+  tick take this in total, summed over the workspaces the tick visits at once.
+
+### Failures
+
+- Arrival is best effort. A failure is logged and counted. The tick writes and counts its vectors as without arrival.
+- Any failure stops arrival for the rest of the tick: the read, the insert, or anything else in a step. The traces of
+  the later chunks count as `after_failure`. The next run labels them.
+- A shutdown is not a failure. It cancels the tick, its arrival steps included.
+- The time bound: all steps of one tick take `topics.arrival.timeout` in all, summed over the workspaces the tick
+  visits at once, and each one ends before the tick's deadline.
+  A step that would start with less than 1s left does not start: its traces count as `over_budget`. A step that has
+  built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A read or
+  insert that runs out of time fails with `error_type = TimeoutException`.
+
+### What to watch
+
+| Metric | Labels | What it says |
+|---|---|---|
+| `topics.arrival.labelled` | `outcome`, `workspace_id`, `workspace_name` | Traces per outcome: `topic`, `other` (a row written), `no_prototypes` (the project has no saved list, or one with no topic), `over_budget` (no time left), `after_failure` (arrival stopped earlier in the tick). |
+| `topics.arrival.failures` | `phase`, `error_type`, `workspace_id`, `workspace_name` | Failed steps per phase: `read` (the saved lists read), `insert` (the `trace_topics` insert), `assign` (any other failure of a step). |
+| `topics.arrival.duration_seconds` | `workspace_id`, `workspace_name` | Wall time of each step that started. |
+
+There is no alert. A rise of `after_failure` or of `failures` says arrival stops early in the tick; a rise of
+`over_budget` says the steps need more than `topics.arrival.timeout`.
+
+### Checking a project's arrival rows
+
+```sql
+-- ClickHouse: the project's traces whose current topic came from arrival, newest first
+SELECT trace_id, trace_created_at, topic_id, last_updated_at
+FROM (
+    SELECT trace_id, trace_created_at, topic_id, source, is_deleted, last_updated_at
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>'
+      AND project_id = '<project_id>'
+    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+    LIMIT 1 BY workspace_id, project_id, trace_id
+)
+WHERE source = 'arrival' AND is_deleted = 0
+ORDER BY trace_created_at DESC
+LIMIT 100;
+```
+
+The all-zeros `topic_id` is Other. The other ids are `topics.id` in MySQL.
