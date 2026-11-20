@@ -113,13 +113,15 @@ class TopicsRunsIntegrationTest {
     private OpikConfiguration opikConfig;
     private TransactionTemplate template;
     private TopicsRunPlanner planner;
+    private TopicRunStore store;
     private TopicsTestData data;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store) {
         this.opikConfig = opikConfig;
+        this.store = store;
         this.template = template;
         this.planner = planner;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
@@ -433,6 +435,34 @@ class TopicsRunsIntegrationTest {
             return null;
         });
         return workspaceId;
+    }
+
+    @Test
+    @DisplayName("a heartbeat keeps a run going after the run saved its row, so the trace_topics insert and the "
+            + "labels run after the save are not cut off; a cancelled run's heartbeat stops it")
+    void heartbeatAfterTheSave() {
+        var workspaceId = enabledWorkspace();
+        var saved = UUID.randomUUID();
+        var cancelled = UUID.randomUUID();
+        var savedRun = TopicsTestData.newId();
+        var cancelledRun = TopicsTestData.newId();
+        var now = Instant.now();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            TopicsTestData.startRun(dao, workspaceId, saved, savedRun, TopicProject.RunMode.FIRST_BUILD, now);
+            TopicsTestData.startRun(dao, workspaceId, cancelled, cancelledRun, TopicProject.RunMode.FIRST_BUILD, now);
+            return dao.markSaved(workspaceId, saved, savedRun, now);
+        });
+        store.cancelProjects(workspaceId, List.of(cancelled), TopicProject.CancelReason.PROJECT_DELETED).block();
+
+        assertThat(store.heartbeat(message(workspaceId, saved, savedRun)).block()).isTrue();
+        assertThat(store.heartbeat(message(workspaceId, cancelled, cancelledRun)).block()).isFalse();
+        assertThat(store.heartbeat(message(workspaceId, saved, TopicsTestData.newId())).block()).isFalse();
+    }
+
+    private static TopicsRunMessage message(String workspaceId, UUID projectId, UUID runId) {
+        return TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(TopicProject.RunMode.FIRST_BUILD).windowTraces(0).build();
     }
 
     /** A {@link ConflictException} keeps its text in the response's {@link ErrorMessage}, not in getMessage(). */
