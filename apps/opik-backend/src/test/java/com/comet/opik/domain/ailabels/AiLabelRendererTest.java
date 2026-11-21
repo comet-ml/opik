@@ -7,6 +7,7 @@ import com.comet.opik.domain.ailabels.AiLabelRenderDAO.ThreadTurnRow;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.TraceRow;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -52,7 +53,8 @@ class AiLabelRendererTest {
      * here.
      */
     private static final Map<Integer, String> GOLDEN_FINGERPRINTS = Map.of(
-            1, "2e107dc51185d3a04a30a48cd8b1b308ab3054b8ecb19a4dfa9dd86dc3dc788b");
+            1, "2e107dc51185d3a04a30a48cd8b1b308ab3054b8ecb19a4dfa9dd86dc3dc788b",
+            2, "625cbdc08d774faddbbcef7f03fdc0e72321ac3d0ad9af497384e9e66dc12f69");
 
     private static final String GOLDEN_DIR = "src/test/resources/ai-labels/renderer/v%d"
             .formatted(AiLabelRenderer.RENDERER_VERSION);
@@ -105,14 +107,45 @@ class AiLabelRendererTest {
         var hugeSpans = new ArrayList<>(huge.spans(hugeTrace, 3, 2, 50));
         hugeSpans.set(1, hugeSpans.get(1).toBuilder().output("\"[1048577 bytes omitted]\"").build());
 
+        var embedding = new AiLabelRenderFixtures(107, false);
+        var embeddingTrace = embedding.trace(10).toBuilder()
+                .output(embeddingOutput(embedding, new Random(107)).toString())
+                .build();
+
+        var longChat = new AiLabelRenderFixtures(108, true);
+        var longChatTrace = longChat.trace(10).toBuilder()
+                .input(chat(longChat, 600).toString())
+                .output(embeddingOutput(longChat, new Random(108)).toString())
+                .build();
+
         return List.of(
                 alone("small", smallTrace, small.spans(smallTrace, 5, 3, 30), 80_000),
                 alone("deep", deepTrace, deepSpans, 9_000),
                 alone("wide", wideTrace, wideSpans, 120_000),
                 alone("multi_byte", multiByteTrace, multiByte.spans(multiByteTrace, 30, 4, 500), 12_000),
                 alone("huge_field", hugeTrace, hugeSpans, 8_000),
+                alone("embedding", embeddingTrace, embedding.spans(embeddingTrace, 3, 2, 50), 4_000),
+                alone("long_chat", longChatTrace, longChat.spans(longChatTrace, 3, 2, 50), 20_000),
                 new GoldenCase("thread", thread(new AiLabelRenderFixtures(106, true)), 80_000),
                 new GoldenCase("thread_outputs_dropped", thread(new AiLabelRenderFixtures(106, true)), 6_000));
+    }
+
+    private static ObjectNode embeddingOutput(AiLabelRenderFixtures fixtures, Random random) {
+        var output = AiLabelJson.NODE_FACTORY.objectNode().put("answer", fixtures.text(200));
+        var vector = output.putArray("embedding");
+        for (int i = 0; i < 1_536; i++) {
+            vector.add(random.nextGaussian());
+        }
+        return output;
+    }
+
+    private static ObjectNode chat(AiLabelRenderFixtures fixtures, int turns) {
+        var input = AiLabelJson.NODE_FACTORY.objectNode();
+        var messages = input.putArray("messages");
+        for (int i = 0; i < turns; i++) {
+            messages.addObject().put("role", i % 2 == 0 ? "user" : "assistant").put("content", fixtures.text(100));
+        }
+        return input;
     }
 
     private static GoldenCase alone(String name, TraceRow trace, List<SpanRow> spans, long budget) {
@@ -198,7 +231,7 @@ class AiLabelRendererTest {
     @Test
     void renderReturnsOverBudgetWithoutAState() {
         var fixtures = new AiLabelRenderFixtures(10, false);
-        var trace = fixtures.trace(10).toBuilder().input("[" + "1,".repeat(50_000) + "1]").build();
+        var trace = fixtures.trace(10).toBuilder().name(fixtures.text(100_000)).build();
         var ref = AiLabelRenderFixtures.refOf(trace);
 
         var outcome = AiLabelRenderer.render(ref, trace, List.of(), null, 80_000);
