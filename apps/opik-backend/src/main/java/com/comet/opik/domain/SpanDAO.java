@@ -2183,7 +2183,7 @@ public class SpanDAO {
 
                         return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost,
                                 costVersion, spanColumnsNonNullable(),
-                                configuration.getResponseFormatting().getTruncationSize());
+                                configuration.getResponseFormatting().getTruncationSize(), streamPayloads());
                     });
         });
     }
@@ -2202,10 +2202,14 @@ public class SpanDAO {
                     .bind("start_time", span.startTime().toString())
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
                     .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-            StreamedPayload.bind(statement,
-                    TruncationUtils.toJsonString(span.input()),
-                    TruncationUtils.toJsonString(span.output()),
-                    Objects.toString(span.metadata(), ""));
+            if (streamPayloads()) {
+                StreamedPayload.bind(statement, span.input(), span.output(), Objects.toString(span.metadata(), ""));
+            } else {
+                StreamedPayload.bind(statement,
+                        TruncationUtils.toJsonString(span.input()),
+                        TruncationUtils.toJsonString(span.output()),
+                        Objects.toString(span.metadata(), ""));
+            }
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -2485,11 +2489,20 @@ public class SpanDAO {
                 .ifPresent(environment -> statement.bind("environment", environment));
     }
 
-    private static void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
-        StreamedPayload.bind(statement,
-                Objects.toString(spanUpdate.input(), null),
-                Objects.toString(spanUpdate.output(), null),
-                Objects.toString(spanUpdate.metadata(), null));
+    private void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
+        if (streamPayloads()) {
+            StreamedPayload.bind(statement, spanUpdate.input(), spanUpdate.output(),
+                    Objects.toString(spanUpdate.metadata(), null));
+        } else {
+            StreamedPayload.bind(statement,
+                    Objects.toString(spanUpdate.input(), null),
+                    Objects.toString(spanUpdate.output(), null),
+                    Objects.toString(spanUpdate.metadata(), null));
+        }
+    }
+
+    private boolean streamPayloads() {
+        return configuration.getDatabaseAnalytics().isStreamPayloads();
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
