@@ -164,6 +164,30 @@ def test_get_json_size_basic(test_input):
     assert sequence_splitter._get_json_size(test_input) == expected
 
 
+@pytest.mark.parametrize(
+    "test_input",
+    [
+        ("a\nb\tc"),  # Control characters with a short escape
+        ("\x00\x01\x1f"),  # Control characters without one, so \u00XX
+        ('say "hi"'),  # Escaped quote
+        ("back\\slash"),  # Escaped backslash
+        ('{"a": "b\\nc"}'),  # JSON text, as logged for a tool result or a prompt
+        ([]),  # Empty containers have no separator to correct for
+        ({}),
+        ([{}, []]),
+        ({1: 2, 3: 4}),  # Non-string keys are quoted, like the JSON encoder does
+    ],
+)
+def test_get_json_size__escaped_strings_and_empty_containers(test_input):
+    expected = len(
+        json.dumps(test_input, separators=(",", ":"), ensure_ascii=False).encode(
+            "utf-8"
+        )
+    )
+
+    assert sequence_splitter._get_json_size(test_input) == expected
+
+
 def test_get_json_size_complex_nested():
     test_input = {
         "string": "simple value",
@@ -209,3 +233,28 @@ def test_split_list_into_batches__items_packed_to_the_limit__serialized_batch_st
     for batch in batches:
         serialized = json.dumps(batch, separators=(",", ":")).encode("utf-8")
         assert len(serialized) <= ONE_MEGABYTE
+
+
+def test_split_list_into_batches__payload_with_json_escaping__serialized_batch_stays_under_the_limit():
+    # The same packing problem, from the other direction: the size of a string is
+    # not its length, because JSON escapes the quotes, backslashes and newlines a
+    # payload that is itself JSON is made of. Estimating those away packs a batch
+    # over the budget it was sized against.
+    ONE_MEGABYTE = fake_message_factory.ONE_MEGABYTE
+    payload = json.dumps(
+        {
+            "tool": "search",
+            "results": [
+                {"title": 'He said "hello"', "snippet": "line one\nline two\tend"}
+                for _ in range(10)
+            ],
+        }
+    )
+    items = [payload] * 1200
+
+    batches = sequence_splitter.split_into_batches(items, max_payload_size_MB=1.0)
+
+    assert sum(len(batch) for batch in batches) == len(items)
+    for batch in batches:
+        serialized = json.dumps(batch, separators=(",", ":"), ensure_ascii=False)
+        assert len(serialized.encode("utf-8")) <= ONE_MEGABYTE

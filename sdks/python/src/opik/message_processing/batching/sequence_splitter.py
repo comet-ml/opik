@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Optional, TypeVar, Sequence, Any
 import opik.jsonable_encoder as jsonable_encoder
 
@@ -39,6 +40,49 @@ def get_payload_size_MB(item: T) -> float:
     return _get_expected_payload_size_MB(item)
 
 
+# A JSON string is not just its characters: ``"`` and ``\`` grow by one byte, and
+# the control characters below are written as a two-character escape, or as a
+# six-character ``\u00XX`` one for the rest of the range. A payload that is itself
+# JSON - an LLM prompt, a tool result, a traceback - is mostly those characters, so
+# sizing it by its UTF-8 length alone undercounts it badly.
+_JSON_ESCAPE_NEEDED_RE = re.compile(r'["\\\x00-\x1f]')
+_JSON_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f]")
+_JSON_SHORT_CONTROL_ESCAPES = "\n\r\t\b\f"
+
+
+def _get_json_string_size(value: str) -> int:
+    """Size of ``value`` as JSON: its UTF-8 bytes, plus quotes and any escaping."""
+    size = len(value.encode("utf-8")) + 2  # "str_content"
+
+    if _JSON_ESCAPE_NEEDED_RE.search(value) is None:
+        # The common case: nothing in this string has to be escaped.
+        return size
+
+    # Every quote and backslash costs one extra byte, and so does each of the
+    # control characters JSON has a short escape for. The remaining control
+    # characters cost the five extra bytes of ``\u00XX``.
+    short_escaped_control_chars = sum(
+        value.count(char) for char in _JSON_SHORT_CONTROL_ESCAPES
+    )
+    control_chars = len(_JSON_CONTROL_CHAR_RE.findall(value))
+
+    return (
+        size
+        + value.count('"')
+        + value.count("\\")
+        + short_escaped_control_chars
+        + (control_chars - short_escaped_control_chars) * 5
+    )
+
+
+def _get_json_key_size(key: Any) -> int:
+    """Size of a mapping key, which JSON always writes as a quoted string."""
+    if isinstance(key, str):
+        return _get_json_string_size(key)
+    # A non-string key is stringified first: ``{1: 2}`` goes out as ``{"1":2}``.
+    return _get_json_string_size(str(key))
+
+
 def _get_json_size(obj: Any) -> Any:
     """
     Compute the size of the resulting JSON without actually doing the JSON
@@ -48,7 +92,7 @@ def _get_json_size(obj: Any) -> Any:
     """
     try:
         if isinstance(obj, str):
-            return len(obj.encode("utf-8")) + 2  # "str_content"
+            return _get_json_string_size(obj)
         elif isinstance(obj, (int, float)):
             return len(str(obj))
         elif isinstance(obj, type(None)):
@@ -59,15 +103,17 @@ def _get_json_size(obj: Any) -> Any:
             allowed_keys = set(obj.keys())
             for key, value in obj.items():
                 if key in allowed_keys:
-                    encoded_key = _get_json_size(key)
+                    encoded_key = _get_json_key_size(key)
                     encoded_value = _get_json_size(value)
                     size += encoded_key + encoded_value + 1 + 1  # key:value and ,
-            return size - 1  # Remove the last trailing comma
+            # Remove the last trailing comma - there is none in an empty object.
+            return size - 1 if obj else size
         elif isinstance(obj, list):
             size = 2  # [obj]
             for item in obj:
                 size += _get_json_size(item) + 1  # ,
-            return size - 1  # Remove the last trailing comma
+            # Remove the last trailing comma - there is none in an empty list.
+            return size - 1 if obj else size
         elif isinstance(obj, bool):
             return len(str(obj))
         else:
