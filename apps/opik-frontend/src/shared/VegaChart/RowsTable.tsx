@@ -8,6 +8,7 @@ import React, {
 import { ColumnDef, ColumnSizingState } from "@tanstack/react-table";
 
 import { coerceNumericRows, VegaRows, VegaSpec } from "@/lib/charts/vega";
+import { getTextWidth } from "@/lib/utils";
 import { Sorting } from "@/types/sorting";
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -99,25 +100,57 @@ const usePersistColumnWidths = (
   }, []);
 };
 
-// A rough measure of the table's 14px text; erring wide keeps short values whole.
-const CHAR_WIDTH = 8;
+// The table's 14px text, measured at the header's medium weight so cells err wide.
+const TEXT_FONT = "500 14px Inter";
 const CELL_PADDING = 24;
 const SORT_ICON_WIDTH = 18;
 const MIN_COLUMN_WIDTH = 80;
+const FALLBACK_CHAR_WIDTH = 8;
 
-const textWidth = (text: string) => text.length * CHAR_WIDTH + CELL_PADDING;
+// Without a canvas to measure with (tests, locked-down browsers), the old rough 8px a character; it under-measures CJK.
+const measureTexts = (texts: string[]): number[] => {
+  try {
+    return getTextWidth(texts, { font: TEXT_FONT });
+  } catch {
+    return texts.map((text) => [...text].length * FALLBACK_CHAR_WIDTH);
+  }
+};
+
+// Widths measured before the web font loads use fallback metrics; true once it has, so they are measured again.
+const useFontsLoaded = () => {
+  const [loaded, setLoaded] = useState(
+    () => !document.fonts || document.fonts.status === "loaded",
+  );
+  useEffect(() => {
+    if (loaded) return;
+    let active = true;
+    document.fonts.ready.then(() => active && setLoaded(true));
+    return () => {
+      active = false;
+    };
+  }, [loaded]);
+  return loaded;
+};
 
 // The width that shows a column's header and longest value in full.
-const contentWidths = (keys: string[], rows: Row[]): ColumnSizingState =>
-  Object.fromEntries(
-    keys.map((key) => [
+const contentWidths = (keys: string[], rows: Row[]): ColumnSizingState => {
+  const cells = keys.map((key) => rows.map((row) => formatCell(row[key])));
+  const texts = [...new Set([...keys, ...cells.flat()])];
+  const measured = measureTexts(texts);
+  const widthOf = new Map(texts.map((text, i) => [text, measured[i]]));
+  const textWidth = (text: string) =>
+    Math.ceil(widthOf.get(text) ?? 0) + CELL_PADDING;
+
+  return Object.fromEntries(
+    keys.map((key, i) => [
       key,
-      rows.reduce(
-        (width, row) => Math.max(width, textWidth(formatCell(row[key]))),
+      cells[i].reduce(
+        (width, text) => Math.max(width, textWidth(text)),
         Math.max(MIN_COLUMN_WIDTH, textWidth(key) + SORT_ICON_WIDTH),
       ),
     ]),
   );
+};
 
 // Narrow columns keep their width and wide ones split the rest, never below the minimum; only then does the table scroll.
 const shareWidth = (
@@ -141,9 +174,10 @@ const shareWidth = (
 
 // The default table frame, scrolling inside the widget with the header stuck to its top; it hugs a short table.
 // Its own scrollbar styles keep the scrollbar visible where the OS hides it, so columns past the edge show.
+// A stable gutter keeps the measured inner width when a vertical scrollbar comes and goes.
 const RowsTableWrapper: React.FC<DataTableWrapperProps> = ({ children }) => (
   <div
-    className="relative max-h-full overflow-auto rounded-md border [&::-webkit-scrollbar-thumb:hover]:bg-[var(--scrollbar-thumb-hover)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar]:bg-transparent [&_thead[data-sticky-vertical]]:!top-0"
+    className="relative max-h-full overflow-auto rounded-md border [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb:hover]:bg-[var(--scrollbar-thumb-hover)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar]:bg-transparent [&_thead[data-sticky-vertical]]:!top-0"
     data-table-scroll-container
   >
     {children}
@@ -194,6 +228,7 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
           },
           // Rankings read best first.
           sortDescFirst: numeric,
+          minSize: MIN_COLUMN_WIDTH,
         };
       }),
     [keys, data],
@@ -249,11 +284,20 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
     ),
   );
 
-  const limits = useMemo(() => contentWidths(keys, data), [keys, data]);
-  // A column is never saved or drawn wider than its content or the widget, which another viewer's screen may make narrow.
+  const fontsLoaded = useFontsLoaded();
+  const limits = useMemo(
+    () => contentWidths(keys, data),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measure again once the font loads
+    [keys, data, fontsLoaded],
+  );
+  // A column is never saved or drawn wider than its content or the widget, which another viewer's screen may make narrow,
+  // nor narrower than the minimum.
   const capWidth = useCallback(
     (id: string, width: number) =>
-      Math.min(width, limits[id] ?? width, frameWidth || width),
+      Math.max(
+        MIN_COLUMN_WIDTH,
+        Math.min(width, limits[id] ?? width, frameWidth || width),
+      ),
     [limits, frameWidth],
   );
 
