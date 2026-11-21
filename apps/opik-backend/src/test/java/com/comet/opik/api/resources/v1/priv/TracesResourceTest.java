@@ -47,6 +47,7 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -2407,6 +2408,43 @@ class TracesResourceTest {
 
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
+    }
+
+    @Nested
+    @DisplayName("Payload storage:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PayloadStorage {
+
+        Stream<JsonNode> batchAndSingleCreateStoreTheSamePayload() {
+            return PayloadCases.payloads();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a batch create and a single create store the same input and output")
+        void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .input(payload)
+                    .output(payload)
+                    .build();
+            var singleTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .input(payload)
+                    .output(payload)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(singleTrace, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(batchTrace, null, API_KEY, TEST_WORKSPACE);
+            getAndAssert(singleTrace, null, API_KEY, TEST_WORKSPACE);
+        }
     }
 
     private Trace getAndAssert(Trace expectedTrace, UUID expectedProjectId, String apiKey, String workspaceName) {
