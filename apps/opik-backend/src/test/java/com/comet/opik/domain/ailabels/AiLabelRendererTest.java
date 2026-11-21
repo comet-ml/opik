@@ -54,7 +54,7 @@ class AiLabelRendererTest {
      */
     private static final Map<Integer, String> GOLDEN_FINGERPRINTS = Map.of(
             1, "2e107dc51185d3a04a30a48cd8b1b308ab3054b8ecb19a4dfa9dd86dc3dc788b",
-            2, "b8b8ee5f746b5c0b06da85f063449590a9756d27f3abb666e5aae4603d8377c3");
+            2, "625cbdc08d774faddbbcef7f03fdc0e72321ac3d0ad9af497384e9e66dc12f69");
 
     private static final String GOLDEN_DIR = "src/test/resources/ai-labels/renderer/v%d"
             .formatted(AiLabelRenderer.RENDERER_VERSION);

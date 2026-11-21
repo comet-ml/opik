@@ -143,18 +143,25 @@ class AiLabelStateFitterTest {
         assertThat(((OverBudget) fit).bytes()).isGreaterThan(1_000);
     }
 
+    /** An embedding means nothing to a summary: it's gone from every state, spans included, whether or not it fits. */
     @Test
-    void fitElidesAnEmbeddingBeforeCuttingAnyText() {
+    void stateDropsEveryEmbedding() {
         var answer = new AiLabelRenderFixtures(11, false).text(500);
         var output = NODE_FACTORY.objectNode().put("answer", answer);
         output.set("embedding", floats(new Random(11), 1_536));
+        var vectorWithNaN = floats(new Random(12), 20).add(NODE_FACTORY.nullNode());
         var trace = trace("{\"q\":\"question\"}", output.toString());
+        var embed = span(trace, "embed", null, 0, "general").toBuilder()
+                .output("{\"vector\":" + vectorWithNaN + ",\"bbox\":[1,2,3,4]}").build();
 
-        var fitted = fitTwice(trace, 2_000);
+        var fitted = (Fitted) fit(trace, List.of(embed), null, BUDGET);
 
-        assertThat(fitted.compactionLevel()).isEqualTo("output_vectors_elided");
+        assertThat(fitted.compactionLevel()).isEqualTo("full");
         assertThat(fitted.state().get("output").get("embedding").textValue()).isEqualTo("…[1536 numbers omitted]…");
         assertThat(fitted.state().get("output").get("answer").textValue()).isEqualTo(answer);
+        var spanOutput = fitted.state().get("spans").get(0).get("output");
+        assertThat(spanOutput.get("vector").textValue()).isEqualTo("…[21 numbers omitted]…");
+        assertThat(spanOutput.get("bbox")).hasSize(4);
     }
 
     /** A knowledge graph: nodes carrying embeddings, text chunks, and edges; bulk that strings at 64 don't remove. */
@@ -180,11 +187,12 @@ class AiLabelStateFitterTest {
 
         var fitted = fitTwice(trace, BUDGET);
 
-        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        int items = capOf(fitted, "arrays_capped:", MIN_ITEMS);
         var fittedOutput = fitted.state().get("output");
         assertThat(fittedOutput.get("graph_nodes")).hasSize(items + 1);
         assertThat(fittedOutput.get("graph_nodes").get(0).get("embedding").textValue())
                 .isEqualTo("…[384 numbers omitted]…");
+        assertThat(fittedOutput.get("graph_nodes").get(0).get("label").textValue()).hasSize(12);
         assertThat(fittedOutput.get("graph_nodes").get(2).textValue()).isEqualTo("…[" + (2_000 - items)
                 + " items truncated]…");
         assertThat(fittedOutput.get("chunks").get(items).get("text").textValue()).hasSize(800);
@@ -213,7 +221,7 @@ class AiLabelStateFitterTest {
 
         var fitted = fitTwice(trace, BUDGET);
 
-        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        int items = capOf(fitted, "arrays_capped:", MIN_ITEMS);
         var fittedOutput = fitted.state().get("output");
         assertThat(fittedOutput.properties()).hasSize(16);
         assertThat(fittedOutput.get("context").get(items).get("source").textValue()).isEqualTo("doc-399");
@@ -235,13 +243,14 @@ class AiLabelStateFitterTest {
 
         var fitted = fitTwice(trace, BUDGET);
 
-        int items = capOf(fitted, "input_arrays_capped:", MIN_ITEMS);
+        int items = capOf(fitted, "arrays_capped:", MIN_ITEMS);
         var fittedMessages = fitted.state().get("input").get("messages");
         assertThat(fittedMessages).hasSize(items + 1);
         assertThat(fittedMessages.get(0)).isEqualTo(messages.get(0));
         assertThat(fittedMessages.get(2).textValue()).isEqualTo("…[" + (2_000 - items) + " items truncated]…");
         assertThat(fittedMessages.get(items)).isEqualTo(last);
         assertThat(items).isGreaterThan(100);
+        assertThat(fitted.state().get("output")).isEqualTo(state(trace, List.of()).get("output"));
     }
 
     @Test
@@ -257,7 +266,7 @@ class AiLabelStateFitterTest {
 
         var fitted = fitTwice(trace, 20_000);
 
-        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        int items = capOf(fitted, "arrays_capped:", MIN_ITEMS);
         var rows = fitted.state().get("output");
         assertThat(rows).hasSize(items + 1);
         assertThat(rows.get(items).get(items).textValue()).isEqualTo("r299c299");
@@ -265,7 +274,7 @@ class AiLabelStateFitterTest {
     }
 
     @Test
-    void fitCutsLongStringsOnceAVectorIsElided() {
+    void fitCutsLongStringsBesideAnEmbedding() {
         var random = new Random(15);
         var fixtures = new AiLabelRenderFixtures(15, false);
         var text = fixtures.text(20_000);
@@ -297,6 +306,22 @@ class AiLabelStateFitterTest {
         assertThat(text).startsWith("{\"key_00000\":0,").endsWith(",\"key_09999\":9999}")
                 .contains(" chars truncated]…");
         assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
+    }
+
+    /** The larger field becomes text first, so a short answer beside a huge input is kept. */
+    @Test
+    void fitTurnsTheLargerFieldIntoTextFirst() {
+        var input = NODE_FACTORY.objectNode();
+        for (int i = 0; i < 10_000; i++) {
+            input.put("key_%05d".formatted(i), i);
+        }
+        var trace = trace(input.toString(), "{\"reply\":\"The refund for order 123 was approved.\"}");
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        assertThat(fitted.compactionLevel()).isEqualTo("input_as_text");
+        assertThat(fitted.state().get("input").textValue()).startsWith("{\"key_00000\":0,");
+        assertThat(fitted.state().get("output")).isEqualTo(state(trace, List.of()).get("output"));
     }
 
     @Test
@@ -350,10 +375,9 @@ class AiLabelStateFitterTest {
                 assertThat(fitted.state()).isEqualTo(state(trace, spans));
             } else {
                 assertThat(full).isGreaterThan(budget);
-                assertThat(fitted.compactionLevel()).matches(
-                        "spans_pruned:\\d+|spans_summarized|history_outputs_dropped:\\d+|history_turns:\\d+"
-                                + "|(output|input)_(vectors_elided|truncated:\\d+|arrays_capped:\\d+"
-                                + "|arrays_capped_truncated:\\d+|as_text)");
+                assertThat(fitted.compactionLevel()).matches("arrays_capped:\\d+|spans_pruned:\\d+|spans_summarized"
+                        + "|history_outputs_dropped:\\d+|history_turns:\\d+|output_truncated:\\d+|input_truncated:\\d+"
+                        + "|truncated_arrays_capped:\\d+|output_as_text|input_as_text|fields_as_text");
                 assertThat(AiLabelsTickService.levelOf(fitted.compactionLevel())).matches("[a-z_]+");
             }
         }

@@ -6,60 +6,56 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.NonNull;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.IntFunction;
+import java.util.stream.Collectors;
 
 /**
  * Fits a canonical state, together with the trace's earlier turns when a task uses them, into one byte budget, in
  * steps that stop as soon as the two fit:
  * <ol>
  *   <li>{@code full}: nothing removed.</li>
+ *   <li>{@code arrays_capped:<N>}: every array in the trace's input and output over N elements keeps its first 2 and
+ *       its last N - 2 around a {@code …[K items truncated]…} element; N is the largest that fits, never below 3. Long
+ *       lists are the cheapest content to lose (embeddings are already gone, see {@link AiLabelRenderer}), and the
+ *       tail is kept because the newest entries of a list (a chat's last turns) carry the most intent. Only when that
+ *       alone fits: otherwise the bulk is text, and the arrays are left whole until it's cut.</li>
  *   <li>{@code spans_pruned:<d>}: the spans at depth {@code d} and below are gone (top-level spans are depth 1), and
  *       {@code spans_summary} counts the whole tree; {@code spans_summarized} once every span is gone.</li>
  *   <li>{@code history_outputs_dropped:<n>}: the outputs of the {@code n} oldest earlier turns are gone.</li>
  *   <li>{@code history_turns:<n>}: only the {@code n} newest earlier turns are left.</li>
- *   <li>{@code output_vectors_elided}, then {@code input_vectors_elided}: every array of more than 16 numbers in the
- *       trace's output, then its input, is a {@code …[N numbers omitted]…} string. An embedding means nothing to a
- *       summary, so it goes before any text is cut, and stays gone in the steps below.</li>
  *   <li>{@code output_truncated:<L>}: every string in the output keeps its first L code points, followed by a
  *       {@code …[N chars truncated]…} marker; L is the largest that fits, never below 64.</li>
  *   <li>{@code input_truncated:<L>}: the output at 64, and the input's strings cut the same way.</li>
- *   <li>{@code output_arrays_capped:<N>}: strings at 64 aren't enough, so the bulk is in arrays. Both fields start
- *       over uncut, and every array in the output over N elements keeps its first 2 and its last N - 2 around a
- *       {@code …[K items truncated]…} element; N is the largest that fits, never below 3. The tail is kept because
- *       the newest entries of a list (a chat's last turns) carry the most intent.</li>
- *   <li>{@code output_arrays_capped_truncated:<L>}: the output's arrays at 3, and its strings cut at L as above.</li>
- *   <li>{@code input_arrays_capped:<N>}, then {@code input_arrays_capped_truncated:<L>}: the output at 3 and 64, and
- *       the input cut the same two ways.</li>
- *   <li>{@code output_as_text}, then {@code input_as_text}: the field, as left by the step before, becomes its
- *       canonical JSON as one string, cut in the middle to fit; the input's step leaves the output only the marker.
- *       </li>
+ *   <li>{@code truncated_arrays_capped:<N>}: both at 64, and the arrays capped as in step 2.</li>
+ *   <li>{@code output_as_text} or {@code input_as_text}: the larger of the two fields becomes its canonical JSON as one
+ *       string, cut in the middle to fit; {@code fields_as_text} when the smaller one must become text too.</li>
  * </ol>
- * Without history, steps 2 and 3 are skipped. A step with nothing to remove from its field is passed through. A state
- * still over budget after the last step (its name alone too big) is {@link OverBudget}.
+ * Without history, steps 4 and 5 are skipped. A step with nothing to remove is passed through. A state still over
+ * budget after the last step (its name alone too big) is {@link OverBudget}.
  *
  * <p>Every step is deterministic: the same state always fits to the same bytes. The size is the state's canonical
  * UTF-8 bytes plus the history's. It is computed rather than serialized, and the span levels are measured in one
  * pass, so a deep span chain costs one walk, not one per level. Caps count code points, so a cut never splits a
- * surrogate pair or a UTF-8 sequence. The state and history are changed in place.
+ * surrogate pair or a UTF-8 sequence. Arrays inside spans aren't capped: spans are pruned whole instead. The state and
+ * history are changed in place.
  */
 final class AiLabelStateFitter {
 
     static final int MIN_CAP = 64;
     static final int MIN_ITEMS = 3;
-    static final int MAX_VECTOR_LENGTH = 16;
     static final String MARKER_OPEN = "…[";
     static final String MARKER_CLOSE = " chars truncated]…";
     static final String ITEMS_MARKER_CLOSE = " items truncated]…";
-    static final String NUMBERS_MARKER_CLOSE = " numbers omitted]…";
 
     private static final String SPANS = "spans";
     private static final String SPANS_SUMMARY = "spans_summary";
     private static final String INPUT = "input";
     private static final String OUTPUT = "output";
-    /** The fields each step cuts, in order: the output says less about intent than the input. */
     private static final List<String> FIELDS = List.of(OUTPUT, INPUT);
     /** An array cut to N elements keeps this many from its start, and the rest from its end. */
     private static final int HEAD_ITEMS = 2;
@@ -88,6 +84,15 @@ final class AiLabelStateFitter {
         if (stateBytes + historyBytes <= budget) {
             return new Fitted(state, history, stateBytes + historyBytes, "full");
         }
+
+        var uncapped = new LinkedHashMap<String, JsonNode>();
+        FIELDS.stream().filter(state::has).forEach(key -> uncapped.put(key, state.get(key)));
+        var capped = capArrays(state, stateBytes, budget - historyBytes);
+        if (capped.fits()) {
+            return new Fitted(state, history, capped.stateBytes() + historyBytes, "arrays_capped:" + capped.cap());
+        }
+        // Arrays alone aren't the bulk, so the text goes first, and they're capped only once it's cut.
+        state.setAll(uncapped);
 
         if (state.has(SPANS)) {
             state.set(SPANS_SUMMARY, spansSummary);
@@ -128,15 +133,6 @@ final class AiLabelStateFitter {
         }
 
         long room = budget - historyBytes;
-        for (var key : FIELDS) {
-            stateBytes = replace(state, key, elideVectors(state.get(key)), stateBytes);
-            if (stateBytes <= room) {
-                return new Fitted(state, history, stateBytes + historyBytes, key + "_vectors_elided");
-            }
-        }
-
-        var uncutOutput = state.get(OUTPUT);
-        var uncutInput = state.get(INPUT);
         var output = truncate(state, OUTPUT, stateBytes, room);
         if (output.fits()) {
             return new Fitted(state, history, output.stateBytes() + historyBytes, "output_truncated:" + output.cap());
@@ -145,35 +141,24 @@ final class AiLabelStateFitter {
         if (input.fits()) {
             return new Fitted(state, history, input.stateBytes() + historyBytes, "input_truncated:" + input.cap());
         }
-
-        // Strings at 64 don't fit, so the bulk is in arrays: cap them with the text whole again.
-        stateBytes = replace(state, OUTPUT, uncutOutput, input.stateBytes());
-        stateBytes = replace(state, INPUT, uncutInput, stateBytes);
-        for (var key : FIELDS) {
-            var original = state.get(key);
-            var capped = search(state, key, stateBytes, room, MIN_ITEMS, longestArray(original) - 1,
-                    items -> cut(original, items, Integer.MAX_VALUE));
-            if (capped.fits()) {
-                return new Fitted(state, history, capped.stateBytes() + historyBytes,
-                        key + "_arrays_capped:" + capped.cap());
-            }
-            var both = search(state, key, capped.stateBytes(), room, MIN_CAP, longestString(original) - 1,
-                    cap -> cut(original, MIN_ITEMS, cap));
-            if (both.fits()) {
-                return new Fitted(state, history, both.stateBytes() + historyBytes,
-                        key + "_arrays_capped_truncated:" + both.cap());
-            }
-            stateBytes = both.stateBytes();
+        var both = capArrays(state, input.stateBytes(), room);
+        if (both.fits()) {
+            return new Fitted(state, history, both.stateBytes() + historyBytes,
+                    "truncated_arrays_capped:" + both.cap());
         }
 
-        for (var key : FIELDS) {
-            var text = asText(state, key, stateBytes, room);
-            if (text.fits()) {
-                return new Fitted(state, history, text.stateBytes() + historyBytes, key + "_as_text");
-            }
-            stateBytes = text.stateBytes();
+        // The larger field goes first, so a short answer isn't lost to a huge input, or the other way round.
+        stateBytes = both.stateBytes();
+        var bySize = sizeOf(state.get(INPUT)) > sizeOf(state.get(OUTPUT)) ? List.of(INPUT, OUTPUT) : FIELDS;
+        var larger = asText(state, bySize.getFirst(), stateBytes, room);
+        if (larger.fits()) {
+            return new Fitted(state, history, larger.stateBytes() + historyBytes, bySize.getFirst() + "_as_text");
         }
-        return new OverBudget(stateBytes + historyBytes);
+        var smaller = asText(state, bySize.getLast(), larger.stateBytes(), room);
+        if (smaller.fits()) {
+            return new Fitted(state, history, smaller.stateBytes() + historyBytes, "fields_as_text");
+        }
+        return new OverBudget(smaller.stateBytes() + historyBytes);
     }
 
     /**
@@ -221,48 +206,48 @@ final class AiLabelStateFitter {
         }
     }
 
-    /** The state's new size once {@code key} holds {@code value}; a field that isn't there stays absent. */
-    private static long replace(ObjectNode state, String key, JsonNode value, long stateBytes) {
-        var previous = state.get(key);
-        if (previous == null) {
-            return stateBytes;
-        }
-        state.set(key, value);
-        return stateBytes - AiLabelJson.sizeOf(previous) + AiLabelJson.sizeOf(value);
+    private record Cut(boolean fits, int cap, long stateBytes) {
     }
 
-    private record Cut(boolean fits, int cap, long stateBytes) {
+    /** Caps every array in the input and output at the largest element count that fits, or at {@link #MIN_ITEMS}. */
+    private static Cut capArrays(ObjectNode state, long stateBytes, long budget) {
+        int longest = FIELDS.stream().mapToInt(key -> longestArray(state.get(key))).max().orElse(0);
+        return search(state, FIELDS, stateBytes, budget, MIN_ITEMS, longest - 1,
+                (field, items) -> cut(field, items, Integer.MAX_VALUE));
     }
 
     /** Cuts every string under {@code key} at the largest cap that fits {@code budget}, or at {@link #MIN_CAP}. */
     private static Cut truncate(ObjectNode state, String key, long stateBytes, long budget) {
-        var original = state.get(key);
-        return search(state, key, stateBytes, budget, MIN_CAP, longestString(original) - 1,
-                cap -> cut(original, Integer.MAX_VALUE, cap));
+        return search(state, List.of(key), stateBytes, budget, MIN_CAP, longestString(state.get(key)) - 1,
+                (field, cap) -> cut(field, Integer.MAX_VALUE, cap));
     }
 
     /**
-     * Sets {@code key} to {@code shrink} of the largest parameter in {@code [low, high]} that fits {@code budget}, or
-     * of {@code low} when none does. The size grows with the parameter, so a binary search finds it; where it only
-     * nearly does (nested arrays, the cut JSON text), the search may stop short of the largest, but what it keeps fits.
+     * Sets each of {@code keys} to {@code shrink} of it at the largest parameter in {@code [low, high]} that fits
+     * {@code budget}, or at {@code low} when none does. The size grows with the parameter, so a binary search finds it;
+     * where it only nearly does (nested arrays, the cut JSON text), the search may stop short of the largest, but what
+     * it keeps fits. A key the state doesn't have stays absent.
      */
-    private static Cut search(ObjectNode state, String key, long stateBytes, long budget, int low, int high,
-            IntFunction<JsonNode> shrink) {
-        var original = state.get(key);
-        if (original == null) {
+    private static Cut search(ObjectNode state, List<String> keys, long stateBytes, long budget, int low, int high,
+            BiFunction<JsonNode, Integer, JsonNode> shrink) {
+        var originals = new LinkedHashMap<String, JsonNode>();
+        keys.stream().filter(state::has).forEach(key -> originals.put(key, state.get(key)));
+        if (originals.isEmpty()) {
             return new Cut(false, low, stateBytes);
         }
-        long others = stateBytes - AiLabelJson.sizeOf(original);
-        var best = shrink.apply(low);
-        long bestBytes = others + AiLabelJson.sizeOf(best);
-        state.set(key, best);
+        long others = stateBytes - originals.values().stream().mapToLong(AiLabelJson::sizeOf).sum();
+        IntFunction<Map<String, JsonNode>> shrinkAll = param -> originals.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> shrink.apply(entry.getValue(), param)));
+        var best = shrinkAll.apply(low);
+        long bestBytes = others + best.values().stream().mapToLong(AiLabelJson::sizeOf).sum();
+        state.setAll(best);
         if (bestBytes > budget) {
             return new Cut(false, low, bestBytes);
         }
         while (low < high) {
             int mid = (int) ((low + (long) high + 1) / 2);
-            var candidate = shrink.apply(mid);
-            long bytes = others + AiLabelJson.sizeOf(candidate);
+            var candidate = shrinkAll.apply(mid);
+            long bytes = others + candidate.values().stream().mapToLong(AiLabelJson::sizeOf).sum();
             if (bytes <= budget) {
                 low = mid;
                 best = candidate;
@@ -271,7 +256,7 @@ final class AiLabelStateFitter {
                 high = mid - 1;
             }
         }
-        state.set(key, best);
+        state.setAll(best);
         return new Cut(true, low, bestBytes);
     }
 
@@ -282,13 +267,18 @@ final class AiLabelStateFitter {
      * would still overflow.
      */
     private static Cut asText(ObjectNode state, String key, long stateBytes, long budget) {
-        var original = state.get(key);
-        if (original == null) {
+        var field = state.get(key);
+        if (field == null) {
             return new Cut(false, 0, stateBytes);
         }
-        String json = AiLabelJson.toCanonicalString(original);
-        return search(state, key, stateBytes, budget, 0, json.getBytes(StandardCharsets.UTF_8).length,
-                maxBytes -> AiLabelJson.NODE_FACTORY.textNode(AiLabelRenderer.capMiddle(json, maxBytes)));
+        String json = AiLabelJson.toCanonicalString(field);
+        // A UTF-16 char is at most 3 UTF-8 bytes, so this bounds the text's size without encoding it.
+        return search(state, List.of(key), stateBytes, budget, 0, json.length() * 3,
+                (ignored, maxBytes) -> AiLabelJson.NODE_FACTORY.textNode(AiLabelRenderer.capMiddle(json, maxBytes)));
+    }
+
+    private static long sizeOf(JsonNode field) {
+        return field == null ? 0 : AiLabelJson.sizeOf(field);
     }
 
     private static int longestString(JsonNode node) {
@@ -314,33 +304,6 @@ final class AiLabelStateFitter {
             longest = Math.max(longest, longestArray(child));
         }
         return longest;
-    }
-
-    /** A copy of {@code node} with every array of more than {@link #MAX_VECTOR_LENGTH} numbers replaced by a marker. */
-    private static JsonNode elideVectors(JsonNode node) {
-        if (node instanceof ArrayNode array) {
-            if (array.size() > MAX_VECTOR_LENGTH && isNumeric(array)) {
-                return TextNode.valueOf(MARKER_OPEN + array.size() + NUMBERS_MARKER_CLOSE);
-            }
-            var copy = AiLabelJson.NODE_FACTORY.arrayNode();
-            array.forEach(child -> copy.add(elideVectors(child)));
-            return copy;
-        }
-        if (node instanceof ObjectNode object) {
-            var copy = AiLabelJson.NODE_FACTORY.objectNode();
-            object.properties().forEach(entry -> copy.set(entry.getKey(), elideVectors(entry.getValue())));
-            return copy;
-        }
-        return node;
-    }
-
-    private static boolean isNumeric(ArrayNode array) {
-        for (var element : array) {
-            if (!element.isNumber()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -370,7 +333,13 @@ final class AiLabelStateFitter {
             int tailStart = array.size() - (maxItems - HEAD_ITEMS);
             if (array.size() > maxItems) {
                 var marker = TextNode.valueOf(MARKER_OPEN + (array.size() - maxItems) + ITEMS_MARKER_CLOSE);
-                if (droppedBytesExceed(array, tailStart, maxItems, cap, AiLabelJson.sizeOf(marker) + 1)) {
+                // Only if the dropped elements, as cut themselves and with their commas, take more than the marker.
+                long markerBytes = AiLabelJson.sizeOf(marker) + 1;
+                long dropped = 0;
+                for (int i = HEAD_ITEMS; i < tailStart && dropped <= markerBytes; i++) {
+                    dropped += AiLabelJson.sizeOf(cut(array.get(i), maxItems, cap)) + 1;
+                }
+                if (dropped > markerBytes) {
                     for (int i = 0; i < HEAD_ITEMS; i++) {
                         copy.add(cut(array.get(i), maxItems, cap));
                     }
@@ -385,14 +354,5 @@ final class AiLabelStateFitter {
             return copy;
         }
         return node;
-    }
-
-    /** Whether the elements a cut drops, as cut themselves and with their commas, take more than {@code bytes}. */
-    private static boolean droppedBytesExceed(ArrayNode array, int tailStart, int maxItems, int cap, long bytes) {
-        long dropped = 0;
-        for (int i = HEAD_ITEMS; i < tailStart && dropped <= bytes; i++) {
-            dropped += AiLabelJson.sizeOf(cut(array.get(i), maxItems, cap)) + 1;
-        }
-        return dropped > bytes;
     }
 }

@@ -63,6 +63,9 @@ class AiLabelSweepDAO {
     record WorkspaceHealth(@NonNull String workspaceId, long unsettled, long unsettledPastSlo) {
     }
 
+    /** The renderer version that first shrinks arrays, and so fits traces that earlier versions left over budget. */
+    static final int RENDER_OVER_BUDGET_FIXED_IN = 2;
+
     // The latest version of each trace in the horizon; created_at is the only time filter and its minmax index does the
     // narrowing. Open traces carry the epoch end_time, not NULL.
     private static final String CANDIDATE_CTES = """
@@ -95,7 +98,7 @@ class AiLabelSweepDAO {
                 SELECT workspace_id, project_id, trace_id, task,
                     task_version >= <required_status> AS is_current,
                     status = 'failed' AND error_code = :render_over_budget
-                        AND renderer_version \\< :renderer_version AS rerender,
+                        AND renderer_version \\< :render_over_budget_fixed_in AS rerender,
                     if(rerender, 0, attempt) AS attempts_made,
                     is_current AND NOT rerender AND (
                         status = 'done'
@@ -130,7 +133,8 @@ class AiLabelSweepDAO {
             """;
 
     // A task version older than required is never settled, but its attempts belong to the old version, so they reset.
-    // Likewise a trace over the render budget under an older renderer, which fits more: it starts over at attempt 1.
+    // Likewise a trace over the render budget under a renderer before RENDER_OVER_BUDGET_FIXED_IN, which fits more:
+    // it starts over at attempt 1. Later renderer versions don't change what fits, so they don't re-sweep these.
     // Newest first (ids are UUIDv7), so under overload the newest traces are labeled and the oldest age out of H. Traces
     // in flight are left out here, before the LIMIT: the newest C would otherwise be exactly the ones in flight.
     private static final String SWEEP = CANDIDATE_CTES + """
@@ -224,7 +228,7 @@ class AiLabelSweepDAO {
                             .bind("max_attempts", config.getRetry().getMaxAttempts())
                             .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds())
                             .bind("render_over_budget", AiLabelsTickService.RENDER_OVER_BUDGET)
-                            .bind("renderer_version", AiLabelRenderer.RENDERER_VERSION);
+                            .bind("render_over_budget_fixed_in", RENDER_OVER_BUDGET_FIXED_IN);
                     bindTasks(statement, tasks);
                     extraBinds.accept(statement);
                     return statement.execute();

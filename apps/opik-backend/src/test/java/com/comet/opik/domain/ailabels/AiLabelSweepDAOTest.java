@@ -151,18 +151,18 @@ class AiLabelSweepDAOTest {
         }
 
         @Test
-        @DisplayName("render_over_budget under an older renderer is a candidate again, at attempt 0")
+        @DisplayName("render_over_budget before the renderer that fits it is a candidate again, at attempt 0")
         void renderOverBudgetUnderAnOlderRendererIsRetried() {
             var workspaceId = workspace();
             var olderRenderer = trace(workspaceId).build().insert();
             var currentRenderer = trace(workspaceId).build().insert();
             var otherFailure = trace(workspaceId).build().insert();
-            status(olderRenderer, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION - 1,
-                    AiLabelsTickService.RENDER_OVER_BUDGET);
-            status(currentRenderer, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION,
-                    AiLabelsTickService.RENDER_OVER_BUDGET);
-            status(otherFailure, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION - 1,
-                    "invalid_request");
+            status(olderRenderer, "summary", "failed", false, 1, 1, 60,
+                    AiLabelSweepDAO.RENDER_OVER_BUDGET_FIXED_IN - 1, AiLabelsTickService.RENDER_OVER_BUDGET);
+            status(currentRenderer, "summary", "failed", false, 1, 1, 60,
+                    AiLabelSweepDAO.RENDER_OVER_BUDGET_FIXED_IN, AiLabelsTickService.RENDER_OVER_BUDGET);
+            status(otherFailure, "summary", "failed", false, 1, 1, 60,
+                    AiLabelSweepDAO.RENDER_OVER_BUDGET_FIXED_IN - 1, "invalid_request");
 
             assertThat(sweep(workspaceId)).singleElement()
                     .satisfies(candidate -> {
