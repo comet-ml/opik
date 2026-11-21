@@ -86,8 +86,8 @@ class SpanJsonRowMapper {
         // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise main's
         // escaped strings, with their slim copies added after last_updated_by below, where main put them.
         if (streamPayloads) {
-            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
-            JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
+            JsonRowValues.putJsonWithSlimOneWalk(node, "input", "input_slim", span.input());
+            JsonRowValues.putJsonWithSlimOneWalk(node, "output", "output_slim", span.output());
         } else {
             node.put("input", TruncationUtils.toJsonString(span.input()));
             node.put("output", TruncationUtils.toJsonString(span.output()));

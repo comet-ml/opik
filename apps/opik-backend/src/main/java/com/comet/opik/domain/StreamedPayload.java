@@ -50,7 +50,7 @@ public class StreamedPayload {
 
     private static JsonWithSlim columns(boolean streamPayloads, JsonNode node) {
         if (streamPayloads) {
-            return TruncationUtils.toJsonWithSlim(node);
+            return TruncationUtils.toJsonWithSlimScanThenOneWalk(node);
         }
         var json = TruncationUtils.toJsonString(node);
         return JsonWithSlim.builder().json(json).slim(TruncationUtils.createSlimJsonString(json)).build();

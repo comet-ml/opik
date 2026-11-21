@@ -22,6 +22,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.CharArrayWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 
@@ -247,7 +248,7 @@ public final class TruncationUtils {
     public static final class SlimCapture implements JsonSerializable {
 
         private final JsonNode node;
-        private String text;
+        private SlimChars text;
 
         private SlimCapture(JsonNode node) {
             this.node = node;
@@ -260,10 +261,10 @@ public final class TruncationUtils {
                         PayloadJson.NODE_PROVIDER);
                 return;
             }
-            String buffered = text;
+            SlimChars buffered = text;
             // Released as soon as it is written, not with the row.
             text = null;
-            generator.writeRawValue(buffered);
+            generator.writeRawValue(buffered.chars(), 0, buffered.size());
         }
 
         @Override
@@ -278,29 +279,33 @@ public final class TruncationUtils {
         @Override
         public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
             ObjectMapper mapper = JsonUtils.getMapper();
-            BufferRecycler recycler = mapper.getFactory()._getBufferRecycler();
-            try (var buffer = new SegmentedStringWriter(recycler)) {
-                try (var slimGenerator = mapper.createGenerator(buffer)) {
-                    // Written as the row generator would write it in place.
-                    slimGenerator.overrideStdFeatures(generator.getFeatureMask(), ~0);
-                    slimGenerator.setCharacterEscapes(generator.getCharacterEscapes());
-                    if (generator.getHighestEscapedChar() > 0) {
-                        slimGenerator.setHighestNonEscapedChar(generator.getHighestEscapedChar());
-                    }
-                    var tee = new TeeGenerator(generator,
-                            new TruncatingGenerator(slimGenerator, DEFAULT_SLIM_STRING_MAX_LENGTH));
-                    node.serialize(tee, PayloadJson.NODE_PROVIDER);
+            var buffer = new SlimChars();
+            try (var slimGenerator = mapper.createGenerator(buffer)) {
+                // Written as the row generator would write it in place.
+                slimGenerator.overrideStdFeatures(generator.getFeatureMask(), ~0);
+                slimGenerator.setCharacterEscapes(generator.getCharacterEscapes());
+                if (generator.getHighestEscapedChar() > 0) {
+                    slimGenerator.setHighestNonEscapedChar(generator.getHighestEscapedChar());
                 }
-                slim.text = buffer.getAndClear();
-            } finally {
-                recycler.releaseToPool();
+                var tee = new TeeGenerator(generator,
+                        new TruncatingGenerator(slimGenerator, DEFAULT_SLIM_STRING_MAX_LENGTH));
+                node.serialize(tee, PayloadJson.NODE_PROVIDER);
             }
+            slim.text = buffer;
         }
 
         @Override
         public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
                 TypeSerializer typeSerializer) throws IOException {
             serialize(generator, provider);
+        }
+    }
+
+    /** A char buffer whose backing array is written raw as it is, with no copy into a {@code String} first. */
+    private static final class SlimChars extends CharArrayWriter {
+
+        char[] chars() {
+            return buf;
         }
     }
 

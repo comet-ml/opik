@@ -70,8 +70,8 @@ class TraceJsonRowMapper {
         // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise main's
         // escaped strings, with their slim copies added after visibility_mode below, where main put them.
         if (streamPayloads) {
-            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", trace.input());
-            JsonRowValues.putJsonWithSlim(node, "output", "output_slim", trace.output());
+            JsonRowValues.putJsonWithSlimOneWalk(node, "input", "input_slim", trace.input());
+            JsonRowValues.putJsonWithSlimOneWalk(node, "output", "output_slim", trace.output());
         } else {
             node.put("input", TruncationUtils.toJsonString(trace.input()));
             node.put("output", TruncationUtils.toJsonString(trace.output()));
