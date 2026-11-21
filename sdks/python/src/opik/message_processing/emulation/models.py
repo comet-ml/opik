@@ -21,6 +21,7 @@ class FeedbackScoreModel:
         value: The numerical value of the feedback score.
         category_name: Category to which the feedback score belongs, if any.
         reason: Reason or explanation for the feedback score, if available.
+        evaluator_revision: Revision of the evaluator that produced the score, if any.
     """
 
     id: str
@@ -28,6 +29,7 @@ class FeedbackScoreModel:
     value: float
     category_name: Optional[str] = None
     reason: Optional[str] = None
+    evaluator_revision: Optional[str] = None
 
 
 @dataclasses.dataclass
