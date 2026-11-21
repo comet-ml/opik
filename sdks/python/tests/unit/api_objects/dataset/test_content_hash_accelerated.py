@@ -151,9 +151,19 @@ def test_content_hash__integer_fallback__preserves_successful_model_serializatio
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize("kind", ["model", "dataclass", "date", "set"])
+@pytest.mark.parametrize(
+    "kind,expected_typed",
+    [
+        ("model", {"answer": 42}),
+        ("dataclass", {"answer": 42}),
+        ("date", "2024-01-02"),
+        ("set", ["a", "b"]),
+    ],
+)
 @pytest.mark.parametrize("number", [42, 2**64])
-def test_content_hash__flexible_value__matches_json_readback(kind, number):
+def test_content_hash__flexible_value__matches_json_readback(
+    kind, expected_typed, number
+):
     class Model(pydantic.BaseModel):
         answer: int = 42
 
@@ -170,4 +180,15 @@ def test_content_hash__flexible_value__matches_json_readback(kind, number):
     item = dataset_item.DatasetItem(input={"typed": values[kind], "number": number})
     stored = json.loads(streaming_upload.dumps(item.get_content()))
 
+    expected_content = {"input": {"typed": expected_typed, "number": number}}
+    # JSON-native literals define the oracle without the SDK's custom conversion hook.
+    # Small integers use compact orjson output; out-of-range integers use stdlib output.
+    expected_json = json.dumps(
+        expected_content,
+        sort_keys=True,
+        separators=(",", ":") if number == 42 else None,
+    ).encode("utf-8")
+
+    assert stored == expected_content
+    assert item.content_hash() == hashlib.sha256(expected_json).hexdigest()
     assert item.content_hash() == dataset_item.DatasetItem(**stored).content_hash()
