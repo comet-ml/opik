@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import numbers
 from typing import Any, Callable, Optional, Sequence, Union
 
@@ -48,15 +49,15 @@ class ChrF(BaseMetric):
         chrf_fn: Optional custom scoring callable for testing or offline usage.
 
     Raises:
-        ValueError: If ``beta`` is not a number, or if ``char_order`` is not an
+        ValueError: If ``beta`` is not a finite number, or if ``char_order`` is not an
             integer of at least 1. Two caller-visible details:
 
             - ``bool`` is rejected for both, even though Python treats it as an
               integer -- ``beta=True`` would otherwise score as ``beta=1``.
-            - a numeric ``beta`` is accepted whatever its sign, and the sign is
+            - a finite ``beta`` is accepted whatever its sign, and the sign is
               ignored: chrF combines precision and recall through ``beta ** 2``,
               so ``beta=-2`` scores identically to ``beta=2`` and ``beta=0``
-              scores on precision alone. Only ``char_order`` is range-checked.
+              scores on precision alone.
 
     Example:
         >>> from opik.evaluation.metrics import ChrF
@@ -95,6 +96,9 @@ class ChrF(BaseMetric):
         # registered as `numbers.Integral`, so the guard has to stay explicit.
         if not isinstance(beta, (int, float, numbers.Real)) or isinstance(beta, bool):
             raise ValueError(f"beta must be a number, got {type(beta).__name__}.")
+
+        if not math.isfinite(beta):
+            raise ValueError(f"beta must be finite, got {beta}.")
 
         if not isinstance(char_order, (int, numbers.Integral)) or isinstance(
             char_order, bool
