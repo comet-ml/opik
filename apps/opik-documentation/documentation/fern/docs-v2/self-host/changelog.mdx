@@ -13,6 +13,22 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+## Release 2.2.153, 2026-11-20
+
+### Security Change
+
+The Python code executor that runs code metrics now sandboxes user code by default:
+
+- `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` (`process` strategy, the default) now defaults to `true`. Each worker runs as an unprivileged user with a minimal environment and no network access.
+- `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING` (`docker` strategy) now defaults to `true`. Executor containers run with no capabilities, a read-only root filesystem, a small `noexec` `/tmp` and a process limit.
+
+Docker Compose and Helm deployments that keep the default python-backend settings need no change: python-backend runs as root, which process isolation requires.
+
+Set either one back to `false` (in the Helm chart under `component.python-backend.env`, or as an environment variable for Docker Compose) when:
+
+- **python-backend runs as non-root with the `process` strategy.** Isolation can't be applied there, so no process worker starts and every code metric evaluation fails. The python-backend log names `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` and the step that failed. Set it to `false`.
+- **Code metrics write outside `/tmp`, write more than 16 MB to `/tmp`, or start more than 64 processes or threads under the `docker` strategy.** Set `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING` to `false`, or raise `PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE` and `PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT`.
+
 ## Release 2.2.101, 2026-10-14
 
 ### Critical Changes
