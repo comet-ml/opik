@@ -418,7 +418,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def is_localhost_installation(self) -> bool:
-        return "localhost" in self.url_override
+        return url_helpers.is_localhost_url(self.url_override)
 
     @pydantic.field_validator("api_key", mode="before")
     @classmethod

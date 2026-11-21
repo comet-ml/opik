@@ -15,6 +15,10 @@ URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "is-alive/ping"
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+# The names that address the local machine itself. `localhost` is one spelling of
+# it; the loopback addresses are the others, and both forms end up in a configured
+# `url_override` depending on how the user reached their local installation.
+LOCALHOST_HOSTNAMES: Final[frozenset] = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def ensure_ending_slash(url: str) -> str:
@@ -92,6 +96,21 @@ def get_base_url(url: str) -> str:
     base_url = f"{parsed.scheme}://{parsed.netloc}/"
 
     return base_url
+
+
+def is_localhost_url(url: str) -> bool:
+    """Whether `url` points at the local machine.
+
+    The parsed host is compared against the local names rather than the word
+    "localhost" being looked for inside the whole URL, which reported
+    `http://127.0.0.1:5173/` and `http://[::1]:5173/` as remote and a remote host
+    that merely contains the word - `https://localhost.example.com/` - as local.
+    """
+    hostname = urllib.parse.urlparse(url).hostname
+    if hostname is None:
+        return False
+
+    return hostname.strip("[]").lower() in LOCALHOST_HOSTNAMES
 
 
 def get_account_details_url(base_url: str) -> str:

@@ -259,3 +259,21 @@ def test_read_config_file_value_with_percent_sign(tmp_path, monkeypatch):
 
     with patch("builtins.open", wraps=io.open):
         assert OpikConfig().project_name == "100% coverage"
+
+
+@pytest.mark.parametrize(
+    ("url_override", "expected"),
+    [
+        ("http://localhost:5173/api/", True),
+        ("http://127.0.0.1:5173/api/", True),
+        ("http://[::1]:5173/api/", True),
+        ("https://localhost.example.com/opik/api/", False),
+        ("https://www.comet.com/opik/api/", False),
+        ("http://opik.internal.example.com:8080/api/", False),
+    ],
+)
+def test_is_localhost_installation__url_host__decides(url_override, expected):
+    # A substring search for "localhost" called the loopback addresses remote and
+    # any host containing the word local, so the installation type the CLI and
+    # `opik healthcheck` branch on was wrong for both.
+    assert OpikConfig(url_override=url_override).is_localhost_installation is expected

@@ -128,7 +128,7 @@ def get_installation_type(
     ):
         return "cloud"
 
-    if "localhost" in url_override:
+    if url_helpers.is_localhost_url(url_override):
         return "local"
 
     return "self-hosted"
