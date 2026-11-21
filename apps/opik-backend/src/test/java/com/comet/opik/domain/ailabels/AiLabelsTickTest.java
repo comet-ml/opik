@@ -775,6 +775,44 @@ class AiLabelsTickTest {
         }
 
         @Test
+        @DisplayName("a trace that failed render_over_budget under an older renderer is rendered again and submitted")
+        void renderOverBudgetUnderAnOlderRendererIsSubmitted() {
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var embedding = IntStream.range(0, 10_000).mapToObj(i -> "0.%04d".formatted(i))
+                    .collect(Collectors.joining(",", "{\"embedding\":[", "]}"));
+            var traceId = trace(workspaceId, projectId, 0, "", ID_GENERATOR.generateId(), embedding);
+            statusDAO.insert(TASKS.stream()
+                    .map(task -> AiLabelStatus.builder()
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .task(task)
+                            .traceId(traceId)
+                            .traceCreatedAt(Instant.now().minusSeconds(60))
+                            .taskVersion(registry.get(task).version())
+                            .rendererVersion(AiLabelRenderer.RENDERER_VERSION - 1)
+                            .status(AiLabelStatus.Status.FAILED)
+                            .retryable(false)
+                            .attempt(1)
+                            .errorCode(AiLabelsTickService.RENDER_OVER_BUDGET)
+                            .jobId("")
+                            .compactionLevel(AiLabelsTickService.OVER_BUDGET_LEVEL)
+                            .build())
+                    .toList()).block();
+
+            tick();
+
+            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
+            assertThat(inFlight(workspaceId)).hasSize(TASKS.size()).allSatisfy(item -> {
+                assertThat(item.traceId()).isEqualTo(traceId);
+                assertThat(item.attempt()).isOne();
+                assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
+                assertThat(item.compactionLevel()).isEqualTo("output_vectors_elided");
+            });
+        }
+
+        @Test
         @DisplayName("items too large for any job are terminal item_too_large, and never submitted")
         void itemTooLargeForAnyJob() {
             config().setMaxJobBytes(4_096 + 100);
@@ -1384,14 +1422,19 @@ class AiLabelsTickTest {
     }
 
     private UUID trace(String workspaceId, UUID projectId, int spans, String threadId, UUID traceId) {
+        return trace(workspaceId, projectId, spans, threadId, traceId, "{\"answer\":\"it is on its way\"}");
+    }
+
+    private UUID trace(String workspaceId, UUID projectId, int spans, String threadId, UUID traceId, String output) {
         execute("""
                 INSERT INTO %s.%s (workspace_id, project_id, id, name, start_time, end_time, input, output, metadata,
                     thread_id, created_at, last_updated_at, is_deleted)
                 VALUES ('%s', '%s', '%s', 'support chat', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(2), '{"question":"where is my refund?"}',
-                    '{"answer":"it is on its way"}', '{"channel":"web"}', '%s', now64(6) - toIntervalSecond(60),
+                    '%s', '{"channel":"web"}', '%s', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(1), 0)
-                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId, threadId));
+                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId, output,
+                threadId));
         for (int i = 0; i < spans; i++) {
             execute("""
                     INSERT INTO %s.spans (id, workspace_id, project_id, trace_id, name, type, start_time, end_time,

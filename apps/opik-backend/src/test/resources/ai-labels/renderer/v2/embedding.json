@@ -1,0 +1,3 @@
+output_vectors_elided
+433
+{"input":{"messages":[{"content":"ltt","role":"system"},{"content":"ifiakjc","role":"user"}]},"name":"trace mglljudz","output":{"answer":"ayijyolugcbcoseicqldlrydrymlcuaiiyqpkqvcxxtzeztotlqfjlbaphadjsbevocwohmmrhbussmmjqjezqwvauxxcyemlyitnyxlrvjitiqsokvgxnedlugmtisqondcayynxvdqogdgkxwmwjijkkfpjehfvjhnkjediweomqjcbbaosgwsxgospdybyxdddgbb","embedding":"…[1536 numbers omitted]…"},"spans_summary":{"guardrails":2,"other_spans":1}}
