@@ -282,7 +282,7 @@ Check out the [examples directory](../../../../examples) for more usage examples
 
 - [GitHub Issues](https://github.com/comet-ml/opik/issues)
 - [Comet Support](mailto:support@comet.com)
-- [Community Slack](https://www.comet.com/docs/opik/community/)
+- [Community Slack](https://chat.comet.com)
 
 ## License
 
