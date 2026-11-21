@@ -1,3 +1,4 @@
+import unicodedata
 from typing import Any, List, Optional, Union
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -6,6 +7,60 @@ try:
     from rouge_score import rouge_scorer
 except ImportError:
     rouge_scorer = None
+
+
+class _UnicodeTokenizer:
+    """Default ROUGE tokenizer that keeps letters and digits of every script.
+
+    rouge-score's default tokenizer keeps only ``[a-z0-9]``, so text in Arabic,
+    Cyrillic, Greek, Devanagari, etc. produces no tokens and always scores 0.0.
+    This tokenizer keeps letters, digits and combining marks (such as Arabic
+    harakat or Devanagari vowel signs) and splits on everything else. For ASCII
+    text it produces exactly the same tokens as rouge-score's default tokenizer.
+
+    Text is Unicode-normalized to NFC before tokenizing, so canonically
+    equivalent spellings (e.g. a precomposed ``é`` and ``e`` + U+0301) yield the
+    same tokens instead of silently mismatching.
+
+    For scripts written without spaces between words (e.g. Chinese, Japanese,
+    Thai) each unsegmented run becomes a single token, so ``rouge1``/``rougeL``
+    still work but ``rouge2`` has no bigrams and scores 0.0 even for identical
+    text. Pass a word-segmenting ``tokenizer`` to ``ROUGE`` for those languages.
+    """
+
+    def __init__(self, use_stemmer: bool = False) -> None:
+        self._stemmer = None
+        if use_stemmer:
+            from nltk.stem import porter
+
+            self._stemmer = porter.PorterStemmer()
+
+    def tokenize(self, text: str) -> List[str]:
+        # Normalize first so canonically equivalent spellings tokenize the same
+        # way; NFC leaves every ASCII character untouched.
+        text = unicodedata.normalize("NFC", text.lower())
+        chars: List[str] = []
+        seen_base = False  # a letter/digit has started the current run
+        for char in text:
+            category = unicodedata.category(char)[0]
+            if category in "LN":
+                chars.append(char)
+                seen_base = True
+            elif category == "M" and seen_base:
+                # Keep a combining mark only when it attaches to a base
+                # character; a leading mark would form an unmatchable token.
+                chars.append(char)
+            else:
+                chars.append(" ")
+                seen_base = False
+        tokens = "".join(chars).split()
+        if self._stemmer is not None:
+            # Like rouge-score, only stem words more than 3 characters long.
+            tokens = [
+                self._stemmer.stem(token) if len(token) > 3 else token
+                for token in tokens
+            ]
+        return [token for token in tokens if token]
 
 
 class ROUGE(base_metric.BaseMetric):
@@ -28,7 +83,10 @@ class ROUGE(base_metric.BaseMetric):
                     - "rougeLSum": splits text using '\\n'"
         use_stemmer: Whether to use stemming when computing ROUGE. Defaults to False.
         split_summaries: Whether to split summaries into sentences. Defaults to False.
-        tokenizer: A tokenizer to use when splitting summaries into sentences. Defaults to None.
+        tokenizer: A tokenizer to use when splitting summaries into sentences. Defaults to None,
+                   which splits on anything that is not a letter or digit, in any script.
+                   For languages written without spaces between words (e.g. Chinese,
+                   Japanese, Thai), pass a tokenizer that segments words.
         project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
@@ -139,6 +197,9 @@ def _build_rouge_backend(
             "`rouge-score` libraries are required for ROUGE score calculation. "
             "Install via `pip install rouge-score`."
         )
+
+    if tokenizer is None:
+        tokenizer = _UnicodeTokenizer(use_stemmer=use_stemmer)
 
     return rouge_scorer.RougeScorer(
         [rouge_type],
