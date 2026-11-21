@@ -36,23 +36,35 @@ const DECISION_MODEL_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
 
 type CreateRuleMenuProps = {
   onSelect: (type: UI_EVALUATORS_RULE_TYPE) => void;
+  label?: string;
+  size?: "xs" | "sm";
+  align?: "start" | "center" | "end";
+  "data-testid"?: string;
 };
 
-const CreateRuleMenu: React.FC<CreateRuleMenuProps> = ({ onSelect }) => {
+const CreateRuleMenu: React.FC<CreateRuleMenuProps> = ({
+  onSelect,
+  label = "Evaluator",
+  size,
+  align,
+  "data-testid": dataTestId = "online-evaluation-create-rule-button",
+}) => {
   const isPythonEvaluatorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
   );
 
   return (
     <CreateMenuButton
-      label="Evaluator"
+      label={label}
       options={
         isPythonEvaluatorEnabled
           ? [LLM_JUDGE_OPTION, DECISION_MODEL_OPTION, CODE_EVALUATOR_OPTION]
           : [LLM_JUDGE_OPTION, DECISION_MODEL_OPTION]
       }
       onSelect={onSelect}
-      data-testid="online-evaluation-create-rule-button"
+      size={size}
+      align={align}
+      data-testid={dataTestId}
     />
   );
 };

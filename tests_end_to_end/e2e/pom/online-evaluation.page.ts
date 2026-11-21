@@ -10,7 +10,6 @@ export type RuleScopeLabel = 'Threads' | 'Traces' | 'Spans';
 
 export interface CreateRuleLLMJudgeFields {
   name: string;
-  /** Template label as shown in the Templates menu. */
   template: 'Hallucination' | 'Moderation' | 'Answer relevance' | 'Tool correctness';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
@@ -257,6 +256,17 @@ export class OnlineEvaluationPage {
     return test.step(`start from the "${label}" card`, async () => {
       await this.startCards.getByRole('button', { name: new RegExp(`^${label}`) }).click();
       await expect(this.startCards).toHaveCount(0);
+    });
+  }
+
+  templateTab(label: string): Locator {
+    return this.panel.locator('button[aria-pressed]', { hasText: new RegExp(`^${label}$`) });
+  }
+
+  async chooseTemplateTab(label: string): Promise<void> {
+    return test.step(`choose the "${label}" template tab`, async () => {
+      await this.templateTab(label).click();
+      await expect(this.templateTab(label)).toHaveAttribute('aria-pressed', 'true');
     });
   }
 
@@ -604,11 +614,6 @@ export class OnlineEvaluationPage {
     return ((await this.modelPicker.textContent()) ?? '').trim();
   }
 
-  /**
-   * The model-parameters gear. Absent (not disabled) when the model has nothing
-   * a rule can set. It has no accessible name (its label is a tooltip), and the
-   * Templates button is another menu trigger, hence the icon filter.
-   */
   get judgeModelParametersTrigger(): Locator {
     return this.panel
       .locator('button[aria-haspopup="menu"]')
@@ -875,11 +880,7 @@ export class OnlineEvaluationPage {
 
   /** Replaces the prompt and scores, and (when creating) sets the name to the template label. */
   async applyJudgeTemplate(label: CreateRuleLLMJudgeFields['template']): Promise<void> {
-    return test.step(`apply the "${label}" judge template`, async () => {
-      await this.panel.getByRole('button', { name: 'Templates' }).click();
-      await this.page.getByRole('menuitem', { name: new RegExp(`^${label}`) }).click();
-      await expect(this.page.getByRole('menu')).toHaveCount(0);
-    });
+    return this.chooseTemplateTab(label);
   }
 
   /** The panel's one CodeMirror editor: the prompt, or the code of a code evaluator. */
@@ -971,15 +972,6 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /**
-   * The score name each question block DISPLAYS, in order.
-   *
-   * Displayed, not stored, and the difference is the point: a template leaves
-   * its main question unnamed and `ScoreNameTitle` falls back to the rule name
-   * for it, so what is on screen for the first block is the rule's name while
-   * the named extras ("Polite tone") show their own. A spec asserting the
-   * fallback is asserting the thing the author actually sees.
-   */
   async readQuestionNames(): Promise<string[]> {
     return test.step('read the score names the Questions card shows', async () => {
       const names = await this.panel
