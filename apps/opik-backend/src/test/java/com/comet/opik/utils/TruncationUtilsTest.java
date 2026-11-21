@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
+import com.fasterxml.jackson.core.util.JsonGeneratorDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -15,11 +16,18 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -440,6 +448,133 @@ public class TruncationUtilsTest {
 
             assertThat(result.length()).isLessThan(input.length());
             assertThat(result.length()).isLessThan(2000); // Much smaller than 50KB
+        }
+    }
+
+    @Nested
+    @DisplayName("one-walk full and slim JSON")
+    public class OneWalkTests {
+
+        private static final int MAX = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+
+        /** Lengths that straddle the cut, plus short and long ones. */
+        private static int randomLength(Random random) {
+            return switch (random.nextInt(4)) {
+                case 0 -> random.nextInt(20);
+                case 1 -> MAX - 3 + random.nextInt(7);
+                case 2 -> MAX * 2 + random.nextInt(MAX * 3);
+                default -> random.nextInt(MAX);
+            };
+        }
+
+        private static String randomString(Random random) {
+            String alphabet = "abcXYZ019 \"\\\n\t\u0001\u001f/<>&\u00e9\u6f22\u2028\uD83D\uDE00";
+            int length = randomLength(random);
+            var text = new StringBuilder(length);
+            while (text.length() < length) {
+                int start = random.nextInt(alphabet.length() - 1);
+                // Keep the surrogate pair whole: the cut may still split it, as it does today.
+                text.append(Character.isHighSurrogate(alphabet.charAt(start))
+                        ? alphabet.substring(start, start + 2)
+                        : alphabet.substring(start, start + 1));
+            }
+            return text.toString();
+        }
+
+        private static JsonNode randomNode(Random random, int depth) {
+            var factory = JsonNodeFactory.instance;
+            int kind = depth >= 4 ? 2 + random.nextInt(5) : random.nextInt(7);
+            return switch (kind) {
+                case 0 -> {
+                    ObjectNode object = factory.objectNode();
+                    int size = random.nextInt(6);
+                    for (int i = 0; i < size; i++) {
+                        object.set(random.nextBoolean() ? randomString(random) : "k%d".formatted(i),
+                                randomNode(random, depth + 1));
+                    }
+                    yield object;
+                }
+                case 1 -> {
+                    var array = factory.arrayNode();
+                    int size = random.nextInt(6);
+                    for (int i = 0; i < size; i++) {
+                        array.add(randomNode(random, depth + 1));
+                    }
+                    yield array;
+                }
+                case 2, 3 -> factory.textNode(randomString(random));
+                case 4 -> random.nextBoolean()
+                        ? factory.numberNode(random.nextLong())
+                        : factory.numberNode(random.nextDouble() * Math.pow(10, random.nextInt(40) - 20));
+                case 5 -> factory.booleanNode(random.nextBoolean());
+                default -> factory.nullNode();
+            };
+        }
+
+        /** Random trees, both built and parsed back from their text, as request bodies are. */
+        public static Stream<JsonNode> randomPayloads() {
+            long seed = RandomUtils.secure().randomLong();
+            var random = new Random(seed);
+            return Stream.generate(() -> randomNode(random, 0))
+                    .limit(200)
+                    .flatMap(node -> Stream.of(node, JsonUtils.getJsonNodeFromString(node.toString())));
+        }
+
+        static Stream<JsonNode> allPayloads() {
+            return Stream.of(ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads(),
+                    randomPayloads(), Stream.of((JsonNode) null))
+                    .flatMap(Function.identity());
+        }
+
+        @ParameterizedTest
+        @MethodSource("allPayloads")
+        @DisplayName("tee-always writes the same strings as the two-walk path, sharing the instance when nothing is cut")
+        void teeAlwaysMatchesTwoWalks(JsonNode node) {
+            JsonWithSlim expected = TruncationUtils.toJsonWithSlim(node);
+
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlimOneWalk(node);
+
+            assertThat(actual).isEqualTo(expected);
+            assertThat(actual.slim() == actual.json()).isEqualTo(expected.slim() == expected.json());
+        }
+
+        @ParameterizedTest
+        @MethodSource("allPayloads")
+        @DisplayName("scan-then-tee writes the same strings as the two-walk path, sharing the instance when nothing is cut")
+        void scanThenTeeMatchesTwoWalks(JsonNode node) {
+            JsonWithSlim expected = TruncationUtils.toJsonWithSlim(node);
+
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlimScanThenOneWalk(node);
+
+            assertThat(actual).isEqualTo(expected);
+            assertThat(actual.slim() == actual.json()).isEqualTo(expected.slim() == expected.json());
+        }
+
+        /** Broken into token writes by the delegate itself, so they reach both sides without an override. */
+        private static final Set<String> ROUTED_THROUGH_TOKENS = Set.of(
+                "writeObject", "writeTree", "writePOJO", "copyCurrentEvent", "copyCurrentStructure");
+
+        private static String signature(Method method) {
+            return "%s(%s)".formatted(method.getName(), Arrays.stream(method.getParameterTypes())
+                    .map(Class::getName)
+                    .collect(Collectors.joining(",")));
+        }
+
+        @Test
+        @DisplayName("the tee overrides every write method of the delegate, so none reaches only one side")
+        void teeOverridesEveryWrite() {
+            Set<String> writes = Arrays.stream(JsonGeneratorDelegate.class.getDeclaredMethods())
+                    .filter(method -> Modifier.isPublic(method.getModifiers()))
+                    .filter(method -> method.getName()
+                            .matches("(write|copy|flush|close|assignCurrentValue|setCurrentValue).*"))
+                    .filter(method -> !ROUTED_THROUGH_TOKENS.contains(method.getName()))
+                    .map(OneWalkTests::signature)
+                    .collect(Collectors.toSet());
+            Set<String> overridden = Arrays.stream(TeeGenerator.class.getDeclaredMethods())
+                    .map(OneWalkTests::signature)
+                    .collect(Collectors.toSet());
+
+            assertThat(overridden).containsAll(writes);
         }
     }
 }

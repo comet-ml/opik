@@ -147,4 +147,22 @@ public class JsonRowValues {
         node.put(slimField, columns.slim());
     }
 
+    /**
+     * {@link #putJsonWithSlim} that walks a container node once: the full field writes the slim copy into a buffer as
+     * it is written, and the slim field writes that buffer raw. Costs one buffered slim copy per payload.
+     */
+    public void putJsonWithSlimOneWalk(@NonNull ObjectNode node, String field, String slimField,
+            @Nullable JsonNode value) {
+        checkField(field);
+        checkField(slimField);
+        if (value != null && value.isContainerNode()) {
+            var slim = TruncationUtils.slimCapture(value);
+            node.putRawValue(field, new RawValue(TruncationUtils.toFullJsonCapturingSlim(value, slim)));
+            node.putRawValue(slimField, new RawValue(slim));
+            return;
+        }
+        var columns = TruncationUtils.toJsonWithSlim(value);
+        node.put(field, columns.json());
+        node.put(slimField, columns.slim());
+    }
 }

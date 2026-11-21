@@ -6,6 +6,7 @@ import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.OpikApplication;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.TruncationUtilsTest.OneWalkTests;
 import com.comet.opik.utils.TruncationUtilsTest.ToJsonWithSlimTests;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonToken;
@@ -278,5 +279,30 @@ class JsonRowValuesTest {
 
         assertThat(storedCells(written(actual, applicationMapper(redactionEnabled))))
                 .isEqualTo(storedCells(written(expected)));
+    }
+
+    static Stream<Arguments> allPayloadsWithRedaction() {
+        return Stream.of(containerPayloads(), deepPayloads(), textPayloads(),
+                ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads(),
+                OneWalkTests.randomPayloads())
+                .flatMap(Function.identity())
+                .flatMap(payload -> Stream.of(
+                        Arguments.of(payload, false),
+                        Arguments.of(payload, true)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("allPayloadsWithRedaction")
+    @DisplayName("the one-walk row is byte-identical to the two-walk row, with redaction on and off")
+    void oneWalkRowMatchesTwoWalkRow(JsonNode payload, boolean redactionEnabled) throws IOException {
+        var mapper = applicationMapper(redactionEnabled);
+        var expected = JsonUtils.createObjectNode();
+        JsonRowValues.putJsonWithSlim(expected, "input", "input_slim", payload);
+        JsonRowValues.putJsonWithSlim(expected, "output", "output_slim", payload);
+        var actual = JsonUtils.createObjectNode();
+        JsonRowValues.putJsonWithSlimOneWalk(actual, "input", "input_slim", payload);
+        JsonRowValues.putJsonWithSlimOneWalk(actual, "output", "output_slim", payload);
+
+        assertThat(written(actual, mapper)).isEqualTo(written(expected, mapper));
     }
 }

@@ -3,6 +3,8 @@ package com.comet.opik.utils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.SerializableString;
+import com.fasterxml.jackson.core.io.SegmentedStringWriter;
+import com.fasterxml.jackson.core.util.BufferRecycler;
 import com.fasterxml.jackson.core.util.JsonGeneratorDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializable;
@@ -172,6 +174,137 @@ public final class TruncationUtils {
     }
 
     /**
+     * {@link #toJsonWithSlim(JsonNode)} in one walk of the node, always teed: the full and slim JSON are written
+     * together, and when nothing is cut the slim copy is the full {@code String} instance.
+     */
+    public static JsonWithSlim toJsonWithSlimOneWalk(JsonNode node) {
+        if (node == null) {
+            return JsonWithSlim.EMPTY;
+        }
+        return writeTeed(node);
+    }
+
+    /**
+     * {@link #toJsonWithSlim(JsonNode)} that scans first, as it does, and tees only a node with a long string:
+     * a payload with none is written once, one with some in one walk rather than two.
+     */
+    public static JsonWithSlim toJsonWithSlimScanThenOneWalk(JsonNode node) {
+        if (node == null) {
+            return JsonWithSlim.EMPTY;
+        }
+        if (!hasLongString(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
+            String json = node.toString();
+            return JsonWithSlim.builder().json(json).slim(json).build();
+        }
+        return writeTeed(node);
+    }
+
+    /** Writes the full JSON and the slim JSON of the node to two strings in one walk. */
+    private static JsonWithSlim writeTeed(JsonNode node) {
+        ObjectMapper mapper = JsonUtils.getMapper();
+        BufferRecycler recycler = mapper.getFactory()._getBufferRecycler();
+        try (var full = new SegmentedStringWriter(recycler);
+                var slim = new SegmentedStringWriter(recycler)) {
+            var truncating = new TruncatingGenerator(mapper.createGenerator(slim), DEFAULT_SLIM_STRING_MAX_LENGTH);
+            try (var fullGenerator = mapper.createGenerator(full);
+                    var tee = new TeeGenerator(fullGenerator, truncating)) {
+                node.serialize(tee, PayloadJson.NODE_PROVIDER);
+            }
+            String json = full.getAndClear();
+            if (!truncating.hasTruncated()) {
+                return JsonWithSlim.builder().json(json).slim(json).build();
+            }
+            return JsonWithSlim.builder().json(json).slim(slim.getAndClear()).build();
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        } finally {
+            recycler.releaseToPool();
+        }
+    }
+
+    /**
+     * The full JSON of a payload node, like {@link #toFullJson(JsonNode)}, that also writes the slim JSON into
+     * {@code slim} in the same walk. The slim field must be written after this one, so the row walks the node once;
+     * the slim copy is buffered between the two fields.
+     *
+     * @param node the payload node
+     * @param slim the slim field's value, filled as this one is written
+     * @return the full JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable toFullJsonCapturingSlim(@NonNull JsonNode node, @NonNull SlimCapture slim) {
+        return new FullJsonCapturingSlim(node, slim);
+    }
+
+    /** The slim field's value for {@link #toFullJsonCapturingSlim}. */
+    public static SlimCapture slimCapture(@NonNull JsonNode node) {
+        return new SlimCapture(node);
+    }
+
+    /**
+     * The slim JSON of a payload node, buffered by {@link #toFullJsonCapturingSlim} and written raw. If the full field
+     * was not written first, it walks the node itself, as {@link #toSlimJson(JsonNode)} does.
+     */
+    public static final class SlimCapture implements JsonSerializable {
+
+        private final JsonNode node;
+        private String text;
+
+        private SlimCapture(JsonNode node) {
+            this.node = node;
+        }
+
+        @Override
+        public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
+            if (text == null) {
+                node.serialize(new TruncatingGenerator(generator, DEFAULT_SLIM_STRING_MAX_LENGTH),
+                        PayloadJson.NODE_PROVIDER);
+                return;
+            }
+            String buffered = text;
+            // Released as soon as it is written, not with the row.
+            text = null;
+            generator.writeRawValue(buffered);
+        }
+
+        @Override
+        public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
+                TypeSerializer typeSerializer) throws IOException {
+            serialize(generator, provider);
+        }
+    }
+
+    private record FullJsonCapturingSlim(JsonNode node, SlimCapture slim) implements JsonSerializable {
+
+        @Override
+        public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
+            ObjectMapper mapper = JsonUtils.getMapper();
+            BufferRecycler recycler = mapper.getFactory()._getBufferRecycler();
+            try (var buffer = new SegmentedStringWriter(recycler)) {
+                try (var slimGenerator = mapper.createGenerator(buffer)) {
+                    // Written as the row generator would write it in place.
+                    slimGenerator.overrideStdFeatures(generator.getFeatureMask(), ~0);
+                    slimGenerator.setCharacterEscapes(generator.getCharacterEscapes());
+                    if (generator.getHighestEscapedChar() > 0) {
+                        slimGenerator.setHighestNonEscapedChar(generator.getHighestEscapedChar());
+                    }
+                    var tee = new TeeGenerator(generator,
+                            new TruncatingGenerator(slimGenerator, DEFAULT_SLIM_STRING_MAX_LENGTH));
+                    node.serialize(tee, PayloadJson.NODE_PROVIDER);
+                }
+                slim.text = buffer.getAndClear();
+            } finally {
+                recycler.releaseToPool();
+            }
+        }
+
+        @Override
+        public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
+                TypeSerializer typeSerializer) throws IOException {
+            serialize(generator, provider);
+        }
+    }
+
+    /**
      * The full and slim JSON strings of a payload node.
      *
      * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
@@ -248,6 +381,11 @@ public final class TruncationUtils {
         private TruncatingGenerator(JsonGenerator delegate, int maxLength) {
             super(delegate, false);
             this.maxLength = maxLength;
+        }
+
+        /** Whether any string value was cut, so the slim text differs from the full one. */
+        private boolean hasTruncated() {
+            return truncated != null;
         }
 
         private char[] truncated() {
