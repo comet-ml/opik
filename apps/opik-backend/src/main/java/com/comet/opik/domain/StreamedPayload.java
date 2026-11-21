@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
@@ -30,13 +31,15 @@ public class StreamedPayload {
     }
 
     /**
-     * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its JSON
-     * and slim copy serialized together here, so callers cannot let the two drift.
+     * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its slim copy
+     * here, so callers cannot let the two drift. With {@code streamPayloads} ({@code databaseAnalytics.streamPayloads})
+     * the JSON and slim copy are serialized together in one pass; without it, as main did, the slim copy is reparsed
+     * from the full JSON string.
      */
-    public static void bind(@NonNull Statement statement, @Nullable JsonNode input, @Nullable JsonNode output,
-            @Nullable String metadata) {
-        var inputColumns = TruncationUtils.toJsonWithSlim(input);
-        var outputColumns = TruncationUtils.toJsonWithSlim(output);
+    public static void bind(@NonNull Statement statement, boolean streamPayloads, @Nullable JsonNode input,
+            @Nullable JsonNode output, @Nullable String metadata) {
+        var inputColumns = columns(streamPayloads, input);
+        var outputColumns = columns(streamPayloads, output);
         statement.bind("input", inputColumns.json())
                 .bind("output", outputColumns.json())
                 .bind("metadata", StringUtils.defaultString(metadata))
@@ -44,17 +47,11 @@ public class StreamedPayload {
                 .bind("output_slim", outputColumns.slim());
     }
 
-    /**
-     * Binds the streamed row from payloads already serialized, each slim copy reparsed from its full JSON: what
-     * {@code databaseAnalytics.streamPayloads=false} binds, as main did. A {@code null} value binds {@code ''} and an
-     * empty slim.
-     */
-    public static void bind(@NonNull Statement statement, @Nullable String input, @Nullable String output,
-            @Nullable String metadata) {
-        statement.bind("input", StringUtils.defaultString(input))
-                .bind("output", StringUtils.defaultString(output))
-                .bind("metadata", StringUtils.defaultString(metadata))
-                .bind("input_slim", input == null ? "" : TruncationUtils.createSlimJsonString(input))
-                .bind("output_slim", output == null ? "" : TruncationUtils.createSlimJsonString(output));
+    private static JsonWithSlim columns(boolean streamPayloads, JsonNode node) {
+        if (streamPayloads) {
+            return TruncationUtils.toJsonWithSlim(node);
+        }
+        var json = TruncationUtils.toJsonString(node);
+        return JsonWithSlim.builder().json(json).slim(TruncationUtils.createSlimJsonString(json)).build();
     }
 }

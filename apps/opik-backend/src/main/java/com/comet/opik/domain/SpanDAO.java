@@ -2202,14 +2202,8 @@ public class SpanDAO {
                     .bind("start_time", span.startTime().toString())
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
                     .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-            if (streamPayloads()) {
-                StreamedPayload.bind(statement, span.input(), span.output(), Objects.toString(span.metadata(), ""));
-            } else {
-                StreamedPayload.bind(statement,
-                        TruncationUtils.toJsonString(span.input()),
-                        TruncationUtils.toJsonString(span.output()),
-                        Objects.toString(span.metadata(), ""));
-            }
+            StreamedPayload.bind(statement, streamPayloads(), span.input(), span.output(),
+                    Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -2490,15 +2484,8 @@ public class SpanDAO {
     }
 
     private void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
-        if (streamPayloads()) {
-            StreamedPayload.bind(statement, spanUpdate.input(), spanUpdate.output(),
-                    Objects.toString(spanUpdate.metadata(), null));
-        } else {
-            StreamedPayload.bind(statement,
-                    Objects.toString(spanUpdate.input(), null),
-                    Objects.toString(spanUpdate.output(), null),
-                    Objects.toString(spanUpdate.metadata(), null));
-        }
+        StreamedPayload.bind(statement, streamPayloads(), spanUpdate.input(), spanUpdate.output(),
+                Objects.toString(spanUpdate.metadata(), null));
     }
 
     private boolean streamPayloads() {

@@ -16,8 +16,9 @@ import java.util.Optional;
 /**
  * Publishes the ClickHouse v2 client's connection pool as OpenTelemetry gauges, to tell when
  * {@code clientMaxOpenConnections} is too small: {@code opik.clickhouse.client.pool.pending} above zero means requests
- * are queued for a connection, and when it stays above zero, raising the pool size helps, as long as ClickHouse insert
- * and read latency still have room.
+ * are queued for a connection. That alone is not a reason to raise it: every backend instance opens up to the pool
+ * size, so ClickHouse sees instances times the pool in concurrent requests. Raise it only while that stays within
+ * ClickHouse's {@code max_concurrent_queries} headroom and its insert and read latency still have room.
  *
  * <p>client-v2 publishes its pool only through a Micrometer registry, so the client binds its gauges to a private one
  * here (see {@link DatabaseAnalyticsFactory#buildClient(ClickHouseClientPoolMetrics)}) and each OpenTelemetry callback

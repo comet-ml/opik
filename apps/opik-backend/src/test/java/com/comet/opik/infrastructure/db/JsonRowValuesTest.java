@@ -255,7 +255,7 @@ class JsonRowValuesTest {
         return cells;
     }
 
-    static Stream<Arguments> payloadsAndMappers() {
+    static Stream<Arguments> payloadsWithRedaction() {
         return Stream.of(containerPayloads(), deepPayloads(), textPayloads(),
                 ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads())
                 .flatMap(Function.identity())
@@ -265,8 +265,8 @@ class JsonRowValuesTest {
     }
 
     @ParameterizedTest
-    @MethodSource("payloadsAndMappers")
-    @DisplayName("the stored cells are the full and slim strings the single-row path writes, whatever the mapper")
+    @MethodSource("payloadsWithRedaction")
+    @DisplayName("the stored cells are the full and slim strings the single-row path writes, with redaction on and off")
     void storedCellsMatchTheStrings(JsonNode payload, boolean redactionEnabled) throws IOException {
         var actual = JsonUtils.createObjectNode();
         JsonRowValues.putJsonWithSlim(actual, "input", "input_slim", payload);

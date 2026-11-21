@@ -3779,15 +3779,8 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        if (streamPayloads()) {
-            StreamedPayload.bind(statement, trace.input(), trace.output(),
-                    TruncationUtils.toJsonString(trace.metadata()));
-        } else {
-            StreamedPayload.bind(statement,
-                    TruncationUtils.toJsonString(trace.input()),
-                    TruncationUtils.toJsonString(trace.output()),
-                    TruncationUtils.toJsonString(trace.metadata()));
-        }
+        StreamedPayload.bind(statement, streamPayloads(), trace.input(), trace.output(),
+                TruncationUtils.toJsonString(trace.metadata()));
 
         bindEpochSentinel(statement, "end_time", trace.endTime());
 
@@ -5704,15 +5697,8 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
-        if (streamPayloads()) {
-            StreamedPayload.bind(statement, traceUpdate.input(), traceUpdate.output(),
-                    Objects.toString(traceUpdate.metadata(), null));
-        } else {
-            StreamedPayload.bind(statement,
-                    Objects.toString(traceUpdate.input(), null),
-                    Objects.toString(traceUpdate.output(), null),
-                    Objects.toString(traceUpdate.metadata(), null));
-        }
+        StreamedPayload.bind(statement, streamPayloads(), traceUpdate.input(), traceUpdate.output(),
+                Objects.toString(traceUpdate.metadata(), null));
     }
 
     private boolean streamPayloads() {
