@@ -47,7 +47,8 @@ import java.util.stream.Collectors;
  *
  * <p>The state is {@code {name, input, output, spans}}, with {@code spans} the {@link AiLabelSpan} tree, every object's
  * keys sorted, and absent fields left out. A span's {@code input} or {@code output} equal to its parent's (the
- * trace's, for a top-level span) is left out too: wrapper spans repeat it. For tasks with {@code {{history}}}, the
+ * trace's, for a top-level span) is left out too: wrapper spans repeat it. Every array of more than 16 numbers (an
+ * embedding, typically) is a {@code …[N numbers omitted]…} string: it means nothing to a summary, only costs tokens. For tasks with {@code {{history}}}, the
  * state is fitted together with the history: the trace's earlier turns in its thread, oldest first, each
  * {@code {input, output}} as stored text. The same trace content always renders to the same bytes, so
  * {@link #RENDERER_VERSION} must be bumped with any change to the output; the golden-file test enforces it.
@@ -72,6 +73,8 @@ public class AiLabelRenderer {
 
     private static final String INPUT = "input";
     private static final String OUTPUT = "output";
+    private static final int MAX_VECTOR_LENGTH = 16;
+    private static final String NUMBERS_MARKER_CLOSE = " numbers omitted]…";
 
     // About 0.5 MB of keys in the read's query text.
     private static final int MAX_SPANS_PER_READ = 10_000;
@@ -303,7 +306,32 @@ public class AiLabelRenderer {
         putNode(state, INPUT, input);
         putNode(state, OUTPUT, output);
         putSpans(state, spans, input, output);
+        state.properties().forEach(entry -> entry.setValue(elideVectors(entry.getValue())));
         return state;
+    }
+
+    /** A copy of {@code node} with every array of more than {@link #MAX_VECTOR_LENGTH} numbers replaced by a marker. */
+    private static JsonNode elideVectors(JsonNode node) {
+        if (node instanceof ArrayNode array) {
+            // Null counts as a number: serializers write NaN in an embedding as null.
+            boolean vector = array.size() > MAX_VECTOR_LENGTH;
+            for (int i = 0; vector && i < array.size(); i++) {
+                vector = array.get(i).isNumber() || array.get(i).isNull();
+            }
+            if (vector) {
+                return AiLabelJson.NODE_FACTORY.textNode(
+                        AiLabelStateFitter.MARKER_OPEN + array.size() + NUMBERS_MARKER_CLOSE);
+            }
+            var copy = AiLabelJson.NODE_FACTORY.arrayNode();
+            array.forEach(child -> copy.add(elideVectors(child)));
+            return copy;
+        }
+        if (node instanceof ObjectNode object) {
+            var copy = AiLabelJson.NODE_FACTORY.objectNode();
+            object.properties().forEach(entry -> copy.set(entry.getKey(), elideVectors(entry.getValue())));
+            return copy;
+        }
+        return node;
     }
 
     static ArrayNode toHistory(List<ThreadTurnRow> turns) {

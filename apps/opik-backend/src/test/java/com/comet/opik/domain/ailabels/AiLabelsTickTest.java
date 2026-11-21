@@ -808,7 +808,7 @@ class AiLabelsTickTest {
                 assertThat(item.traceId()).isEqualTo(traceId);
                 assertThat(item.attempt()).isOne();
                 assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
-                assertThat(item.compactionLevel()).isEqualTo("output_vectors_elided");
+                assertThat(item.compactionLevel()).isEqualTo("full");
             });
         }
 
