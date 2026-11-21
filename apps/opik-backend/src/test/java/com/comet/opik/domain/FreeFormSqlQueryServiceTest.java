@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.ServerException;
+import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
@@ -26,10 +27,12 @@ import org.mockito.quality.Strictness;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -114,6 +117,131 @@ class FreeFormSqlQueryServiceTest {
         var config = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         config.setUsername(user);
         return config;
+    }
+
+    static Stream<Arguments> metadataExpressions() {
+        return Stream.of(
+                arguments("currentUser()", "Function currentUser"),
+                arguments("database()", "Function database"),
+                arguments("schema()", "Function schema"),
+                arguments("current_database()", "Function current_database"),
+                arguments("current_user()", "Function current_user"),
+                arguments("current_user", "Identifier current_user"),
+                arguments("getMacro('replica')", "Function getMacro"),
+                arguments("getServerPort('tcp_port')", "Function getServerPort"),
+                arguments("displayName()", "Function displayName"),
+                arguments("DISPLAYNAME()", "Function DISPLAYNAME"),
+                arguments("enabledRoles()", "Function enabledRoles"),
+                arguments("defaultRoles()", "Function defaultRoles"),
+                arguments("getOSKernelVersion()", "Function getOSKernelVersion"),
+                arguments("tcpPort()", "Function tcpPort"),
+                arguments("TCPPORT()", "Function TCPPORT"),
+                arguments("authenticatedUser()", "Function authenticatedUser"),
+                arguments("enabledProfiles()", "Function enabledProfiles"),
+                arguments("defaultProfiles()", "Function defaultProfiles"),
+                arguments("current_database", "Identifier current_database"),
+                arguments("database", "Identifier database"),
+                arguments("schema", "Identifier schema"),
+                arguments("user", "Identifier user"),
+                arguments("currentDatabase", "Identifier currentDatabase"),
+                arguments("currentUser", "Identifier currentUser"));
+    }
+
+    static Stream<Arguments> forbiddenAstCases() {
+        var catalogs = Stream.of(
+                "system.tables", "system.columns", "system.databases", "system.settings", "system.one",
+                "information_schema.tables")
+                .map(table -> arguments("SELECT toJSONString(count()) AS result FROM " + table,
+                        "TableIdentifier " + table));
+        var metadata = metadataExpressions().map(shape -> arguments(
+                "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(shape.get()[0]), shape.get()[1]));
+        return Stream.concat(catalogs, metadata);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenAstCases")
+    @DisplayName("catalog and metadata reads are rejected before execution for both accounts")
+    void forbiddenAstNodesAreRejected(String query, String astLabel) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  " + astLabel)));
+        if (astLabel.startsWith("Identifier ")) {
+            String resolvedFunction = switch (astLabel.substring("Identifier ".length()).toLowerCase()) {
+                case "current_user", "user", "currentuser" -> "currentUser";
+                default -> "currentDatabase";
+            };
+            when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(List.of(
+                            "QUERY id: 0", "  FUNCTION id: 1, function_name: " + resolvedFunction
+                                    + ", function_type: ordinary, result_type: String")));
+        }
+
+        for (var account : FreeFormSqlAccount.values()) {
+            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null, query).join())
+                    .cause().satisfies(error -> {
+                        assertThat(error).isInstanceOf(BadRequestException.class);
+                        assertThat(((WebApplicationException) error).getResponse().getEntity())
+                                .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                    });
+        }
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a metadata-like identifier resolved as a column is allowed")
+    void metadataNamedColumnIsAllowed() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  Identifier currentUser")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  COLUMN id: 1, column_name: currentUser, result_type: UInt8")));
+
+        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null,
+                "SELECT toJSONString(map('n', toString(currentUser))) AS result FROM "
+                        + "(SELECT 1 AS currentUser)")
+                .join();
+
+        verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a newly niladic metadata function is rejected when ClickHouse resolves it")
+    void newlyNiladicMetadataFunctionIsRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  Identifier version")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, function_name: version, result_type: String")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null,
+                "SELECT toJSONString(map('n', toString(version))) AS result").join())
+                .isInstanceOf(CompletionException.class)
+                .cause().isInstanceOf(BadRequestException.class)
+                .satisfies(
+                        error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse().getEntity()))
+                                .contains(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE));
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a query returning more than the single result column is a clean 400")
+    void nonSingleResultColumnIsRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new NoSuchColumnException("Free-form SQL must return exactly one result column")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(
+                                    new ErrorMessage(List.of("Query must return exactly one column named 'result'")));
+                });
     }
 
     @Test

@@ -34,10 +34,12 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -85,6 +87,7 @@ public class FreeFormSqlQueryService {
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
         PARSE_ERROR("rejected", "parse_error"),
         PERMISSION_DENIED("error", "permission_denied"),
+        FORBIDDEN_FUNCTION("rejected", "forbidden_function"),
         SCALAR_SUBQUERY_NOT_ALLOWED("rejected", "scalar_subquery_not_allowed"),
         POLICY_UNVERIFIED("error", "policy_unverified"),
         POLICY_CHECK_FAILED("error", "policy_check_failed"),
@@ -107,7 +110,35 @@ public class FreeFormSqlQueryService {
      */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
+    /**
+     * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
+     * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
+     * Matched on the database qualifier of a {@code TableIdentifier} node, lower-cased, since ClickHouse exposes both
+     * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; direct
+     * table references are rejected in the app even if those grants change.
+     */
+    private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
+
+    /**
+     * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
+     * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
+     * identity out of both the result and the error surface. Compared lower-cased; ClickHouse function names are
+     * case-insensitive. ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such
+     * as {@code current_user} and {@code database} are Identifier nodes, not Function nodes, in EXPLAIN AST.
+     */
+    private static final String FUNCTION_AST_PREFIX = "Function ";
+    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
+    private static final String FUNCTION_QUERY_TREE_PREFIX = "FUNCTION ";
+    private static final Pattern RESOLVED_FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
+    private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
+            "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
+            "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
+            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
+            "displayname", "enabledroles", "defaultroles", "getoskernelversion", "tcpport", "authenticateduser",
+            "enabledprofiles", "defaultprofiles");
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
+    static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
     static final String SCALAR_SUBQUERY_MESSAGE = """
             Query rejected: a scalar subquery (a subquery used as a value, e.g. SELECT (SELECT count() FROM spans)) \
             cannot read a table; this one reads %s. Compute the value in a CTE and select from it instead, e.g. \
@@ -216,18 +247,42 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> subqueryReads(account, workspaceId, projectScope, query, startMillis))
+                .thenCompose(nodeLabels -> resolvedMetadataCheck(account, workspaceId, projectScope, query,
+                        nodeLabels, startMillis))
+                .thenCompose(queryTree -> subqueryReads(account, workspaceId, projectScope, query, queryTree,
+                        startMillis))
                 .thenCompose(subqueryReads -> runQuery(account, workspaceId, projectScope, query, subqueryReads,
                         startMillis));
+    }
+
+    /** An AST Identifier can resolve to either a metadata function or a legitimate column/alias. */
+    private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
+            String projectScope, String query, List<String> nodeLabels, long startMillis) {
+        if (!containsForbiddenMetadataIdentifierNode(nodeLabels)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
+                .handle((queryTree, error) -> {
+                    if (error != null) {
+                        throw mapExecutionError(error, startMillis);
+                    }
+                    if (containsForbiddenResolvedMetadataFunction(queryTree)) {
+                        throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                    }
+                    return queryTree;
+                });
     }
 
     /** Where the query's subqueries read, for the check; unknown when it is off or could not tell in audit. */
     private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> subqueryReads(FreeFormSqlAccount account,
             String workspaceId,
-            String projectScope, String query, long startMillis) {
+            String projectScope, String query, @Nullable List<String> resolvedTree, long startMillis) {
         if (mode != FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
             // Off: nothing to check. Audit: the tree is explained after the response, with the rest of the check.
             return CompletableFuture.completedFuture(FreeFormSqlSubqueries.SubqueryReads.UNKNOWN);
+        }
+        if (resolvedTree != null) {
+            return CompletableFuture.completedFuture(rejectScalarReads(account, resolvedTree, null, startMillis));
         }
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
                 .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
@@ -308,6 +363,13 @@ public class FreeFormSqlQueryService {
         if (containsSetNode(nodeLabels)) {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
                     "Query rejected: SETTINGS/SET clauses are not allowed", null);
+        }
+        if (containsForbiddenCatalogTableNode(nodeLabels)) {
+            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+        }
+        if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
+            // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
+            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
@@ -433,8 +495,47 @@ public class FreeFormSqlQueryService {
 
     private static boolean containsSetNode(List<String> nodeLabels) {
         return nodeLabels.stream()
-                .map(label -> label.stripLeading().split("\\s", 2)[0])
+                .map(FreeFormSqlQueryService::firstToken)
                 .anyMatch(SETTINGS_AST_NODES::contains);
+    }
+
+    private static String firstToken(String label) {
+        return label.stripLeading().split("\\s", 2)[0];
+    }
+
+    private static String firstTokenAfterPrefix(String label, String prefix) {
+        return firstToken(label.substring(prefix.length()));
+    }
+
+    private static boolean containsForbiddenCatalogTableNode(List<String> nodeLabels) {
+        return nodeLabels.stream()
+                .map(String::stripLeading)
+                .filter(label -> label.startsWith(TABLE_IDENTIFIER_AST_PREFIX))
+                .map(label -> label.substring(TABLE_IDENTIFIER_AST_PREFIX.length()).toLowerCase(Locale.ROOT))
+                .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
+    }
+
+    private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
+        return nodeLabels.stream().map(String::stripLeading)
+                .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
+                .map(label -> firstTokenAfterPrefix(label, FUNCTION_AST_PREFIX).toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
+    }
+
+    private static boolean containsForbiddenMetadataIdentifierNode(List<String> nodeLabels) {
+        return nodeLabels.stream().map(String::stripLeading)
+                .filter(label -> label.startsWith(IDENTIFIER_AST_PREFIX))
+                .map(label -> firstTokenAfterPrefix(label, IDENTIFIER_AST_PREFIX).toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
+    }
+
+    private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {
+        return queryTree.stream().map(String::stripLeading)
+                .filter(line -> line.startsWith(FUNCTION_QUERY_TREE_PREFIX))
+                .map(RESOLVED_FUNCTION_NAME::matcher)
+                .filter(java.util.regex.Matcher::find)
+                .map(matcher -> matcher.group(1).toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
@@ -474,7 +575,7 @@ public class FreeFormSqlQueryService {
         }
         if (code == CH_ACCESS_DENIED) {
             return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
-                    "Query rejected: access denied", error);
+                    ACCESS_DENIED_MESSAGE, error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
         return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
