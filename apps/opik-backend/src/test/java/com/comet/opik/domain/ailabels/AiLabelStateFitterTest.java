@@ -19,9 +19,14 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
+import static com.comet.opik.domain.ailabels.AiLabelJson.NODE_FACTORY;
+import static com.comet.opik.domain.ailabels.AiLabelStateFitter.MIN_CAP;
+import static com.comet.opik.domain.ailabels.AiLabelStateFitter.MIN_ITEMS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AiLabelStateFitterTest {
+
+    private static final long BUDGET = 48L * 1024;
 
     @Test
     void sizeOfMatchesTheCanonicalBytesForEveryScript() {
@@ -129,13 +134,169 @@ class AiLabelStateFitterTest {
     }
 
     @Test
-    void fitIsOverBudgetWhenBothAt64DoNotFit() {
-        var fixtures = new AiLabelRenderFixtures(8, false);
-        var output = fixtures.text(1_000);
-        var trace = trace("{\"items\":[" + "1,".repeat(5_000) + "1]}", "\"" + output + "\"");
-        var atFloor = state(trace, List.of()).put("output", cut(output, 64));
+    void fitIsOverBudgetOnlyWhenTheStateWithoutItsFieldsDoesNotFit() {
+        var trace = trace("{\"q\":\"question\"}", "\"answer\"").toBuilder().name("n".repeat(2_000)).build();
 
-        assertThat(fit(trace, List.of(), null, 1_000)).isEqualTo(new OverBudget(canonicalBytes(atFloor)));
+        var fit = fit(trace, List.of(), null, 1_000);
+
+        assertThat(fit).isInstanceOf(OverBudget.class);
+        assertThat(((OverBudget) fit).bytes()).isGreaterThan(1_000);
+    }
+
+    @Test
+    void fitElidesAnEmbeddingBeforeCuttingAnyText() {
+        var answer = new AiLabelRenderFixtures(11, false).text(500);
+        var output = NODE_FACTORY.objectNode().put("answer", answer);
+        output.set("embedding", floats(new Random(11), 1_536));
+        var trace = trace("{\"q\":\"question\"}", output.toString());
+
+        var fitted = fitTwice(trace, 2_000);
+
+        assertThat(fitted.compactionLevel()).isEqualTo("output_vectors_elided");
+        assertThat(fitted.state().get("output").get("embedding").textValue()).isEqualTo("…[1536 numbers omitted]…");
+        assertThat(fitted.state().get("output").get("answer").textValue()).isEqualTo(answer);
+    }
+
+    /** A knowledge graph: nodes carrying embeddings, text chunks, and edges; bulk that strings at 64 don't remove. */
+    @Test
+    void fitCapsTheArraysOfAKnowledgeGraphOutput() {
+        var random = new Random(12);
+        var fixtures = new AiLabelRenderFixtures(12, false);
+        var output = NODE_FACTORY.objectNode();
+        var nodes = output.putArray("graph_nodes");
+        for (int i = 0; i < 2_000; i++) {
+            var node = nodes.addObject().put("id", "n" + i).put("label", fixtures.text(12)).put("type", "entity");
+            node.set("embedding", floats(random, 384));
+        }
+        var chunks = output.putArray("chunks");
+        for (int i = 0; i < 300; i++) {
+            chunks.addObject().put("chunk_id", i).put("text", fixtures.text(800));
+        }
+        var edges = output.putObject("consolidated_graph").putArray("edges");
+        for (int i = 0; i < 3_000; i++) {
+            edges.addObject().put("from", "n" + i % 2_000).put("to", "n" + (i * 7) % 2_000).put("rel", "links");
+        }
+        var trace = trace("{\"query\":\"" + fixtures.text(200) + "\"}", output.toString());
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        var fittedOutput = fitted.state().get("output");
+        assertThat(fittedOutput.get("graph_nodes")).hasSize(items + 1);
+        assertThat(fittedOutput.get("graph_nodes").get(0).get("embedding").textValue())
+                .isEqualTo("…[384 numbers omitted]…");
+        assertThat(fittedOutput.get("graph_nodes").get(2).textValue()).isEqualTo("…[" + (2_000 - items)
+                + " items truncated]…");
+        assertThat(fittedOutput.get("chunks").get(items).get("text").textValue()).hasSize(800);
+        assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
+    }
+
+    /** A large nested output object of many keys, beside a long retrieval context. */
+    @Test
+    void fitCapsTheArraysOfALargeNestedOutputWithAContext() {
+        var fixtures = new AiLabelRenderFixtures(13, false);
+        var output = NODE_FACTORY.objectNode();
+        for (int key = 0; key < 15; key++) {
+            var section = output.putObject("section_" + key);
+            section.put("title", fixtures.text(40));
+            var entries = section.putArray("entries");
+            for (int i = 0; i < 150; i++) {
+                entries.addObject().put("name", fixtures.text(8)).put("score", i).put("ok", i % 2 == 0);
+            }
+        }
+        var context = output.putArray("context");
+        for (int i = 0; i < 400; i++) {
+            context.addObject().put("source", "doc-" + i).put("snippet", fixtures.text(60));
+        }
+        var trace = trace("{\"request\":\"" + fixtures.text(300) + "\"}", output.toString());
+        assertThat(canonicalBytes(state(trace, List.of()).get("output"))).isGreaterThan(100 * 1024);
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        var fittedOutput = fitted.state().get("output");
+        assertThat(fittedOutput.properties()).hasSize(16);
+        assertThat(fittedOutput.get("context").get(items).get("source").textValue()).isEqualTo("doc-399");
+        assertThat(fittedOutput.get("section_14").get("title").textValue()).hasSize(40);
+    }
+
+    /** A long chat: the newest turns carry the intent, so the last message is kept whole. */
+    @Test
+    void fitKeepsTheNewestMessagesOfALongChatInput() {
+        var fixtures = new AiLabelRenderFixtures(14, false);
+        var input = NODE_FACTORY.objectNode();
+        var messages = input.putArray("messages");
+        messages.addObject().put("role", "system").put("content", fixtures.text(2_000));
+        for (int i = 1; i < 2_000; i++) {
+            messages.addObject().put("role", i % 2 == 1 ? "user" : "assistant").put("content", fixtures.text(250));
+        }
+        var last = messages.get(1_999).deepCopy();
+        var trace = trace(input.toString(), "{\"reply\":\"" + fixtures.text(300) + "\"}");
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        int items = capOf(fitted, "input_arrays_capped:", MIN_ITEMS);
+        var fittedMessages = fitted.state().get("input").get("messages");
+        assertThat(fittedMessages).hasSize(items + 1);
+        assertThat(fittedMessages.get(0)).isEqualTo(messages.get(0));
+        assertThat(fittedMessages.get(2).textValue()).isEqualTo("…[" + (2_000 - items) + " items truncated]…");
+        assertThat(fittedMessages.get(items)).isEqualTo(last);
+        assertThat(items).isGreaterThan(100);
+    }
+
+    @Test
+    void fitCapsNestedArraysAtEveryLevel() {
+        var output = NODE_FACTORY.arrayNode();
+        for (int row = 0; row < 300; row++) {
+            var cells = output.addArray();
+            for (int cell = 0; cell < 300; cell++) {
+                cells.add("r" + row + "c" + cell);
+            }
+        }
+        var trace = trace("\"question\"", output.toString());
+
+        var fitted = fitTwice(trace, 20_000);
+
+        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        var rows = fitted.state().get("output");
+        assertThat(rows).hasSize(items + 1);
+        assertThat(rows.get(items).get(items).textValue()).isEqualTo("r299c299");
+        assertThat(rows.get(0).get(2).textValue()).isEqualTo("…[" + (300 - items) + " items truncated]…");
+    }
+
+    @Test
+    void fitCutsLongStringsOnceAVectorIsElided() {
+        var random = new Random(15);
+        var fixtures = new AiLabelRenderFixtures(15, false);
+        var text = fixtures.text(20_000);
+        var output = NODE_FACTORY.objectNode().put("text", text);
+        output.set("embedding", floats(random, 3_072));
+        var trace = trace("{\"q\":\"question\"}", output.toString());
+
+        var fitted = fitTwice(trace, 8_000);
+
+        int cap = capOf(fitted, "output_truncated:", MIN_CAP);
+        assertThat(fitted.state().get("output").get("text").textValue()).isEqualTo(cut(text, cap));
+        assertThat(fitted.state().get("output").get("embedding").textValue())
+                .isEqualTo("…[3072 numbers omitted]…");
+    }
+
+    /** Thousands of keys of short values: no array or string to cut, so the output becomes cut JSON text. */
+    @Test
+    void fitTurnsAWideObjectIntoTextAsALastResort() {
+        var output = NODE_FACTORY.objectNode();
+        for (int i = 0; i < 10_000; i++) {
+            output.put("key_%05d".formatted(i), i);
+        }
+        var trace = trace("{\"q\":\"question\"}", output.toString());
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        assertThat(fitted.compactionLevel()).isEqualTo("output_as_text");
+        var text = fitted.state().get("output").textValue();
+        assertThat(text).startsWith("{\"key_00000\":0,").endsWith(",\"key_09999\":9999}")
+                .contains(" chars truncated]…");
+        assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
     }
 
     @Test
@@ -191,9 +352,31 @@ class AiLabelStateFitterTest {
                 assertThat(full).isGreaterThan(budget);
                 assertThat(fitted.compactionLevel()).matches(
                         "spans_pruned:\\d+|spans_summarized|history_outputs_dropped:\\d+|history_turns:\\d+"
-                                + "|output_truncated:\\d+|input_truncated:\\d+");
+                                + "|(output|input)_(vectors_elided|truncated:\\d+|arrays_capped:\\d+"
+                                + "|arrays_capped_truncated:\\d+|as_text)");
+                assertThat(AiLabelsTickService.levelOf(fitted.compactionLevel())).matches("[a-z_]+");
             }
         }
+    }
+
+    /** Fits a fresh state twice: the same bytes both times, within budget and measured exactly. */
+    private static Fitted fitTwice(TraceRow trace, long budget) {
+        var first = (Fitted) fit(trace, List.of(), null, budget);
+        var second = (Fitted) fit(trace, List.of(), null, budget);
+
+        assertThat(AiLabelRenderer.canonicalJson(second.state()))
+                .isEqualTo(AiLabelRenderer.canonicalJson(first.state()));
+        assertThat(second.compactionLevel()).isEqualTo(first.compactionLevel());
+        assertThat(first.bytes()).isLessThanOrEqualTo(budget).isEqualTo(canonicalBytes(first.state()));
+        return first;
+    }
+
+    private static ArrayNode floats(Random random, int size) {
+        var vector = NODE_FACTORY.arrayNode();
+        for (int i = 0; i < size; i++) {
+            vector.add(random.nextGaussian());
+        }
+        return vector;
     }
 
     private static Fit fit(TraceRow trace, List<SpanRow> spans, ArrayNode history, long budget) {
@@ -225,9 +408,13 @@ class AiLabelStateFitterTest {
     }
 
     private static int capOf(Fitted fit, String prefix) {
+        return capOf(fit, prefix, MIN_CAP);
+    }
+
+    private static int capOf(Fitted fit, String prefix, int floor) {
         assertThat(fit.compactionLevel()).startsWith(prefix);
         int cap = Integer.parseInt(fit.compactionLevel().substring(prefix.length()));
-        assertThat(cap).isGreaterThanOrEqualTo(64);
+        assertThat(cap).isGreaterThanOrEqualTo(floor);
         return cap;
     }
 

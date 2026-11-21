@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
 @Singleton
 public class AiLabelRenderer {
 
-    public static final int RENDERER_VERSION = 1;
+    public static final int RENDERER_VERSION = 2;
 
     private static final Map<SpanType, String> SUMMARY_KEYS = Map.of(
             SpanType.llm, "llm_calls",

@@ -151,6 +151,27 @@ class AiLabelSweepDAOTest {
         }
 
         @Test
+        @DisplayName("render_over_budget under an older renderer is a candidate again, at attempt 0")
+        void renderOverBudgetUnderAnOlderRendererIsRetried() {
+            var workspaceId = workspace();
+            var olderRenderer = trace(workspaceId).build().insert();
+            var currentRenderer = trace(workspaceId).build().insert();
+            var otherFailure = trace(workspaceId).build().insert();
+            status(olderRenderer, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION - 1,
+                    AiLabelsTickService.RENDER_OVER_BUDGET);
+            status(currentRenderer, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION,
+                    AiLabelsTickService.RENDER_OVER_BUDGET);
+            status(otherFailure, "summary", "failed", false, 1, 1, 60, AiLabelRenderer.RENDERER_VERSION - 1,
+                    "invalid_request");
+
+            assertThat(sweep(workspaceId)).singleElement()
+                    .satisfies(candidate -> {
+                        assertThat(candidate.traceId()).isEqualTo(olderRenderer.id());
+                        assertThat(candidate.missing()).isEqualTo(Map.of("summary", 0));
+                    });
+        }
+
+        @Test
         @DisplayName("a trace id reused in another project is settled separately")
         void traceIdReusedInAnotherProjectIsSettledSeparately() {
             var workspaceId = workspace();
@@ -353,15 +374,21 @@ class AiLabelSweepDAOTest {
 
     private void status(TraceFixture trace, String task, String status, boolean retryable, int attempt,
             int taskVersion, long updatedSecondsAgo) {
+        status(trace, task, status, retryable, attempt, taskVersion, updatedSecondsAgo,
+                AiLabelRenderer.RENDERER_VERSION, "");
+    }
+
+    private void status(TraceFixture trace, String task, String status, boolean retryable, int attempt,
+            int taskVersion, long updatedSecondsAgo, int rendererVersion, String errorCode) {
         execute("""
                 INSERT INTO %s.ai_label_status (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
-                    renderer_version, status, retryable, attempt, updated_at)
-                SELECT '%s', '%s', '%s', '%s', created_at, %d, 1, '%s', %b, %d, now64(6) - toIntervalSecond(%d)
+                    renderer_version, status, retryable, attempt, error_code, updated_at)
+                SELECT '%s', '%s', '%s', '%s', created_at, %d, %d, '%s', %b, %d, '%s', now64(6) - toIntervalSecond(%d)
                 FROM %s.%s WHERE id = '%s' LIMIT 1
                 """
                 .formatted(DATABASE_NAME, trace.workspaceId(), trace.projectId(), task, trace.id(), taskVersion,
-                        status, retryable, attempt, updatedSecondsAgo, DATABASE_NAME, PostCutoverTraces.SHARD,
-                        trace.id()));
+                        rendererVersion, status, retryable, attempt, errorCode, updatedSecondsAgo, DATABASE_NAME,
+                        PostCutoverTraces.SHARD, trace.id()));
     }
 
     private void execute(String sql) {
