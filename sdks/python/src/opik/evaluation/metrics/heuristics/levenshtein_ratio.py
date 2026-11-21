@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from .. import base_metric, score_result
+from . import _text_normalization
 from opik.exceptions import MetricComputationError
 
 
@@ -18,6 +19,9 @@ class LevenshteinRatio(base_metric.BaseMetric):
 
     Args:
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
+            Case-insensitive comparison uses Unicode case folding, so "STRASSE" matches
+            "straße". Text is NFC-normalized in both modes, so canonically
+            equivalent strings such as a precomposed and a decomposed "é" match.
         name: The name of the metric. Defaults to "levenshtein_ratio_metric".
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
@@ -78,8 +82,8 @@ class LevenshteinRatio(base_metric.BaseMetric):
 
         import rapidfuzz.distance.Indel
 
-        value = output if self._case_sensitive else output.lower()
-        reference = reference if self._case_sensitive else reference.lower()
+        value = _text_normalization.normalize(output, self._case_sensitive)
+        reference = _text_normalization.normalize(reference, self._case_sensitive)
 
         score = rapidfuzz.distance.Indel.normalized_similarity(value, reference)
         return score_result.ScoreResult(value=score, name=self.name)

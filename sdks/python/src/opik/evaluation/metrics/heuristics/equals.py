@@ -1,6 +1,7 @@
 from typing import Any, Callable, Optional, Set
 
 from .. import base_metric, score_result
+from . import _text_normalization
 from opik.exceptions import MetricComputationError
 
 _CONTAINER_TYPES = (dict, list, tuple, set, frozenset)
@@ -57,8 +58,7 @@ def _canonical_text(
         active_ids.discard(id(value))
 
 
-def _keep_case(text: str) -> str:
-    return text
+_keep_case = _text_normalization.keep_case
 
 
 class Equals(base_metric.BaseMetric):
@@ -75,6 +75,9 @@ class Equals(base_metric.BaseMetric):
 
     Args:
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
+            Case-insensitive comparison uses Unicode case folding, so "STRASSE" matches
+            "straße". Text is NFC-normalized in both modes, so canonically
+            equivalent strings such as a precomposed and a decomposed "é" match.
         name: The name of the metric. Defaults to "equals_metric".
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
@@ -128,7 +131,9 @@ class Equals(base_metric.BaseMetric):
         value_left: Optional[str] = None
         value_right: Optional[str] = None
         if _is_container(output) and _is_container(reference):
-            normalize = _keep_case if self._case_sensitive else str.lower
+            normalize = (
+                _keep_case if self._case_sensitive else _text_normalization.fold_case
+            )
             try:
                 value_left = _canonical_text(output, normalize, set())
                 value_right = _canonical_text(reference, normalize, set())
@@ -140,9 +145,9 @@ class Equals(base_metric.BaseMetric):
             output_str = str(output)
             reference_str = str(reference)
 
-            value_left = output_str if self._case_sensitive else output_str.lower()
-            value_right = (
-                reference_str if self._case_sensitive else reference_str.lower()
+            value_left = _text_normalization.normalize(output_str, self._case_sensitive)
+            value_right = _text_normalization.normalize(
+                reference_str, self._case_sensitive
             )
 
         if value_left == value_right:

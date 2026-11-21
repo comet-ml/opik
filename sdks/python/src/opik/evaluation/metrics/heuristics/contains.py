@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 from opik.exceptions import MetricComputationError
 from .. import base_metric, score_result
+from . import _text_normalization
 
 
 class Contains(base_metric.BaseMetric):
@@ -13,6 +14,9 @@ class Contains(base_metric.BaseMetric):
 
     Args:
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
+            Case-insensitive comparison uses Unicode case folding, so "STRASSE" matches
+            "straße". Text is NFC-normalized in both modes, so canonically
+            equivalent strings such as a precomposed and a decomposed "é" match.
         reference: Optional default reference string. If provided, it will be used unless
             a reference is explicitly passed to `score()`.
         name: The name of the metric. Defaults to "contains_metric".
@@ -98,7 +102,7 @@ class Contains(base_metric.BaseMetric):
                 "No reference string provided. Either pass `reference` to `score()` or set a default reference when creating the metric."
             )
 
-        # Handle a non-string reference before it reaches `.lower()` / `in`
+        # Handle a non-string reference before it reaches normalization / `in`
         if not isinstance(ref, str):
             raise ValueError(
                 f"Invalid reference string provided. Reference must be a string, "
@@ -117,8 +121,8 @@ class Contains(base_metric.BaseMetric):
                 f"got {type(output).__name__}"
             )
 
-        value = output if self._case_sensitive else output.lower()
-        ref = ref if self._case_sensitive else ref.lower()
+        value = _text_normalization.normalize(output, self._case_sensitive)
+        ref = _text_normalization.normalize(ref, self._case_sensitive)
 
         if ref in value:
             return score_result.ScoreResult(value=1.0, name=self.name)
