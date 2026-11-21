@@ -610,6 +610,7 @@ def test_kl_divergence__finite_smoothing__retains_score(smoothing, expected):
 
     result = metric.score(output="cat cat dog", reference="cat dog dog")
 
+    assert result.scoring_failed is False
     # The two probabilities are 2/3 and 1/3; negative smoothing stays clamped to zero.
     assert result.value == pytest.approx(expected)
 
