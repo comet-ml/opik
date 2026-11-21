@@ -21,6 +21,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.Optional;
 
+import static com.comet.opik.infrastructure.llm.LlmProviderClientGenerator.JUDGE_MAX_RETRIES;
+
 /**
  * Service provider for the Opik Free Model LLM provider.
  * This provider transforms the model name from "opik-free-model" to the actual model.
@@ -81,8 +83,9 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
         var builder = OpenAiChatModel.builder()
                 .modelName(transformedParameters.name())
                 .apiKey(config.apiKey())
-                // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
-                // internal retry does not keep hitting an exhausted key.
+                .maxRetries(JUDGE_MAX_RETRIES)
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable so the judge's
+                // retries do not keep hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder(
                         ProviderHeadersHttpClient.builder(httpClientBuilders.builder(), config.headers())))
                 .logRequests(llmProviderClientConfig.getLogRequests())

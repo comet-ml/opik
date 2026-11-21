@@ -79,6 +79,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             LlmAsJudgeModelParameters modelParameters, HttpClientBuilder httpClientBuilder) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
+                .maxRetries(JUDGE_MAX_RETRIES)
                 .modelName(modelParameters.name())
                 .httpClientBuilder(httpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())

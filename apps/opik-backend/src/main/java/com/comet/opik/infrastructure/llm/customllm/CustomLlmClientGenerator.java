@@ -70,6 +70,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
+                .maxRetries(JUDGE_MAX_RETRIES)
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .modelName(actualModelName)
                 .apiKey(clientApiKey(config))

@@ -30,6 +30,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -100,10 +101,17 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
+        return newVertexAIClient(apiKey, request, null);
+    }
+
+    // maxRetries null keeps the model's own default.
+    private VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
+            @Nullable Integer maxRetries) {
         return buildPerCallModel(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
+            Optional.ofNullable(maxRetries).ifPresent(builder::maxRetries);
 
             Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
             Optional.ofNullable(request.topP()).ifPresent(builder::topP);
@@ -305,6 +313,6 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                         }))
                 .ifPresent(requestBuilder::customParameters);
 
-        return newVertexAIClient(apiKey, requestBuilder.build());
+        return newVertexAIClient(apiKey, requestBuilder.build(), JUDGE_MAX_RETRIES);
     }
 }
