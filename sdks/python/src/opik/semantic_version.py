@@ -27,6 +27,50 @@ def _cmp(a, b) -> int:
     return (a > b) - (a < b)
 
 
+def _is_numeric_identifier(identifier: str) -> bool:
+    # `str.isdigit` alone accepts characters `int` cannot parse (superscripts, other
+    # scripts' digits), which would turn a comparison into a ValueError.
+    return identifier.isascii() and identifier.isdigit()
+
+
+def _cmp_pre_release(left: Optional[str], right: Optional[str]) -> int:
+    """Order two pre-release strings by SemVer 2.0.0 rule 11.
+
+    A version carrying a pre-release precedes the same core version without one, so
+    ``1.2.0-rc1`` sorts below ``1.2.0``. Identifiers are dot-separated: numeric ones
+    compare numerically and rank below alphanumeric ones, alphanumeric ones compare
+    by ASCII order, and when every shared identifier is equal the longer set of
+    identifiers wins.
+    """
+    if left is None and right is None:
+        return 0
+    if left is None:
+        return 1
+    if right is None:
+        return -1
+
+    left_identifiers = left.split(".")
+    right_identifiers = right.split(".")
+
+    for left_identifier, right_identifier in zip(left_identifiers, right_identifiers):
+        left_is_numeric = _is_numeric_identifier(left_identifier)
+        right_is_numeric = _is_numeric_identifier(right_identifier)
+
+        if left_is_numeric and right_is_numeric:
+            comparison = _cmp(int(left_identifier), int(right_identifier))
+        elif left_is_numeric:
+            comparison = -1
+        elif right_is_numeric:
+            comparison = 1
+        else:
+            comparison = _cmp(left_identifier, right_identifier)
+
+        if comparison != 0:
+            return comparison
+
+    return _cmp(len(left_identifiers), len(right_identifiers))
+
+
 def _comparator(operator: Comparator) -> Comparator:
     @wraps(operator)
     def wrapper(self: "SemanticVersion", other: ComparableVersion) -> bool:
@@ -160,7 +204,15 @@ class SemanticVersion:
 
         v1 = self.to_tuple()[:3]
         v2 = other.to_tuple()[:3]
-        return _cmp(v1, v2)
+        comparison = _cmp(v1, v2)
+        if comparison != 0:
+            return comparison
+
+        # Only the pre-release decides between two versions of the same core. Build
+        # metadata never carries precedence (SemVer 2.0.0 rule 10), and
+        # `feature_branch` is a Comet extension with no defined precedence, so both
+        # stay out of the comparison as they always have.
+        return _cmp_pre_release(self.pre_release, other.pre_release)
 
     @_comparator
     def __eq__(self, other: ComparableVersion) -> bool:  # type: ignore
