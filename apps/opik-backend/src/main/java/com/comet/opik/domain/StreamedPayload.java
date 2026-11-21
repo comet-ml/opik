@@ -43,4 +43,18 @@ public class StreamedPayload {
                 .bind("input_slim", inputColumns.slim())
                 .bind("output_slim", outputColumns.slim());
     }
+
+    /**
+     * Binds the streamed row from payloads already serialized, each slim copy reparsed from its full JSON: what
+     * {@code databaseAnalytics.streamPayloads=false} binds, as main did. A {@code null} value binds {@code ''} and an
+     * empty slim.
+     */
+    public static void bind(@NonNull Statement statement, @Nullable String input, @Nullable String output,
+            @Nullable String metadata) {
+        statement.bind("input", StringUtils.defaultString(input))
+                .bind("output", StringUtils.defaultString(output))
+                .bind("metadata", StringUtils.defaultString(metadata))
+                .bind("input_slim", input == null ? "" : TruncationUtils.createSlimJsonString(input))
+                .bind("output_slim", output == null ? "" : TruncationUtils.createSlimJsonString(output));
+    }
 }

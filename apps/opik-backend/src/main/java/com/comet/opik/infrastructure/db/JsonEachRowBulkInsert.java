@@ -51,13 +51,15 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
  * implementation it replaced; both the toggle and that implementation are gone.
  *
- * <p><b>Two ways to build the body</b>, chosen by {@code databaseAnalytics.bulkInsertStreamRows}:
+ * <p><b>Two ways to build the body</b>, chosen by {@code databaseAnalytics.streamPayloads}, which also picks how the
+ * span and trace row mappers write their payloads:
  * <ul>
  *   <li><b>Streamed</b> (true): {@link #write} runs as the client's {@code DataStreamWriter}, so each row is mapped
  *   and serialized into the body as it is sent, and the batch is never held as a buffer: the client sends the body
  *   chunked through its fixed-size compression buffer. The writer runs on the client's {@code chc-operation} pool
- *   ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), which is unbounded, and the insert holds its
- *   pooled connection while the rows are mapped and serialized.</li>
+ *   ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), and the insert holds its pooled connection
+ *   while the rows are mapped and serialized. The client leases that connection before it calls the writer, so
+ *   {@code clientMaxOpenConnections} bounds how many inserts serialize at once.</li>
  *   <li><b>Buffered</b> (false): the batch is serialized into a buffer on {@code boundedElastic}, and the insert takes
  *   a connection only to send the finished buffer.</li>
  * </ul>
@@ -89,7 +91,7 @@ public class JsonEachRowBulkInsert {
 
     private final ObjectWriter rowWriter;
 
-    private final boolean streamRows;
+    private final boolean streamPayloads;
 
     /**
      * The mapper is injected rather than read from {@code JsonUtils}: that one is a static field the
@@ -110,7 +112,7 @@ public class JsonEachRowBulkInsert {
     public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper,
             @NonNull @Config("databaseAnalytics") DatabaseAnalyticsFactory databaseAnalytics) {
         this.clickHouseClient = clickHouseClient;
-        this.streamRows = databaseAnalytics.isBulkInsertStreamRows();
+        this.streamPayloads = databaseAnalytics.isStreamPayloads();
         // One nesting level above the mapper's, so a payload node.toString() can serialize still fits inside the row
         // object that JsonRowValues embeds it in.
         this.rowFactory = objectMapper.getFactory().rebuild()
@@ -138,7 +140,7 @@ public class JsonEachRowBulkInsert {
             return Mono.just(0L);
         }
 
-        Mono<Long> insert = streamRows
+        Mono<Long> insert = streamPayloads
                 ? send(table, logComment, body -> write(body, items, rowMapper))
                 : Mono.fromCallable(() -> buffer(items, rowMapper))
                         .subscribeOn(Schedulers.boundedElastic())

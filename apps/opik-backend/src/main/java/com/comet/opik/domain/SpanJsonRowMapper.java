@@ -52,13 +52,15 @@ class SpanJsonRowMapper {
      *                           have been migrated off {@code Nullable} to their sentinels.
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive leaves the column
      *                           out so its DDL default applies, matching the binder's {@code bindNull}.
+     * @param streamPayloads     {@code databaseAnalytics.streamPayloads}: false writes {@code input} / {@code output}
+     *                           and their slim copies as escaped strings, as main did.
      * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
      *                           Resolved AND formatted once per batch by the caller, so a
      *                           batch-invariant value is not reformatted per row.
      */
     ObjectNode toJsonRow(@NonNull Span span, @NonNull String userName, @NonNull String workspaceId,
             @NonNull String nowForBatch, @NonNull BigDecimal cost, @NonNull String costVersion,
-            boolean nonNullableColumns, int truncationSize) {
+            boolean nonNullableColumns, int truncationSize, boolean streamPayloads) {
 
         var node = JsonUtils.createObjectNode();
 
@@ -80,9 +82,14 @@ class SpanJsonRowMapper {
             node.putNull("end_time");
         }
 
-        // Each with its *_slim column, streamed from the node when the row is written.
-        JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
-        JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
+        // Each with its *_slim column: streamed from the node when the row is written, or main's escaped strings.
+        if (streamPayloads) {
+            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
+            JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
+        } else {
+            JsonRowValues.putJsonStringWithSlim(node, "input", "input_slim", span.input());
+            JsonRowValues.putJsonStringWithSlim(node, "output", "output_slim", span.output());
+        }
         // toString(), not toJsonString() -- see the class javadoc. Matches the binder.
         node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
         node.put("model", StringUtils.defaultIfBlank(span.model(), ""));

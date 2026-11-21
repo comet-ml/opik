@@ -64,7 +64,7 @@ class JsonEachRowBulkInsertClickHouseTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     @DisplayName("a row mapper failing mid-body fails the insert and writes no row")
-    void mapperFailureMidBodyFailsTheInsertAndWritesNothing(boolean streamRows) {
+    void mapperFailureMidBodyFailsTheInsertAndWritesNothing(boolean streamPayloads) {
         var table = newTable();
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32),
@@ -77,10 +77,10 @@ class JsonEachRowBulkInsertClickHouseTest {
             return row(item);
         };
 
-        var insert = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamRows(streamRows))
+        var insert = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamPayloads(streamPayloads))
                 .insert(table, "log-comment", items, rowMapper);
 
-        if (streamRows) {
+        if (streamPayloads) {
             // The client wraps what the writer throws, and does not retry it, so callers matching on exception types
             // see ClickHouseException rather than the mapper's own exception.
             assertThatThrownBy(insert::block).isInstanceOf(ClickHouseException.class).hasRootCause(failure);
@@ -95,12 +95,13 @@ class JsonEachRowBulkInsertClickHouseTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     @DisplayName("rows written into the body reach the table")
-    void writesTheRows(boolean streamRows) {
+    void writesTheRows(boolean streamPayloads) {
         var table = newTable();
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32));
 
-        Long written = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamRows(streamRows))
+        Long written = new JsonEachRowBulkInsert(client, MAPPER,
+                JsonEachRowBulkInsertTest.streamPayloads(streamPayloads))
                 .insert(table, "log-comment", items, JsonEachRowBulkInsertClickHouseTest::row)
                 .block();
 

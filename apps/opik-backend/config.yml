@@ -133,12 +133,19 @@ databaseAnalytics:
   #   turn true only for the Distributed (Hyperscale) topology.
   clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
   #  Default: true
-  #  Description: How the JSONEachRow bulk inserts (spans, traces, feedback scores, experiment and dataset items) build
-  #   their request body. true writes the rows straight into the body on the ClickHouse client's own threads while the
-  #   request is sent, so the batch is never buffered, but each insert holds its pooled connection while rows are
-  #   mapped and serialized. false serializes the batch into a buffer on boundedElastic first and takes the connection
-  #   only to send it.
-  bulkInsertStreamRows: ${ANALYTICS_DB_BULK_INSERT_STREAM_ROWS:-true}
+  #  Description: How span and trace input/output are written to ClickHouse. true serializes each payload and its slim
+  #   copy in one pass from the parsed JSON, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized; see clientMaxOpenConnections). false is the previous path:
+  #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
+  #   connection is taken.
+  streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-true}
+  #  Default: 20
+  #  Description: Size of the ClickHouse v2 client's connection pool per backend instance. Every JSONEachRow bulk insert
+  #   and v2 query holds one connection for its whole request, including ClickHouse's async-insert wait, so this caps how
+  #   many run at once; a request that cannot get one within 10s is retried by the client. max_open_connections in
+  #   queryParameters does not apply here: it only reaches the R2DBC driver.
+  clientMaxOpenConnections: ${ANALYTICS_DB_CLIENT_MAX_OPEN_CONNECTIONS:-20}
   #  Default: false
   #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
   #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);

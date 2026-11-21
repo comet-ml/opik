@@ -106,12 +106,14 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
   #  Default: true
-  #  Description: How the JSONEachRow bulk inserts (spans, traces, feedback scores, experiment and dataset items) build
-  #   their request body. true writes the rows straight into the body on the ClickHouse client's own threads while the
-  #   request is sent, so the batch is never buffered, but each insert holds its pooled connection while rows are
-  #   mapped and serialized. false serializes the batch into a buffer on boundedElastic first and takes the connection
-  #   only to send it.
-  bulkInsertStreamRows: true
+  #  Description: How span and trace input/output are written to ClickHouse. true serializes each payload and its slim
+  #   copy in one pass from the parsed JSON, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized; see clientMaxOpenConnections). false is the previous path:
+  #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
+  #   connection is taken.
+  streamPayloads: true
+  clientMaxOpenConnections: 20
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:
