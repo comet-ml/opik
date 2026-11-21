@@ -102,3 +102,40 @@ def test_levenshtein_ratio__canonically_equivalent_unicode__score_one(
     )
 
     assert metric.score(output=CAFE_DECOMPOSED, reference=CAFE_COMPOSED).value == 1.0
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+def test_equals__canonically_equivalent_dict_keys_with_swapped_values__score_zero(
+    case_sensitive,
+):
+    metric = equals.Equals(case_sensitive=case_sensitive, track=False)
+
+    result = metric.score(
+        output={CAFE_DECOMPOSED: 1, CAFE_COMPOSED: 2},
+        reference={CAFE_DECOMPOSED: 2, CAFE_COMPOSED: 1},
+    )
+
+    assert result.value == 0.0
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+def test_equals__canonically_equivalent_dict_keys_with_same_values__score_one(
+    case_sensitive,
+):
+    metric = equals.Equals(case_sensitive=case_sensitive, track=False)
+
+    result = metric.score(
+        output={CAFE_DECOMPOSED: 1, CAFE_COMPOSED: 2},
+        reference={CAFE_COMPOSED: 2, CAFE_DECOMPOSED: 1},
+    )
+
+    assert result.value == 1.0
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+def test_contains__reference_starting_with_combining_mark__score_one(
+    case_sensitive,
+):
+    metric = contains.Contains(case_sensitive=case_sensitive, track=False)
+
+    assert metric.score(output="áb", reference="́b").value == 1.0

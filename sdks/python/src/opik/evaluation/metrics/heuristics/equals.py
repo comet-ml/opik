@@ -58,7 +58,11 @@ def _canonical_text(
         active_ids.discard(id(value))
 
 
-_keep_case = _text_normalization.keep_case
+def _keep_case(text: str) -> str:
+    # Breaks ties between dict keys that normalize to the same text, so it must
+    # keep the raw text: keys that differ only in case or Unicode encoding keep
+    # their own values.
+    return text
 
 
 class Equals(base_metric.BaseMetric):
@@ -132,7 +136,9 @@ class Equals(base_metric.BaseMetric):
         value_right: Optional[str] = None
         if _is_container(output) and _is_container(reference):
             normalize = (
-                _keep_case if self._case_sensitive else _text_normalization.fold_case
+                _text_normalization.keep_case
+                if self._case_sensitive
+                else _text_normalization.fold_case
             )
             try:
                 value_left = _canonical_text(output, normalize, set())
