@@ -120,6 +120,82 @@ def test_jsonable_encoder__converted_to_list(obj):
 
 
 @pytest.mark.parametrize(
+    "scalar,expected_type,expected_value",
+    [
+        (np.int64(42), int, 42),
+        (np.int32(-7), int, -7),
+        (np.int16(123), int, 123),
+        (np.int8(1), int, 1),
+        (np.uint64(100), int, 100),
+        (np.uint32(50), int, 50),
+        (np.uint16(25), int, 25),
+        (np.uint8(5), int, 5),
+        (np.float64(3.14159), float, 3.14159),
+        (np.float32(2.5), float, 2.5),
+        (np.bool_(True), bool, True),
+        (np.bool_(False), bool, False),
+        (np.str_("hello"), str, "hello"),
+    ],
+)
+def test_jsonable_encoder__numpy_scalars__encoded_as_native_python_types(
+    scalar, expected_type, expected_value
+):
+    encoded = jsonable_encoder.encode(scalar)
+    assert isinstance(encoded, expected_type)
+    assert encoded == expected_value
+
+
+def test_jsonable_encoder__numpy_scalars_in_containers__encoded_as_native_python_types():
+    payload = {
+        "count": np.int64(42),
+        "score": np.float32(0.95),
+        "is_valid": np.bool_(True),
+        "items": [np.int32(1), np.float64(2.0), np.bool_(False)],
+        "nested": {"val": np.uint8(7)},
+    }
+    encoded = jsonable_encoder.encode(payload)
+
+    assert encoded == {
+        "count": 42,
+        "score": pytest.approx(0.95),
+        "is_valid": True,
+        "items": [1, 2.0, False],
+        "nested": {"val": 7},
+    }
+    assert isinstance(encoded["count"], int)
+    assert isinstance(encoded["score"], float)
+    assert isinstance(encoded["is_valid"], bool)
+    assert isinstance(encoded["items"][0], int)
+    assert isinstance(encoded["items"][1], float)
+    assert isinstance(encoded["items"][2], bool)
+    assert isinstance(encoded["nested"]["val"], int)
+
+
+def test_jsonable_encoder__numpy_scalar_dict_keys__encoded_as_native_keys():
+    payload = {np.int64(1): "first", np.int64(2): "second"}
+    encoded = jsonable_encoder.encode(payload)
+
+    assert encoded == {1: "first", 2: "second"}
+    assert all(isinstance(k, int) for k in encoded.keys())
+
+
+def test_jsonable_encoder__numpy_non_finite_floats__encoded_as_float():
+    import math
+
+    nan_val = jsonable_encoder.encode(np.float32("nan"))
+    assert isinstance(nan_val, float)
+    assert math.isnan(nan_val)
+
+    inf_val = jsonable_encoder.encode(np.float32("inf"))
+    assert isinstance(inf_val, float)
+    assert math.isinf(inf_val) and inf_val > 0
+
+    ninf_val = jsonable_encoder.encode(np.float32("-inf"))
+    assert isinstance(ninf_val, float)
+    assert math.isinf(ninf_val) and ninf_val < 0
+
+
+@pytest.mark.parametrize(
     "obj,expected",
     [
         (
