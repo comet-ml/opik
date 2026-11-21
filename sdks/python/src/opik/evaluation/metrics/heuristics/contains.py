@@ -125,11 +125,11 @@ class Contains(base_metric.BaseMetric):
         # sequence (e.g. "\u0301b" in "a\u0301b") disappears once the output is
         # composed, so the un-normalized text is checked as well.
         raw_value = output if self._case_sensitive else output.casefold()
-        raw_ref = ref if self._case_sensitive else ref.casefold()
+        raw_reference = ref if self._case_sensitive else ref.casefold()
         value = _text_normalization.normalize(output, self._case_sensitive)
         ref = _text_normalization.normalize(ref, self._case_sensitive)
 
-        if ref in value or raw_ref in raw_value:
+        if ref in value or raw_reference in raw_value:
             return score_result.ScoreResult(value=1.0, name=self.name)
 
         return score_result.ScoreResult(value=0.0, name=self.name)
