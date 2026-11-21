@@ -7,30 +7,45 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
+import com.comet.opik.infrastructure.net.RefusedHostException;
+import com.comet.opik.utils.RetryUtils;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.ServerErrorException;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
+import java.net.ConnectException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -41,6 +56,7 @@ import static org.mockito.Mockito.when;
 class DecisionScoringServiceTest {
 
     private static final int CHARS_PER_TOKEN = 4;
+    private static final LlmProviderClientApiConfig KEY = LlmProviderClientApiConfig.builder().apiKey("key").build();
 
     private final DecisionScoringService service = new DecisionScoringService(
             Set.of(mock(OpenRouterDecisionsClient.class)), mock(LlmProviderFactory.class));
@@ -204,6 +220,55 @@ class DecisionScoringServiceTest {
                 .hasMessageContaining("No Decisions API client for provider");
     }
 
+    static Stream<Arguments> decideMapsAFailureTheClientDidNotMap() {
+        var refusedDestination = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.DESTINATION);
+        var refusedUrl = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
+        return Stream.of(
+                arguments(new ProcessingException(new ConnectException("Connect to probe.example.com:8443 failed")),
+                        ServerErrorException.class, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(new ProcessingException(new RefusedHostException("probe.example.com refused")),
+                        BadRequestException.class, refusedDestination.getMessage()),
+                arguments(refusedUrl, BadRequestException.class, refusedUrl.getMessage()));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void decideMapsAFailureTheClientDidNotMap(Throwable failure, Class<? extends Throwable> expected,
+            String message) {
+        StepVerifier.create(decideFailingWith(failure))
+                .expectErrorSatisfies(error -> assertThat(error)
+                        .isInstanceOf(expected)
+                        .hasMessage(message)
+                        .satisfies(mapped -> assertThat(ExceptionUtils.getStackTrace(mapped))
+                                .doesNotContain("probe.example.com")))
+                .verify();
+    }
+
+    static Stream<Throwable> decideKeepsAFailureTheClientMapped() {
+        return Stream.of(new ClientErrorException("OpenRouter Decisions API request failed", 402),
+                new RetryUtils.RetryableHttpException("OpenRouter Decisions API request failed", 503));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void decideKeepsAFailureTheClientMapped(Throwable failure) {
+        StepVerifier.create(decideFailingWith(failure))
+                .expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
+                .verify();
+    }
+
+    private static Mono<DecisionsResponse> decideFailingWith(Throwable failure) {
+        var model = "~typesafe/jev-latest";
+        var openRouterClient = client(OpenRouterDecisionsClient.class, LlmProvider.OPEN_ROUTER);
+        var service = new DecisionScoringService(Set.of(openRouterClient), keyLookup(model));
+        var request = service.buildRequest(model, List.of(UserMessage.from("hi")), List.of(score("q", "?")));
+        when(openRouterClient.decide(eq(request), eq(KEY))).thenReturn(Mono.error(failure));
+
+        return service.decide(request, "workspace", passThroughRecorder());
+    }
+
     private static <T extends DecisionsClient> T client(Class<T> type, LlmProvider provider) {
         var client = mock(type);
         when(client.provider()).thenReturn(provider);
@@ -212,8 +277,7 @@ class DecisionScoringServiceTest {
 
     private static LlmProviderFactory keyLookup(String model) {
         var llmProviderFactory = mock(LlmProviderFactory.class);
-        when(llmProviderFactory.getClientApiConfig("workspace", model))
-                .thenReturn(LlmProviderClientApiConfig.builder().apiKey("key").build());
+        when(llmProviderFactory.getClientApiConfig("workspace", model)).thenReturn(KEY);
         return llmProviderFactory;
     }
 

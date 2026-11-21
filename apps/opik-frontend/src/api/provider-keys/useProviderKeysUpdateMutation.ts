@@ -27,7 +27,10 @@ const useProviderKeysUpdateMutation = () => {
           ...(providerKey.apiKey !== undefined && {
             api_key: providerKey.apiKey,
           }),
-          ...(providerKey.base_url && { base_url: providerKey.base_url }),
+          // "" moves a built-in provider back to its default URL
+          ...(providerKey.base_url !== undefined && {
+            base_url: providerKey.base_url,
+          }),
           ...(providerKey?.configuration && {
             configuration: providerKey.configuration,
           }),
