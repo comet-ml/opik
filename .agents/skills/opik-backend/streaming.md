@@ -119,7 +119,7 @@ square of the data.
 looks that row up (`RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR`) and reads its `experiment_id` and *stored*
 `dataset_item_id`. A row reports the *stable* `dataset_item_id`, while the sort key holds the stored one (legacy items
 store an older version's row id), so a caller-supplied value would be wrong anyway. The lookup is by `id` alone, so it
-needs a skip index on `id`: `experiment_items` and `experiment_item_aggregates` have a `minmax` index (`000151`), which
+needs a skip index on `id`: `experiment_items` and `experiment_item_aggregates` have a `minmax` index (`000152`), which
 works because UUIDv7 ids rise along the sort key. Without one, the lookup reads every in-scope experiment on each page.
 
 If the cursor row is gone, the optional `last_retrieved_experiment_id` hint resumes from the start of that experiment;

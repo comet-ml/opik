@@ -3071,7 +3071,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
-    // Finds the cursor row by id alone among the stream's experiments; the minmax skip index on id (000151) keeps
+    // Finds the cursor row by id alone among the stream's experiments; the minmax skip index on id (000152) keeps
     // this to a granule or two per table instead of every in-scope experiment
     private static final String RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR = """
             SELECT experiment_id, dataset_item_id
