@@ -490,18 +490,18 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          <GroupsButton
+            columns={FILTER_AND_GROUP_COLUMNS}
+            config={filtersAndGroupsConfig as never}
+            groups={groups}
+            onChange={setGroups}
+          />
           <FiltersButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
             layout="add"
-          />
-          <GroupsButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            groups={groups}
-            onChange={setGroups}
           />
         </div>
         <div className="flex items-center gap-2">
