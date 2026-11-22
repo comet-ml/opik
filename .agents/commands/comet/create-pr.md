@@ -89,24 +89,32 @@ This workflow will:
   ```
 
 - **Ensure remote branch exists (auto)**: Push local commits so the branch is on origin
+
   ```bash
   git push -u origin HEAD
   ```
+
 - **Sync with `main` (base branch) (auto)**: Ensure the working branch is up to date before proceeding
   - Fetch latest refs and check divergence
+
     ```bash
     git fetch origin
     git rev-list --left-right --count origin/main...HEAD
     ```
+
   - If the branch is behind `main`, the command will perform a rebase. If rebase conflicts occur, it stops and reports them.
+
     ```bash
     git rebase origin/main
     # If conflicts arise, resolve them and continue with: git rebase --continue
     ```
+
   - After syncing, push updates:
+
     ```bash
     git push --force-with-lease   # after rebase
     ```
+
   - **Post-push: sync PR description.** If an open PR exists for this branch, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) with `branch = git rev-parse --abbrev-ref HEAD`. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo.
 
 ---
@@ -125,6 +133,7 @@ This workflow will:
 ### 5. Run Quality Checks
 
 - **Execute quality checks**: Run the following commands in sequence based on the project type:
+
   ```bash
   # For Java backend projects
   (cd apps/opik-backend && mvn compile -DskipTests && mvn test && mvn spotless:check)
@@ -135,8 +144,10 @@ This workflow will:
   # For SDK changes
   (cd "$(git rev-parse --show-toplevel)" && make precommit)
   ```
+
 - **If all pass**: Continue to next step
 - **If errors found**: Run auto-fix commands, then re-verify:
+
   ```bash
   # For Java backend projects
   (cd apps/opik-backend && mvn spotless:apply && mvn compile -DskipTests && mvn test)
@@ -147,6 +158,7 @@ This workflow will:
   # For SDK changes
   (cd "$(git rev-parse --show-toplevel)" && make precommit)
   ```
+
 - **If quality checks still fail**: Show errors and ask if user wants to continue
 - **If user chooses to continue**: Proceed with warnings
 - **If user chooses to stop**: Stop the flow
@@ -174,10 +186,12 @@ This workflow will:
   - IPs, storage bucket names, credentials, or any secret
 
   When summarizing changes, describe behavior in generic terms ("a customer reported…", "in a production deployment…") rather than naming the source. Redact screenshots or log excerpts before including them. For anything that needs private context, reference the Jira ticket instead of embedding it here.
+
   ```bash
   # Read the actual PR template — do NOT hardcode it
   cat .github/pull_request_template.md
   ```
+
   - **Fill every `##` section** in the template — the PR linter requires all sections to be present
   - If a section is not applicable, write "N/A" rather than removing it
 - **Section guidance**:
@@ -211,9 +225,11 @@ Before creating the PR, validate the generated title and body against the same r
 - **Read pr-lint rules at runtime**: Parse `.github/workflows/pr-lint.yml` as source of truth for the title regex and required sections. Fall back to the rules below only if the workflow file cannot be read.
 
 - **Title validation**: Verify the PR title matches the regex:
+
   ```
   ^\[(OPIK-\d+|DND-\d+|DEV-\d+|CUST-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$
   ```
+
   - Reject titles missing a ticket prefix (e.g., `[OPIK-1234]`) or using invalid component tags
 
 - **Required sections validation**: Verify the PR body contains all required `##` headings:

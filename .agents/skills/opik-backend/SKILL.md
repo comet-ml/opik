@@ -6,6 +6,7 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 # Opik Backend
 
 ## Architecture
+
 - **Layered**: Resource → Service → DAO (never skip layers)
 - **DI**: Guice modules, constructor injection with `@Inject`
 - **Databases**: MySQL (metadata, transactional) + ClickHouse (analytics, append-only)
@@ -13,12 +14,14 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 ## Naming Conventions
 
 ### Plural Names (Resources, Tests, URLs, DB Tables)
+
 - **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
 - **Resource test classes**: `TracesResourceTest`, `SpansResourceTest`, `DatasetsResourceTest` (not `TraceResourceTest`)
 - **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
 - **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
 
 ### Singular Names (DAO, Service)
+
 - **DAO classes**: `TraceDAO`, `SpanDAO`, `DatasetDAO` (not `TracesDAO`)
 - **Service classes**: `TraceService`, `SpanService`, `DatasetService` (not `TracesService`)
 
@@ -49,6 +52,7 @@ public class TracesService { }
 ## Lombok Conventions
 
 ### Records and DTOs
+
 - Always annotate records/DTOs with `@Builder(toBuilder = true)`
 - Use builders (not constructors) when instantiating records
 - For **internal records** (built programmatically, never validated by Bean Validation), use Lombok `@NonNull` on required fields — it generates a runtime null check at construction
@@ -83,6 +87,7 @@ public record MyRequest(@NonNull @NotNull UUID id) {}
 ```
 
 ### Dependency Injection
+
 - Use `@RequiredArgsConstructor(onConstructor_ = @Inject)` instead of manual constructors
 
 ```java
@@ -104,6 +109,7 @@ public class MyService {
 ```
 
 ### Interfaces
+
 - Don't put validation annotations (`@NonNull`) on interface method parameters
 - Keep interfaces free of implementation details
 
@@ -122,6 +128,7 @@ interface MyService {
 ## Critical Gotchas
 
 ### StringTemplate Memory Leak
+
 ```java
 // ✅ GOOD
 var template = TemplateUtils.newST(QUERY);
@@ -131,6 +138,7 @@ var template = new ST(QUERY);
 ```
 
 ### List Access
+
 ```java
 // ✅ GOOD
 users.getFirst()
@@ -215,6 +223,7 @@ filter clause — must be produced by the allow-listed builders (`SortingQueryBu
 Some `%s` query templates predate this rule. Don't copy them and don't add new ones.
 
 ### Immutable Collections
+
 ```java
 // ✅ GOOD
 Set.of("A", "B", "C")
@@ -226,11 +235,14 @@ Arrays.asList("A", "B", "C")
 ```
 
 ## API Design
+
 - **Query parameters that accept lists**: Use plural names from the start (e.g., `exclude_category_names` not `exclude_category_name`). Starting with a singular name and later adding a plural variant results in two redundant query params on the same endpoint. Plural names are backward-compatible since they work for both single and multiple values.
 - **Optional query parameters**: don't annotate `@QueryParam` parameters with `@Nullable`; none of the backend's query params are. A `@QueryParam` without `@NotNull` or `@DefaultValue` is already optional and arrives as `null` when omitted. Document what omitting it means in its `@Schema(description = ...)`. `@Nullable` stays appropriate on API models and on internal methods, including private helpers inside resource classes.
 
 ### User-Named Resources (name length)
+
 A name longer than its column fails the INSERT with `MysqlDataTruncation` and surfaces as a 500. Every create and update/rename of a user-named resource must bound it:
+
 1. **One constant per name, matching its column**: `public static final int NAME_MAX_LENGTH = 150;` on the resource model (e.g. `Project.NAME_MAX_LENGTH`), referenced everywhere the limit applies. Check the column width in the migration; not every name column is 150.
 2. **Validate declaratively** on the create **and** the update/rename request models, and on every field that creates the resource implicitly (e.g. `project_name` on traces/spans/datasets): `@Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters")`. `@Size` is published as `maxLength` in the OpenAPI spec and reaches the generated SDKs.
 3. **Don't wrap it in a composed constraint annotation**: swagger-core ignores constraints on the composing annotation, so the spec loses `maxLength` (and any `pattern` it carried). Repeat `@Size` with the shared constant instead.
@@ -241,6 +253,7 @@ A name longer than its column fails the INSERT with `MysqlDataTruncation` and su
 ## Error Handling
 
 ### Use Jakarta Exceptions
+
 ```java
 throw new BadRequestException("Invalid input");
 throw new NotFoundException("User not found: '%s'".formatted(id));
@@ -249,6 +262,7 @@ throw new InternalServerErrorException("System error", cause);
 ```
 
 ### Error Response Classes
+
 - Simple: `io.dropwizard.jersey.errors.ErrorMessage`
 - Complex: `com.comet.opik.api.error.ErrorMessage`
 - **Never create new error message classes**
@@ -256,6 +270,7 @@ throw new InternalServerErrorException("System error", cause);
 ## Logging
 
 ### Format Convention
+
 ```java
 // ✅ GOOD - values in single quotes
 log.info("Created user: '{}'", userId);
@@ -266,6 +281,7 @@ log.info("Created user: {}", userId);
 ```
 
 ### Value Placement
+
 Put the message first and the interpolated values at the **end** of the sentence, as a trailing
 `name '{}'` list. This keeps a stable literal prefix that stays greppable during a production
 debugging session — a message whose values are interleaved has no fixed substring to search for.
@@ -284,11 +300,13 @@ throw new DestinationGuardException("destination '%s' has no valid host".formatt
 ```
 
 ### Never Log
+
 - Emails, passwords, tokens, API keys
 - PII, personal identifiers
 - Database credentials
 
 ## Reference Files
+
 - [clickhouse.md](clickhouse.md) - ClickHouse query patterns
 - [mysql.md](mysql.md) - TransactionTemplate patterns
 - [testing.md](testing.md) - PODAM, naming, assertion patterns

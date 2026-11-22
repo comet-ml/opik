@@ -132,11 +132,13 @@ await openai.flush();
 ```
 
 **Advantages**:
+
 - Transparent to user code
 - Works with any SDK method
 - Preserves TypeScript types
 
 **Tradeoffs**:
+
 - Requires understanding SDK structure
 - May need updates when SDK changes
 
@@ -208,11 +210,13 @@ await handler.flushAsync();
 ```
 
 **Advantages**:
+
 - Framework-native pattern
 - Handles complex chains automatically
 - Built-in parent-child relationships
 
 **Tradeoffs**:
+
 - Framework-specific implementation
 - Must implement all callback methods
 
@@ -278,11 +282,13 @@ const result = await generateText({
 ```
 
 **Advantages**:
+
 - Leverages standard telemetry
 - Works with any OTel-instrumented framework
 - Rich span metadata
 
 **Tradeoffs**:
+
 - Requires OTel setup
 - More complex configuration
 
@@ -291,6 +297,7 @@ const result = await generateText({
 ### OpenAI Integration (`opik-openai`)
 
 **Supported Operations**:
+
 - `chat.completions.create()` (streaming and non-streaming)
 - `completions.create()`
 - All nested API methods
@@ -323,6 +330,7 @@ for await (const chunk of stream) {
 ### LangChain Integration (`opik-langchain`)
 
 **Supported Components**:
+
 - LLMs and Chat Models
 - Chains
 - Tools
@@ -350,6 +358,7 @@ const handler = new OpikCallbackHandler({
 ### Vercel AI Integration (`opik-vercel`)
 
 **Supported Functions**:
+
 - `generateText()`
 - `generateObject()`
 - `streamText()`
@@ -370,6 +379,7 @@ OpikExporter.getSettings({
 ### Gemini Integration (`opik-gemini`)
 
 **Supported Operations**:
+
 - `generateContent()`
 - `generateContentStream()`
 - Chat sessions
