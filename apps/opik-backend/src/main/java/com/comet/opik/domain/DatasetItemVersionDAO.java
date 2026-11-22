@@ -2498,16 +2498,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * the row reports. That is the {@code experiment_items} key prefix
      * {@code (workspace_id, experiment_id, dataset_item_id, trace_id, id)}, so the cursor predicate is a key
      * range and a page reads about {@code :limit} rows instead of re-scanning the in-scope experiments; an
-     * {@code id}-only cursor prunes nothing here since {@code id} is the last key column. {@code trace_id} is
+     * {@code id < :cursor_id} page predicate alone would prune nothing, since {@code id} is the last key column.
+     * {@code trace_id} is
      * skipped: an (experiment, dataset item) pair holds one or two rows, and keeping it out keeps the cursor
      * to what a row identifies. {@code experiment_item_aggregates}
      * ({@code (workspace_id, experiment_id, id)}) is ordered the same way, which bounds its page by the
      * experiment prefix and keeps the order stable when an experiment moves from raw to aggregated mid-stream.
      *
-     * <p><b>The cursor.</b> Callers send the last row's {@code experiment_id} and {@code id}; its stored
-     * {@code dataset_item_id} is looked up by {@link #RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR} and bound as
-     * {@code :cursor_dataset_item_id}. If that row is gone, the stream resumes from the start of its experiment
-     * ({@code cursor_unresolved}): it repeats rows rather than skipping any.
+     * <p><b>The cursor.</b> Callers send the last row's {@code id}, like every other stream. Its
+     * {@code experiment_id} and stored {@code dataset_item_id} are looked up by
+     * {@link #RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR} (pruned by the minmax skip index on {@code id}) and bound as
+     * the key-range position. If that row is gone, the optional {@code last_retrieved_experiment_id} hint resumes
+     * the stream from the start of that experiment ({@code cursor_unresolved}); without the hint it restarts from
+     * the beginning. Either way it repeats rows rather than skipping any.
      *
      * <p><b>Item filters are applied before {@code LIMIT}.</b> A row dropped after the limit would shorten the
      * page, and a short page is how stream callers detect the end. The filtered id sets hold every row id and
@@ -3068,19 +3071,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
+    // Finds the cursor row by id alone among the stream's experiments; the minmax skip index on id (000151) keeps
+    // this to a granule or two per table instead of every in-scope experiment
     private static final String RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR = """
-            SELECT dataset_item_id
+            SELECT experiment_id, dataset_item_id
             FROM (
-                SELECT dataset_item_id
+                SELECT experiment_id, dataset_item_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                AND experiment_id = :experiment_id
+                AND experiment_id IN :experiment_ids
                 AND id = :id
                 UNION ALL
-                SELECT dataset_item_id
+                SELECT experiment_id, dataset_item_id
                 FROM experiment_item_aggregates
                 WHERE workspace_id = :workspace_id
-                AND experiment_id = :experiment_id
+                AND experiment_id IN :experiment_ids
                 AND id = :id
             )
             LIMIT 1
@@ -4324,12 +4329,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private record StreamPreQueryResults(String workspaceId, List<UUID> targetProjectIds,
-            AggregatedExperimentCounts counts, Optional<String> cursorDatasetItemId) {
+            AggregatedExperimentCounts counts, Optional<StreamCursor> cursor) {
     }
 
-    private Mono<Optional<String>> resolveStreamCursor(DatasetExperimentItemStreamCriteria criteria,
+    /** Sort-key position of the cursor row: its experiment and its stored {@code dataset_item_id}. */
+    private record StreamCursor(String experimentId, String datasetItemId) {
+    }
+
+    private Mono<Optional<StreamCursor>> resolveStreamCursor(DatasetExperimentItemStreamCriteria criteria,
             String workspaceId) {
-        if (criteria.lastRetrievedId() == null) {
+        if (criteria.lastRetrievedId() == null || criteria.experimentIds().isEmpty()) {
             return Mono.just(Optional.empty());
         }
 
@@ -4338,11 +4347,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     "resolve_experiment_item_stream_cursor", workspaceId, "", criteria.datasetId());
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", criteria.lastRetrievedExperimentId().toString())
+                    .bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new))
                     .bind("id", criteria.lastRetrievedId().toString());
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("dataset_item_id", String.class)))
+                    .flatMap(result -> result.map((row, rowMetadata) -> new StreamCursor(
+                            row.get("experiment_id", String.class), row.get("dataset_item_id", String.class))))
                     .next()
                     .map(Optional::of)
                     .defaultIfEmpty(Optional.empty());
@@ -4356,11 +4366,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Flux.empty();
         }
 
-        boolean hasCursor = criteria.lastRetrievedId() != null;
-        var cursorDatasetItemId = preQueryResults.cursorDatasetItemId();
-        if (hasCursor && cursorDatasetItemId.isEmpty()) {
-            log.warn("Experiment item stream cursor '{}'/'{}' not found, resuming from the start of its experiment",
-                    criteria.lastRetrievedExperimentId(), criteria.lastRetrievedId());
+        var cursor = preQueryResults.cursor();
+        boolean cursorNotFound = criteria.lastRetrievedId() != null && cursor.isEmpty();
+        // Without the row, the hint is the only position left: resume from the start of its experiment
+        boolean resumeFromHint = cursorNotFound && criteria.lastRetrievedExperimentId() != null;
+        if (resumeFromHint) {
+            log.warn("Experiment item stream cursor '{}' not found, resuming from the start of experiment '{}'",
+                    criteria.lastRetrievedId(), criteria.lastRetrievedExperimentId());
+        } else if (cursorNotFound) {
+            log.warn("Experiment item stream cursor '{}' not found and no experiment hint, restarting the stream",
+                    criteria.lastRetrievedId());
         }
 
         return asyncTemplate.stream(connection -> {
@@ -4373,8 +4388,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template.add("has_raw", counts.hasRaw());
             template.add("has_aggregated", counts.hasAggregated());
-            template.add("cursor_resolved", cursorDatasetItemId.isPresent());
-            template.add("cursor_unresolved", hasCursor && cursorDatasetItemId.isEmpty());
+            template.add("cursor_resolved", cursor.isPresent());
+            template.add("cursor_unresolved", resumeFromHint);
             addDatasetItemFiltersToTemplate(template, criteria.filters());
             var targetProjectIds = preQueryResults.targetProjectIds();
             if (CollectionUtils.isNotEmpty(targetProjectIds)) {
@@ -4386,12 +4401,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .bind("versionId", criteria.fallbackVersionId())
                     .bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new))
                     .bind("limit", criteria.limit());
-            if (hasCursor) {
+            cursor.ifPresent(position -> statement
+                    .bind("cursor_experiment_id", position.experimentId())
+                    .bind("cursor_dataset_item_id", position.datasetItemId())
+                    .bind("cursor_id", criteria.lastRetrievedId().toString()));
+            if (resumeFromHint) {
                 statement.bind("cursor_experiment_id", criteria.lastRetrievedExperimentId().toString());
             }
-            cursorDatasetItemId.ifPresent(datasetItemId -> statement
-                    .bind("cursor_dataset_item_id", datasetItemId)
-                    .bind("cursor_id", criteria.lastRetrievedId().toString()));
             if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                 statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
             }

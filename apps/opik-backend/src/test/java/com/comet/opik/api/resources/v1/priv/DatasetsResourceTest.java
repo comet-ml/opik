@@ -9359,7 +9359,8 @@ class DatasetsResourceTest {
             }
         }
 
-        // Reads every page the way a stream client does: until a page comes back shorter than the limit
+        // Reads every page the way a generic stream client does: sends only the last row's id, until a page comes back
+        // shorter than the limit
         private List<ExperimentItem> streamAll(DatasetExperimentItemStreamRequest request) {
             var allItems = new ArrayList<ExperimentItem>();
             var pageRequest = request;
@@ -9370,7 +9371,6 @@ class DatasetsResourceTest {
                     return allItems;
                 }
                 pageRequest = pageRequest.toBuilder()
-                        .lastRetrievedExperimentId(page.getLast().experimentId())
                         .lastRetrievedId(page.getLast().id())
                         .build();
             }
@@ -9525,31 +9525,39 @@ class DatasetsResourceTest {
                     expectedExperimentItem);
         }
 
-        @Test
-        @DisplayName("when the cursor's experiment item was deleted, then resume from the start of its experiment")
-        void streamWhenCursorItemDeletedThenResumeFromItsExperiment() {
-            var datasetItems = IntStream.range(0, 3)
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when the cursor's experiment item was deleted, then resume from its experiment with the hint, or restart without it")
+        void streamWhenCursorItemDeleted(boolean withExperimentHint) {
+            var datasetItems = IntStream.range(0, 2)
                     .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
             var dataset = createDatasetWithItems(datasetItems);
-            var experimentId = createExperiment(dataset);
-            var experimentItems = datasetItems.stream()
-                    .map(item -> createExperimentItem(experimentId, item))
+            var olderExperimentId = createExperiment(dataset);
+            var newerExperimentId = createExperiment(dataset);
+            var experimentItems = Stream.of(olderExperimentId, newerExperimentId)
+                    .flatMap(experimentId -> datasetItems.stream()
+                            .map(item -> createExperimentItem(experimentId, item)))
                     .toList();
             createExperimentItems(experimentItems.toArray(ExperimentItem[]::new));
             var request = DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).limit(1).build();
 
-            var firstPage = datasetResourceClient.streamDatasetExperimentItems(request, apiKey, workspaceName);
-            var cursorItem = firstPage.getFirst();
+            // The newer experiment streams first, so the first row of the older one sits after it
+            var streamOrder = streamAll(request);
+            var cursorItem = streamOrder.stream()
+                    .filter(item -> item.experimentId().equals(olderExperimentId))
+                    .findFirst()
+                    .orElseThrow();
             experimentResourceClient.deleteExperimentItems(Set.of(cursorItem.id()), apiKey, workspaceName);
 
             var remainingExperimentItems = streamAll(request.toBuilder()
-                    .lastRetrievedExperimentId(cursorItem.experimentId())
+                    .lastRetrievedExperimentId(withExperimentHint ? olderExperimentId : null)
                     .lastRetrievedId(cursorItem.id())
                     .build());
 
             var expectedRemaining = experimentItems.stream()
                     .filter(item -> !item.id().equals(cursorItem.id()))
+                    .filter(item -> !withExperimentHint || item.experimentId().equals(olderExperimentId))
                     .toArray(ExperimentItem[]::new);
             assertExperimentItems(remainingExperimentItems, expectedRemaining);
         }
@@ -9601,8 +9609,8 @@ class DatasetsResourceTest {
             return Stream.of(
                     arguments(valid.toBuilder().limit(2001).build(), "limit must be less than or equal to 2000"),
                     arguments(valid.toBuilder().limit(0).build(), "limit must be greater than or equal to 1"),
-                    arguments(valid.toBuilder().lastRetrievedId(GENERATOR.generate()).build(),
-                            "cursorComplete last_retrieved_experiment_id and last_retrieved_id must be set together"),
+                    arguments(valid.toBuilder().lastRetrievedExperimentId(GENERATOR.generate()).build(),
+                            "cursorComplete last_retrieved_experiment_id requires last_retrieved_id"),
                     arguments(valid.toBuilder().datasetId(null).build(),
                             "datasetIdentified exactly one of dataset_id or dataset_name must be set"),
                     arguments(valid.toBuilder().datasetName("dataset").build(),

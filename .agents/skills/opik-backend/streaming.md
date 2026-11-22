@@ -12,7 +12,7 @@ Existing streams to copy from:
 | Experiments | `ExperimentsResource.streamExperiments` | `ExperimentDAO.FIND` (shared) | `last_retrieved_id` |
 | Experiment items | `ExperimentsResource.streamExperimentItems` | `ExperimentItemDAO.STREAM` (dedicated) | `last_retrieved_id` |
 | Dataset items | `DatasetsResource.streamDatasetItems` | `SELECT_DATASET_ITEM_VERSIONS` (shared) | `last_retrieved_id` |
-| A dataset's experiment items | `DatasetsResource.streamDatasetExperimentItems` | `STREAM_DATASET_EXPERIMENT_ITEMS` (dedicated) | `last_retrieved_experiment_id` + `last_retrieved_id` |
+| A dataset's experiment items | `DatasetsResource.streamDatasetExperimentItems` | `STREAM_DATASET_EXPERIMENT_ITEMS` (dedicated) | `last_retrieved_id` (+ optional `last_retrieved_experiment_id` hint) |
 
 ## Request Record
 
@@ -41,8 +41,11 @@ public record FooStreamRequest(
 - `limit`: `@Min(1) @Max(2000)` with the default in the accessor. A violation is a 422 like any bean-validation error.
 - Defaults belong in the accessor, not in `@DefaultValue`. That is a JAX-RS annotation and does nothing for a JSON body,
   so a primitive `boolean truncate` silently defaults to `false`.
-- Cursor fields are named `last_retrieved_*` and are all optional. When the cursor has more than one field, require
-  all or none with an `@AssertTrue` method (see `DatasetExperimentItemStreamRequest`).
+- Cursor fields are named `last_retrieved_*` and are all optional. Keep the request cursor to a single
+  `last_retrieved_id` so every stream reads the same way on the client; the server can derive the rest of the sort-key
+  position from that row (see Order and cursor). An extra hint field must be optional and only used as a fallback;
+  reject a hint sent without `last_retrieved_id` with an `@AssertTrue` method (see
+  `DatasetExperimentItemStreamRequest`).
 
 ## Resource
 
@@ -100,8 +103,8 @@ square of the data.
 
 - `traces`/`spans` (`(workspace_id, project_id, id)` plus a week bound derived from the UUIDv7 id): a single
   `last_retrieved_id` is a range read.
-- `experiment_items` (`(workspace_id, experiment_id, dataset_item_id, trace_id, id)`): `id` is the last key column and
-  has no skip index, so `id < :cursor` prunes nothing. `STREAM_DATASET_EXPERIMENT_ITEMS` orders by
+- `experiment_items` (`(workspace_id, experiment_id, dataset_item_id, trace_id, id)`): `id` is the last key column, so
+  `id < :cursor` as the page predicate prunes nothing. `STREAM_DATASET_EXPERIMENT_ITEMS` orders by
   `(experiment_id, dataset_item_id, id)` instead and writes the cursor as nested `OR`s, which ClickHouse can analyze
   against the key:
 
@@ -112,10 +115,15 @@ square of the data.
               OR (dataset_item_id = :cursor_dataset_item_id AND id < :cursor_id))))
   ```
 
-Keep the request cursor to what a row identifies unambiguously. In that stream a row reports the *stable*
-`dataset_item_id`, while the sort key holds the *stored* one (legacy items store an older version's row id). So
-callers send only `experiment_id` and `id`, and the DAO looks up the stored `dataset_item_id` before the page query. If
-the cursor row is gone, resume from the start of its experiment: repeating rows is recoverable, skipping them is not.
+**Derive the sort-key position on the server.** Callers send only the last row's `id`. Before the page query, the DAO
+looks that row up (`RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR`) and reads its `experiment_id` and *stored*
+`dataset_item_id`. A row reports the *stable* `dataset_item_id`, while the sort key holds the stored one (legacy items
+store an older version's row id), so a caller-supplied value would be wrong anyway. The lookup is by `id` alone, so it
+needs a skip index on `id`: `experiment_items` and `experiment_item_aggregates` have a `minmax` index (`000151`), which
+works because UUIDv7 ids rise along the sort key. Without one, the lookup reads every in-scope experiment on each page.
+
+If the cursor row is gone, the optional `last_retrieved_experiment_id` hint resumes from the start of that experiment;
+without it the stream restarts. Repeating rows is recoverable, skipping them is not.
 
 ### Rules
 
@@ -141,8 +149,8 @@ The Python SDK pages through every stream with `rest_stream_parser.read_and_pars
   is not served again;
 - it halves the page size and retries from the same cursor when a page fails for size-related reasons.
 
-The helper assumes the cursor is a single `id`. A stream with a multi-field cursor has to generalize it rather than
-loop by hand: make the cursor opaque, built from the last row by a callback that callers supply.
+The helper assumes the cursor is a single `id`, which is why the request cursor should stay a single
+`last_retrieved_id`: every stream, including the dataset experiment-items one, then reads with this helper unchanged.
 
 ## Testing
 
@@ -152,7 +160,9 @@ Resource tests should cover:
   until a short page arrives, and assert the full id list in order (`containsExactlyElementsOf`), not just the set.
   Cover data that crosses the cursor's grouping, such as several experiments per item.
 - **Filters narrow the stream** and still end with a short page.
-- **Validation:** `limit` of 2001 and 0, and an incomplete multi-field cursor, return 422.
+- **Validation:** `limit` of 2001 and 0, and a hint field sent without `last_retrieved_id`, return 422.
+- **Deleted cursor row:** with a hint, the stream resumes from the hinted position; without one, it restarts. Neither
+  skips a row.
 - **Not found:** an unknown parent returns 404 before the stream starts, not an error line.
 - **Empty:** no rows means an empty body.
 - **Parity:** if the stream mirrors a paged endpoint, assert the streamed rows equal the paged endpoint's rows.
