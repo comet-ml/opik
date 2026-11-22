@@ -33,6 +33,7 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -2523,6 +2524,43 @@ class SpansResourceTest {
                         })))
                         .defaultIfEmpty(0L);
             }).block();
+        }
+    }
+
+    @Nested
+    @DisplayName("Payload storage:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PayloadStorage {
+
+        Stream<JsonNode> batchAndSingleCreateStoreTheSamePayload() {
+            return PayloadCases.payloads();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a batch create and a single create store the same input and output")
+        void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .input(payload)
+                    .output(payload)
+                    .build();
+            var singleSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .input(payload)
+                    .output(payload)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(singleSpan, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(batchSpan, API_KEY, TEST_WORKSPACE);
+            getAndAssert(singleSpan, API_KEY, TEST_WORKSPACE);
         }
     }
 

@@ -1,6 +1,9 @@
 package com.comet.opik.infrastructure.db;
 
+import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.util.RawValue;
 import com.google.common.base.Preconditions;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
@@ -114,4 +117,34 @@ public class JsonRowValues {
 
         node.put(field, value);
     }
+
+    /**
+     * Writes a payload ({@code input}, {@code output}) and its slim copy into their {@code String} columns.
+     *
+     * <p>An object or array is embedded in the row as raw JSON, written from the node when the row is serialized.
+     * The cells hold the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)} only under this contract:
+     * <ul>
+     *   <li>the target columns are {@code String}, and</li>
+     *   <li>the insert sets {@code input_format_json_read_objects_as_strings} and
+     *   {@code input_format_json_read_arrays_as_strings}, which store a raw object or array verbatim, as
+     *   {@link JsonEachRowBulkInsert} does.</li>
+     * </ul>
+     *
+     * <p>Anything else is written as that text: ClickHouse would store a raw root string without its quotes and
+     * a raw {@code null} as an empty string, which are not the cells the string path writes.
+     */
+    public void putJsonWithSlim(@NonNull ObjectNode node, String field, String slimField,
+            @Nullable JsonNode value) {
+        checkField(field);
+        checkField(slimField);
+        if (value != null && value.isContainerNode()) {
+            node.putRawValue(field, new RawValue(TruncationUtils.toFullJson(value)));
+            node.putRawValue(slimField, new RawValue(TruncationUtils.toSlimJson(value)));
+            return;
+        }
+        var columns = TruncationUtils.toJsonWithSlim(value);
+        node.put(field, columns.json());
+        node.put(slimField, columns.slim());
+    }
+
 }
