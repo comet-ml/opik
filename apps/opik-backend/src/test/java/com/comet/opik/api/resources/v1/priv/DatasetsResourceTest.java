@@ -90,6 +90,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -139,6 +140,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -291,6 +293,7 @@ class DatasetsResourceTest {
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
@@ -311,6 +314,7 @@ class DatasetsResourceTest {
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
+        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -9465,6 +9469,70 @@ class DatasetsResourceTest {
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                             .build())
                     .containsExactlyInAnyOrderElementsOf(pagedExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when every experiment is aggregated and its items point at legacy version row ids, then page every item exactly once")
+        void streamWhenAllExperimentsAggregatedWithLegacyItemIdsThenEveryItemOnce() {
+            var datasetItems = IntStream.range(0, 5)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
+                    .toList();
+            var dataset = createDatasetWithItems(datasetItems);
+            // A delta rewrites the version and mints a new row id per item, so each row id differs from its stable
+            // dataset_item_id: the id a legacy experiment item stores
+            var latestVersion = createVersion(dataset.id(), firstVersion(dataset.id()));
+            var rowIdByStableId = readRowIdsByStableId(dataset.id(), latestVersion.id());
+            assertThat(datasetItems)
+                    .as("every item needs a row id different from its stable id, or there is no legacy id to page")
+                    .allSatisfy(item -> assertThat(rowIdByStableId.get(item.id())).isNotEqualTo(item.id()));
+
+            var experimentId = createExperiment(dataset);
+            var experimentItems = datasetItems.stream()
+                    .map(item -> createExperimentItem(experimentId, item).toBuilder()
+                            .datasetItemId(rowIdByStableId.get(item.id()))
+                            .build())
+                    .toList();
+            createExperimentItems(experimentItems.toArray(ExperimentItem[]::new));
+            var expectedIds = experimentItems.stream().map(ExperimentItem::id).toList();
+            var request = DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).limit(1).build();
+
+            assertThat(streamAll(request))
+                    .as("raw experiment with legacy item ids")
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+
+            // Aggregation stores the stable id in experiment_item_aggregates while experiment_items keeps the legacy
+            // row id, so the two tables disagree on the cursor row's dataset_item_id. With the only experiment
+            // aggregated, the raw branch (the only one that reads traces) isn't rendered at all
+            experimentAggregatesService.populateAggregations(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            assertThat(streamAll(request))
+                    .as("the same experiment, aggregated")
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+        }
+
+        private Map<UUID, UUID> readRowIdsByStableId(UUID datasetId, UUID versionId) {
+            return clickHouseTemplate.nonTransaction(connection -> Flux
+                    .from(connection.createStatement("""
+                            SELECT dataset_item_id, id
+                            FROM dataset_item_versions FINAL
+                            WHERE workspace_id = :workspace_id
+                            AND dataset_id = :dataset_id
+                            AND dataset_version_id = :version_id
+                            """)
+                            .bind("workspace_id", workspaceId)
+                            .bind("dataset_id", datasetId.toString())
+                            .bind("version_id", versionId.toString())
+                            .execute())
+                    .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                            row.get("dataset_item_id", UUID.class), row.get("id", UUID.class))))
+                    .collectMap(Map.Entry::getKey, Map.Entry::getValue))
+                    .block();
         }
 
         @Test
