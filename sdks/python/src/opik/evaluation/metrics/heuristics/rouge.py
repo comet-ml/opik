@@ -23,9 +23,11 @@ class _UnicodeTokenizer:
     same tokens instead of silently mismatching.
 
     For scripts written without spaces between words (e.g. Chinese, Japanese,
-    Thai) each unsegmented run becomes a single token, so ``rouge1``/``rougeL``
-    still work but ``rouge2`` has no bigrams and scores 0.0 even for identical
-    text. Pass a word-segmenting ``tokenizer`` to ``ROUGE`` for those languages.
+    Thai) each unsegmented run becomes a single token, so a run only counts
+    when it matches exactly: ``rouge1``/``rougeL`` score 1.0 for identical text
+    but 0.0 if any character differs (``我喜欢学习中文`` vs ``我喜欢学习英文``),
+    and ``rouge2`` has no bigrams and scores 0.0 even for identical text. Pass a
+    word-segmenting ``tokenizer`` to ``ROUGE`` for those languages.
     """
 
     def __init__(self, use_stemmer: bool = False) -> None:
