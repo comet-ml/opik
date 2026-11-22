@@ -9,7 +9,7 @@ DEBUG_MODE=${DEBUG_MODE:-false}
 # opik.sh guardrails flag to append (empty = guardrails off). Set by --guardrails
 # (GPU-capable image, runs on CPU when no GPU) or --guardrails-cpu (slim CPU image).
 GUARDRAILS_OPIK_FLAG=""
-ORIGINAL_COMMAND="$0 $@"
+ORIGINAL_COMMAND="$0 $*"
 
 # Ollie / Agent Insights read-only freeform SQL is off by default for local dev (the feature is driven by the Ollie
 # agent, which isn't available locally). Set TOGGLE_OLLIE_ENABLED=true before invoking to opt in: start_backend
@@ -1109,6 +1109,7 @@ start_frontend() {
     # (platform_opik_vite_args is empty when the platform stack is off).
     log_debug "Starting frontend with: npm run start"
     platform_prepare_opik_comet_env
+    # shellcheck disable=SC2046  # platform_opik_vite_args prints zero or several args; word-split on purpose
     CI=true nohup npm run start $(platform_opik_vite_args) > "$FRONTEND_LOG_FILE" 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"

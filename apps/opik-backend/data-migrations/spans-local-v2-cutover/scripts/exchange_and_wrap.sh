@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Driver for step 3 of the spans cutover: settle gate + EXCHANGE + Distributed wrap (runbook: ../README.md).
 #
@@ -220,7 +221,10 @@ done
 # then reads the unset sample variables as 0 and passes — so an out-of-range value would reach the EXCHANGE without
 # having read replication at all. A numeric `<= SETTLE_TIMEOUT_MAX` test cannot catch that, because the wrapped value is
 # negative and compares as in-range. 0 is accepted, and means a single sample.
-[[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] && (( SETTLE_TIMEOUT <= SETTLE_TIMEOUT_MAX )) || { echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample. The ceiling is two hours here rather than the traces runbook's one, because a single spans part can approach 150 GiB and one legitimate GET_PART of such a part takes many minutes; past two hours, aborting and resolving the lag beats waiting." >&2; exit 2; }
+if ! [[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] || (( SETTLE_TIMEOUT > SETTLE_TIMEOUT_MAX )); then
+    echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample. The ceiling is two hours here rather than the traces runbook's one, because a single spans part can approach 150 GiB and one legitimate GET_PART of such a part takes many minutes; past two hours, aborting and resolving the lag beats waiting." >&2
+    exit 2
+fi
 
 # One place for the connection and client-side options, so every call site below carries the same host, port,
 # database and the two timeouts. log_comment is NOT here, because clickhouse-client rejects a setting passed twice and
@@ -386,8 +390,7 @@ SCOPE_MODE=""          # skip | unbounded | scoped. Set by derive_delete_scope, 
 SCOPE_PARTITIONS=()    # the partition values, ascending, when SCOPE_MODE is `scoped`.
 SCOPE_WINDOW_END=""    # the instant the derivation bounded its bridge read at; rendered into the replay's own match.
 SCOPE_REASON=""        # one line for the operator saying which mode was chosen and why.
-SCOPE_TARGET=""        # the table the replay mutates, kept so verify_delete_scope re-derives against the same one.
-SCOPE_ANCHOR=""        # the event_time floor, kept for the same reason.
+SCOPE_ANCHOR=""        # the event_time floor, kept so verify_delete_scope reports against the same window.
 
 # One `-- >>> BEGIN <name>` .. `-- >>> END <name>` block (exact-line markers) out of a text held in a variable. The
 # same marker grammar extract() parses out of a file; this reads a string because the callers below splice a block
@@ -435,7 +438,7 @@ run_scope_derivation() {
 derive_delete_scope() {
     local target="$1" anchor="$2" row found partition_key expected scope_row bridged underivable partitions p
     SCOPE_MODE="" SCOPE_PARTITIONS=() SCOPE_WINDOW_END="" SCOPE_REASON=""
-    SCOPE_TARGET="$target" SCOPE_ANCHOR="$anchor"
+    SCOPE_ANCHOR="$anchor"
 
     [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
 
@@ -759,6 +762,7 @@ require_rendered() {
         echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         return 2
     fi
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2
@@ -1080,6 +1084,7 @@ run_final_deletion_replay() {
     # Nothing bridged: the replay's predicate is an AND over that set, so it can match no row. Returning here rather
     # than sending it is the point -- an unbounded DELETE that deletes nothing still locks every partition, which would
     # make "there was nothing left to replay" the cheapest way to fail immediately before the swap.
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
         verify_delete_scope
         return 0

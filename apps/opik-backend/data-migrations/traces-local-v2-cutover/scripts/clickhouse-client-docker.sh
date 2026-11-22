@@ -31,6 +31,7 @@ IMAGE="${CLICKHOUSE_CLIENT_IMAGE:-clickhouse/clickhouse-server:26.3.62.3-alpine}
 
 # CLICKHOUSE_CLIENT_DOCKER_OPTS is unquoted so multiple flags word-split; CLICKHOUSE_* are forwarded so the in-image
 # client reads the same connection env the driver scripts set.
+# shellcheck disable=SC2086  # word-split on purpose, see above
 exec docker run --rm -i ${CLICKHOUSE_CLIENT_DOCKER_OPTS:-} \
     -e CLICKHOUSE_HOST -e CLICKHOUSE_PORT -e CLICKHOUSE_USER -e CLICKHOUSE_PASSWORD -e CLICKHOUSE_DATABASE \
     --entrypoint clickhouse-client "$IMAGE" "$@"

@@ -36,4 +36,5 @@ if [ "$ENABLE_VIRTUAL_THREADS" = "true" ]; then
 fi
 
 echo "Starting opik-backend service..."
-java $JAVA_OPTS -jar opik-backend-$OPIK_VERSION.jar server config.yml
+# shellcheck disable=SC2086  # JAVA_OPTS is a space-separated flag list and must word-split
+java $JAVA_OPTS -jar "opik-backend-$OPIK_VERSION.jar" server config.yml

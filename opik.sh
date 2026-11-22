@@ -120,7 +120,7 @@ record_timing() {
   local name="$1" value="$2" overwrite="${3:-false}" i
   for i in "${!timing_labels[@]}"; do
     if [[ "${timing_labels[$i]}" == "$name" ]]; then
-      [[ "$overwrite" == true ]] && timing_values[$i]="$value"
+      [[ "$overwrite" == true ]] && timing_values[i]="$value"
       return 0
     fi
   done
@@ -182,11 +182,13 @@ get_system_info() {
   if command -v uname >/dev/null 2>&1; then
     os_info=$(uname -s 2>/dev/null || echo "unknown")
     if [[ "$os_info" == "Darwin" ]]; then
-      local os_version=$(sw_vers -productVersion 2>/dev/null || echo "")
+      local os_version
+      os_version=$(sw_vers -productVersion 2>/dev/null || echo "")
       [[ -n "$os_version" ]] && os_info="macOS ${os_version}" || os_info="macOS"
     elif [[ "$os_info" == "Linux" ]]; then
       if [[ -f /etc/os-release ]]; then
-        local distro=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
+        local distro
+        distro=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
         [[ -n "$distro" ]] && os_info="$distro" || os_info="Linux"
       fi
     fi
@@ -195,7 +197,8 @@ get_system_info() {
   # Docker version - safe with fallback
   local docker_version="unknown"
   if command -v docker >/dev/null 2>&1; then
-    local docker_output=$(docker --version 2>/dev/null || echo "")
+    local docker_output
+    docker_output=$(docker --version 2>/dev/null || echo "")
     if [[ -n "$docker_output" ]]; then
       # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
       docker_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
@@ -208,7 +211,8 @@ get_system_info() {
   local docker_compose_version="unknown"
   if command -v docker >/dev/null 2>&1; then
     # Try Docker Compose V2 (plugin)
-    local compose_output=$(docker compose version 2>/dev/null || echo "")
+    local compose_output
+    compose_output=$(docker compose version 2>/dev/null || echo "")
     if [[ -n "$compose_output" ]]; then
       # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
       docker_compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
@@ -272,7 +276,8 @@ create_opik_config_if_missing() {
   
   debugLog "[DEBUG] Creating .opik.config file at $config_file"
   
-  local ui_url=$(get_ui_url)
+  local ui_url
+  ui_url=$(get_ui_url)
   
   cat > "$config_file" << EOF
 [opik]
@@ -730,10 +735,23 @@ BACKEND=false
 LOCAL_BE=false
 LOCAL_BE_FE=false
 
+# Rebuilds REMAINING_ARGS from the rest of the arguments minus every exact match of
+# $1, so `set -- "${REMAINING_ARGS[@]}"` drops the flag while keeping arguments
+# that contain spaces intact.
+remove_flag() {
+  local flag="$1" arg
+  shift
+  REMAINING_ARGS=()
+  for arg in "$@"; do
+    [[ "$arg" == "$flag" ]] || REMAINING_ARGS+=("$arg")
+  done
+}
+
 if [[ "$*" == *"--build"* ]]; then
   BUILD_MODE=true
   # Remove the flag from arguments
-  set -- ${@/--build/}
+  remove_flag --build "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 if [[ "$*" == *"--debug"* ]]; then
@@ -741,20 +759,23 @@ if [[ "$*" == *"--debug"* ]]; then
   echo "🐞 Debug mode enabled."
   log_worktree_config
   # Remove the flag from arguments
-  set -- ${@/--debug/}
+  remove_flag --debug "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 if [[ "$*" == *"--port-mapping"* ]]; then
   PORT_MAPPING=true
   # Remove the flag from arguments
-  set -- ${@/--port-mapping/}
+  remove_flag --port-mapping "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 # Check for profile flags
 if [[ "$*" == *"--infra"* ]]; then
   INFRA=true
   # Remove the flag from arguments
-  set -- ${@/--infra/}
+  remove_flag --infra "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 if [[ "$*" == *"--backend"* ]]; then
@@ -762,7 +783,8 @@ if [[ "$*" == *"--backend"* ]]; then
   # Enable CORS for frontend development
   export CORS=true
   # Remove the flag from arguments
-  set -- ${@/--backend/}
+  remove_flag --backend "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 # Check --local-be-fe BEFORE --local-be (more specific first or regex will cause a script failure)
@@ -771,7 +793,8 @@ if [[ "$*" == *"--local-be-fe"* ]]; then
   PORT_MAPPING=true  # Required for local processes to connect to infrastructure
   export OPIK_REVERSE_PROXY_URL="http://host.docker.internal:8080"
   # Remove the flag from arguments
-  set -- ${@/--local-be-fe/}
+  remove_flag --local-be-fe "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 if [[ "$*" == *"--local-be"* ]]; then
@@ -779,7 +802,8 @@ if [[ "$*" == *"--local-be"* ]]; then
   PORT_MAPPING=true  # Required for local processes to connect to infrastructure
   export OPIK_FRONTEND_FLAVOR=local_be
   # Remove the flag from arguments
-  set -- ${@/--local-be/}
+  remove_flag --local-be "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 # Check for guardrails flags. --guardrails-cpu must be handled before --guardrails
@@ -793,7 +817,8 @@ if [[ "$*" == *"--guardrails-cpu"* ]]; then
   fi
   export TOGGLE_GUARDRAILS_ENABLED=true
   # Remove the flag from arguments
-  set -- ${@/--guardrails-cpu/}
+  remove_flag --guardrails-cpu "$@"
+  set -- "${REMAINING_ARGS[@]}"
 elif [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
   GUARDRAILS_MODE=gpu
@@ -803,7 +828,8 @@ elif [[ "$*" == *"--guardrails"* ]]; then
   fi
   export TOGGLE_GUARDRAILS_ENABLED=true
   # Remove the flag from arguments
-  set -- ${@/--guardrails/}
+  remove_flag --guardrails "$@"
+  set -- "${REMAINING_ARGS[@]}"
 fi
 
 # Count active partial profiles

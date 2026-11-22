@@ -9,7 +9,7 @@ url="${base_url}/health-check?name=all&type=ready"
 
 while (( retries < max_retries ))
 do
-  response=$(curl -s -o /dev/null -w "%{http_code}" $url)
+  response=$(curl -s -o /dev/null -w "%{http_code}" "$url")
   if [[ $response -eq 200 ]]; then
     echo "Backend is up and healthy!"
     exit 0

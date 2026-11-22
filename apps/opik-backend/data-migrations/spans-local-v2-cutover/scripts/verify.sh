@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Fidelity QA driver for the spans cutover (runbook: ../README.md, "Verifying the migration").
 #
@@ -352,6 +353,7 @@ render_block() {
     #
     # Masked first because every check below needs the executable text: comments are not whitespace, and a block's own
     # prose can contain the token that identifies it.
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2

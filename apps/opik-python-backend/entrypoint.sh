@@ -72,5 +72,5 @@ $INSTRUMENTATION_CMD gunicorn --access-logfile '-' \
   --workers 1 \
   --threads "$NUM_THREADS" \
   --worker-class gthread \
-  --bind=0.0.0.0:$PYTHON_BACKEND_PORT \
+  --bind="0.0.0.0:$PYTHON_BACKEND_PORT" \
   --chdir ./src 'opik_backend:create_app()'

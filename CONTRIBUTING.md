@@ -88,6 +88,9 @@ A maintainer can run the E2E suite against your branch before merging. The skip 
 
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
+## Shell scripts
+Standalone shell scripts (`*.sh`) are linted with [ShellCheck](https://github.com/koalaman/shellcheck), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed scripts; inline `run:` shell in workflows is covered separately by actionlint. It runs at ShellCheck's default severity (every finding, down to style). Repo-wide settings live in `.shellcheckrc`, which deliberately disables no rules; a deliberate exception is a `# shellcheck disable=SCxxxx` directive next to the code, with a reason. The hook runs ShellCheck via its Docker image, so it needs only Docker — no manual install. To run it on a single file: `pre-commit run shellcheck --files path/to/script.sh` (or `shellcheck path/to/script.sh` with a local install).
+
 ## Secret scanning
 
 Every commit is scanned for hardcoded secrets (API keys, tokens, credentials, private keys) with [betterleaks](https://github.com/betterleaks/betterleaks), the successor to gitleaks from the same maintainers. It runs as a hook locally via pre-commit and in the unified `🐙 Code Quality` workflow on every changed file. The pre-commit framework builds the pinned version from source, so no manual install is needed. The scan is offline and prints findings redacted.

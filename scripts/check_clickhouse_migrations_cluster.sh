@@ -77,6 +77,7 @@ validate_migration_file() {
     
     # Read file line by line
     local line_num=0
+    # shellcheck disable=SC2094  # check_ddl_statement only prints $file in its messages; it never writes to it
     while IFS= read -r line; do
         ((line_num++))
         
@@ -92,12 +93,14 @@ validate_migration_file() {
         # Handle rollback statements specially
         if echo "$line" | grep -qiE "$ROLLBACK_COMMENT_REGEX"; then
             # Extract the DDL statement from the rollback comment
-            local rollback_ddl=$(echo "$line" | sed -E "$ROLLBACK_EXTRACT_REGEX")
+            local rollback_ddl
+            rollback_ddl=$(echo "$line" | sed -E "$ROLLBACK_EXTRACT_REGEX")
             
             # Check if the rollback contains DDL statements using centralized regex
             if echo "$rollback_ddl" | grep -qiE "$DDL_DETECTION_REGEX"; then
                 # Extract DDL type using centralized regex
-                local ddl_type=$(echo "$rollback_ddl" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
+                local ddl_type
+                ddl_type=$(echo "$rollback_ddl" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
                 
                 if ! check_ddl_statement "$file" "$line_num" "$rollback_ddl" "$ddl_type"; then
                     ((file_errors++))
@@ -114,7 +117,8 @@ validate_migration_file() {
         # Check for DDL statements using centralized regex (case insensitive)
         if echo "$line" | grep -qiE "$DDL_DETECTION_REGEX"; then
             # Extract DDL type using centralized regex
-            local ddl_type=$(echo "$line" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
+            local ddl_type
+            ddl_type=$(echo "$line" | sed -nE "s/$DDL_DETECTION_REGEX.*/\1/Ip")
             
             if ! check_ddl_statement "$file" "$line_num" "$line" "$ddl_type"; then
                 ((file_errors++))
@@ -164,7 +168,8 @@ main() {
         fi
         
         # Find all SQL migration files in the directory
-        migration_files=($(find "$MIGRATION_DIR" -name "*.sql" | sort))
+        migration_files=()
+        while IFS= read -r migration_file; do migration_files+=("$migration_file"); done < <(find "$MIGRATION_DIR" -name "*.sql" | sort)
         echo "📊 Validating all migration files in directory..."
     fi
     
@@ -182,7 +187,7 @@ main() {
     fi
     
     echo "📊 Found ${#valid_files[@]} migration file(s) to check"
-    echo "=" $(printf '=%.0s' {1..50})
+    echo "= $(printf '=%.0s' {1..50})"
     echo
     
     # Validate each migration file
@@ -199,7 +204,7 @@ main() {
     done
     
     # Summary
-    echo "=" $(printf '=%.0s' {1..50})
+    echo "= $(printf '=%.0s' {1..50})"
     echo "📈 SUMMARY:"
     echo "   📁 Total files checked: $total_files"
     

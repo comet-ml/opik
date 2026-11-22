@@ -1,0 +1,9 @@
+# ShellCheck config for the standalone `.sh` scripts (run by the `shellcheck`
+# pre-commit hook / 🐙 Code Quality). Keep this file free of repo-wide `disable=`
+# lines: a global disable silently exempts every future script. Suppress a
+# deliberate exception inline, next to the code, with a reason.
+
+# Follow `source`/`.` into helper scripts (e.g. scripts/worktree-utils.sh) so
+# variables and functions shared across files are checked as one program.
+external-sources=true
+source-path=SCRIPTDIR

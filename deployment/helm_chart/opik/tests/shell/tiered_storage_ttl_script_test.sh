@@ -10,7 +10,7 @@
 # Requires: helm, python3, bash. Run from the chart directory or anywhere.
 set -eu
 
-CHART_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+CHART_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -115,32 +115,44 @@ materialized() { grep -q "ON CLUSTER '{cluster}' MATERIALIZE TTL" "$CALL_LOG"; }
 echo "tiered-storage TTL script"
 
 if run; then
-  [ "$(alters)" = 0 ] && pass "already applied: verifies, no ALTER" || fail "already applied: verifies, no ALTER" "$(alters) ALTERs"
+  if [ "$(alters)" = 0 ]; then pass "already applied: verifies, no ALTER"
+  else fail "already applied: verifies, no ALTER" "$(alters) ALTERs"; fi
 else
   fail "already applied: verifies, no ALTER" "exited non-zero: $(cat "$WORK/err")"
 fi
 
 if run MOCK_POLICY=default MOCK_SAME=0; then
-  grep -q "ON CLUSTER '{cluster}' MODIFY SETTING storage_policy = 'tiered_replicated'" "$CALL_LOG" \
-    && grep -q "ON CLUSTER '{cluster}' MODIFY TTL id_at + INTERVAL 13 WEEK TO DISK 'cold' SETTINGS materialize_ttl_after_modify = 0" "$CALL_LOG" \
-    && pass "fresh table: attaches the policy and sets the TTL without materializing" \
-    || fail "fresh table: attaches the policy and sets the TTL without materializing" "$(grep ALTER "$CALL_LOG")"
+  if grep -q "ON CLUSTER '{cluster}' MODIFY SETTING storage_policy = 'tiered_replicated'" "$CALL_LOG" \
+    && grep -q "ON CLUSTER '{cluster}' MODIFY TTL id_at + INTERVAL 13 WEEK TO DISK 'cold' SETTINGS materialize_ttl_after_modify = 0" "$CALL_LOG"; then
+    pass "fresh table: attaches the policy and sets the TTL without materializing"
+  else
+    fail "fresh table: attaches the policy and sets the TTL without materializing" "$(grep ALTER "$CALL_LOG")"
+  fi
 else
   fail "fresh table: attaches the policy and sets the TTL" "exited non-zero: $(cat "$WORK/err")"
 fi
-grep -q "s3cret-pass" "$CALL_LOG" && fail "password stays off argv" "found on argv" || pass "password stays off argv"
-grep -q "MATERIALIZE TTL" "$CALL_LOG" && fail "materialize off: never materializes" "issued MATERIALIZE TTL" || pass "materialize off: never materializes"
-run MOCK_PENDING=5 && ! grep -q "system.parts" "$CALL_LOG" \
-  && pass "materialize off: never reads parts" || fail "materialize off: never reads parts" "$(cat "$CALL_LOG")"
+if grep -q "s3cret-pass" "$CALL_LOG"; then fail "password stays off argv" "found on argv"
+else pass "password stays off argv"; fi
+if grep -q "MATERIALIZE TTL" "$CALL_LOG"; then fail "materialize off: never materializes" "issued MATERIALIZE TTL"
+else pass "materialize off: never materializes"; fi
+if run MOCK_PENDING=5 && ! grep -q "system.parts" "$CALL_LOG"; then pass "materialize off: never reads parts"
+else fail "materialize off: never reads parts" "$(cat "$CALL_LOG")"; fi
 
-run TTL_MATERIALIZE=true MOCK_PENDING=138 && materialized \
-  && pass "materialize on, parts without the TTL: materializes on the cluster" \
-  || fail "materialize on, parts without the TTL: materializes on the cluster" "$(cat "$WORK/out" "$WORK/err")"
-run TTL_MATERIALIZE=true MOCK_PENDING=0 && ! materialized && grep -q "nothing to materialize" "$WORK/out" \
-  && pass "materialize on, every part has the TTL: no-op (a re-sync)" \
-  || fail "materialize on, every part has the TTL: no-op (a re-sync)" "$(cat "$WORK/out")"
-run TTL_MATERIALIZE=true MOCK_PENDING=40 MOCK_RUNNING=1 && ! materialized && grep -q "still running" "$WORK/out" \
-  && pass "materialize on, a run in flight: skips" || fail "materialize on, a run in flight: skips" "$(cat "$WORK/out")"
+if run TTL_MATERIALIZE=true MOCK_PENDING=138 && materialized; then
+  pass "materialize on, parts without the TTL: materializes on the cluster"
+else
+  fail "materialize on, parts without the TTL: materializes on the cluster" "$(cat "$WORK/out" "$WORK/err")"
+fi
+if run TTL_MATERIALIZE=true MOCK_PENDING=0 && ! materialized && grep -q "nothing to materialize" "$WORK/out"; then
+  pass "materialize on, every part has the TTL: no-op (a re-sync)"
+else
+  fail "materialize on, every part has the TTL: no-op (a re-sync)" "$(cat "$WORK/out")"
+fi
+if run TTL_MATERIALIZE=true MOCK_PENDING=40 MOCK_RUNNING=1 && ! materialized && grep -q "still running" "$WORK/out"; then
+  pass "materialize on, a run in flight: skips"
+else
+  fail "materialize on, a run in flight: skips" "$(cat "$WORK/out")"
+fi
 # Each failure case must exit non-zero and never reach MATERIALIZE.
 fails_without_materialize() {  # name, run args...
   name="$1"; shift
@@ -151,37 +163,54 @@ fails_without_materialize() {  # name, run args...
 fails_without_materialize "unreadable part count fails the Job" TTL_MATERIALIZE=true MOCK_PENDING=garbage
 fails_without_materialize "unreadable mutations fail the Job" TTL_MATERIALIZE=true MOCK_PENDING=3 MOCK_RUNNING=garbage
 fails_without_materialize "a replica that does not match fails before materializing" TTL_MATERIALIZE=true MOCK_PENDING=3 MOCK_OK=1
-run TTL_MATERIALIZE=yes && fail "a bad TTL_MATERIALIZE fails before any query" "exited 0" \
-  || { [ -s "$CALL_LOG" ] && fail "a bad TTL_MATERIALIZE fails before any query" "queried anyway" || pass "a bad TTL_MATERIALIZE fails before any query"; }
-run TTL_TABLES=traces-local:13 && fail "a bad TTL_TABLES entry fails before any query" "exited 0" \
-  || { [ -s "$CALL_LOG" ] && fail "a bad TTL_TABLES entry fails before any query" "queried anyway" || pass "a bad TTL_TABLES entry fails before any query"; }
+# Each pre-flight failure case must exit non-zero and never reach clickhouse-client.
+fails_before_any_query() {  # name, run args...
+  name="$1"; shift
+  if run "$@"; then fail "$name" "exited 0"
+  elif [ -s "$CALL_LOG" ]; then fail "$name" "queried anyway"
+  else pass "$name"; fi
+}
+fails_before_any_query "a bad TTL_MATERIALIZE fails before any query" TTL_MATERIALIZE=yes
+fails_before_any_query "a bad TTL_TABLES entry fails before any query" TTL_TABLES=traces-local:13
 
 if run MOCK_EXISTS=0; then
-  [ "$(alters)" = 0 ] && grep -q "skip opik.traces_local" "$WORK/out" \
-    && pass "missing table: skipped, no ALTER" || fail "missing table: skipped, no ALTER" "$(cat "$WORK/out")"
+  if [ "$(alters)" = 0 ] && grep -q "skip opik.traces_local" "$WORK/out"; then
+    pass "missing table: skipped, no ALTER"
+  else
+    fail "missing table: skipped, no ALTER" "$(cat "$WORK/out")"
+  fi
 else
   fail "missing table: skipped" "exited non-zero"
 fi
 
-run MOCK_EXISTS=garbage && fail "unreadable EXISTS fails the Job" "exited 0" || pass "unreadable EXISTS fails the Job"
+if run MOCK_EXISTS=garbage; then fail "unreadable EXISTS fails the Job" "exited 0"
+else pass "unreadable EXISTS fails the Job"; fi
 
 if run MOCK_POLICY_REPLICAS=1 MOCK_POLICY=default; then
   fail "policy missing on a replica fails before any ALTER" "exited 0"
 else
-  [ "$(alters)" = 0 ] && pass "policy missing on a replica fails before any ALTER" || fail "policy missing on a replica fails before any ALTER" "$(alters) ALTERs"
+  if [ "$(alters)" = 0 ]; then pass "policy missing on a replica fails before any ALTER"
+  else fail "policy missing on a replica fails before any ALTER" "$(alters) ALTERs"; fi
 fi
 
-run MOCK_OK=1 && fail "a replica that does not match fails the Job" "exited 0" || pass "a replica that does not match fails the Job"
+if run MOCK_OK=1; then fail "a replica that does not match fails the Job" "exited 0"
+else pass "a replica that does not match fails the Job"; fi
 
-run MOCK_POLICY=default MOCK_ALTER_FAIL=1 && fail "a failed ALTER fails the Job" "exited 0" || pass "a failed ALTER fails the Job"
+if run MOCK_POLICY=default MOCK_ALTER_FAIL=1; then fail "a failed ALTER fails the Job" "exited 0"
+else pass "a failed ALTER fails the Job"; fi
 
-run ANALYTICS_DB_MIGRATIONS_PASS= SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS=secret-pass MOCK_EXPECT_PASS=secret-pass \
-  && pass "a later source (the Secret) wins over the ConfigMap" || fail "a later source (the Secret) wins over the ConfigMap" "$(cat "$WORK/err")"
-run ANALYTICS_DB_MIGRATIONS_PASS= SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS= MOCK_EXPECT_PASS=cm-pass \
-  && pass "a source without the key falls back to the earlier one" || fail "a source without the key falls back to the earlier one" "$(cat "$WORK/err")"
+if run ANALYTICS_DB_MIGRATIONS_PASS='' SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS=secret-pass MOCK_EXPECT_PASS=secret-pass; then
+  pass "a later source (the Secret) wins over the ConfigMap"
+else
+  fail "a later source (the Secret) wins over the ConfigMap" "$(cat "$WORK/err")"
+fi
+if run ANALYTICS_DB_MIGRATIONS_PASS='' SRC0_ANALYTICS_DB_MIGRATIONS_PASS=cm-pass SRC1_ANALYTICS_DB_MIGRATIONS_PASS='' MOCK_EXPECT_PASS=cm-pass; then
+  pass "a source without the key falls back to the earlier one"
+else
+  fail "a source without the key falls back to the earlier one" "$(cat "$WORK/err")"
+fi
 
-run ANALYTICS_DB_MIGRATIONS_PASS= && fail "missing credential fails before any query" "exited 0" \
-  || { [ -s "$CALL_LOG" ] && fail "missing credential fails before any query" "queried anyway" || pass "missing credential fails before any query"; }
+fails_before_any_query "missing credential fails before any query" ANALYTICS_DB_MIGRATIONS_PASS=''
 
 [ "$FAILED" -eq 0 ] || { echo "$FAILED failed"; exit 1; }
 echo "all passed"

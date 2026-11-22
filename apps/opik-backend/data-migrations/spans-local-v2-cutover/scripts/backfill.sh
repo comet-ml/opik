@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Backfill driver for the spans cutover (runbook: ../README.md, step 1).
 #
@@ -363,6 +364,7 @@ require_rendered() {
         echo "       $end_line), so the block would capture to end of file and sweep every later block into it." >&2
         exit 2
     fi
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $BACKFILL_SQL rendered no executable SQL (empty, or comments only)." >&2
@@ -661,7 +663,7 @@ run_backfill() {
 #
 # Idempotent/resumable: a window already present on the destination is skipped.
 insert_window() {
-    local label="$1" lo="$2" hi="$3" src dst settled short block
+    local label="$1" lo="$2" hi="$3" src dst settled short
     src="$(count_src_uniq "$lo" "$hi")"
     dst="$(count_dst_uniq "$lo" "$hi")"
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # POST-SWAP reconciliation driver for the traces cutover (runbook: ../README.md).
 #
@@ -216,7 +217,10 @@ done
 # Digit-capped BEFORE any arithmetic sees it, for the reason exchange_and_wrap.sh's identical check spells out: a leading
 # zero reads as octal, and past 2^63 bash arithmetic wraps silently, which would make the gate's `polls` negative, run
 # its loop zero times, and pass a verdict on unset (0) counters without having read replication at all.
-[[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] && (( SETTLE_TIMEOUT <= SETTLE_TIMEOUT_MAX )) || { echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample." >&2; exit 2; }
+if ! [[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] || (( SETTLE_TIMEOUT > SETTLE_TIMEOUT_MAX )); then
+    echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample." >&2
+    exit 2
+fi
 [[ "$MAX_PASSES" =~ ^[1-9][0-9]?$ ]] || { echo "ERROR: --max-passes must be 1..99." >&2; exit 2; }
 # 0 is meaningful (ClickHouse reads it as "unlimited"). Upper-bounded at 6 digits for the same reason as in backfill.sh:
 # an out-of-range value would otherwise be rendered into the SQL and rejected by the server mid-run instead of here.
@@ -642,6 +646,7 @@ require_rendered() {
         echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         exit 2
     fi
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2

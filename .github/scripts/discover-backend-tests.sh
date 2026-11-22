@@ -40,8 +40,8 @@ done
 # then greedy-assign each to the smallest group
 declare -a group_size group_list
 for ((i=1; i<=NUM_GROUPS; i++)); do
-  group_size[$i]=0
-  group_list[$i]=""
+  group_size[i]=0
+  group_list[i]=""
 done
 
 while IFS=' ' read -r lines file; do
@@ -51,9 +51,9 @@ while IFS=' ' read -r lines file; do
       min_g=$i
     fi
   done
-  group_size[$min_g]=$(( group_size[min_g] + lines ))
+  group_size[min_g]=$(( group_size[min_g] + lines ))
   c=$(to_class "$file")
-  group_list[$min_g]="${group_list[$min_g]:+${group_list[$min_g]},}$c"
+  group_list[min_g]="${group_list[$min_g]:+${group_list[$min_g]},}$c"
 done < <(
   for f in "${integration_files[@]}"; do
     echo "$(wc -l < "$f") $f"
@@ -77,10 +77,12 @@ echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 echo "Matrix written to GITHUB_OUTPUT ($(( NUM_GROUPS + 1 )) jobs: 1 unit + $NUM_GROUPS integration)"
 
 # Summary
-echo "### Test Split Summary" >> "$GITHUB_STEP_SUMMARY"
-echo "- **Unit tests**: ${#unit_files[@]} classes" >> "$GITHUB_STEP_SUMMARY"
-echo "- **Integration tests**: ${#integration_files[@]} classes in $NUM_GROUPS groups" >> "$GITHUB_STEP_SUMMARY"
-for ((i=1; i<=NUM_GROUPS; i++)); do
-  count=$(echo "${group_list[$i]}" | tr ',' '\n' | grep -c '.' || true)
-  echo "  - Group $i: $count classes (~${group_size[$i]} lines)" >> "$GITHUB_STEP_SUMMARY"
-done
+{
+  echo "### Test Split Summary"
+  echo "- **Unit tests**: ${#unit_files[@]} classes"
+  echo "- **Integration tests**: ${#integration_files[@]} classes in $NUM_GROUPS groups"
+  for ((i=1; i<=NUM_GROUPS; i++)); do
+    count=$(echo "${group_list[$i]}" | tr ',' '\n' | grep -c '.' || true)
+    echo "  - Group $i: $count classes (~${group_size[$i]} lines)"
+  done
+} >> "$GITHUB_STEP_SUMMARY"

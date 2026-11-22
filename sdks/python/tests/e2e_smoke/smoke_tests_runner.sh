@@ -24,10 +24,7 @@ for file in $python_files; do
     echo "═════════════════════════════════════════════════════════════════"
     echo ""
     echo ">>> Executing: $file"
-    python3 "$file"
-
-    # Check execution status
-    if [ $? -eq 0 ]; then
+    if python3 "$file"; then
         echo ">>> ✔ Test passed: $file"
     else
         echo ">>> ❌ Test failed: $file"
