@@ -25,13 +25,24 @@ spec:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
       {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
-      {{- if and .Values.clickhouse.monitoring.useSecret .Values.clickhouse.monitoring.useSecret.enabled }}
-      {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
-      {{- else if .Values.clickhouse.monitoring.password }}
-      {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
+      {{- $mon := .Values.clickhouse.monitoring }}
+      {{- if and $mon.useSecret $mon.useSecret.enabled }}
+      {{ $mon.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ $mon.secretname }}/{{ $mon.password_key }}
+      {{- else if $mon.password }}
+      {{ $mon.username }}/password: {{ $mon.password }}
       {{- end }}
-      {{ .Values.clickhouse.monitoring.username }}/networks/ip:
-        - '0.0.0.0/0'
+      {{ $mon.username }}/profile: {{ $mon.username }}
+      {{- if not $mon.networks }}
+      {{- fail "clickhouse.monitoring.networks is empty; list the networks the monitoring user may log in from" }}
+      {{- end }}
+      {{ $mon.username }}/networks/ip:
+        {{- toYaml $mon.networks | nindent 8 }}
+      {{- $grants := concat ($mon.grants | default list) ($mon.additionalGrants | default list) }}
+      {{- if not $grants }}
+      {{- fail "clickhouse.monitoring.grants and additionalGrants are both empty; a users.xml user without grants holds every privilege" }}
+      {{- end }}
+      {{ $mon.username }}/grants/query:
+        {{- toYaml $grants | nindent 8 }}
       {{- end }}
       {{- range .Values.clickhouse.additionalUsers }}
       {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
@@ -52,7 +63,19 @@ spec:
     {{- if or .Values.clickhouse.additionalProfiles (and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username) }}
     profiles:
       {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
-      {{ .Values.clickhouse.monitoring.username }}/readonly: 1
+      {{- $mon := .Values.clickhouse.monitoring }}
+      {{- range $key, $value := $mon.settings }}
+      {{- if hasKey ($mon.limits | default dict) $key }}
+      {{- fail (printf "clickhouse.monitoring: %s is set in both settings and limits; keep it in limits" $key) }}
+      {{- end }}
+      {{ $mon.username }}/{{ $key }}: {{ $value }}
+      {{- end }}
+      {{- /* min 1 because 0 means unlimited; int64 stops Helm printing 2.5e+11 */}}
+      {{- range $key, $value := $mon.limits }}
+      {{ $mon.username }}/{{ $key }}: {{ $value | int64 }}
+      {{ $mon.username }}/constraints/{{ $key }}/min: 1
+      {{ $mon.username }}/constraints/{{ $key }}/max: {{ $value | int64 }}
+      {{- end }}
       {{- end }}
       {{- range .Values.clickhouse.additionalProfiles }}
       {{- $profileName := .name }}

@@ -520,24 +520,29 @@ def test_dspy__cache_enabled_and_response_cached__no_usage_and_cache_hit_true(
     opik_callback = OpikCallback(project_name="dspy-cache-test")
     dspy.settings.configure(callbacks=[opik_callback])
 
-    cot = dspy.ChainOfThought("question -> answer")
+    # Predict, not ChainOfThought: caching doesn't depend on reasoning output, and
+    # OpenAI's reasoning models intermittently reject a prompt that asks them to
+    # write out their reasoning about an odd question (invalid_prompt).
+    predict = dspy.Predict("question -> answer")
 
-    # Use a unique question to ensure we start with a non-cached response
-    unique_question = f"What is {uuid.uuid4().hex[:8]}?"
+    # An ordinary question made unique per run, so the first call is never cached
+    unique_question = (
+        f"Reply with one word: what colour is the sky? (request {uuid.uuid4().hex[:8]})"
+    )
 
     # First call - will NOT be cached (fresh question)
-    cot(question=unique_question)
+    predict(question=unique_question)
 
     # Second call with SAME question - will be cached
-    cot(question=unique_question)
+    predict(question=unique_question)
 
     opik_callback.flush()
 
     assert len(fake_backend.trace_trees) == 2
 
+    # A top-level Predict is the trace itself, so its LM call is the trace's first span
     first_trace = fake_backend.trace_trees[0]
-    first_predict_span = first_trace.spans[0]
-    first_lm_span = first_predict_span.spans[0]
+    first_lm_span = first_trace.spans[0]
 
     assert first_lm_span.name.startswith("LM:")
     assert first_lm_span.usage is not None
@@ -546,8 +551,7 @@ def test_dspy__cache_enabled_and_response_cached__no_usage_and_cache_hit_true(
 
     # Check the second trace (cached response)
     cached_trace = fake_backend.trace_trees[1]
-    cached_predict_span = cached_trace.spans[0]
-    cached_lm_span = cached_predict_span.spans[0]
+    cached_lm_span = cached_trace.spans[0]
 
     assert cached_lm_span.name.startswith("LM:")
 
