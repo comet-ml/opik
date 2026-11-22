@@ -67,13 +67,14 @@ class TraceJsonRowMapper {
             node.putNull("end_time");
         }
 
-        // Each with its *_slim column: streamed from the node when the row is written, or main's escaped strings.
+        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise main's
+        // escaped strings, with their slim copies added after visibility_mode below, where main put them.
         if (streamPayloads) {
             JsonRowValues.putJsonWithSlim(node, "input", "input_slim", trace.input());
             JsonRowValues.putJsonWithSlim(node, "output", "output_slim", trace.output());
         } else {
-            JsonRowValues.putJsonStringWithSlim(node, "input", "input_slim", trace.input());
-            JsonRowValues.putJsonStringWithSlim(node, "output", "output_slim", trace.output());
+            node.put("input", TruncationUtils.toJsonString(trace.input()));
+            node.put("output", TruncationUtils.toJsonString(trace.output()));
         }
         node.put("metadata", TruncationUtils.toJsonString(trace.metadata()));
 
@@ -92,6 +93,10 @@ class TraceJsonRowMapper {
         node.put("visibility_mode", trace.visibilityMode() != null
                 ? trace.visibilityMode().getValue()
                 : VisibilityMode.DEFAULT.getValue());
+        if (!streamPayloads) {
+            node.put("input_slim", TruncationUtils.createSlimJsonString(node.get("input").textValue()));
+            node.put("output_slim", TruncationUtils.createSlimJsonString(node.get("output").textValue()));
+        }
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {

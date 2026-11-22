@@ -132,14 +132,14 @@ databaseAnalytics:
   #   definition ('cluster') isn't visible from the node. Leave false for single-shard / non-Distributed deployments;
   #   turn true only for the Distributed (Hyperscale) topology.
   clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
-  #  Default: true
-  #  Description: How span and trace input/output are written to ClickHouse. true serializes each payload and its slim
-  #   copy in one pass from the parsed JSON, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #  Default: false
+  #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
+  #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
   #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
   #   pooled connection while its rows are serialized; see clientMaxOpenConnections). false is the previous path:
   #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
   #   connection is taken.
-  streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-true}
+  streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-false}
   #  Default: 20
   #  Description: Size of the ClickHouse v2 client's connection pool per backend instance. Every JSONEachRow bulk insert
   #   and v2 query holds one connection for its whole request, including ClickHouse's async-insert wait, so this caps how

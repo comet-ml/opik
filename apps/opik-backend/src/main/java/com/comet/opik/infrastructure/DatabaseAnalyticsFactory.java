@@ -127,8 +127,8 @@ public class DatabaseAnalyticsFactory {
     private boolean coldStorageDiskHealthCheckEnabled;
 
     /**
-     * How span and trace payloads and bulk insert bodies are written. True serializes each payload and its slim copy in
-     * one pass from the node and streams bulk insert rows into the request body; false is main's path: payloads
+     * How span and trace payloads and bulk insert bodies are written. True writes each payload and its slim copy from
+     * the node without reparsing it and streams bulk insert rows into the request body; false is main's path: payloads
      * serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered on
      * {@code boundedElastic} before the connection is taken.
      */

@@ -147,16 +147,4 @@ public class JsonRowValues {
         node.put(slimField, columns.slim());
     }
 
-    /**
-     * Writes a payload and its slim copy as escaped strings, the slim copy reparsed from the full one: the cells
-     * {@code databaseAnalytics.streamPayloads=false} writes, as before {@link #putJsonWithSlim} existed.
-     */
-    public void putJsonStringWithSlim(@NonNull ObjectNode node, String field, String slimField,
-            @Nullable JsonNode value) {
-        checkField(field);
-        checkField(slimField);
-        var json = TruncationUtils.toJsonString(value);
-        node.put(field, json);
-        node.put(slimField, TruncationUtils.createSlimJsonString(json));
-    }
 }

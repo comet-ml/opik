@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Span;
 import com.comet.opik.infrastructure.db.JsonRowValues;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.NonNull;
@@ -82,13 +83,14 @@ class SpanJsonRowMapper {
             node.putNull("end_time");
         }
 
-        // Each with its *_slim column: streamed from the node when the row is written, or main's escaped strings.
+        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise main's
+        // escaped strings, with their slim copies added after last_updated_by below, where main put them.
         if (streamPayloads) {
             JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
             JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
         } else {
-            JsonRowValues.putJsonStringWithSlim(node, "input", "input_slim", span.input());
-            JsonRowValues.putJsonStringWithSlim(node, "output", "output_slim", span.output());
+            node.put("input", TruncationUtils.toJsonString(span.input()));
+            node.put("output", TruncationUtils.toJsonString(span.output()));
         }
         // toString(), not toJsonString() -- see the class javadoc. Matches the binder.
         node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
@@ -114,6 +116,10 @@ class SpanJsonRowMapper {
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);
+        if (!streamPayloads) {
+            node.put("input_slim", TruncationUtils.createSlimJsonString(node.get("input").textValue()));
+            node.put("output_slim", TruncationUtils.createSlimJsonString(node.get("output").textValue()));
+        }
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
