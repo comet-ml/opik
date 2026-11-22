@@ -35,7 +35,7 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
     const handleDebouncedValueChange = useMemo(
       () =>
         debounce((val: InputValue) => {
-          isFunction(valueChangeCallbackRef.current) &&
+          if (isFunction(valueChangeCallbackRef.current))
             valueChangeCallbackRef.current(val);
         }, delay),
       [delay],
@@ -79,19 +79,14 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
 
         handleDebouncedValueChange.flush();
 
-        setLocalValue((state) => {
-          if (state !== pendingValueRef.current) {
-            const newValue = pendingValueRef.current;
-            pendingValueRef.current = undefined;
-            return newValue;
-          }
-
-          return state;
-        });
+        if (localValue !== pendingValueRef.current) {
+          setLocalValue(pendingValueRef.current);
+          pendingValueRef.current = undefined;
+        }
 
         onBlur?.(e);
       },
-      [handleDebouncedValueChange, onBlur],
+      [handleDebouncedValueChange, localValue, onBlur],
     );
 
     const displayValue = localValue ?? value ?? "";

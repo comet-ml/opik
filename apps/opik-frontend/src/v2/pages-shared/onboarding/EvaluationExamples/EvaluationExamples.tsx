@@ -39,7 +39,7 @@ const EvaluationExamples: React.FC = () => {
   const apiKey = useUserApiKey();
   const projectName = useActiveProjectName();
 
-  const tabContentMap: Record<TabValue, JSX.Element> = {
+  const tabContentMap: Record<TabValue, React.JSX.Element> = {
     "evaluate-prompts": (
       <IntegrationTemplate
         code={evaluatePromptsCode}

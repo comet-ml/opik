@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.otel;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
@@ -10,6 +12,7 @@ import jakarta.ws.rs.ext.Provider;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 
@@ -31,7 +34,14 @@ public class OtelProtobufMessageBodyReader<T extends Message> implements Message
             // Find the `parseFrom(InputStream)` method in the Protobuf class
             Method parseFrom = type.getMethod("parseFrom", InputStream.class);
             return (T) parseFrom.invoke(null, entityStream);
-        } catch (Exception e) {
+        } catch (InvocationTargetException e) {
+            // A body that is not valid protobuf is the client's error: answer 400 so exporters don't retry it.
+            if (e.getCause() instanceof InvalidProtocolBufferException invalid) {
+                throw new BadRequestException(
+                        "Invalid Protobuf message, error: '%s'".formatted(invalid.getMessage()), invalid);
+            }
+            throw new IOException("Failed to parse Protobuf message", e.getCause());
+        } catch (ReflectiveOperationException e) {
             throw new IOException("Failed to parse Protobuf message", e);
         }
     }

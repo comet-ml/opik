@@ -84,8 +84,10 @@ const StatCardValue = React.forwardRef<
 ));
 StatCardValue.displayName = "StatCard.Value";
 
-interface StatCardDeltaProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
+interface StatCardDeltaProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "children"
+> {
   from: React.ReactNode;
   to: React.ReactNode;
 }

@@ -33,7 +33,7 @@ type MessagesTabProps = {
   transformedOutput: object;
   media: UnifiedMediaItem[];
   isLoading: boolean;
-  scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {

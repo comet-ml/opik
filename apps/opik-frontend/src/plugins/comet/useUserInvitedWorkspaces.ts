@@ -16,7 +16,7 @@ export default function useUserInvitedWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
   return useQuery({
-    // enabled: true is needed just to overcome the eslint requirement to have parameters
+    // enabled: true is needed just to overcome the lint requirement to have parameters
     queryKey: ["user-invited-workspaces", { enabled: true }],
     queryFn: (context) => getUserInvitedWorkspaces(context),
     ...options,

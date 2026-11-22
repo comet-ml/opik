@@ -10,24 +10,28 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 export interface AddItemPanelContext {
   tags: string[];
   setHasUnsavedChanges: (v: boolean) => void;
+  requestClose: () => void;
 }
 
 interface AddItemPanelWrapperProps {
   panelId: string;
-  formId: string;
+  // Omit to let children render their own footer via `requestClose`.
+  formId?: string;
   title: string;
   open: boolean;
   onClose: () => void;
   initialWidth?: number;
+  showAddTagLabel?: boolean;
   children: (context: AddItemPanelContext) => ReactNode;
 }
 
 const AddItemPanelWrapperContent: React.FC<{
-  formId: string;
+  formId?: string;
+  showAddTagLabel?: boolean;
   onClose: () => void;
   onDirtyChange: (dirty: boolean) => void;
   children: (context: AddItemPanelContext) => ReactNode;
-}> = ({ formId, onClose, onDirtyChange, children }) => {
+}> = ({ formId, showAddTagLabel, onClose, onDirtyChange, children }) => {
   const [tags, setTags] = useState<string[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isDirty = hasUnsavedChanges || tags.length > 0;
@@ -43,43 +47,56 @@ const AddItemPanelWrapperContent: React.FC<{
     cancel,
   } = useConfirmAction();
 
+  const requestClose = () => {
+    if (isDirty) {
+      requestConfirm(onClose);
+    } else {
+      onClose();
+    }
+  };
+
+  const context: AddItemPanelContext = {
+    tags,
+    setHasUnsavedChanges,
+    requestClose,
+  };
+
   return (
     <>
       <div className="flex size-full flex-col">
-        <div className="shrink-0 border-b bg-background px-6 py-4">
-          <TagListRenderer
-            tags={tags}
-            onAddTag={(tag) => setTags((prev) => [...prev, tag])}
-            onDeleteTag={(tag) =>
-              setTags((prev) => prev.filter((t) => t !== tag))
-            }
-            size="sm"
-            align="start"
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {children({ tags, setHasUnsavedChanges })}
-        </div>
-
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (isDirty) {
-                requestConfirm(onClose);
-              } else {
-                onClose();
+        <div className="shrink-0 bg-background px-6 pt-4">
+          <div className="border-b pb-5">
+            <TagListRenderer
+              tags={tags}
+              onAddTag={(tag) => setTags((prev) => [...prev, tag])}
+              onDeleteTag={(tag) =>
+                setTags((prev) => prev.filter((t) => t !== tag))
               }
-            }}
-          >
-            Cancel
-          </Button>
-          <Button variant="default" size="sm" type="submit" form={formId}>
-            Save changes
-          </Button>
+              size="md"
+              align="start"
+              showAddLabelWhenEmpty={showAddTagLabel}
+            />
+          </div>
         </div>
+
+        {formId ? (
+          <>
+            <div className="flex-1 overflow-y-auto">{children(context)}</div>
+
+            <div className="mx-6 flex shrink-0 items-center justify-end gap-2 border-t py-4">
+              <Button variant="outline" size="sm" onClick={requestClose}>
+                Cancel
+              </Button>
+              <Button variant="default" size="sm" type="submit" form={formId}>
+                Save changes
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {children(context)}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
@@ -104,6 +121,7 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
   open,
   onClose,
   initialWidth,
+  showAddTagLabel,
   children,
 }) => {
   const [isDirty, setIsDirty] = useState(false);
@@ -127,6 +145,7 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
         <AddItemPanelWrapperContent
           formId={formId}
           onClose={onClose}
+          showAddTagLabel={showAddTagLabel}
           onDirtyChange={setIsDirty}
         >
           {children}
