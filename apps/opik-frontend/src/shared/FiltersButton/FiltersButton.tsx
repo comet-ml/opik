@@ -101,15 +101,12 @@ const FiltersButton = <TColumnData,>({
           {showAddChip ? (
             <Button
               variant="outline"
-              size="2xs"
-              className={cn(
-                "gap-1 rounded-full pl-1.5 pr-2 text-muted-slate",
-                className,
-              )}
+              size="sm"
+              className={cn("rounded-full text-muted-slate", className)}
               disabled={disabled}
             >
-              <Plus className="size-3 shrink-0" />
-              Add filter
+              <Plus className="size-3.5 shrink-0" />
+              <span className="ml-1.5">Add filter</span>
             </Button>
           ) : (
             <Button
