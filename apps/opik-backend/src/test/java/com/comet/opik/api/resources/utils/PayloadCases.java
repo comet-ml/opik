@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.slim.SlimJson;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
@@ -29,7 +29,7 @@ public class PayloadCases {
     private static final int BATCH_ENVELOPE_DEPTH = 3;
 
     public static Stream<JsonNode> payloads() {
-        int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+        int max = SlimJson.MAX_STRING_LENGTH;
         return Stream.of(
                 JsonUtils.getJsonNodeFromString("{}"),
                 JsonUtils.getJsonNodeFromString("[]"),

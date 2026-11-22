@@ -5,8 +5,8 @@ import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.OpikApplication;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TruncationUtils;
-import com.comet.opik.utils.TruncationUtilsTest.ToJsonWithSlimTests;
+import com.comet.opik.utils.slim.SlimJson;
+import com.comet.opik.utils.slim.SlimJsonTest;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadConstraints;
@@ -150,7 +150,7 @@ class JsonRowValuesTest {
     }
 
     static Stream<JsonNode> containerPayloads() {
-        int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+        int max = SlimJson.MAX_STRING_LENGTH;
         return Stream.of(
                 JsonUtils.getJsonNodeFromString("{}"),
                 JsonUtils.getJsonNodeFromString("[]"),
@@ -168,7 +168,7 @@ class JsonRowValuesTest {
 
         JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
 
-        var columns = TruncationUtils.toJsonWithSlim(payload);
+        var columns = SlimJson.toStrings(payload);
         assertThat(written(node))
                 .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(columns.json(), columns.slim()));
     }
@@ -207,7 +207,7 @@ class JsonRowValuesTest {
                 JsonUtils.getJsonNodeFromString("null"),
                 JsonUtils.getJsonNodeFromString(String.valueOf(RandomUtils.secure().randomInt())),
                 JsonUtils.getJsonNodeFromString("\"%s\"".formatted(
-                        randomText(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH + 1))));
+                        randomText(SlimJson.MAX_STRING_LENGTH + 1))));
     }
 
     @ParameterizedTest
@@ -218,7 +218,7 @@ class JsonRowValuesTest {
 
         JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
 
-        var columns = TruncationUtils.toJsonWithSlim(payload);
+        var columns = SlimJson.toStrings(payload);
         var expected = JsonUtils.createObjectNode()
                 .put("input", columns.json())
                 .put("input_slim", columns.slim());
@@ -257,7 +257,7 @@ class JsonRowValuesTest {
 
     static Stream<Arguments> payloadsWithRedaction() {
         return Stream.of(containerPayloads(), deepPayloads(), textPayloads(),
-                ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads())
+                SlimJsonTest.parsedPayloads(), SlimJsonTest.builtPayloads(), SlimJsonTest.randomPayloads())
                 .flatMap(Function.identity())
                 .flatMap(payload -> Stream.of(
                         Arguments.of(payload, false),
@@ -271,7 +271,7 @@ class JsonRowValuesTest {
         var actual = JsonUtils.createObjectNode();
         JsonRowValues.putJsonWithSlim(actual, "input", "input_slim", payload);
 
-        var columns = TruncationUtils.toJsonWithSlim(payload);
+        var columns = SlimJson.toStrings(payload);
         var expected = JsonUtils.createObjectNode()
                 .put("input", columns.json())
                 .put("input_slim", columns.slim());
@@ -279,4 +279,5 @@ class JsonRowValuesTest {
         assertThat(storedCells(written(actual, applicationMapper(redactionEnabled))))
                 .isEqualTo(storedCells(written(expected)));
     }
+
 }
