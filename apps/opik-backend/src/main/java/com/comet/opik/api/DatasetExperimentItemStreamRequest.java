@@ -28,8 +28,8 @@ public record DatasetExperimentItemStreamRequest(
         @Schema(description = "Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist") @Size(min = 1, max = MAX_DATASET_VERSIONS) Set<@NotBlank String> datasetVersions,
         @Schema(description = "JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference") String filters,
         @Schema(description = "Maximum number of experiment items to return", defaultValue = "2000") @Min(1) @Max(2000) Integer limit,
-        @Schema(description = "experiment_id of the last experiment item received. Set together with last_retrieved_id") UUID lastRetrievedExperimentId,
-        @Schema(description = "id of the last experiment item received. Set together with last_retrieved_experiment_id") UUID lastRetrievedId,
+        @Schema(description = "Optional hint: experiment_id of the last experiment item received. Used only if that item was deleted, to resume from the start of its experiment instead of from the start of the stream. Requires last_retrieved_id") UUID lastRetrievedExperimentId,
+        @Schema(description = "id of the last experiment item received") UUID lastRetrievedId,
         @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") Boolean truncate) {
 
     public static final int MAX_DATASET_VERSIONS = 20;
@@ -52,7 +52,7 @@ public record DatasetExperimentItemStreamRequest(
     }
 
     @JsonIgnore
-    @AssertTrue(message = "last_retrieved_experiment_id and last_retrieved_id must be set together") public boolean isCursorComplete() {
-        return (lastRetrievedExperimentId == null) == (lastRetrievedId == null);
+    @AssertTrue(message = "last_retrieved_experiment_id requires last_retrieved_id") public boolean isCursorComplete() {
+        return lastRetrievedExperimentId == null || lastRetrievedId != null;
     }
 }
