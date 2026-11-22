@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
@@ -45,11 +46,15 @@ vi.mock("@/api/datasets/useExperimentsList", () => ({
   default: (...args: unknown[]) => mockUseExperimentsList(...args),
 }));
 
-const renderPanel = (experiments: Experiment[], canCreateExperiments = true) =>
+const renderPanel = (
+  experiments: Experiment[],
+  canCreateExperiments = true,
+  props: Partial<React.ComponentProps<typeof ExperimentsActionsPanel>> = {},
+) =>
   render(
     <PermissionsTestProvider permissions={{ canCreateExperiments }}>
       <TooltipProvider>
-        <ExperimentsActionsPanel experiments={experiments} />
+        <ExperimentsActionsPanel experiments={experiments} {...props} />
       </TooltipProvider>
     </PermissionsTestProvider>,
   );
@@ -124,6 +129,56 @@ describe("ExperimentsActionsPanel Compare button", () => {
         search: { experiments: ["exp-1", "exp-2", "exp-3"] },
       }),
     );
+  });
+});
+
+describe("ExperimentsActionsPanel mixed item sources", () => {
+  it("disables Compare when the selection mixes item sources", () => {
+    renderPanel([
+      buildExperiment("exp-1", "dataset-1"),
+      buildExperiment("exp-2", "dataset-2"),
+    ]);
+
+    expect(getCompareButton()).toBeDisabled();
+  });
+
+  it("explains why Compare is disabled in its tooltip", async () => {
+    renderPanel([
+      buildExperiment("exp-1", "dataset-1"),
+      buildExperiment("exp-2", "dataset-2"),
+    ]);
+
+    fireEvent.focus(getCompareButton().parentElement!);
+
+    expect(
+      await screen.findAllByText(
+        "Select experiments from the same test suite to compare them",
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("keeps tag and delete enabled for a mixed selection", () => {
+    renderPanel([
+      buildExperiment("exp-1", "dataset-1"),
+      buildExperiment("exp-2", "dataset-2"),
+    ]);
+
+    expect(screen.getByRole("button", { name: "Manage tags" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+  });
+});
+
+describe("ExperimentsActionsPanel selection bar variant", () => {
+  it("labels the Manage tags button and hides the compare explainer", () => {
+    renderPanel([buildExperiment("exp-1")], true, {
+      buttonVariant: "ghostInverted",
+      buttonSize: "2xs",
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Manage tags" }),
+    ).toHaveTextContent("Manage tags");
+    expect(getCompareButton()).toBeEnabled();
   });
 });
 
