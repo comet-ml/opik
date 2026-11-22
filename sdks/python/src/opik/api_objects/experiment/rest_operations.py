@@ -1,7 +1,7 @@
 import json
 import math
 from concurrent import futures
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
@@ -159,17 +159,13 @@ def stream_experiment_items_for_dataset(
     if max_results <= 0:
         return []
 
-    def read_page(
-        batch_size: int, cursor: Optional[Tuple[str, str]]
-    ) -> Iterable[bytes]:
-        last_experiment_id, last_id = cursor if cursor is not None else (None, None)
+    def read_page(batch_size: int, last_retrieved_id: Optional[str]) -> Iterable[bytes]:
         return rest_client.datasets.stream_dataset_experiment_items(
             dataset_id=dataset_id,
             dataset_versions=dataset_versions,
             filters=filter_expression,
             limit=batch_size,
-            last_retrieved_experiment_id=last_experiment_id,
-            last_retrieved_id=last_id,
+            last_retrieved_id=last_retrieved_id,
             truncate=truncate,
         )
 
@@ -178,7 +174,6 @@ def stream_experiment_items_for_dataset(
             read_source=read_page,
             parsed_item_class=dict,
             max_results=max_results,
-            cursor_from_record=_experiment_item_cursor,
         )
     except ApiError as e:
         # A 404 is also what a dataset deleted since it was resolved returns, so
@@ -213,15 +208,6 @@ def _error_message(body: Any) -> str:
     if isinstance(errors, list) and errors and isinstance(errors[0], str):
         return errors[0]
     return ""
-
-
-def _experiment_item_cursor(record: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-    # The stream pages on (experiment_id, id); the backend resolves the stored
-    # dataset_item_id from that row itself.
-    experiment_id, item_id = record.get("experiment_id"), record.get("id")
-    if experiment_id is None or item_id is None:
-        return None
-    return (experiment_id, item_id)
 
 
 def http_client(rest_client: rest_api.OpikApi) -> Any:

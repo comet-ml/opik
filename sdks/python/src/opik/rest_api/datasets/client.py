@@ -1316,10 +1316,10 @@ class DatasetsClient:
             Maximum number of experiment items to return
 
         last_retrieved_experiment_id : typing.Optional[str]
-            experiment_id of the last experiment item received. Set together with last_retrieved_id
+            Optional hint: experiment_id of the last experiment item received. Used only if that item was deleted, to resume from the start of its experiment instead of from the start of the stream. Requires last_retrieved_id
 
         last_retrieved_id : typing.Optional[str]
-            id of the last experiment item received. Set together with last_retrieved_experiment_id
+            id of the last experiment item received
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
@@ -3028,10 +3028,10 @@ class AsyncDatasetsClient:
             Maximum number of experiment items to return
 
         last_retrieved_experiment_id : typing.Optional[str]
-            experiment_id of the last experiment item received. Set together with last_retrieved_id
+            Optional hint: experiment_id of the last experiment item received. Used only if that item was deleted, to resume from the start of its experiment instead of from the start of the stream. Requires last_retrieved_id
 
         last_retrieved_id : typing.Optional[str]
-            id of the last experiment item received. Set together with last_retrieved_experiment_id
+            id of the last experiment item received
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata

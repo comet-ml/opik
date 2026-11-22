@@ -1,16 +1,6 @@
 import json
 import logging
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-)
+from typing import Callable, Dict, Iterable, Type, List, Optional, Tuple, TypeVar
 
 import httpx
 
@@ -44,31 +34,20 @@ _SIZE_CORRELATED_ERRORS: Tuple[Type[Exception], ...] = (
 T = TypeVar("T")
 
 
-def _record_id(record: Dict[str, Any]) -> Any:
-    return record.get("id")
-
-
 def read_and_parse_full_stream(
-    read_source: Callable[[int, Any], Iterable[bytes]],
+    read_source: Callable[[int, Optional[str]], Iterable[bytes]],
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
     strict: bool = False,
-    cursor_from_record: Callable[[Dict[str, Any]], Any] = _record_id,
 ) -> List[T]:
     """
     Args:
-        read_source: Called with the page size and the cursor, which is None on
-            the first request and otherwise whatever ``cursor_from_record``
-            returned for the last record of the previous page.
         strict: When True, a page that drops any record raises instead of
             returning a short result. Callers that turn a short read into
             deletions (the migrate paths) must fail loudly rather than replay
             missing records as deletions; search paths, where the caller can see
             the warning, keep the default.
-        cursor_from_record: Extracts the cursor from a decoded record. Most
-            streams page on ``id`` alone; a stream whose cursor spans several
-            fields returns them together, e.g. as a tuple.
     """
     result: List[T] = []
     # Per-page page size, adaptively halved on size-correlated failures and
@@ -76,11 +55,10 @@ def read_and_parse_full_stream(
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
     dropped_records_total = 0
-    # The backend pages from the last record it was told about, so the cursor
-    # has to come from the last record the backend *sent*, not the last one that
-    # parsed: a page that ends with unreadable records would otherwise be served
-    # again.
-    cursor: Any = None
+    # The backend pages with `id < :last_received_id`, so the cursor has to be
+    # the last id the backend *sent*, not the last one that parsed: a page that
+    # ends with unreadable records would otherwise be served again.
+    cursor: Optional[str] = None
     while True:
         if max_results is None:
             current_batch_size = batch_size
@@ -92,16 +70,16 @@ def read_and_parse_full_stream(
             # no more data to request
             break
 
+        last_retrieved_id = cursor
         dropped_records: Dict[str, int] = {"count": 0}
-        page_last_id: Dict[str, Any] = {"id": None}
+        page_last_id: Dict[str, Optional[str]] = {"id": None}
         try:
-            results_stream = read_source(current_batch_size, cursor)
+            results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
                 stream=results_stream,
                 item_class=parsed_item_class,
                 dropped_records_out=dropped_records,
                 last_id_out=page_last_id,
-                cursor_from_record=cursor_from_record,
             )
         except _SIZE_CORRELATED_ERRORS as exc:
             if batch_size <= MIN_ENDPOINT_BATCH_SIZE:
@@ -122,13 +100,14 @@ def read_and_parse_full_stream(
         if page_last_id["id"] is not None:
             cursor = page_last_id["id"]
         elif parsed_items:
-            # No raw line on this page reported a cursor; fall back to this page's
-            # last parsed record. Never to an earlier page's: that would move the
-            # cursor backwards and re-serve the same pages forever. A page with
-            # neither leaves the cursor where it was, which ends the read below.
+            # No line on this page decoded to an object with an id; fall back to
+            # this page's last parsed record so the read still advances. Never to
+            # an earlier page's: that would move the cursor backwards and re-serve
+            # the same pages forever. A page with neither leaves the cursor where
+            # it was, which ends the read below.
             last_item = parsed_items[-1]
-            cursor = cursor_from_record(
-                last_item if isinstance(last_item, dict) else vars(last_item)
+            cursor = (
+                last_item.get("id") if isinstance(last_item, dict) else last_item.id  # type: ignore[attr-defined]
             )
 
         # Records the backend sent but that failed to parse were still part of
@@ -194,8 +173,7 @@ def read_and_parse_stream(
     item_class: Type[T],
     nb_samples: Optional[int] = None,
     dropped_records_out: Optional[Dict[str, int]] = None,
-    last_id_out: Optional[Dict[str, Any]] = None,
-    cursor_from_record: Callable[[Dict[str, Any]], Any] = _record_id,
+    last_id_out: Optional[Dict[str, Optional[str]]] = None,
 ) -> List[T]:
     """Parse an NDJSON stream into ``item_class`` instances.
 
@@ -203,15 +181,14 @@ def read_and_parse_stream(
     ``dropped_records_out`` is given, its ``"count"`` key is set to how many
     were skipped, which is what a paginating caller needs to tell a short page
     (end of data) apart from a full page with unreadable records. When
-    ``last_id_out`` is given, its ``"id"`` key is set to the cursor
-    (``cursor_from_record``, the record's ``id`` by default) of the last
+    ``last_id_out`` is given, its ``"id"`` key is set to the ``id`` of the last
     line that decoded to an object, even if that record failed validation: a
     paginating caller needs the backend's own position, not the last record it
     managed to use.
     """
     result: List[T] = []
     dropped_records = 0
-    last_id: Any = None
+    last_id: Optional[str] = None
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -222,11 +199,7 @@ def read_and_parse_stream(
 
         # last record in chunk may be incomplete
         for line in lines[:-1]:
-            item, raw_id = _parse_stream_line(
-                line=line,
-                item_class=item_class,
-                cursor_from_record=cursor_from_record,
-            )
+            item, raw_id = _parse_stream_line(line=line, item_class=item_class)
             if raw_id is not None:
                 last_id = raw_id
             if item is None:
@@ -244,11 +217,7 @@ def read_and_parse_stream(
 
     # Process any remaining data in the buffer after the stream ends
     if buffer:
-        item, raw_id = _parse_stream_line(
-            line=buffer,
-            item_class=item_class,
-            cursor_from_record=cursor_from_record,
-        )
+        item, raw_id = _parse_stream_line(line=buffer, item_class=item_class)
         if raw_id is not None:
             last_id = raw_id
         if item is None:
@@ -270,8 +239,8 @@ def _report_dropped_records(
 
 
 def _report_last_id(
-    last_id_out: Optional[Dict[str, Any]],
-    last_id: Any,
+    last_id_out: Optional[Dict[str, Optional[str]]],
+    last_id: Optional[str],
 ) -> None:
     if last_id_out is not None:
         last_id_out["id"] = last_id
@@ -280,19 +249,18 @@ def _report_last_id(
 def _parse_stream_line(
     line: bytes,
     item_class: Type[T],
-    cursor_from_record: Callable[[Dict[str, Any]], Any],
-) -> Tuple[Optional[T], Any]:
+) -> Tuple[Optional[T], Optional[str]]:
     """Parse one NDJSON line.
 
     Returns the parsed item (or None when the record is unusable) together with
-    the cursor the record carried, which is reported even when validation of the
+    the ``id`` the record carried, which is reported even when validation of the
     rest of the record failed.
     """
-    raw_id: Any = None
+    raw_id: Optional[str] = None
     try:
         item_dict = json.loads(line.decode("utf-8"))
         if isinstance(item_dict, dict):
-            raw_id = cursor_from_record(item_dict)
+            raw_id = item_dict.get("id")
         item_obj = item_class(**item_dict)
         return item_obj, raw_id
 

@@ -32,23 +32,23 @@ def _row(experiment_id: str, row_id: str, dataset_item_id: str) -> Dict[str, Any
 
 
 class _StreamEndpoint:
-    """Serves rows like the backend: (experiment_id, id) descending, below the cursor."""
+    """Serves rows like the backend: (experiment_id, dataset_item_id, id)
+    descending, after the row whose id is the cursor."""
 
     def __init__(self, rows: List[Dict[str, Any]]) -> None:
         self._rows = sorted(
-            rows, key=lambda row: (row["experiment_id"], row["id"]), reverse=True
+            rows,
+            key=lambda row: (row["experiment_id"], row["dataset_item_id"], row["id"]),
+            reverse=True,
         )
         self.calls: List[Dict[str, Any]] = []
 
     def __call__(self, **kwargs: Any) -> List[bytes]:
         self.calls.append(kwargs)
         rows = self._rows
-        if kwargs["last_retrieved_experiment_id"] is not None:
-            cursor = (
-                kwargs["last_retrieved_experiment_id"],
-                kwargs["last_retrieved_id"],
-            )
-            rows = [row for row in rows if (row["experiment_id"], row["id"]) < cursor]
+        if kwargs["last_retrieved_id"] is not None:
+            position = [row["id"] for row in rows].index(kwargs["last_retrieved_id"])
+            rows = rows[position + 1 :]
         return [
             json.dumps(row).encode("utf-8") + b"\n" for row in rows[: kwargs["limit"]]
         ]
@@ -98,10 +98,8 @@ def test_find_experiment_items_for_dataset__no_experiment_ids__reads_every_row_f
         ("item-2", "exp-b"),
         ("item-2", "exp-a"),
     ]
-    assert [
-        (call["last_retrieved_experiment_id"], call["last_retrieved_id"])
-        for call in stream.calls
-    ] == [(None, None), ("exp-b", "r4"), ("exp-a", "r2")]
+    assert [call["last_retrieved_id"] for call in stream.calls] == [None, "r4", "r1"]
+    assert all("last_retrieved_experiment_id" not in call for call in stream.calls)
     assert all(call["dataset_id"] == DATASET_ID for call in stream.calls)
 
 
@@ -237,6 +235,19 @@ def test_find_experiment_items_for_dataset__error_line_in_the_stream__raises_api
             json.dumps(_row("exp-a", "r1", "item-1")).encode("utf-8") + b"\n",
             json.dumps(error_line).encode("utf-8") + b"\n",
         ]
+
+    with pytest.raises(ApiError) as exc_info:
+        _find(_client(stream))
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.body == error_line
+
+
+def test_find_experiment_items_for_dataset__error_line_alone_on_a_page__raises_api_error():
+    error_line = {"code": 500, "message": "Streaming operation timed out"}
+
+    def stream(**kwargs: Any) -> List[bytes]:
+        return [json.dumps(error_line).encode("utf-8") + b"\n"]
 
     with pytest.raises(ApiError) as exc_info:
         _find(_client(stream))
