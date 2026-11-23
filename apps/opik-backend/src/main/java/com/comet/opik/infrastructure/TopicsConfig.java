@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -139,6 +140,7 @@ public class TopicsConfig {
     private VectorsConfig vectors;
 
     /** The last parse of {@link #enabledWorkspaces}, with the string it was parsed from. */
+    @Builder(toBuilder = true)
     private record ParsedWorkspaces(String raw, Map<String, TopicsStage> stages) {
     }
 
@@ -159,7 +161,7 @@ public class TopicsConfig {
         var raw = enabledWorkspaces;
         var parsed = parsedWorkspaces;
         if (parsed == null || !Objects.equals(parsed.raw(), raw)) {
-            parsed = new ParsedWorkspaces(raw, parse(raw));
+            parsed = ParsedWorkspaces.builder().raw(raw).stages(parse(raw)).build();
             parsedWorkspaces = parsed;
         }
         return parsed.stages();
@@ -182,7 +184,7 @@ public class TopicsConfig {
                             "topics.enabledWorkspaces: unknown stage in '%s'".formatted(entry)));
             if (stages.putIfAbsent(workspaceId, stage) != null) {
                 throw new IllegalArgumentException(
-                        "topics.enabledWorkspaces: workspace '%s' is listed more than once".formatted(workspaceId));
+                        "topics.enabledWorkspaces: listed more than once, workspace '%s'".formatted(workspaceId));
             }
         }
         return Map.copyOf(stages);
