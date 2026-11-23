@@ -82,21 +82,25 @@ public class TopicsRebuildService {
      * The stats a run logs and returns, built here from what each phase returns, and its seconds per phase. Only the
      * run's own flow writes it.
      */
-    record RunStats(ObjectNode stats, ObjectNode seconds) {
+    @Builder(toBuilder = true)
+    record RunStats(@NonNull ObjectNode stats, @NonNull ObjectNode seconds) {
 
         static RunStats of(TopicRun run) {
             var stats = JsonUtils.createObjectNode();
             stats.put("window_from", run.from().toString());
             stats.put("window_until", run.to().toString());
-            return new RunStats(stats, JsonUtils.createObjectNode());
+            return RunStats.builder().stats(stats).seconds(JsonUtils.createObjectNode()).build();
         }
 
         void add(ObjectNode phaseStats) {
             stats.setAll(phaseStats);
         }
 
-        /** Adds a call's counts to the run's: a nightly update makes several calls. */
-        void sum(ObjectNode call) {
+        /**
+         * Adds a call's stats to the run's, as a nightly update makes several calls: numbers add up, and any other
+         * field takes the last call's value.
+         */
+        void addCall(ObjectNode call) {
             call.properties().forEach(field -> {
                 if (field.getValue().isNumber()) {
                     stats.put(field.getKey(), stats.path(field.getKey()).asLong(0) + field.getValue().asLong());
@@ -385,7 +389,7 @@ public class TopicsRebuildService {
             case NightStep.Done<TopicUpdate> done -> Mono.just(done.result());
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, stats, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .doOnNext(answer -> stats.sum(answer.stats()))
+                        .doOnNext(answer -> stats.addCall(answer.stats()))
                         .flatMap(answer -> cpu(() -> ask.next().apply(answer.value())))
                         .flatMap(next -> night(run, stats, next));
         };
