@@ -172,8 +172,13 @@ export class ProjectsPage {
       const response = await posted;
       let message: string | null = null;
       try {
-        const body = (await response.json()) as { message?: unknown } | null;
-        if (typeof body?.message === 'string') message = body.message;
+        // A 4xx from the resource carries `message`; a bean-validation 422 carries `errors`.
+        const body = (await response.json()) as { message?: unknown; errors?: unknown } | null;
+        if (typeof body?.message === 'string') {
+          message = body.message;
+        } else if (Array.isArray(body?.errors) && body.errors.length > 0) {
+          message = body.errors.join('\n');
+        }
       } catch {
         // A 201 answers with an empty body and a Location header; only a
         // failure carries a message, and the caller asserts the status.

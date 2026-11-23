@@ -72,7 +72,7 @@ export const sliceColumnWindowHeaders = <
   }
 
   const leafSlots = headers.flatMap((header) =>
-    new Array<THeader>(Math.max(header.colSpan, 1)).fill(header),
+    Array.from({ length: Math.max(header.colSpan, 1) }, () => header),
   );
 
   const segments = new Map<THeader, number>();

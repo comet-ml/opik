@@ -180,9 +180,7 @@ export const EditableCompareExperimentsFeedbackScoreCell: React.FC<
   );
 };
 
-export const resolveCompareExperimentsFeedbackScoreCell = (
-  scoreName: string,
-) =>
+export const resolveCompareExperimentsFeedbackScoreCell = (scoreName: string) =>
   scoreName === USER_FEEDBACK_NAME
     ? EditableCompareExperimentsFeedbackScoreCell
     : CompareExperimentsFeedbackScoreCell;

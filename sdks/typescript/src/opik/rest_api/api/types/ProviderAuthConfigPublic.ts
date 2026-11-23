@@ -8,11 +8,11 @@ import type * as OpikApi from "../index.js";
 export interface ProviderAuthConfigPublic {
     /** Auth service URL the credentials are sent to */
     tokenUrl?: string;
-    /** How credentials are sent: form body (default), JSON body, or basic auth (id/secret in an HTTP Basic header, remaining fields in the form body) */
+    /** How credentials are sent: form body (default), JSON body, or basic auth (client_id/client_secret, or username/password, in an HTTP Basic header; remaining fields in the form body) */
     sendAs?: OpikApi.ProviderAuthConfigPublicSendAs;
     /** Fields sent to the token URL. Values flagged as secret are write-only: they read back as the '__SECRET__' sentinel */
     credentials?: OpikApi.CredentialPublic[];
-    /** Field holding the token in the reply; dot-path for nested replies */
+    /** Field holding the token in the reply; dot-path for nested replies. A reply that is the bare token itself (plain text or a JSON string) is used as-is and needs fallback_ttl_seconds */
     tokenField?: string;
     /** Field holding the token lifetime in seconds in the reply; dot-path for nested replies */
     expiresField?: string;

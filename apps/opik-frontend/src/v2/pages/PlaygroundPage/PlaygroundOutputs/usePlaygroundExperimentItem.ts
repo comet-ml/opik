@@ -151,11 +151,10 @@ export default function usePlaygroundExperimentItem(
         wasReadAfterFinish(query.state.dataUpdatedAt) ? Infinity : 0,
       refetchInterval: (query) => {
         const rows = query.state.data?.content ?? [];
-        const hasItem = rows.some(
-          (row) =>
-            row.experiment_items?.some(
-              (ei) => ei.dataset_item_id === datasetItemId,
-            ),
+        const hasItem = rows.some((row) =>
+          row.experiment_items?.some(
+            (ei) => ei.dataset_item_id === datasetItemId,
+          ),
         );
         // Rows read before that cannot show the items written just before it, so concluding from
         // them calls a row unrun and then contradicts itself. One more read settles it.

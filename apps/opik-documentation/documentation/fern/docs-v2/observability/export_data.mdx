@@ -13,6 +13,8 @@ Opik gives you several ways to export the data you've logged — pick the one th
 
 The Python and TypeScript SDKs let you search and export traces, spans, and threads programmatically.
 
+The SDK search methods return the data to your code. They do not write files. To save the data, write the result to a file yourself. To move data to another Opik deployment, use the [command-line tools](#command-line-tools) instead. See [Move to Opik Cloud](/self-host/migrate-to-cloud) for a full walkthrough.
+
 ### Traces
 
 <Tabs>
@@ -187,6 +189,12 @@ opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 `ITEM` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
+
+The CLI writes the files to `./opik_exports/` by default. Use `--path` to set a different folder.
+
+<Note>
+  On a self-hosted deployment, the workspace name is `default`. The Opik UI shows this workspace as **Personal**, but the CLI needs the real name: `opik export default my-project all`.
+</Note>
 
 ```bash wordWrap
 # Export everything in a project

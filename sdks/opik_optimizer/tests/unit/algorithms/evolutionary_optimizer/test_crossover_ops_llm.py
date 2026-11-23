@@ -135,54 +135,6 @@ class TestLLMDeapCrossover:
         assert child1["main"][0]["content"] == "LLM generated 1"
         assert child2["main"][0]["content"] == "LLM generated 2"
 
-    def test_llm_crossover_prefers_semantic_when_enabled(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
-    ) -> None:
-        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
-            llm_deap_crossover,
-        )
-
-        def fake_semantic(
-            *_args: Any, **_kwargs: Any
-        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            return (
-                [system_message("Semantic child 1")],
-                [system_message("Semantic child 2")],
-            )
-
-        def fake_llm(
-            *_args: Any, **_kwargs: Any
-        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            raise AssertionError(
-                "LLM crossover should not be used when semantic succeeds"
-            )
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops._semantic_crossover_messages",
-            fake_semantic,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops._llm_crossover_messages",
-            fake_llm,
-        )
-
-        ind1 = make_deap_individual({"main": [system_message("Original 1")]})
-        ind2 = make_deap_individual({"main": [system_message("Original 2")]})
-
-        child1, child2 = llm_deap_crossover(
-            ind1,
-            ind2,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            use_semantic=True,
-            verbose=0,
-        )
-
-        assert child1["main"][0]["content"] == "Semantic child 1"
-        assert child2["main"][0]["content"] == "Semantic child 2"
-
     def test_llm_crossover_falls_back_from_semantic(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:

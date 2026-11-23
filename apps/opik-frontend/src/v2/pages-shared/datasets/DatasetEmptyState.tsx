@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { Button } from "@/ui/button";
 import { CreateDatasetMode } from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
-import { CREATE_ENTITY_OPTIONS } from "@/v2/pages-shared/datasets/CreateEntityMenu";
+import { useCreateEntityOptions } from "@/v2/pages-shared/datasets/CreateEntityMenu";
 
 type DatasetEmptyStateProps = {
   title: string;
@@ -27,6 +27,7 @@ const DatasetEmptyState: React.FC<DatasetEmptyStateProps> = ({
   onSelect,
 }) => {
   const { themeMode } = useTheme();
+  const createOptions = useCreateEntityOptions();
   const imageUrl = themeMode === THEME_MODE.DARK ? darkImageUrl : lightImageUrl;
 
   return (
@@ -40,7 +41,7 @@ const DatasetEmptyState: React.FC<DatasetEmptyStateProps> = ({
         </div>
         {canCreate && (
           <div className="flex flex-col gap-3">
-            {CREATE_ENTITY_OPTIONS.map(
+            {createOptions.map(
               ({
                 mode,
                 Icon,

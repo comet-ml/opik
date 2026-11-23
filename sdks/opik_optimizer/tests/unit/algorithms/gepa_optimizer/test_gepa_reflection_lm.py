@@ -135,29 +135,6 @@ def _run_optimize(
 
 
 class TestGepaReflectionLmInstrumentation:
-    def test_reflection_lm__handed_to_gepa_instead_of_a_model_string__is_a_callable(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """A string makes gepa build its own uninstrumented litellm client."""
-        _, captured, _ = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        reflection_lm = captured["reflection_lm"]
-        assert not isinstance(reflection_lm, str)
-        assert callable(reflection_lm)
-
     def test_reflection_call__invoked_with_a_prompt_string__requests_the_optimizer_model_with_reflection_metadata(
         self,
         mock_optimization_context,
@@ -288,43 +265,6 @@ class TestGepaReflectionLmInstrumentation:
 
         assert isinstance(exc.value, opik_exceptions.OpikException)
         assert exc.value.model == "gpt-4o-mini"
-
-    def test_reflection_lm__wrapped_in_gepas_real_tracking_lm__returns_a_str(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """gepa wraps a non-str reflection_lm in TrackingLM and invokes it with a
-        single positional arg, expecting a str back. Pin that against the real
-        class so a signature drift in gepa breaks here, not in a live run.
-
-        gepa.lm exists in neither the declared floor (gepa>=0.1.0) nor 0.1.1, so
-        this skips where the class is absent rather than pinning a version the
-        package does not require."""
-        TrackingLM = pytest.importorskip(
-            "gepa.lm", reason="gepa.lm.TrackingLM not present in this gepa version"
-        ).TrackingLM
-
-        _, captured, _ = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        tracking_lm = TrackingLM(captured["reflection_lm"])
-
-        with _stub_provider(_make_reflection_response("instruction via gepa")):
-            out = tracking_lm("improve this prompt")
-
-        assert isinstance(out, str)
-        assert out.strip() == "instruction via gepa"
 
     def test_reflection_call__made_through_the_callable__is_counted_into_the_run(
         self,

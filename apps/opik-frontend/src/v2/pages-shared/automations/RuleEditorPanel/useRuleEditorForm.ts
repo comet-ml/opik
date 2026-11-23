@@ -345,7 +345,7 @@ const useRuleEditorForm = ({
     (template: LLMPromptTemplate, label: string) => {
       const current = form.getValues("llmJudgeDetails");
       const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
-      const mainScoreName = isEdit ? current.schema[0]?.name ?? "" : "";
+      const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
       form.setValue(
         "llmJudgeDetails",
         {

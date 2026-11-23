@@ -389,7 +389,6 @@ class ExperimentTracesWeekBoundTest {
     }
 
     private Stream<Arguments> everyReadPrunes() {
-        // Read at call time rather than captured: @MethodSource runs before @BeforeAll has wired the clients.
         Runnable projectScopedList = () -> experimentResourceClient.getProjectExperiments(fixture.projectId(), 1, 10,
                 null, null, null, false, null, null, false, API_KEY, WORKSPACE_NAME, SC_OK);
         Runnable compare = () -> compare(fixture.datasetId(), fixture.experimentId(), null);
