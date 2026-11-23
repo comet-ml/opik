@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -78,7 +79,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProjectNight(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
-            @QueryParam("night") String night) {
+            @QueryParam("night") @Schema(description = "The night, yyyy-MM-dd (UTC). Default today's date in UTC; at most tomorrow, at least 365 days ago") String night) {
         if (!config.isEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
