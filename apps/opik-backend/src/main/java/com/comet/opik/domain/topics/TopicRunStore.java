@@ -253,10 +253,19 @@ class TopicRunStore {
                 .flatMap(saved -> keepIfProjectExists(run));
     }
 
+    /** Whether the project is still in {@code projects}. */
+    Mono<Boolean> projectExists(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return jdbi(() -> exists(workspaceId, projectId));
+    }
+
+    private boolean exists(String workspaceId, UUID projectId) {
+        return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
+    }
+
     /** False, after deleting the run's topics, when the project was deleted during the run. */
     private Mono<Boolean> keepIfProjectExists(TopicRun run) {
         return jdbi(() -> {
-            boolean exists = !projectService.findByIds(run.workspaceId(), Set.of(run.projectId())).isEmpty();
+            boolean exists = exists(run.workspaceId(), run.projectId());
             if (!exists) {
                 int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                         .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
