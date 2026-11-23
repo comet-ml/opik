@@ -48,11 +48,13 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
- * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a
- * {@code Set*} node (top-level, subquery, CTE, UNION arm or {@code FORMAT ... SETTINGS}) the query is rejected before
- * execution, and an unparseable query is rejected too — execution never runs on a validation failure. The
- * workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row policies, never
- * concatenated into the SQL.
+ * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
+ * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, tables in the {@code system} and
+ * {@code information_schema} catalogs, and listed environment or identity functions before execution. A bare
+ * identifier with the name of a listed function may instead be a column or alias; {@code EXPLAIN QUERY TREE} resolves
+ * it, and the service rejects it only if ClickHouse resolves it as a function. Execution never runs on a validation
+ * failure. The workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row
+ * policies, never concatenated into the SQL.
  *
  * <p>On top of the row policies, a post-run check verifies from the query's {@code system.query_log} entries and its
  * plan that every table it read was read under a row policy ({@link FreeFormSqlPolicyCheck}). A scalar subquery
