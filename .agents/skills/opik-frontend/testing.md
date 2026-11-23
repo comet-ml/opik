@@ -2,14 +2,16 @@
 
 ## When to Write Tests
 
-### ALWAYS Test:
+### ALWAYS Test
+
 - Utility functions with multiple scenarios
 - Data processing logic with edge cases
 - Parsing/transformation functions
 - Filter/search logic
 - Business logic with multiple branches
 
-### DON'T Test:
+### DON'T Test
+
 - Simple UI components without logic
 - Third-party library integrations
 - Trivial getters/setters

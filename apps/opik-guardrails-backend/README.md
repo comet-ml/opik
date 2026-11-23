@@ -54,7 +54,7 @@ docker build -f Dockerfile.cpu -t opik-guardrails-backend:cpu .
 docker run -p 5000:5000 opik-guardrails-backend:cpu
 ```
 
-The server will be available at http://localhost:5000
+The server will be available at <http://localhost:5000>
 
 ### Device selection
 
@@ -97,6 +97,7 @@ curl -X POST http://localhost:5000/api/v1/guardrails/validations \
 ```
 
 Parameters:
+
 - `text`: The text to validate (required)
 - `validations`: Array of validation instructions (required)
   - Each validation requires:
@@ -109,11 +110,12 @@ Parameters:
           - `restrict`: Validation passes if NONE of the topics match (used for content filtering)
           - `allow`: Validation passes if at least one of the topics matches (used for content classification)
       - For `PII` type: A PIIValidationConfig object with parameters:
-        - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Default entities include: "IP_ADDRESS", "PHONE_NUMBER", "PERSON", "MEDICAL_LICENSE", "URL", "EMAIL_ADDRESS", "IBAN_CODE". Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
+        - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Default entities include: "IP_ADDRESS", "PHONE_NUMBER", "PERSON", "MEDICAL_LICENSE", "URL", "EMAIL_ADDRESS", "IBAN_CODE". Supported entities can be found here: <https://microsoft.github.io/presidio/supported_entities/>
         - `language`: Language of the text (default: "en")
         - `threshold`: Confidence threshold for PII detection (default: 0.5)
 
 Example response:
+
 ```json
 {
   "validation_passed": false,

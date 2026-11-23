@@ -32,12 +32,14 @@ Comprehensive architecture documentation for contributors and team members. Thes
 ## 🔄 Maintenance
 
 **Update documentation when**:
+
 - Major architectural changes
 - New patterns introduced
 - New integrations added
 - Performance optimizations
 
 **Quality standards**:
+
 - Accurate (reflects codebase)
 - Clear (easy for newcomers)
 - Practical (real examples)
