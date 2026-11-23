@@ -12,7 +12,6 @@ let versionData: unknown;
 
 vi.mock("@/api/datasets/useDatasetVersionByHash", () => ({
   default: () => ({ data: versionData }),
-  datasetVersionByHashKey: (params: unknown) => ["dataset-versions", params],
   getDatasetVersionByHash: vi.fn(),
 }));
 

@@ -141,13 +141,19 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   const waitEnd = waitEndOf(lastWrittenAtOf(runs), openedAt);
   const lateWaitEnd = lateWaitEndOf(lastWrittenAtOf(runs), openedAt);
   const traceIds = runs.flatMap((run) => (run.trace_id ? [run.trace_id] : []));
+  const unscoredTraceIds = new Set(
+    runs.flatMap((run) =>
+      run.trace_id && !run.assertion_results?.length ? [run.trace_id] : [],
+    ),
+  );
 
   const judgeStatusesByTraceId = useQueries({
     queries: traceIds.map((traceId) => ({
       queryKey: onlineScoringStatusesKey(traceId),
       queryFn: (context: Parameters<typeof getOnlineScoringStatuses>[0]) =>
         getOnlineScoringStatuses(context, { traceId }),
-      enabled: !experimentFinished,
+      // Once the run is over, only a run still without results needs its judges, to say why.
+      enabled: !experimentFinished || unscoredTraceIds.has(traceId),
       refetchInterval: (query: {
         state: { data?: UseOnlineScoringStatusesResponse };
       }) => {
@@ -220,7 +226,8 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
 
   if (!experimentId) return null;
 
-  if (statusInfo?.evaluating && finalJudgeStatus) {
+  // Once the run is over, a row without results is a generic scoring error; its judges know why.
+  if ((statusInfo?.evaluating || statusInfo?.isError) && finalJudgeStatus) {
     return (
       <StatusTag {...ERROR_RESULT(scoringStatusMessage(finalJudgeStatus))} />
     );

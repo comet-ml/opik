@@ -26,6 +26,7 @@ let experimentStatus: string;
 let compareData: CompareData | undefined;
 let statusesByTrace: Record<string, OnlineScoringStatus[]>;
 let suiteAssertionCount: number | undefined;
+let statusLookups: Record<string, boolean>;
 
 vi.mock("../suiteAssertions", () => ({
   useSuiteAssertionCount: () => suiteAssertionCount,
@@ -40,15 +41,22 @@ vi.mock("@tanstack/react-query", () => ({
     queries,
     combine,
   }: {
-    queries: { queryKey: [string, { traceId: string }] }[];
+    queries: { queryKey: [string, { traceId: string }]; enabled: boolean }[];
     combine: (results: unknown[]) => unknown;
-  }) =>
-    combine(
-      queries.map(({ queryKey: [, { traceId }] }) => ({
-        data: { content: statusesByTrace[traceId] ?? [] },
+  }) => {
+    statusLookups = Object.fromEntries(
+      queries.map(({ queryKey: [, { traceId }], enabled }) => [
+        traceId,
+        enabled,
+      ]),
+    );
+    return combine(
+      queries.map(({ queryKey: [, { traceId }], enabled }) => ({
+        data: enabled ? { content: statusesByTrace[traceId] ?? [] } : undefined,
         dataUpdatedAt: Date.now(),
       })),
-    ),
+    );
+  },
   useQueryClient: () => ({
     getQueryData: ([, { traceId }]: [string, { traceId: string }]) => ({
       content: statusesByTrace[traceId] ?? [],
@@ -89,7 +97,7 @@ vi.mock("@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell", () => ({
     suiteHasAssertions: boolean,
   ) =>
     finished
-      ? { status: "scoring-error", evaluating: false }
+      ? { status: "scoring-error", evaluating: false, isError: true }
       : suiteHasAssertions
         ? { status: undefined, evaluating: true }
         : { status: "skipped", evaluating: false },
@@ -235,6 +243,33 @@ describe("PlaygroundOutputAssertionStatus", () => {
       "title",
       "The provider is rate limiting calls. No score will be stored.",
     );
+  });
+
+  it("should keep showing why the judge gave up once the run is over", () => {
+    experimentStatus = "completed";
+    statusesByTrace = {
+      "trace-1": [judgeStatus(ONLINE_SCORING_STATE.SKIPPED)],
+    };
+    compareData = compareWithItemWritten(minutesAgo(1));
+
+    renderStatus();
+
+    expect(screen.getByTestId("status")).toHaveAttribute(
+      "title",
+      "The provider is rate limiting calls. No score will be stored.",
+    );
+  });
+
+  it("should only look up the judges of a finished run's runs still without results", () => {
+    experimentStatus = "completed";
+    compareData = compareWithRuns(
+      { traceId: "trace-1", scored: true },
+      { traceId: "trace-2" },
+    );
+
+    renderStatus();
+
+    expect(statusLookups).toEqual({ "trace-1": false, "trace-2": true });
   });
 
   it("should ignore the statuses of project rules scoring the same trace", () => {

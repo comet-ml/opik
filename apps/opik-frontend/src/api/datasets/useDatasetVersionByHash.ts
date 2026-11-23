@@ -7,10 +7,6 @@ type UseDatasetVersionByHashParams = {
   versionHash: string;
 };
 
-export const datasetVersionByHashKey = (
-  params: UseDatasetVersionByHashParams,
-): [string, UseDatasetVersionByHashParams] => ["dataset-versions", params];
-
 export const getDatasetVersionByHash = async (
   { signal }: QueryFunctionContext,
   { datasetId, versionHash }: UseDatasetVersionByHashParams,
@@ -28,7 +24,7 @@ export default function useDatasetVersionByHash(
   options?: QueryConfig<DatasetVersion>,
 ) {
   return useQuery({
-    queryKey: datasetVersionByHashKey(params),
+    queryKey: ["dataset-versions", params],
     queryFn: (context) => getDatasetVersionByHash(context, params),
     ...options,
   });

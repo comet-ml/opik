@@ -1,7 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 
 import useDatasetVersionByHash, {
-  datasetVersionByHashKey,
   getDatasetVersionByHash,
 } from "@/api/datasets/useDatasetVersionByHash";
 import { DatasetVersion, Evaluator, Experiment } from "@/types/datasets";
@@ -48,7 +47,7 @@ export const fetchSuiteAssertionCount = async (
   if (!datasetId || !versionHash) return 0;
   try {
     const version = await queryClient.fetchQuery<DatasetVersion>({
-      queryKey: datasetVersionByHashKey({ datasetId, versionHash }),
+      queryKey: ["dataset-versions", { datasetId, versionHash }],
       queryFn: (context) =>
         getDatasetVersionByHash(context, { datasetId, versionHash }),
       staleTime: VERSION_STALE_TIME,
