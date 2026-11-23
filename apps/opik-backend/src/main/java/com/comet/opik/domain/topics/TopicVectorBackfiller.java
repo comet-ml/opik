@@ -308,6 +308,7 @@ class TopicVectorBackfiller {
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
                 .flatMap(read -> writer.embedAndWrite(workspace, read.candidates(), budget, null)
+                        .map(TopicVectorWriter.ChunkWrite::result)
                         .map(result -> {
                             boolean drained = read.complete() && !result.cut();
                             if (!drained && result.written() == 0) {

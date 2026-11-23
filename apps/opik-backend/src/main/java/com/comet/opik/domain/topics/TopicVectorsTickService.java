@@ -23,11 +23,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
@@ -170,18 +170,22 @@ public class TopicVectorsTickService {
                             .flatMap(served -> {
                                 var readTime = since(readStarted);
                                 long embedStarted = System.nanoTime();
-                                // The traces of the projects it started are the backfill's from now on.
-                                Set<VectorKey> done = ConcurrentHashMap.newKeySet();
-                                read.candidates().stream().map(VectorKey::of).forEach(done::add);
-                                served.candidates().stream().map(VectorKey::of).forEach(done::remove);
-                                return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, done)
-                                        .flatMap(result -> {
-                                            var visit = new Visit(workspace, true, read.complete(), result,
+                                return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore)
+                                        .flatMap(written -> {
+                                            var visit = new Visit(workspace, true, read.complete(), written.result(),
                                                     served.started(), readTime, since(embedStarted));
-                                            return pass
-                                                    ? Mono.just(visit)
-                                                    : saveWatermark(workspaceId, watermark(read.candidates(), done,
-                                                            find.limit(), find.upperBound())).thenReturn(visit);
+                                            if (pass) {
+                                                return Mono.just(visit);
+                                            }
+                                            // The traces of the projects it started are the backfill's from now on.
+                                            var settled = new HashSet<>(written.settled());
+                                            var servedKeys = served.candidates().stream().map(VectorKey::of)
+                                                    .collect(Collectors.toSet());
+                                            read.candidates().stream().map(VectorKey::of)
+                                                    .filter(key -> !servedKeys.contains(key))
+                                                    .forEach(settled::add);
+                                            return saveWatermark(workspaceId, watermark(read.candidates(), settled,
+                                                    find.limit(), find.upperBound())).thenReturn(visit);
                                         });
                             }))
                     .onErrorResume(exception -> {
@@ -268,28 +272,16 @@ public class TopicVectorsTickService {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
-    /** A {@code topic_vectors} row's key within a workspace's read. */
-    record VectorKey(@NonNull UUID projectId, @NonNull UUID traceId, int taskVersion) {
-
-        static VectorKey of(TopicVector vector) {
-            return new VectorKey(vector.projectId(), vector.traceId(), vector.taskVersion());
-        }
-
-        static VectorKey of(Candidate candidate) {
-            return new VectorKey(candidate.projectId(), candidate.traceId(), candidate.taskVersion());
-        }
-    }
-
     /**
      * A workspace's next watermark after a read that found {@code found}, oldest status first, and settled
-     * {@code done} (written, never to be embedded, or left to the backfill): the status of the first one not done, so
+     * {@code settled} (written, never to be embedded, or left to the backfill): the status of the first one not settled, so
      * the next read finds it again; with none, the last status found when the read hit {@code limit}, as more may share
      * it, and else the read's upper bound.
      */
-    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> done, int limit,
+    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> settled, int limit,
             @NonNull Instant upperBound) {
         return found.stream()
-                .filter(candidate -> !done.contains(VectorKey.of(candidate)))
+                .filter(candidate -> !settled.contains(VectorKey.of(candidate)))
                 .findFirst()
                 .map(Candidate::statusUpdatedAt)
                 .orElseGet(() -> found.size() < limit ? upperBound : found.getLast().statusUpdatedAt());

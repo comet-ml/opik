@@ -2,13 +2,13 @@
 headline: Install the macOS app with MDM
 og:description: Deploy Cost Intelligence as a macOS menu-bar app and network
   extension for transparent capture of every Claude Code user, including the
-  desktop app, delivered through the MDM you already run.
+  Code tab of the Claude desktop app, delivered through the MDM you already run.
 og:site_name: Opik Documentation
 og:title: Install the macOS app with MDM - Opik
 title: macOS app with MDM
 ---
 
-The macOS app is the rollout path for full coverage: it captures every Claude Code user on the machine, whether they work in the CLI or the desktop app. Developers keep working exactly as before — no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
+The macOS app is the rollout path for full coverage: it captures every Claude Code user on the machine, whether they work in the CLI or in the Code tab of the Claude desktop app. Developers keep working exactly as before — no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
 
 ## How it works
 
@@ -23,7 +23,7 @@ The data landing in Opik is the same as the plugin produces. What differs is how
 | | Plugin (proxy) | macOS app (extension) |
 | --- | --- | --- |
 | How traffic arrives | Agent is pointed at a local port | The OS diverts the flows |
-| Captures | Claude Code CLI | CLI **and** the Claude Code desktop app |
+| Captures | Claude Code CLI | CLI **and** the Code tab of the Claude desktop app |
 | Configuration touches | The agent's settings | Certificate trust only, set up by the app |
 | Delivered via | MDM or Claude managed settings | MDM |
 | TLS | Not intercepted | Terminated locally |
@@ -33,9 +33,27 @@ The data landing in Opik is the same as the plugin produces. What differs is how
   **The plugin is our recommended path.** It is simpler — no system extension,
   no certificate, no TLS interception — and it runs on macOS, Linux and
   Windows. Its limit is coverage: it captures the Claude Code **CLI**, not the
-  desktop app. Choose the macOS app when you want to roll Cost Intelligence
-  out to all of your users, including the ones working in the Claude Code
-  desktop app.
+  Claude desktop app. Choose the macOS app when you want to roll Cost
+  Intelligence out to all of your users, including the ones working in the
+  Code tab of the Claude desktop app.
+</Note>
+
+### What is captured in the Claude desktop app
+
+The Claude desktop app has three surfaces. The macOS app captures the one that runs Claude Code:
+
+| Surface | Captured |
+| --- | --- |
+| **Code** tab | Yes, as Claude Code usage |
+| **Chat** | No |
+| **Cowork** | No |
+
+Cost Intelligence reports Claude Code usage, so Chat and Cowork are out of scope and nothing from them is recorded.
+
+<Note>
+  Only connections opened after capture starts are recorded. If the Claude
+  desktop app was already open when the macOS app was installed, quit and
+  reopen it.
 </Note>
 
 ## Deploy via MDM
@@ -526,7 +544,7 @@ Ways to trigger the first launch, in order of preference:
 
 The four numbered steps in the diagram, in full:
 
-1. **The developer works as usual.** They prompt Claude Code from the CLI or the desktop app. Neither is configured, pointed at a proxy, or aware the app exists.
+1. **The developer works as usual.** They prompt Claude Code from the CLI or the Code tab of the Claude desktop app. Neither is configured, pointed at a proxy, or aware the app exists.
 2. **macOS diverts the agent's API calls to the app.** The system extension terminates TLS on the device so the app can read each call and attribute its cost — that interception happens on the device only, and it never leaves the machine.
 3. **The call is forwarded unchanged.** The app opens its own TLS connection — to the Anthropic API by default, or to your LLM gateway when one is configured — with full certificate validation, and passes the request and response through untouched.
 4. **Metadata ships to Opik on the side.** Counts, costs, and structure — [never content](/cost-intelligence/data-privacy-security) — go to your Opik workspace asynchronously. This side path never sits between the developer and the model: if anything in it fails, the agent keeps working.
