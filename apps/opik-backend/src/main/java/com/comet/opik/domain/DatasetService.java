@@ -443,7 +443,9 @@ class DatasetServiceImpl implements DatasetService {
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        Dataset dataset = findByName(identifier, Visibility.PRIVATE);
+        Dataset dataset = StringUtils.isNotBlank(identifier.projectName())
+                ? findInProjectByName(workspaceId, identifier)
+                : findByName(identifier, Visibility.PRIVATE);
 
         template.inTransaction(WRITE, handle -> {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
@@ -457,6 +459,27 @@ class DatasetServiceImpl implements DatasetService {
                 Set.of(dataset.id()),
                 workspaceId,
                 requestContext.get().getUserName()));
+    }
+
+    /**
+     * Finds a dataset by name in the named project, falling back only to a dataset with no project, created before
+     * project scoping. Unlike the read lookup, it never falls back to a same-named dataset in another project, so a
+     * delete can't remove another project's dataset. SDKs always send a project name, hence the project-less fallback.
+     */
+    private Dataset findInProjectByName(String workspaceId, DatasetIdentifier identifier) {
+        Optional<UUID> projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName());
+
+        Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return projectId
+                    .flatMap(id -> findSingleByName(dao, workspaceId, identifier.datasetName(), id,
+                            Visibility.PRIVATE))
+                    .or(() -> dao.findByName(workspaceId, identifier.datasetName(), null).stream()
+                            .filter(candidate -> candidate.projectId() == null)
+                            .findFirst());
+        }).orElseThrow(this::newNotFoundException);
+
+        return verifyVisibility(dataset, Visibility.PRIVATE);
     }
 
     private NotFoundException newNotFoundException() {
