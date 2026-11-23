@@ -251,6 +251,7 @@ public class TestSuiteAssertionSampler {
                                             .llmAsJudgeCode(prepared.code())
                                             .workspaceId(tracesBatch.workspaceId())
                                             .userName(tracesBatch.userName())
+                                            .organizationId(tracesBatch.organizationId())
                                             .categoryName(SUITE_ASSERTION_CATEGORY)
                                             .scoreNameMapping(prepared.scoreNameMapping())
                                             .promptType(PromptType.PYTHON)

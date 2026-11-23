@@ -2,10 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.error.InvalidUUIDException;
 import com.comet.opik.api.events.TracesDeleted;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
@@ -34,6 +37,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
 
@@ -43,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -543,6 +548,45 @@ class TraceServiceImplTest {
             assertThat(event.projectId()).isEqualTo(projectId);
             assertThat(event.workspaceId()).isEqualTo(workspaceId);
             assertThat(event.userName()).isEqualTo(DEFAULT_USER);
+        }
+    }
+
+    @Nested
+    class TraceEventOrganization {
+
+        @Test
+        void batchUpdate__whenContextHasOrganization__thenTracesUpdatedCarriesIt() {
+            var updated = batchUpdateUnder(ctx -> ctx.put(RequestContext.ORGANIZATION_ID, "organization-1"));
+
+            assertThat(updated.organizationId()).isEqualTo("organization-1");
+        }
+
+        @Test
+        void batchUpdate__whenContextHasNoOrganization__thenTracesUpdatedHasNone() {
+            var updated = batchUpdateUnder(ctx -> ctx);
+
+            assertThat(updated.organizationId()).isNull();
+        }
+
+        private TracesUpdated batchUpdateUnder(Function<Context, Context> organization) {
+            var traceId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var update = TraceUpdate.builder().projectName("project").build();
+            when(traceDao.getProjectIdsByTraceIds(List.of(traceId))).thenReturn(Mono.just(Map.of(traceId, projectId)));
+            when(traceDao.bulkUpdate(Set.of(traceId), update, false)).thenReturn(Mono.empty());
+
+            traceService.batchUpdate(TraceBatchUpdate.builder().ids(Set.of(traceId)).update(update).build())
+                    .contextWrite(ctx -> organization.apply(ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, "workspace")))
+                    .block();
+
+            var events = ArgumentCaptor.forClass(Object.class);
+            verify(eventBus, times(2)).post(events.capture());
+            return events.getAllValues().stream()
+                    .filter(TracesUpdated.class::isInstance)
+                    .map(TracesUpdated.class::cast)
+                    .findFirst()
+                    .orElseThrow();
         }
     }
 

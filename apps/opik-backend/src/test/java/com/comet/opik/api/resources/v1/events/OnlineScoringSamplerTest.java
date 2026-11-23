@@ -696,6 +696,41 @@ class OnlineScoringSamplerTest {
     }
 
     @Nested
+    class OrganizationTests {
+
+        @Test
+        void judgeMessageCarriesTheOrganizationOfTheCreatedTraces() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(
+                    new TracesCreated(List.of(trace), workspaceId, userName, null, null, "organization-1"));
+
+            verify(onlineScorePublisher).enqueueMessage(
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId("organization-1").build()),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @Test
+        void judgeMessageCarriesTheOrganizationOfTheUpdatedTraces() {
+            var trace = createTrace(Source.SDK);
+            var traceUpdate = TraceUpdate.builder().endTime(Instant.now()).build();
+            var event = new TracesUpdated(Set.of(projectId), Set.of(trace.id()), workspaceId, userName,
+                    traceUpdate, null, null, "organization-1");
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesUpdated(event);
+
+            verify(onlineScorePublisher).enqueueMessage(
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId("organization-1").build()),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+    }
+
+    @Nested
     class TracesUpdatedTests {
 
         @ParameterizedTest

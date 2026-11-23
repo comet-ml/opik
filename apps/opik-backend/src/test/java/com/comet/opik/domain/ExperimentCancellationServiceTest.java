@@ -4,6 +4,7 @@ import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -84,7 +85,7 @@ class ExperimentCancellationServiceTest {
         ledger = new ExperimentItemLedger(redissonClient, config);
         service = new ExperimentCancellationService(redissonClient, config, ledger);
         publisher = new ExperimentItemPublisher(redissonClient, config,
-                mock(TestSuiteAssertionCounterService.class), service, ledger);
+                mock(TestSuiteAssertionCounterService.class), service, ledger, FixedOrganizationResolver.NONE);
     }
 
     @Test

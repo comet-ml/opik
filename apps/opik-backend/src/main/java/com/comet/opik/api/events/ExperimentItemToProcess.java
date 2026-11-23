@@ -25,7 +25,8 @@ public record ExperimentItemToProcess(
         @NonNull List<UUID> allExperimentIds,
         List<OpikPromptEntry> opikPrompts,
         Boolean testSuite,
-        List<UUID> selectedRuleIds) implements RedisSubscriberMessage {
+        List<UUID> selectedRuleIds,
+        String organizationId) implements RedisSubscriberMessage {
 
     /**
      * Null on messages published before regular datasets could run server-side, when every run was a test
@@ -33,5 +34,10 @@ public record ExperimentItemToProcess(
      */
     public boolean isTestSuite() {
         return testSuite == null || testSuite;
+    }
+
+    @Override
+    public RedisSubscriberMessage withOrganizationId(String organizationId) {
+        return toBuilder().organizationId(organizationId).build();
     }
 }
