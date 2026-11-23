@@ -24,6 +24,7 @@ OPIK_API_KEY=<your key> \
 ```
 
 Then:
+
 - `GET http://localhost:5175/health` → `{"status":"ok"}`
 - `GET http://localhost:5175/docs` → Swagger UI (auto-generated)
 - `GET http://localhost:5175/openapi.json` → OpenAPI 3 spec
@@ -61,11 +62,13 @@ accidentally targeting a different Opik instance.
 ### `POST /projects`
 
 Body:
+
 ```json
 { "name": "cuj-...", "workspace": "andreicautisanu" }
 ```
 
 Response (HTTP 201):
+
 ```json
 { "id": "<uuid>", "name": "cuj-..." }
 ```

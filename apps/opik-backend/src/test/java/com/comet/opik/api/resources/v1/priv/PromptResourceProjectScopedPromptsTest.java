@@ -13,13 +13,13 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.PromptDAO;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.hc.core5.http.HttpStatus;
@@ -67,7 +67,7 @@ class PromptResourceProjectScopedPromptsTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final TestContainersSetup setup = new TestContainersSetup();
 
@@ -107,11 +107,12 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     /**
-     * Seeds a prompt with no project, as created before project scoping. No API creates one any more.
+     * Seeds a prompt with no project, as created before project scoping. Every API and service path now assigns a
+     * project (the Default Project when none is given), so this legacy shape can only be written directly.
      */
     private Prompt saveProjectlessPrompt(String name, String workspaceId) {
         var prompt = buildPrompt()
-                .id(ID_GENERATOR.generate())
+                .id(ID_GENERATOR.generateId())
                 .name(name)
                 .projectId(null)
                 .lastUpdatedBy(USER)
