@@ -37,7 +37,7 @@ public class TracesCreated extends BaseEvent {
         this(traces, workspaceId, userName, workspaceName, cipxDeviceId, null);
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     private TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
             @Nullable String workspaceName, @Nullable String cipxDeviceId, @Nullable String organizationId) {
         super(workspaceId, userName);
