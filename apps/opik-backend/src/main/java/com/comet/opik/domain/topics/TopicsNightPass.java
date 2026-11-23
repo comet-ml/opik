@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
@@ -97,6 +98,12 @@ class TopicsNightPass {
         this.candidates = candidates;
         this.metrics = metrics;
         this.names = names;
+        var ignored = new TreeSet<>(config.getNightly().workspaceIds());
+        ignored.removeAll(config.enabledWorkspaceIds());
+        if (!ignored.isEmpty()) {
+            log.warn("topics.nightly.workspaces lists workspaces that are not in topics.enabledWorkspaces; they are "
+                    + "ignored, workspaces '{}'", ignored);
+        }
     }
 
     /** A night: its UTC date, whose start ends its window, and the schedule's first fire that day, its start. */
@@ -189,13 +196,15 @@ class TopicsNightPass {
 
     /**
      * One plan's night pass at {@code now}: queues up to {@code free} nightly updates through {@code queue} and
-     * returns how many it queued. Nothing when the nightly job is off or no night is on. A read that fails is logged
-     * and counted as a failed night; the next plan goes on.
+     * returns how many it queued, for the workspaces among {@code workspaceIds} that {@code topics.nightly.workspaces}
+     * covers. Nothing when the nightly job is off or no night is on. A read that fails is logged and counted as a
+     * failed night; the next plan goes on.
      */
     Mono<Integer> plan(@NonNull Collection<String> workspaceIds, @NonNull Instant now, int free,
             @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var nightly = config.getNightly();
-        if (!nightly.isEnabled() || workspaceIds.isEmpty()) {
+        var covered = workspaceIds.stream().filter(nightly::covers).toList();
+        if (!nightly.isEnabled() || covered.isEmpty()) {
             return Mono.just(0);
         }
         var found = current(nightly.getSchedule(), now);
@@ -206,8 +215,8 @@ class TopicsNightPass {
         var budgetEnd = night.start().plus(nightly.getBudget().toJavaDuration());
         var current = tally(night);
         var pass = now.isBefore(budgetEnd)
-                ? decide(night, workspaceIds, now, budgetEnd, free, queue, current)
-                : end(night, workspaceIds, current).thenReturn(0);
+                ? decide(night, covered, now, budgetEnd, free, queue, current)
+                : end(night, covered, current).thenReturn(0);
         return pass.onErrorResume(error -> {
             log.error("Topics night '{}' pass failed; the next plan goes on with it", night.date(), error);
             metrics.night(NightOutcome.FAILED.value(), 1);
@@ -230,9 +239,10 @@ class TopicsNightPass {
             if (!config.getNightly().isEnabled()) {
                 throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
             }
-            if (!workspaceService.isEnabled(workspaceId)) {
+            if (!config.getNightly().covers(workspaceId) || !workspaceService.isEnabled(workspaceId)) {
                 throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs to be in "
-                        + "topics.enabledWorkspaces and enabled in ai_label_workspaces").formatted(workspaceId));
+                        + "topics.enabledWorkspaces, in topics.nightly.workspaces when that is set, and enabled in "
+                        + "ai_label_workspaces").formatted(workspaceId));
             }
             var row = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
                     .findExistingProjectIds(workspaceId, Set.of(projectId)).isEmpty()
