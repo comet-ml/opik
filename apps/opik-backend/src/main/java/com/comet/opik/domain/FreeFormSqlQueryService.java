@@ -348,10 +348,7 @@ public class FreeFormSqlQueryService {
         if (containsSetNode(nodeLabels)) {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
-        if (containsForbiddenCatalogTableNode(nodeLabels)) {
-            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
-        }
-        if (containsTableFunctionNode(nodeLabels)) {
+        if (containsForbiddenCatalogTableNode(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
             throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
