@@ -300,8 +300,7 @@ class TopicsRebuildServiceTest {
                 .isEqualTo(TopicProject.RunStatus.SAVED);
         var before = data.topics(projectId);
         stubAnswer(emptyNaming());
-        var updateRunId = store.startRun(workspace(), projectId, TopicProject.RunMode.NIGHTLY_UPDATE, Instant.EPOCH)
-                .block();
+        var updateRunId = start(TopicProject.RunMode.NIGHTLY_UPDATE);
 
         var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
 
@@ -532,9 +531,13 @@ class TopicsRebuildServiceTest {
 
     /** Queues and claims a first build, as the planner and a pod's subscriber do. */
     private UUID start() {
-        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD).block().orElseThrow();
+        return start(TopicProject.RunMode.FIRST_BUILD);
+    }
+
+    private UUID start(TopicProject.RunMode mode) {
+        var runId = store.queue(workspaceId, projectId, mode).block().orElseThrow();
         var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicProject.RunMode.FIRST_BUILD).night(NIGHT).windowTraces(FIXTURE.size()).build();
+                .mode(mode).night(NIGHT).windowTraces(FIXTURE.size()).build();
         assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
         return runId;
     }

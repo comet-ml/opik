@@ -1148,7 +1148,8 @@ class TopicsDaoStorageTest {
             for (int i = 0; i < count; i++) {
                 var runId = UUID.randomUUID();
                 var startedAt = latest.minus(Duration.ofHours(count - 1 - i));
-                runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.NIGHTLY_UPDATE, startedAt);
+                TopicsTestData.startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.NIGHTLY_UPDATE,
+                        startedAt);
                 if (i < failures) {
                     runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
                             TopicProject.RunError.INTERNAL);
