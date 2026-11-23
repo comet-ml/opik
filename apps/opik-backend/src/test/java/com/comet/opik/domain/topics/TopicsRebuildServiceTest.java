@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.assertj.core.groups.Tuple;
@@ -42,11 +43,13 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.metrics;
@@ -56,6 +59,7 @@ import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
 import static com.comet.opik.domain.topics.TopicsTestData.answer;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,8 +67,8 @@ import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The rebuild service end to end: the window read from ClickHouse, the save to MySQL, the {@code trace_topics} insert
- * and opik-inference stubbed in WireMock. Each test has its own workspace and project. Failures that need a store to
- * fail on cue are in {@link TopicsRebuildServiceFaultsTest}.
+ * and opik-inference stubbed in WireMock. Each test has its own workspace and project, and some bind an algorithm of
+ * their own. Failures that need a store to fail on cue are in {@link TopicsRebuildServiceFaultsTest}.
  */
 @DisplayName("topics rebuild service")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -118,6 +122,9 @@ class TopicsRebuildServiceTest {
     private WorkspaceNameService workspaceNames;
     private TopicWindowDAO windowDAO;
     private InferenceClient client;
+    private TransactionTemplateAsync clickHouseTemplate;
+    private TopicVectorsDAO vectorsDAO;
+    private TopicsMetrics metrics;
     private TopicRunStore store;
     private TopicsRebuildService service;
     private InMemoryMetricReader metricReader;
@@ -133,6 +140,8 @@ class TopicsRebuildServiceTest {
         this.template = template;
         this.idGenerator = idGenerator;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, TRACES);
+        this.clickHouseTemplate = clickHouseTemplate;
+        this.vectorsDAO = vectorsDAO;
         this.config = opikConfig.getTopics();
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
@@ -155,12 +164,10 @@ class TopicsRebuildServiceTest {
         wireMock.server().resetAll();
         // The app's beans with a meter of the test's own, so each test reads only what its run recorded.
         metricReader = InMemoryMetricReader.create();
-        var metrics = metrics(metricReader);
+        metrics = metrics(metricReader);
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
                 workspaceNames);
-        service = new TopicsRebuildService(config, new TopicWindowReader(config, windowDAO),
-                new TopicsLlm(config, client, metrics), store, idGenerator, metrics, workspaceNames,
-                FIXTURE_ALGORITHM);
+        service = serviceWith(FIXTURE_ALGORITHM);
         workspaceId = idGenerator.generateId().toString();
         projectId = idGenerator.generateId();
         data.seed(workspaceId, projectId, 0, FIXTURE.size());
@@ -195,7 +202,7 @@ class TopicsRebuildServiceTest {
         assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(1);
         assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(FIXTURE.size());
         assertThat(sum(metricReader, "topics.save.rows", "table", "topics")).isEqualTo(topics.size());
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "ok")).isEqualTo(1);
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isEqualTo(1);
         assertThat(points(metricReader, "topics.run.other_share")).singleElement()
                 .satisfies(point -> assertThat(point.value()).isEqualTo(outcome.stats().get("other_share")
                         .asDouble()));
@@ -268,7 +275,7 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "ok")).isZero();
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isZero();
     }
 
     @Test
@@ -281,6 +288,201 @@ class TopicsRebuildServiceTest {
 
         assertThat(data.topicProject(projectId).runErrorCode()).isEqualTo(TopicProject.RunError.TIMEOUT);
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
+    }
+
+    /**
+     * Four texts, three traces each, so each text is its own group and its vector is the group's centre. The answer
+     * names the topic for the group of {@code alpha}: {@code beta} and {@code gamma} are Other groups within 0.95 of it
+     * (gated), {@code delta} is an Other group far from it (kept).
+     */
+    @Test
+    @DisplayName("the gated Other prototypes are not saved, and the saved rows assign as the build did")
+    void gatedOtherIsNotSaved() {
+        int d = TopicEmbedding.DIMENSIONS;
+        var alpha = unit(d, 0, 1, 0, 0);
+        var gated = List.of(unit(d, 0, 0.97, 1, Math.sqrt(1 - 0.97 * 0.97)),
+                unit(d, 0, 0.96, 2, Math.sqrt(1 - 0.96 * 0.96)));
+        var delta = unit(d, 3, 1, 0, 0);
+        var groupTexts = List.of("alpha request", "beta request", "gamma request", "delta request");
+        var groupVectors = List.of(alpha, gated.get(0), gated.get(1), delta);
+        int count = 12;
+        var traceIds = new ArrayList<UUID>(count);
+        var createdAt = new ArrayList<Instant>(count);
+        var texts = new String[count];
+        var vectors = new float[count * d];
+        for (int i = 0; i < count; i++) {
+            createdAt.add(FIXTURE.night.minusSeconds(3_600L * (count - i)));
+            traceIds.add(TopicsTestData.newId());
+            texts[i] = groupTexts.get(i % 4);
+            System.arraycopy(groupVectors.get(i % 4), 0, vectors, i * d, d);
+        }
+        workspaceId = idGenerator.generateId().toString();
+        projectId = idGenerator.generateId();
+        new TopicsTestData(template, clickHouseTemplate, vectorsDAO,
+                new TopicsTestData.Traces(traceIds, createdAt, texts, vectors, FIXTURE.night))
+                .seed(workspaceId, projectId, 0, count);
+        // The groups' numbers in the prompt are the algorithm's: each stub answers for one number.
+        for (int group = 0; group <= groupTexts.size(); group++) {
+            var output = InferenceJson.MAPPER.createObjectNode();
+            output.putArray("topics").addObject().put("name", "Alpha Requests").put("definition", "d");
+            output.putArray("assignment").addObject().put("cluster", group).put("topic", 0);
+            wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH))
+                    .withRequestBody(matching("(?s).*cluster " + group
+                            + ": \\d+% of traffic\\\\n    - alpha request.*"))
+                    .willReturn(answer(output, 0)));
+        }
+        var runId = start();
+
+        var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
+                .firstBuild(runId, workspaceId, projectId, NIGHT, count).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
+        assertThat(outcome.stats().get("gated_other").asInt()).isEqualTo(2);
+        var topicRows = data.topics(projectId).stream().flatMap(topic -> topic.vectors().vectors().stream())
+                .toList();
+        var otherRows = data.topicProject(projectId).otherVectors().vectors();
+        assertThat(topicRows).hasSize(1);
+        assertThat(otherRows).singleElement().satisfies(other -> assertThat(other).containsExactly(delta));
+        var algorithmConfig = TopicsTestAlgorithm.config();
+        for (var other : otherRows) {
+            for (var topic : topicRows) {
+                assertThat(dot(other, topic)).isLessThan(algorithmConfig.getOtherGate());
+            }
+        }
+
+        // The saved rows, with or without the gated twins, give the labels the build saved.
+        var topicIdByTrace = data.traceTopics(workspaceId, projectId).stream()
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        var savedLabels = traceIds.stream()
+                .mapToInt(traceId -> TraceTopic.OTHER.equals(topicIdByTrace.get(traceId)) ? TopicAlgorithm.OTHER : 0)
+                .toArray();
+        var withoutGated = new PrototypeAssigner(topicRows, List.of(0), otherRows, d,
+                algorithmConfig.getAssignMinCosine(), algorithmConfig.getOtherGate());
+        var withGated = new PrototypeAssigner(topicRows, List.of(0),
+                Stream.concat(otherRows.stream(), gated.stream()).toList(), d,
+                algorithmConfig.getAssignMinCosine(), algorithmConfig.getOtherGate());
+        assertThat(withoutGated.assign(vectors)).containsExactly(savedLabels);
+        assertThat(withGated.assign(vectors)).containsExactly(savedLabels);
+        assertThat(savedLabels).containsExactly(0, 0, 0, TopicAlgorithm.OTHER, 0, 0, 0, TopicAlgorithm.OTHER, 0,
+                0, 0, TopicAlgorithm.OTHER);
+    }
+
+    @Test
+    @DisplayName("the service saves what the bound algorithm returns: its topics with their prototypes, labels and "
+            + "stats")
+    void savesWhatTheAlgorithmReturns() {
+        int d = TopicEmbedding.DIMENSIONS;
+        var first = unit(d, 0, 1, 1, 0);
+        var second = unit(d, 1, 1, 0, 0);
+        var other = unit(d, 2, 1, 0, 0);
+        var stub = new TopicAlgorithm() {
+            @Override
+            public Clustering cluster(TopicWindow window, int maxTopics) {
+                var stats = InferenceJson.MAPPER.createObjectNode().put("stub_stat", maxTopics);
+                var author = LlmRequest.builder().call(LlmCall.AUTHOR).prompt("name these")
+                        .schema(InferenceJson.MAPPER.createObjectNode()).maxTokens(10).build();
+                return new Clustering() {
+                    @Override
+                    public LlmRequest author() {
+                        return author;
+                    }
+
+                    @Override
+                    public ObjectNode stats() {
+                        return stats;
+                    }
+
+                    @Override
+                    public FirstBuild finish(AuthorAnswer answer) {
+                        var labels = new int[window.size()];
+                        for (int i = 0; i < labels.length; i++) {
+                            labels[i] = i % 3 == 2 ? OTHER : i % 3;
+                        }
+                        return FirstBuild.builder()
+                                .topics(List.of(
+                                        NewTopic.builder().name("First").definition("one")
+                                                .prototypes(List.of(first)).build(),
+                                        NewTopic.builder().name("Second").definition("two")
+                                                .prototypes(List.of(second)).build()))
+                                .labels(labels)
+                                .otherPrototypes(List.of(other))
+                                .stats(InferenceJson.MAPPER.createObjectNode())
+                                .build();
+                    }
+                };
+            }
+
+            @Override
+            public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+                return vectors -> new UUID[vectors.size()];
+            }
+        };
+        stubAnswer(FIXTURE.firstBuildAnswer);
+        var runId = start();
+
+        var outcome = serviceWith(stub).firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var saved = data.topics(projectId);
+        assertThat(saved).usingRecursiveFieldByFieldElementComparatorIgnoringFields("id").containsExactlyInAnyOrder(
+                topic("First", "one", first, 0), topic("Second", "two", second, 1));
+        assertThat(data.topicProject(projectId).otherVectors()).isEqualTo(new PrototypeVectors(List.of(other)));
+        var idByName = saved.stream().collect(Collectors.toMap(Topic::name, Topic::id));
+        var topicIds = List.of(idByName.get("First"), idByName.get("Second"), TraceTopic.OTHER);
+        assertThat(data.traceTopics(workspaceId, projectId)).usingRecursiveFieldByFieldElementComparator()
+                .containsExactlyInAnyOrderElementsOf(IntStream.range(0, FIXTURE.size())
+                        .mapToObj(i -> TraceTopic.builder()
+                                .workspaceId(workspaceId)
+                                .projectId(projectId)
+                                .traceId(FIXTURE.traceIds.get(i))
+                                .traceCreatedAt(FIXTURE.createdAt.get(i))
+                                .topicId(topicIds.get(i % 3))
+                                .source(TraceTopic.Source.RUN)
+                                .runId(runId)
+                                .build())
+                        .toList());
+        var json = outcome.stats();
+        assertThat(json.get("stub_stat").asInt()).isEqualTo(config.getAlgorithm().getMaxTopics());
+        assertThat(json.get("topics").asInt()).isEqualTo(2);
+        assertThat(json.get("other_share").asDouble())
+                .isEqualTo((double) IntStream.range(0, FIXTURE.size()).filter(i -> i % 3 == 2).count()
+                        / FIXTURE.size());
+    }
+
+    private TopicsRebuildService serviceWith(TopicAlgorithm algorithm) {
+        return new TopicsRebuildService(config, new TopicWindowReader(config, windowDAO),
+                new TopicsLlm(config, client, metrics), store, idGenerator, metrics, workspaceNames, algorithm);
+    }
+
+    /** A topic born on the run's night, with the traces whose index is {@code label} mod 3, and one prototype. */
+    private Topic topic(String name, String definition, float[] prototype, int label) {
+        return Topic.builder()
+                .id(TraceTopic.OTHER)
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .name(name)
+                .definition(definition)
+                .born(NIGHT)
+                .size((int) IntStream.range(0, FIXTURE.size()).filter(i -> i % 3 == label).count())
+                .vectors(new PrototypeVectors(List.of(prototype)))
+                .build();
+    }
+
+    /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
+    private static float[] unit(int d, int i, double a, int j, double b) {
+        var out = new float[d];
+        out[i] = (float) a;
+        out[j] += (float) b;
+        return out;
+    }
+
+    private static double dot(float[] a, float[] b) {
+        double s = 0;
+        for (int t = 0; t < a.length; t++) {
+            s += (double) a[t] * b[t];
+        }
+        return s;
     }
 
     /** Queues and claims a first build, as the planner and a pod's subscriber do. */

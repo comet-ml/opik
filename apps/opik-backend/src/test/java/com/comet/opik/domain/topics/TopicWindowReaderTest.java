@@ -58,7 +58,7 @@ class TopicWindowReaderTest {
             assertThat(window.vectors()[i * d]).isEqualTo(i);
             assertThat(window.traces().get(i).traceCreatedAt()).isEqualTo(start.plusSeconds(i));
         }
-        assertThat(run.stats().get("skipped_rows").asInt()).isEqualTo(1);
-        assertThat(run.stats().get("window_traces").asLong()).isEqualTo(count);
+        assertThat(window.stats().get("skipped_rows").asInt()).isEqualTo(1);
+        assertThat(window.stats().get("window_traces").asLong()).isEqualTo(count);
     }
 }

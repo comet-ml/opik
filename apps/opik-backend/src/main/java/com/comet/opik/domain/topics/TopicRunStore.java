@@ -6,6 +6,7 @@ import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -72,9 +73,9 @@ public class TopicRunStore {
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int queued = template.inTransaction(WRITE, handle -> {
-                var runDAO = handle.attach(TopicProjectDAO.class);
-                runDAO.ensureRow(workspaceId, projectId);
-                return runDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
+                var projectDAO = handle.attach(TopicProjectDAO.class);
+                projectDAO.ensureRow(workspaceId, projectId);
+                return projectDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
             });
             return queued == 1 ? Optional.of(runId) : Optional.empty();
         });
@@ -120,12 +121,16 @@ public class TopicRunStore {
         })).doOnNext(code -> code.ifPresent(value -> countFailed(workspaceId, value)));
     }
 
-    /** {@code queued -> failed} with {@code cancelled}, for a queued run whose project or workspace left. */
-    Mono<Boolean> dropQueued(@NonNull InFlightRun run, @NonNull TopicProject.CancelReason reason) {
-        return write(dao -> dao.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason, Instant.now()))
+    /**
+     * {@code queued -> failed} with {@code cancelled}: its project or workspace left (the reason), or a run by hand was
+     * not published (no reason).
+     */
+    Mono<Boolean> dropQueued(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @Nullable TopicProject.CancelReason reason) {
+        return write(dao -> dao.dropQueued(workspaceId, projectId, runId, reason, Instant.now()))
                 .doOnNext(dropped -> {
                     if (dropped) {
-                        countFailed(run.workspaceId(), RunError.CANCELLED);
+                        countFailed(workspaceId, RunError.CANCELLED);
                     }
                 });
     }
@@ -253,10 +258,19 @@ public class TopicRunStore {
                 .flatMap(saved -> keepIfProjectExists(run));
     }
 
+    /** Whether the project is still in {@code projects}. */
+    Mono<Boolean> projectExists(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return jdbi(() -> exists(workspaceId, projectId));
+    }
+
+    private boolean exists(String workspaceId, UUID projectId) {
+        return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
+    }
+
     /** False, after deleting the run's topics, when the project was deleted during the run. */
     private Mono<Boolean> keepIfProjectExists(TopicRun run) {
         return jdbi(() -> {
-            boolean exists = !projectService.findByIds(run.workspaceId(), Set.of(run.projectId())).isEmpty();
+            boolean exists = exists(run.workspaceId(), run.projectId());
             if (!exists) {
                 int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                         .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
@@ -282,7 +296,7 @@ public class TopicRunStore {
 
     /**
      * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted ok or failed. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
      * the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
@@ -296,11 +310,11 @@ public class TopicRunStore {
                                 signal.totalRetries() + 2, signal.failure())))
                 .map(__ -> {
                     metrics.saved(run.workspace(), "trace_topics", traceTopics.size());
-                    metrics.traceTopicsInsert(run.workspace(), "ok");
+                    metrics.traceTopicsInsert(run.workspace(), true);
                     return true;
                 })
                 .onErrorResume(exception -> {
-                    metrics.traceTopicsInsert(run.workspace(), "failed");
+                    metrics.traceTopicsInsert(run.workspace(), false);
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
                     return Mono.just(false);

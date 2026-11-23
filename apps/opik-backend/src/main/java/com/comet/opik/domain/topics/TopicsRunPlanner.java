@@ -5,6 +5,8 @@ import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ServiceUnavailableException;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsBackfillGate backfillGate;
 
     /** A run to queue: its message once queued, which gives it its id. */
+    @Builder(toBuilder = true)
     record Planned(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull RunMode mode, LocalDate night,
             long windowTraces) {
 
@@ -110,7 +113,8 @@ public class TopicsRunPlanner {
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
                                         .formatted(projectId, vectors, night, config.getBuild().getMinVectors())));
                     }
-                    return queueOne(new Planned(workspaceId, projectId, RunMode.FIRST_BUILD, night, vectors))
+                    return queueByHand(Planned.builder().workspaceId(workspaceId).projectId(projectId)
+                            .mode(RunMode.FIRST_BUILD).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
                 })
@@ -134,6 +138,32 @@ public class TopicsRunPlanner {
                         .thenReturn(runId));
     }
 
+    /**
+     * Queues a run started by hand and publishes it. When the publish fails, the run is dropped and the caller gets an
+     * error to retry on: a run left queued would block the project's next run by hand until a plan publishes it again.
+     */
+    private Mono<UUID> queueByHand(Planned run) {
+        return store.queue(run.workspaceId(), run.projectId(), run.mode())
+                .flatMap(Mono::justOrEmpty)
+                .flatMap(runId -> publisher.publish(run.message(runId))
+                        .thenReturn(runId)
+                        .onErrorResume(error -> {
+                            log.warn("Topics run '{}' queued by hand but not published, project '{}'; it is dropped",
+                                    runId, run.projectId(), error);
+                            // No reason: nothing cancelled the run, no pod ever had it.
+                            return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
+                                    .onErrorResume(dropError -> {
+                                        log.error("Topics run '{}' not published and not dropped, project '{}'; it "
+                                                + "stays queued until a plan publishes it", runId, run.projectId(),
+                                                dropError);
+                                        return Mono.just(false);
+                                    })
+                                    .then(Mono.error(() -> new ServiceUnavailableException(
+                                            "The topics run of project '%s' could not be started, try again"
+                                                    .formatted(run.projectId()))));
+                        }));
+    }
+
     private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
         var failedAfter = now.minus(config.getFirstBuild().getRetryDelays().getFirst().toJavaDuration());
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
@@ -148,12 +178,13 @@ public class TopicsRunPlanner {
         for (int i = 0; i < Math.max(labels.size(), builds.size()); i++) {
             if (i < labels.size()) {
                 var project = labels.get(i);
-                result.add(new Planned(project.workspaceId(), project.projectId(), RunMode.LABELS, null, 0));
+                result.add(Planned.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
+                        .mode(RunMode.LABELS).build());
             }
             if (i < builds.size()) {
                 var build = builds.get(i);
-                result.add(new Planned(build.workspaceId(), build.projectId(), RunMode.FIRST_BUILD, night,
-                        build.vectors()));
+                result.add(Planned.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
+                        .mode(RunMode.FIRST_BUILD).night(night).windowTraces(build.vectors()).build());
             }
         }
         return result;

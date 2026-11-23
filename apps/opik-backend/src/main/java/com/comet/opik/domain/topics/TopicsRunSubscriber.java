@@ -126,9 +126,14 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
             case FIRST_BUILD -> rebuildService.firstBuild(message.runId(), message.workspaceId(),
                     message.projectId(), message.night(), message.windowTraces())
                     .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
+                    // A build saved after its project was deleted is discarded: nothing is left to label. When the
+                    // check fails, the labelling run is queued, and the planner cancels it if the project is gone.
+                    .filterWhen(outcome -> store.projectExists(message.workspaceId(), message.projectId())
+                            .onErrorReturn(true))
                     // The saved list's labelling pass is a run of its own: one place keeps it apart from a build.
-                    .flatMap(outcome -> planner.queueOne(new TopicsRunPlanner.Planned(message.workspaceId(),
-                            message.projectId(), RunMode.LABELS, null, 0)))
+                    .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                            .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
+                            .build()))
                     .then();
             case LABELS -> label(message, deadline);
             case NIGHTLY_UPDATE -> fail(message, RunError.INTERNAL);

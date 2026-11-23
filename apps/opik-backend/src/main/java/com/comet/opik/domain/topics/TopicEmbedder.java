@@ -123,12 +123,12 @@ class TopicEmbedder {
             return ChunkOutcome.skipped(SkipReason.INVALID_VECTOR, chunk.size());
         }
         var vectors = new ArrayList<TopicVector>(chunk.size());
-        var zero = new ArrayList<Candidate>();
+        var invalidCandidates = new ArrayList<Candidate>();
         for (int i = 0; i < chunk.size(); i++) {
             var candidate = chunk.get(i);
             var normalized = normalize(result.embeddings()[i]);
             if (normalized.isEmpty()) {
-                zero.add(candidate);
+                invalidCandidates.add(candidate);
             }
             normalized.ifPresent(vector -> vectors.add(
                     TopicVector.builder()
@@ -144,14 +144,14 @@ class TopicEmbedder {
                             .vector(vector)
                             .build()));
         }
-        int invalid = zero.size();
+        int invalid = invalidCandidates.size();
         if (invalid > 0) {
             log.error("Topic vectors embed answered '{}' zero or non-finite vectors, workspace '{}'", invalid,
                     workspaceId);
         }
         // The same summary gets the same vector, so these keys are settled.
         return new ChunkOutcome(vectors, invalid > 0 ? Map.of(SkipReason.INVALID_VECTOR, invalid) : Map.of(),
-                ChunkOutcome.keys(zero));
+                ChunkOutcome.keys(invalidCandidates));
     }
 
     /** Scaled to length 1, so the nightly job's dot product is the cosine; empty for a zero or non-finite vector. */

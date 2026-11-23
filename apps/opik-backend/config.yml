@@ -2536,13 +2536,13 @@ inference:
   #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance, each on a thread
   #  of its own. A call over it retries after a short backoff, then fails. Decide calls share the jerseyClient connection
   #  pool with the other calls to opik-inference, so when guardrail validations are on, this plus
-  #  aiLabels.loadConcurrency (when ai-labels is on) and topics.vectors.embedConcurrency (when Topics is on) must be
-  #  below jerseyClient.maxConnectionsPerRoute
+  #  aiLabels.loadConcurrency (when ai-labels is on), topics.vectors.embedConcurrency and maxConcurrentGenerates (when
+  #  Topics is on) must be below jerseyClient.maxConnectionsPerRoute
   maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
   #  Default: 4
   #  Description: Most synchronous generate calls (Topics builds) in flight from one backend instance, each on a thread
   #  of its own while the model answers. They share the jerseyClient connection pool with the other calls to
-  #  opik-inference
+  #  opik-inference (see maxConcurrentDecides)
   maxConcurrentGenerates: ${OPIK_INFERENCE_MAX_CONCURRENT_GENERATES:-4}
   #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
   #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
