@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.domain.topics.TopicsStage;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
@@ -64,6 +63,16 @@ class TopicsConfigTest {
         assertThat(VALIDATOR.validateProperty(config, "enabledWorkspacesValid")).singleElement()
                 .satisfies(violation -> assertThat(violation.getMessage())
                         .contains("topics.enabledWorkspaces", "vectors, build, arrival, nightly, ui"));
+    }
+
+    @Test
+    void parseFollowsALaterValue() {
+        var config = withList("wsA:build");
+        assertThat(config.enabledWorkspaceStages()).isEqualTo(Map.of("wsA", TopicsStage.BUILD));
+
+        config.setEnabledWorkspaces("wsB");
+
+        assertThat(config.enabledWorkspaceStages()).isEqualTo(Map.of("wsB", TopicsStage.UI));
     }
 
     @Test

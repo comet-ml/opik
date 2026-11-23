@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.domain.topics.TopicsStage;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -15,7 +14,10 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -136,14 +138,34 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
+    /** The last parse of {@link #enabledWorkspaces}, with the string it was parsed from. */
+    private record ParsedWorkspaces(String raw, Map<String, TopicsStage> stages) {
+    }
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private volatile ParsedWorkspaces parsedWorkspaces;
+
     /**
      * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
      * {@link TopicsStage#ALL}. Throws on an unknown stage or a repeated id, which {@link #isEnabledWorkspacesValid()}
-     * rejects at startup. Deliberately neither cached nor named as a bean getter: Lombok's toString/equals/hashCode and
-     * Jackson call getters, and a parse cached before the field was bound would keep an empty map for the life of the
-     * process.
+     * rejects at startup. Not named as a bean getter, since Lombok and Jackson call getters. The parse is kept against
+     * the string it came from, so a value bound or set later is parsed again rather than served stale.
      */
     public Map<String, TopicsStage> enabledWorkspaceStages() {
+        var raw = enabledWorkspaces;
+        var parsed = parsedWorkspaces;
+        if (parsed == null || !Objects.equals(parsed.raw(), raw)) {
+            parsed = new ParsedWorkspaces(raw, parse(raw));
+            parsedWorkspaces = parsed;
+        }
+        return parsed.stages();
+    }
+
+    private static Map<String, TopicsStage> parse(String enabledWorkspaces) {
         var stages = new HashMap<String, TopicsStage>();
         for (var entry : Objects.toString(enabledWorkspaces, "").split(",")) {
             var parts = entry.split(":", -1);

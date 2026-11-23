@@ -1,4 +1,4 @@
-package com.comet.opik.domain.topics;
+package com.comet.opik.infrastructure;
 
 import java.util.Arrays;
 import java.util.Locale;
@@ -6,7 +6,7 @@ import java.util.Optional;
 
 /**
  * How far Topics goes for a workspace listed in {@code topics.enabledWorkspaces}, in declaration order. A workspace at
- * a stage runs that stage and every earlier one; see {@link TopicWorkspaceService#reaches}.
+ * a stage runs that stage and every earlier one; {@code TopicWorkspaceService.reaches} checks it.
  */
 public enum TopicsStage {
     VECTORS,
