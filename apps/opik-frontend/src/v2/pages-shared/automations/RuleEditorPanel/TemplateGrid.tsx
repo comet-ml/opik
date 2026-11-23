@@ -31,7 +31,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
     className={cn(
       "flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
       isDashed
-        ? "border-dashed border-slate-300 bg-soft-background"
+        ? "border-dashed border-border bg-soft-background"
         : "border-border bg-background shadow-sm",
       isSelected && "border-primary bg-primary-foreground",
     )}
@@ -84,7 +84,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
         label="Start blank"
         description={blankDescription}
         icon={Plus}
-        iconClassName="bg-slate-200"
+        iconClassName="bg-muted"
         isSelected={isBlankSelected}
         isDashed
         onClick={onStartBlank}

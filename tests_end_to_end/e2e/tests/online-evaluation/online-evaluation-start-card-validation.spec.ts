@@ -28,11 +28,7 @@ function isRuleCreate(method: string, url: string): boolean {
  *
  * Each assertion is exhaustive over the messages the editor is showing, not a
  * membership check on one of them, because the second half of this behaviour is
- * that the start error is the ONLY error. The cards hide the model selector and
- * the prompt box, so listing a model or a question error beside them points the
- * author at a field that is not on screen — the decision-model panel really did
- * that until this PR's last commit, which is the shape the Moderation test
- * below pins.
+ * that the start error is the ONLY error.
  *
  * Deterministic, free and entirely local to the page: no model is ever called,
  * and the judge half seeds a provider whose base URL refuses every connection

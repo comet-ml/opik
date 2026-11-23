@@ -65,6 +65,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     isPickingTemplate,
     openTemplates,
     openContent,
+    showContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -112,7 +113,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
           },
         },
       );
-    })();
+    }, showContent)();
   }, [
     rule,
     isEdit,
@@ -124,6 +125,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     showRuleCreatedToast,
     onRuleCreated,
     onClose,
+    showContent,
   ]);
 
   const templateActions = {

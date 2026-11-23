@@ -293,6 +293,7 @@ const useRuleEditorForm = ({
     setIsPickingTemplate,
     recordAction,
     resetHistory,
+    withoutHistory,
   } = useRuleEditorHistory(form, autoNameRef);
 
   const isDefaultName = useCallback(() => {
@@ -350,6 +351,11 @@ const useRuleEditorForm = ({
   const openTemplates = useCallback(
     () => recordAction(() => setIsPickingTemplate(true)),
     [recordAction, setIsPickingTemplate],
+  );
+
+  const showContent = useCallback(
+    () => withoutHistory(() => setIsPickingTemplate(false)),
+    [withoutHistory, setIsPickingTemplate],
   );
 
   const openContent = useCallback(
@@ -433,61 +439,68 @@ const useRuleEditorForm = ({
     ],
   );
 
-  const prepareForSubmit = useCallback(() => {
-    const values = form.getValues();
+  const prepareForSubmit = useCallback(
+    () =>
+      withoutHistory(() => {
+        const values = form.getValues();
 
-    if (values.uiType === UI_EVALUATORS_RULE_TYPE.python_code) {
-      if (values.scope === EVALUATORS_RULE_SCOPE.thread) return;
-      const details = form.getValues("pythonCodeDetails");
-      const { metric } = details;
-      const {
-        arguments: codeArguments,
-        unknownArguments,
-        parsingError,
-      } = getCodeArguments(
-        metric,
-        values.scope,
-        getSavedCodeArguments(details),
-      );
-      form.setValue("pythonCodeDetails.arguments", {
-        ...codeArguments,
-        ...Object.fromEntries(unknownArguments.map((name) => [name, ""])),
-      });
-      form.setValue("pythonCodeDetails.parsingArgumentsError", parsingError);
-      return;
-    }
+        if (values.uiType === UI_EVALUATORS_RULE_TYPE.python_code) {
+          if (values.scope === EVALUATORS_RULE_SCOPE.thread) return;
+          const details = form.getValues("pythonCodeDetails");
+          const { metric } = details;
+          const {
+            arguments: codeArguments,
+            unknownArguments,
+            parsingError,
+          } = getCodeArguments(
+            metric,
+            values.scope,
+            getSavedCodeArguments(details),
+          );
+          form.setValue("pythonCodeDetails.arguments", {
+            ...codeArguments,
+            ...Object.fromEntries(unknownArguments.map((name) => [name, ""])),
+          });
+          form.setValue(
+            "pythonCodeDetails.parsingArgumentsError",
+            parsingError,
+          );
+          return;
+        }
 
-    const llmJudgeDetails = form.getValues("llmJudgeDetails");
+        const llmJudgeDetails = form.getValues("llmJudgeDetails");
 
-    const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
-    if (mainScore) {
-      const nextMainScore = {
-        ...mainScore,
-        name: mainScore.name.trim() || values.ruleName.trim(),
-        description:
-          rule || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
-            ? mainScore.description
-            : "",
-      };
-      if (!isEqual(nextMainScore, mainScore)) {
-        form.setValue("llmJudgeDetails.schema", [
-          nextMainScore,
-          ...additionalScores,
-        ]);
-      }
-    }
+        const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
+        if (mainScore) {
+          const nextMainScore = {
+            ...mainScore,
+            name: mainScore.name.trim() || values.ruleName.trim(),
+            description:
+              rule || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+                ? mainScore.description
+                : "",
+          };
+          if (!isEqual(nextMainScore, mainScore)) {
+            form.setValue("llmJudgeDetails.schema", [
+              nextMainScore,
+              ...additionalScores,
+            ]);
+          }
+        }
 
-    const { variables, parsingVariablesError } = getPromptVariables(
-      llmJudgeDetails.messages,
-      llmJudgeDetails.variables,
-      values.scope,
-    );
-    form.setValue("llmJudgeDetails.variables", variables);
-    form.setValue(
-      "llmJudgeDetails.parsingVariablesError",
-      parsingVariablesError,
-    );
-  }, [form, rule]);
+        const { variables, parsingVariablesError } = getPromptVariables(
+          llmJudgeDetails.messages,
+          llmJudgeDetails.variables,
+          values.scope,
+        );
+        form.setValue("llmJudgeDetails.variables", variables);
+        form.setValue(
+          "llmJudgeDetails.parsingVariablesError",
+          parsingVariablesError,
+        );
+      }),
+    [form, rule, withoutHistory],
+  );
 
   useEffect(() => {
     const subscription = form.watch((_, { name }) => {
@@ -570,6 +583,7 @@ const useRuleEditorForm = ({
     isPickingTemplate,
     openTemplates,
     openContent,
+    showContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,

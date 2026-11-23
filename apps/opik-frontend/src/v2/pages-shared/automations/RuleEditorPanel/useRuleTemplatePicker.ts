@@ -1,4 +1,5 @@
 import { UseFormReturn } from "react-hook-form";
+import isEmpty from "lodash/isEmpty";
 
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
@@ -28,7 +29,7 @@ const useRuleTemplatePicker = (
   const uiType = form.watch("uiType");
   const scope = form.watch("scope");
   const options = getRuleTemplateOptions(uiType, scope);
-  const hasContent = messages.length > 0;
+  const hasContent = !isEmpty(messages);
   const isBlank =
     hasContent && isBlankContent({ messages, schema }, uiType, scope);
   const selectedOption = hasContent

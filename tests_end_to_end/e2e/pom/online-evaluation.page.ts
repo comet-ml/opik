@@ -202,10 +202,6 @@ export class OnlineEvaluationPage {
     return messages.map((message) => message.trim());
   }
 
-  /**
-   * Opens the create panel. A new judge or decision model starts on cards, so
-   * this also picks one: the given template, or the card to write your own.
-   */
   async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge', startCard?: string): Promise<void> {
     return test.step(`open the create panel for a ${type} evaluator`, async () => {
       await this.openEvaluatorMenuItem(type);
@@ -215,19 +211,6 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /**
-   * Opens the create panel and STOPS on the start cards, choosing none.
-   *
-   * For the specs whose subject is the card screen itself — which card set a
-   * scope offers, what each card applies, and the submit the cards block. Every
-   * other caller wants `openCreateRulePanel`, which goes on to pick one,
-   * because the rest of the form does not exist until a card is chosen.
-   *
-   * The cards are asserted present rather than assumed: a panel that opened
-   * already past them (a default prompt coming back, an edit panel opening by
-   * mistake) would otherwise surface as the caller's later card click never
-   * finding its button, several steps from the cause.
-   */
   async openCreateRulePanelOnStartCards(
     type: Exclude<EvaluatorType, 'Code evaluator'>,
   ): Promise<void> {

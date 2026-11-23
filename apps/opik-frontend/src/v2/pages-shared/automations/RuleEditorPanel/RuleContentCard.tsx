@@ -34,10 +34,10 @@ const RuleContentTab: React.FC<RuleContentTabProps> = ({
   >
     <IconTag
       icon={icon}
-      className={isSelected ? iconClassName : "bg-slate-200"}
-      iconClassName={isSelected ? undefined : "text-slate-700"}
+      className={isSelected ? iconClassName : "bg-muted"}
+      iconClassName={isSelected ? undefined : "text-muted-slate"}
     />
-    {label}
+    <span>{label}</span>
   </button>
 );
 

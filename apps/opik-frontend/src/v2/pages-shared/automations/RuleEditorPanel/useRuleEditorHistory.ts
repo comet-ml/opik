@@ -7,6 +7,7 @@ import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 
 export const RULE_HISTORY_SCOPE_ATTRIBUTE = "data-rule-history";
+export const RULE_HISTORY_IGNORE_ATTRIBUTE = "data-rule-history-ignore";
 
 const TRACKED_FIELDS = [
   "ruleName",
@@ -72,7 +73,11 @@ const isOutsideHistoryScope = (element: Element | null) => {
     element instanceof HTMLInputElement ||
     element instanceof HTMLTextAreaElement ||
     (element instanceof HTMLElement && element.isContentEditable);
-  return isEditable && !element.closest(`[${RULE_HISTORY_SCOPE_ATTRIBUTE}]`);
+  return (
+    isEditable &&
+    (!element.closest(`[${RULE_HISTORY_SCOPE_ATTRIBUTE}]`) ||
+      Boolean(element.closest(`[${RULE_HISTORY_IGNORE_ATTRIBUTE}]`)))
+  );
 };
 
 const useRuleEditorHistory = (
@@ -120,6 +125,14 @@ const useRuleEditorHistory = (
       futureRef.current = [];
       currentRef.current = takeSnapshot();
       typingGroupRef.current = null;
+    },
+    [takeSnapshot, runSilently],
+  );
+
+  const withoutHistory = useCallback(
+    (change: () => void) => {
+      runSilently(change);
+      currentRef.current = takeSnapshot();
     },
     [takeSnapshot, runSilently],
   );
@@ -174,6 +187,7 @@ const useRuleEditorHistory = (
       if (isSilentRef.current || !name || !isTrackedField(name)) return;
       const previous = currentRef.current;
       const next = takeSnapshot();
+      if (previous && isSameContent(previous, next)) return;
       const previousText = previous ? getContentText(previous) : "";
       const nextText = getContentText(next);
       const isDeleting = nextText.length < previousText.length;
@@ -224,6 +238,7 @@ const useRuleEditorHistory = (
     setIsPickingTemplate,
     recordAction,
     resetHistory,
+    withoutHistory,
   };
 };
 
