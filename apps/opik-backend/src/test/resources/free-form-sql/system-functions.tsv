@@ -1,0 +1,1791 @@
+# clickhouse/clickhouse-server:26.3.62.3-alpine
+name	alias_to	is_aggregate	case_insensitive	origin
+BIT_AND	groupBitAnd	1	1	System
+BIT_OR	groupBitOr	1	1	System
+BIT_XOR	groupBitXor	1	1	System
+BLAKE3		0	0	System
+CAST		0	1	System
+CHARACTER_LENGTH	lengthUTF8	0	1	System
+CHAR_LENGTH	lengthUTF8	0	1	System
+COVAR_POP	covarPop	1	1	System
+COVAR_SAMP	covarSamp	1	1	System
+CRC32		0	1	System
+CRC32IEEE		0	1	System
+CRC64		0	1	System
+DATABASE	currentDatabase	0	1	System
+DATE		0	1	System
+DATE_DIFF	dateDiff	0	0	System
+DATE_FORMAT	formatDateTime	0	1	System
+DATE_TRUNC	dateTrunc	0	1	System
+DAY	toDayOfMonth	0	1	System
+DAYOFMONTH	toDayOfMonth	0	1	System
+DAYOFWEEK	toDayOfWeek	0	1	System
+DAYOFYEAR	toDayOfYear	0	1	System
+FORMAT_BYTES	formatReadableSize	0	1	System
+FQDN		0	1	System
+FROM_BASE64	base64Decode	0	1	System
+FROM_DAYS	fromDaysSinceYearZero	0	1	System
+FROM_UNIXTIME	fromUnixTimestamp	0	1	System
+HMAC		0	1	System
+HOUR	toHour	0	1	System
+INET6_ATON	IPv6StringToNum	0	1	System
+INET6_NTOA	IPv6NumToString	0	1	System
+INET_ATON	IPv4StringToNum	0	1	System
+INET_NTOA	IPv4NumToString	0	1	System
+IPv4CIDRToRange		0	0	System
+IPv4NumToString		0	0	System
+IPv4NumToStringClassC		0	0	System
+IPv4StringToNum		0	0	System
+IPv4StringToNumOrDefault		0	0	System
+IPv4StringToNumOrNull		0	0	System
+IPv4ToIPv6		0	0	System
+IPv6CIDRToRange		0	0	System
+IPv6NumToString		0	0	System
+IPv6StringToNum		0	0	System
+IPv6StringToNumOrDefault		0	0	System
+IPv6StringToNumOrNull		0	0	System
+JSONAllPaths		0	0	System
+JSONAllPathsWithTypes		0	0	System
+JSONArrayLength		0	0	System
+JSONDynamicPaths		0	0	System
+JSONDynamicPathsWithTypes		0	0	System
+JSONExtract		0	0	System
+JSONExtractArrayRaw		0	0	System
+JSONExtractArrayRawCaseInsensitive		0	0	System
+JSONExtractBool		0	0	System
+JSONExtractBoolCaseInsensitive		0	0	System
+JSONExtractCaseInsensitive		0	0	System
+JSONExtractFloat		0	0	System
+JSONExtractFloatCaseInsensitive		0	0	System
+JSONExtractInt		0	0	System
+JSONExtractIntCaseInsensitive		0	0	System
+JSONExtractKeys		0	0	System
+JSONExtractKeysAndValues		0	0	System
+JSONExtractKeysAndValuesCaseInsensitive		0	0	System
+JSONExtractKeysAndValuesRaw		0	0	System
+JSONExtractKeysAndValuesRawCaseInsensitive		0	0	System
+JSONExtractKeysCaseInsensitive		0	0	System
+JSONExtractRaw		0	0	System
+JSONExtractRawCaseInsensitive		0	0	System
+JSONExtractString		0	0	System
+JSONExtractStringCaseInsensitive		0	0	System
+JSONExtractUInt		0	0	System
+JSONExtractUIntCaseInsensitive		0	0	System
+JSONHas		0	0	System
+JSONKey		0	0	System
+JSONLength		0	0	System
+JSONMergePatch		0	0	System
+JSONSharedDataPaths		0	0	System
+JSONSharedDataPathsWithTypes		0	0	System
+JSONType		0	0	System
+JSON_ARRAY_LENGTH	JSONArrayLength	0	1	System
+JSON_EXISTS		0	0	System
+JSON_QUERY		0	0	System
+JSON_VALUE		0	0	System
+L1Distance		0	0	System
+L1Norm		0	0	System
+L1Normalize		0	0	System
+L2Distance		0	0	System
+L2DistanceTransposed		0	0	System
+L2Norm		0	0	System
+L2Normalize		0	0	System
+L2SquaredDistance		0	0	System
+L2SquaredNorm		0	0	System
+LAST_DAY	toLastDayOfMonth	0	1	System
+LinfDistance		0	0	System
+LinfNorm		0	0	System
+LinfNormalize		0	0	System
+LpDistance		0	0	System
+LpNorm		0	0	System
+LpNormalize		0	0	System
+MACNumToString		0	0	System
+MACStringToNum		0	0	System
+MACStringToOUI		0	0	System
+MAP_FROM_ARRAYS	mapFromArrays	0	0	System
+MD4		0	0	System
+MD5		0	0	System
+MILLISECOND	toMillisecond	0	1	System
+MINUTE	toMinute	0	1	System
+MONTH	toMonth	0	1	System
+NATURAL_SORT_KEY	naturalSortKey	0	1	System
+OCTET_LENGTH	length	0	1	System
+QUARTER	toQuarter	0	1	System
+REGEXP_EXTRACT	regexpExtract	0	1	System
+REGEXP_MATCHES	match	0	1	System
+REGEXP_REPLACE	replaceRegexpAll	0	1	System
+RIPEMD160		0	0	System
+SCHEMA	currentDatabase	0	1	System
+SECOND	toSecond	0	1	System
+SHA1		0	0	System
+SHA224		0	0	System
+SHA256		0	0	System
+SHA384		0	0	System
+SHA512		0	0	System
+SHA512_256		0	0	System
+STD	stddevPop	1	1	System
+STDDEV_POP	stddevPop	1	1	System
+STDDEV_SAMP	stddevSamp	1	1	System
+ST_LineFromWKB	readWKBLineString	0	0	System
+ST_MLineFromWKB	readWKBMultiLineString	0	0	System
+ST_MPolyFromWKB	readWKBMultiPolygon	0	0	System
+ST_PointFromWKB	readWKBPoint	0	0	System
+ST_PolyFromWKB	readWKBPolygon	0	0	System
+SUBSTRING_INDEX	substringIndex	0	1	System
+SVG	svg	0	0	System
+TIMESTAMP_DIFF	dateDiff	0	0	System
+TO_BASE64	base64Encode	0	1	System
+TO_DAYS	toDaysSinceYearZero	0	1	System
+TO_UNIXTIME	parseDateTime	0	1	System
+ULIDStringToDateTime		0	0	System
+URLHash		0	0	System
+URLHierarchy		0	0	System
+URLPathHierarchy		0	0	System
+UTCTimestamp		0	1	System
+UTC_timestamp	UTCTimestamp	0	1	System
+UUIDNumToString		0	0	System
+UUIDStringToNum		0	0	System
+UUIDToNum		0	0	System
+UUIDv7ToDateTime		0	0	System
+VAR_POP	varPop	1	1	System
+VAR_SAMP	varSamp	1	1	System
+WKB	wkb	0	0	System
+WKT	wkt	0	0	System
+YEAR	toYear	0	1	System
+YYYYMMDDToDate		0	1	System
+YYYYMMDDToDate32		0	1	System
+YYYYMMDDhhmmssToDateTime		0	1	System
+YYYYMMDDhhmmssToDateTime64		0	0	System
+_CAST		0	1	System
+__actionName		0	0	System
+__applyFilter		0	0	System
+__bitBoolMaskAnd		0	0	System
+__bitBoolMaskOr		0	0	System
+__bitSwapLastTwo		0	0	System
+__bitWrapperFunc		0	0	System
+__getScalar		0	0	System
+__patchPartitionID		0	0	System
+__scalarSubqueryResult		0	0	System
+abs		0	1	System
+accurateCast		0	0	System
+accurateCastOrDefault		0	0	System
+accurateCastOrNull		0	0	System
+acos		0	1	System
+acosh		0	0	System
+addDate		0	1	System
+addDays		0	0	System
+addHours		0	0	System
+addInterval		0	0	System
+addMicroseconds		0	0	System
+addMilliseconds		0	0	System
+addMinutes		0	0	System
+addMonths		0	0	System
+addNanoseconds		0	0	System
+addQuarters		0	0	System
+addSeconds		0	0	System
+addTupleOfIntervals		0	0	System
+addWeeks		0	0	System
+addYears		0	0	System
+addressToLine		0	0	System
+addressToLineWithInlines		0	0	System
+addressToSymbol		0	0	System
+aes_decrypt_mysql		0	0	System
+aes_encrypt_mysql		0	0	System
+age		0	1	System
+aggThrow		1	0	System
+alphaTokens		0	0	System
+analysisOfVariance		1	1	System
+and		0	0	System
+anova	analysisOfVariance	1	1	System
+any		1	0	System
+anyHeavy		1	0	System
+anyLast		1	0	System
+anyLastRespectNulls	anyLast_respect_nulls	1	0	System
+anyLast_respect_nulls		1	0	System
+anyRespectNulls	any_respect_nulls	1	0	System
+anyValueRespectNulls	any_respect_nulls	1	0	System
+any_respect_nulls		1	0	System
+any_value	any	1	1	System
+any_value_respect_nulls	any_respect_nulls	1	1	System
+appendTrailingCharIfAbsent		0	0	System
+approx_top_count	approx_top_k	1	1	System
+approx_top_k		1	1	System
+approx_top_sum		1	1	System
+areaCartesian		0	0	System
+areaSpherical		0	0	System
+argAndMax		1	0	System
+argAndMin		1	0	System
+argMax		1	0	System
+argMin		1	0	System
+array		0	0	System
+arrayAUC	arrayROCAUC	0	0	System
+arrayAUCPR		0	0	System
+arrayAll		0	0	System
+arrayAvg		0	0	System
+arrayCompact		0	0	System
+arrayConcat		0	0	System
+arrayCount		0	0	System
+arrayCumSum		0	0	System
+arrayCumSumNonNegative		0	0	System
+arrayDifference		0	0	System
+arrayDistinct		0	0	System
+arrayDotProduct		0	0	System
+arrayElement		0	0	System
+arrayElementOrNull		0	0	System
+arrayEnumerate		0	0	System
+arrayEnumerateDense		0	0	System
+arrayEnumerateDenseRanked		0	0	System
+arrayEnumerateUniq		0	0	System
+arrayEnumerateUniqRanked		0	0	System
+arrayExcept		0	0	System
+arrayExists		0	0	System
+arrayFill		0	0	System
+arrayFilter		0	0	System
+arrayFirst		0	0	System
+arrayFirstIndex		0	0	System
+arrayFirstOrNull		0	0	System
+arrayFlatten		0	0	System
+arrayFold		0	0	System
+arrayIntersect		0	0	System
+arrayJaccardIndex		0	0	System
+arrayJoin		0	0	System
+arrayLast		0	0	System
+arrayLastIndex		0	0	System
+arrayLastOrNull		0	0	System
+arrayLevenshteinDistance		0	0	System
+arrayLevenshteinDistanceWeighted		0	0	System
+arrayMap		0	0	System
+arrayMax		0	0	System
+arrayMin		0	0	System
+arrayNormalizedGini		0	0	System
+arrayPRAUC	arrayAUCPR	0	0	System
+arrayPartialReverseSort		0	0	System
+arrayPartialShuffle		0	1	System
+arrayPartialSort		0	0	System
+arrayPopBack		0	0	System
+arrayPopFront		0	0	System
+arrayProduct		0	0	System
+arrayPushBack		0	0	System
+arrayPushFront		0	0	System
+arrayROCAUC		0	0	System
+arrayRandomSample		0	0	System
+arrayReduce		0	0	System
+arrayReduceInRanges		0	0	System
+arrayRemove		0	0	System
+arrayResize		0	0	System
+arrayReverse		0	0	System
+arrayReverseFill		0	0	System
+arrayReverseSort		0	0	System
+arrayReverseSplit		0	0	System
+arrayRotateLeft		0	0	System
+arrayRotateRight		0	0	System
+arrayShiftLeft		0	0	System
+arrayShiftRight		0	0	System
+arrayShingles		0	0	System
+arrayShuffle		0	1	System
+arraySimilarity		0	0	System
+arraySlice		0	0	System
+arraySort		0	0	System
+arraySplit		0	0	System
+arrayStringConcat		0	0	System
+arraySum		0	0	System
+arraySymmetricDifference		0	0	System
+arrayUnion		0	0	System
+arrayUniq		0	0	System
+arrayWithConstant		0	0	System
+arrayZip		0	0	System
+arrayZipUnaligned		0	0	System
+array_agg	groupArray	1	1	System
+array_concat_agg	groupArrayArray	1	1	System
+array_remove	arrayRemove	0	1	System
+ascii		0	1	System
+asin		0	1	System
+asinh		0	0	System
+assumeNotNull		0	0	System
+atan		0	1	System
+atan2		0	1	System
+atanh		0	0	System
+authUser	authenticatedUser	0	0	System
+authenticatedUser		0	0	System
+avg		1	1	System
+avg2		0	1	System
+avgWeighted		1	0	System
+bar		0	0	System
+base32Decode		0	0	System
+base32Encode		0	0	System
+base58Decode		0	0	System
+base58Encode		0	0	System
+base64Decode		0	0	System
+base64Encode		0	0	System
+base64URLDecode		0	0	System
+base64URLEncode		0	0	System
+basename		0	0	System
+bech32Decode		0	0	System
+bech32Encode		0	0	System
+bin		0	1	System
+bitAnd		0	0	System
+bitCount		0	0	System
+bitHammingDistance		0	0	System
+bitNot		0	0	System
+bitOr		0	0	System
+bitPositionsToArray		0	0	System
+bitRotateLeft		0	0	System
+bitRotateRight		0	0	System
+bitShiftLeft		0	0	System
+bitShiftRight		0	0	System
+bitSlice		0	0	System
+bitTest		0	0	System
+bitTestAll		0	0	System
+bitTestAny		0	0	System
+bitXor		0	0	System
+bitmapAnd		0	0	System
+bitmapAndCardinality		0	0	System
+bitmapAndnot		0	0	System
+bitmapAndnotCardinality		0	0	System
+bitmapBuild		0	0	System
+bitmapCardinality		0	0	System
+bitmapContains		0	0	System
+bitmapHasAll		0	0	System
+bitmapHasAny		0	0	System
+bitmapMax		0	0	System
+bitmapMin		0	0	System
+bitmapOr		0	0	System
+bitmapOrCardinality		0	0	System
+bitmapSubsetInRange		0	0	System
+bitmapSubsetLimit		0	0	System
+bitmapToArray		0	0	System
+bitmapTransform		0	0	System
+bitmapXor		0	0	System
+bitmapXorCardinality		0	0	System
+bitmaskToArray		0	0	System
+bitmaskToList		0	0	System
+blockNumber		0	0	System
+blockSerializedSize		0	0	System
+blockSize		0	0	System
+boundingRatio		1	0	System
+buildId		0	0	System
+byteHammingDistance		0	0	System
+byteSize		0	0	System
+byteSlice	substring	0	1	System
+byteSwap		0	1	System
+caseFoldUTF8		0	0	System
+caseWithExpr	caseWithExpression	0	0	System
+caseWithExpression		0	0	System
+caseWithoutExpr	multiIf	0	0	System
+caseWithoutExpression	multiIf	0	0	System
+catboostEvaluate		0	0	System
+categoricalInformationValue		1	0	System
+cbrt		0	0	System
+ceil		0	1	System
+ceiling	ceil	0	1	System
+changeDay		0	0	System
+changeHour		0	0	System
+changeMinute		0	0	System
+changeMonth		0	0	System
+changeSecond		0	0	System
+changeYear		0	0	System
+char		0	1	System
+cityHash64		0	0	System
+clamp		0	0	System
+coalesce		0	1	System
+colorOKLABToSRGB		0	0	System
+colorOKLCHToSRGB		0	0	System
+colorSRGBToOKLAB		0	0	System
+colorSRGBToOKLCH		0	0	System
+compareSubstrings		0	0	System
+concat		0	1	System
+concatAssumeInjective		0	0	System
+concatWithSeparator		0	0	System
+concatWithSeparatorAssumeInjective		0	0	System
+concat_ws	concatWithSeparator	0	1	System
+connectionId		0	1	System
+connection_id	connectionID	0	1	System
+contingency		1	0	System
+conv		0	0	System
+convertCharset		0	0	System
+corr		1	1	System
+corrMatrix		1	0	System
+corrStable		1	0	System
+cos		0	1	System
+cosh		0	0	System
+cosineDistance		0	0	System
+cosineDistanceTransposed		0	0	System
+count		1	1	System
+countDigits		0	0	System
+countEqual		0	0	System
+countMatches		0	0	System
+countMatchesCaseInsensitive		0	0	System
+countSubstrings		0	1	System
+countSubstringsCaseInsensitive		0	0	System
+countSubstringsCaseInsensitiveUTF8		0	0	System
+covarPop		1	0	System
+covarPopMatrix		1	0	System
+covarPopStable		1	0	System
+covarSamp		1	0	System
+covarSampMatrix		1	0	System
+covarSampStable		1	0	System
+cramersV		1	0	System
+cramersVBiasCorrected		1	0	System
+cume_dist		1	0	System
+curdate	today	0	1	System
+currentDatabase		0	0	System
+currentProfiles		0	0	System
+currentQueryID		0	0	System
+currentRoles		0	0	System
+currentSchemas		0	1	System
+currentUser		0	0	System
+current_database	currentDatabase	0	1	System
+current_date	today	0	1	System
+current_query_id	currentQueryID	0	1	System
+current_schemas	currentSchemas	0	1	System
+current_timestamp	now	0	1	System
+current_user	currentUser	0	1	System
+cutFragment		0	0	System
+cutIPv6		0	0	System
+cutQueryString		0	0	System
+cutQueryStringAndFragment		0	0	System
+cutToFirstSignificantSubdomain		0	0	System
+cutToFirstSignificantSubdomainCustom		0	0	System
+cutToFirstSignificantSubdomainCustomRFC		0	0	System
+cutToFirstSignificantSubdomainCustomWithWWW		0	0	System
+cutToFirstSignificantSubdomainCustomWithWWWRFC		0	0	System
+cutToFirstSignificantSubdomainRFC		0	0	System
+cutToFirstSignificantSubdomainWithWWW		0	0	System
+cutToFirstSignificantSubdomainWithWWWRFC		0	0	System
+cutURLParameter		0	0	System
+cutWWW		0	0	System
+damerauLevenshteinDistance		0	0	System
+dateDiff		0	1	System
+dateName		0	1	System
+dateTime64ToSnowflake		0	0	System
+dateTime64ToSnowflakeID		0	0	System
+dateTimeToSnowflake		0	0	System
+dateTimeToSnowflakeID		0	0	System
+dateTimeToUUIDv7		0	0	System
+dateTrunc		0	0	System
+date_bin	toStartOfInterval	0	1	System
+date_diff	dateDiff	0	0	System
+decodeHTMLComponent		0	0	System
+decodeURLComponent		0	0	System
+decodeURLFormComponent		0	0	System
+decodeXMLComponent		0	0	System
+decrypt		0	0	System
+defaultProfiles		0	0	System
+defaultRoles		0	0	System
+defaultValueOfArgumentType		0	0	System
+defaultValueOfTypeName		0	0	System
+degrees		0	1	System
+deltaSum		1	0	System
+deltaSumTimestamp		1	0	System
+demangle		0	0	System
+denseRank		1	0	System
+dense_rank	denseRank	1	1	System
+detectCharset		0	0	System
+detectLanguage		0	0	System
+detectLanguageMixed		0	0	System
+detectLanguageUnknown		0	0	System
+detectTonality		0	0	System
+dictGet		0	0	System
+dictGetAll		0	0	System
+dictGetChildren		0	0	System
+dictGetDate		0	0	System
+dictGetDateOrDefault		0	0	System
+dictGetDateTime		0	0	System
+dictGetDateTimeOrDefault		0	0	System
+dictGetDescendants		0	0	System
+dictGetFloat32		0	0	System
+dictGetFloat32OrDefault		0	0	System
+dictGetFloat64		0	0	System
+dictGetFloat64OrDefault		0	0	System
+dictGetHierarchy		0	0	System
+dictGetIPv4		0	0	System
+dictGetIPv4OrDefault		0	0	System
+dictGetIPv6		0	0	System
+dictGetIPv6OrDefault		0	0	System
+dictGetInt16		0	0	System
+dictGetInt16OrDefault		0	0	System
+dictGetInt32		0	0	System
+dictGetInt32OrDefault		0	0	System
+dictGetInt64		0	0	System
+dictGetInt64OrDefault		0	0	System
+dictGetInt8		0	0	System
+dictGetInt8OrDefault		0	0	System
+dictGetKeys		0	0	System
+dictGetOrDefault		0	0	System
+dictGetOrNull		0	0	System
+dictGetString		0	0	System
+dictGetStringOrDefault		0	0	System
+dictGetUInt16		0	0	System
+dictGetUInt16OrDefault		0	0	System
+dictGetUInt32		0	0	System
+dictGetUInt32OrDefault		0	0	System
+dictGetUInt64		0	0	System
+dictGetUInt64OrDefault		0	0	System
+dictGetUInt8		0	0	System
+dictGetUInt8OrDefault		0	0	System
+dictGetUUID		0	0	System
+dictGetUUIDOrDefault		0	0	System
+dictHas		0	0	System
+dictIsIn		0	0	System
+displayName		0	0	System
+distanceCosine	cosineDistance	0	1	System
+distanceCosineTransposed	cosineDistanceTransposed	0	1	System
+distanceL1	L1Distance	0	1	System
+distanceL2	L2Distance	0	1	System
+distanceL2Squared	L2SquaredDistance	0	1	System
+distanceL2Transposed	L2DistanceTransposed	0	1	System
+distanceLinf	LinfDistance	0	1	System
+distanceLp	LpDistance	0	1	System
+distinctDynamicTypes		1	0	System
+distinctJSONPaths		1	0	System
+distinctJSONPathsAndTypes		1	0	System
+divide		0	0	System
+divideDecimal		0	0	System
+divideOrNull		0	0	System
+domain		0	0	System
+domainRFC		0	0	System
+domainWithoutWWW		0	0	System
+domainWithoutWWWRFC		0	0	System
+dotProduct		0	0	System
+dumpColumnStructure		0	0	System
+dynamicElement		0	0	System
+dynamicType		0	0	System
+e		0	0	System
+editDistance		0	0	System
+editDistanceUTF8		0	0	System
+empty		0	0	System
+emptyArrayDate		0	0	System
+emptyArrayDateTime		0	0	System
+emptyArrayFloat32		0	0	System
+emptyArrayFloat64		0	0	System
+emptyArrayInt16		0	0	System
+emptyArrayInt32		0	0	System
+emptyArrayInt64		0	0	System
+emptyArrayInt8		0	0	System
+emptyArrayString		0	0	System
+emptyArrayToSingle		0	0	System
+emptyArrayUInt16		0	0	System
+emptyArrayUInt32		0	0	System
+emptyArrayUInt64		0	0	System
+emptyArrayUInt8		0	0	System
+enabledProfiles		0	0	System
+enabledRoles		0	0	System
+encodeURLComponent		0	0	System
+encodeURLFormComponent		0	0	System
+encodeXMLComponent		0	0	System
+encrypt		0	0	System
+endsWith		0	0	System
+endsWithCaseInsensitive		0	0	System
+endsWithCaseInsensitiveUTF8		0	0	System
+endsWithUTF8		0	0	System
+entropy		1	0	System
+equals		0	0	System
+erf		0	0	System
+erfc		0	0	System
+errorCodeToName		0	0	System
+estimateCompressionRatio		1	0	System
+evalMLMethod		0	0	System
+exp		0	1	System
+exp10		0	0	System
+exp2		0	0	System
+exponentialMovingAverage		1	0	System
+exponentialTimeDecayedAvg		1	0	System
+exponentialTimeDecayedCount		1	0	System
+exponentialTimeDecayedMax		1	0	System
+exponentialTimeDecayedSum		1	0	System
+extract		0	0	System
+extractAll		0	0	System
+extractAllGroups	extractAllGroupsVertical	0	0	System
+extractAllGroupsHorizontal		0	0	System
+extractAllGroupsVertical		0	0	System
+extractGroups		0	0	System
+extractKeyValuePairs		0	0	System
+extractKeyValuePairsWithEscaping		0	0	System
+extractTextFromHTML		0	0	System
+extractURLParameter		0	0	System
+extractURLParameterNames		0	0	System
+extractURLParameters		0	0	System
+factorial		0	1	System
+farmFingerprint64		0	0	System
+farmHash64		0	0	System
+file		0	0	System
+filesystemAvailable		0	0	System
+filesystemCapacity		0	0	System
+filesystemUnreserved		0	0	System
+finalizeAggregation		0	0	System
+financialInternalRateOfReturn		0	0	System
+financialInternalRateOfReturnExtended		0	0	System
+financialNetPresentValue		0	0	System
+financialNetPresentValueExtended		0	0	System
+firstLine		0	0	System
+firstNonDefault		0	1	System
+firstSignificantSubdomain		0	0	System
+firstSignificantSubdomainCustom		0	0	System
+firstSignificantSubdomainCustomRFC		0	0	System
+firstSignificantSubdomainRFC		0	0	System
+firstValueRespectNulls	any_respect_nulls	1	0	System
+first_value	any	1	1	System
+first_value_respect_nulls	any_respect_nulls	1	1	System
+flameGraph		1	0	System
+flatten	arrayFlatten	0	1	System
+flattenTuple		0	0	System
+flipCoordinates		0	0	System
+floor		0	1	System
+format		0	0	System
+formatDateTime		0	0	System
+formatDateTimeInJodaSyntax		0	0	System
+formatQuery		0	0	System
+formatQueryOrNull		0	0	System
+formatQuerySingleLine		0	0	System
+formatQuerySingleLineOrNull		0	0	System
+formatReadableDecimalSize		0	0	System
+formatReadableQuantity		0	0	System
+formatReadableSize		0	0	System
+formatReadableTimeDelta		0	0	System
+formatRow		0	0	System
+formatRowNoNewline		0	0	System
+fragment		0	0	System
+fromDaysSinceYearZero		0	0	System
+fromDaysSinceYearZero32		0	0	System
+fromModifiedJulianDay		0	0	System
+fromModifiedJulianDayOrNull		0	0	System
+fromUTCTimestamp		0	0	System
+fromUnixTimestamp		0	0	System
+fromUnixTimestamp64Micro		0	0	System
+fromUnixTimestamp64Milli		0	0	System
+fromUnixTimestamp64Nano		0	0	System
+fromUnixTimestamp64Second		0	0	System
+fromUnixTimestampInJodaSyntax		0	0	System
+from_utc_timestamp	fromUTCTimestamp	0	1	System
+fullHostName	FQDN	0	0	System
+fuzzBits		0	0	System
+fuzzQuery		0	0	System
+gccMurmurHash		0	0	System
+gcd		0	0	System
+generateRandomStructure		0	0	System
+generateSerialID		0	0	System
+generateSnowflakeID		0	0	System
+generateULID		0	0	System
+generateUUIDv4		0	0	System
+generateUUIDv7		0	0	System
+geoDistance		0	0	System
+geoToH3		0	0	System
+geoToS2		0	0	System
+geohashDecode		0	0	System
+geohashEncode		0	0	System
+geohashesInBox		0	0	System
+getClientHTTPHeader		0	0	System
+getMacro		0	0	System
+getMaxTableNameLengthForDatabase		0	0	System
+getMergeTreeSetting		0	0	System
+getOSKernelVersion		0	0	System
+getServerPort		0	0	System
+getServerSetting		0	0	System
+getSetting		0	0	System
+getSettingOrDefault		0	0	System
+getSizeOfEnumType		0	0	System
+getSubcolumn		0	0	System
+getTypeSerializationStreams		0	0	System
+globalIn		0	0	System
+globalInIgnoreSet		0	0	System
+globalNotIn		0	0	System
+globalNotInIgnoreSet		0	0	System
+globalNotNullIn		0	0	System
+globalNotNullInIgnoreSet		0	0	System
+globalNullIn		0	0	System
+globalNullInIgnoreSet		0	0	System
+globalVariable		0	0	System
+greatCircleAngle		0	0	System
+greatCircleDistance		0	0	System
+greater		0	0	System
+greaterOrEquals		0	0	System
+greatest		0	1	System
+groupArray		1	0	System
+groupArrayInsertAt		1	0	System
+groupArrayIntersect		1	0	System
+groupArrayLast		1	0	System
+groupArrayMovingAvg		1	0	System
+groupArrayMovingSum		1	0	System
+groupArraySample		1	0	System
+groupArraySorted		1	0	System
+groupBitAnd		1	0	System
+groupBitOr		1	0	System
+groupBitXor		1	0	System
+groupBitmap		1	0	System
+groupBitmapAnd		1	0	System
+groupBitmapOr		1	0	System
+groupBitmapXor		1	0	System
+groupConcat		1	0	System
+groupNumericIndexedVector		1	0	System
+groupUniqArray		1	0	System
+group_concat	groupConcat	1	1	System
+h3CellAreaM2		0	0	System
+h3CellAreaRads2		0	0	System
+h3Distance		0	0	System
+h3EdgeAngle		0	0	System
+h3EdgeLengthKm		0	0	System
+h3EdgeLengthM		0	0	System
+h3ExactEdgeLengthKm		0	0	System
+h3ExactEdgeLengthM		0	0	System
+h3ExactEdgeLengthRads		0	0	System
+h3GetBaseCell		0	0	System
+h3GetDestinationIndexFromUnidirectionalEdge		0	0	System
+h3GetFaces		0	0	System
+h3GetIndexesFromUnidirectionalEdge		0	0	System
+h3GetOriginIndexFromUnidirectionalEdge		0	0	System
+h3GetPentagonIndexes		0	0	System
+h3GetRes0Indexes		0	0	System
+h3GetResolution		0	0	System
+h3GetUnidirectionalEdge		0	0	System
+h3GetUnidirectionalEdgeBoundary		0	0	System
+h3GetUnidirectionalEdgesFromHexagon		0	0	System
+h3HexAreaKm2		0	0	System
+h3HexAreaM2		0	0	System
+h3HexRing		0	0	System
+h3IndexesAreNeighbors		0	0	System
+h3IsPentagon		0	0	System
+h3IsResClassIII		0	0	System
+h3IsValid		0	0	System
+h3Line		0	0	System
+h3NumHexagons		0	0	System
+h3PointDistKm		0	0	System
+h3PointDistM		0	0	System
+h3PointDistRads		0	0	System
+h3PolygonToCells		0	0	System
+h3ToCenterChild		0	0	System
+h3ToChildren		0	0	System
+h3ToGeo		0	0	System
+h3ToGeoBoundary		0	0	System
+h3ToParent		0	0	System
+h3ToString		0	0	System
+h3UnidirectionalEdgeIsValid		0	0	System
+h3kRing		0	0	System
+halfMD5		0	0	System
+has		0	0	System
+hasAll		0	0	System
+hasAllToken	hasAllTokens	0	0	System
+hasAllTokens		0	0	System
+hasAny		0	0	System
+hasAnyToken	hasAnyTokens	0	0	System
+hasAnyTokens		0	0	System
+hasColumnInTable		0	0	System
+hasSubsequence		0	1	System
+hasSubsequenceCaseInsensitive		0	1	System
+hasSubsequenceCaseInsensitiveUTF8		0	1	System
+hasSubsequenceUTF8		0	1	System
+hasSubstr		0	0	System
+hasThreadFuzzer		0	0	System
+hasToken		0	0	System
+hasTokenCaseInsensitive		0	1	System
+hasTokenCaseInsensitiveOrNull		0	1	System
+hasTokenOrNull		0	0	System
+hex		0	1	System
+hilbertDecode		0	0	System
+hilbertEncode		0	0	System
+histogram		1	0	System
+hiveHash		0	0	System
+hop		0	0	System
+hopEnd		0	0	System
+hopStart		0	0	System
+hostName		0	0	System
+hostname	hostName	0	0	System
+hypot		0	1	System
+icebergBucket		0	0	System
+icebergHash		0	0	System
+icebergTruncate		0	0	System
+identity		0	0	System
+idnaDecode		0	0	System
+idnaEncode		0	0	System
+if		0	1	System
+ifNotFinite		0	0	System
+ifNull		0	1	System
+ignore		0	0	System
+ilike		0	0	System
+in		0	0	System
+inIgnoreSet		0	0	System
+indexHint		0	0	System
+indexOf		0	0	System
+indexOfAssumeSorted		0	0	System
+initcap		0	1	System
+initcapUTF8		0	0	System
+initialQueryID		0	0	System
+initialQueryStartTime		0	0	System
+initial_query_id	initialQueryID	0	1	System
+initial_query_start_time	initialQueryStartTime	0	1	System
+initializeAggregation		0	0	System
+instr	positionCaseInsensitive	0	1	System
+intDiv		0	0	System
+intDivOrNull		0	0	System
+intDivOrZero		0	0	System
+intExp10		0	0	System
+intExp2		0	0	System
+intHash32		0	0	System
+intHash64		0	0	System
+intervalLengthSum		1	0	System
+isASCII	isValidASCII	0	0	System
+isConstant		0	0	System
+isDecimalOverflow		0	0	System
+isDistinctFrom		0	0	System
+isDynamicElementInSharedData		0	0	System
+isFinite		0	0	System
+isIPAddressInRange		0	0	System
+isIPv4String		0	0	System
+isIPv6String		0	0	System
+isInfinite		0	0	System
+isMergeTreePartCoveredBy		0	1	System
+isNaN		0	0	System
+isNotDistinctFrom		0	0	System
+isNotNull		0	0	System
+isNull		0	1	System
+isNullable		0	0	System
+isValidASCII		0	0	System
+isValidJSON		0	0	System
+isValidUTF8		0	0	System
+isZeroOrNull		0	0	System
+jaroSimilarity		0	0	System
+jaroWinklerSimilarity		0	0	System
+javaHash		0	0	System
+javaHashUTF16LE		0	0	System
+joinGet		0	0	System
+joinGetOrNull		0	0	System
+jsonMergePatch	JSONMergePatch	0	0	System
+jumpConsistentHash		0	0	System
+kafkaMurmurHash		0	0	System
+keccak256		0	0	System
+kolmogorovSmirnovTest		1	1	System
+kostikConsistentHash		0	0	System
+kql_array_sort_asc		0	0	System
+kql_array_sort_desc		0	0	System
+kurtPop		1	0	System
+kurtSamp		1	0	System
+lag		1	1	System
+lagInFrame		1	0	System
+largestTriangleThreeBuckets		1	0	System
+lastValueRespectNulls	anyLast_respect_nulls	1	0	System
+last_value	anyLast	1	1	System
+last_value_respect_nulls	anyLast_respect_nulls	1	1	System
+lcase	lower	0	1	System
+lcm		0	0	System
+lead		1	1	System
+leadInFrame		1	0	System
+least		0	1	System
+left		0	1	System
+leftPad		0	0	System
+leftPadUTF8		0	0	System
+leftUTF8		0	0	System
+lemmatize		0	0	System
+length		0	1	System
+lengthUTF8		0	0	System
+less		0	0	System
+lessOrEquals		0	0	System
+levenshteinDistance	editDistance	0	0	System
+levenshteinDistanceUTF8	editDistanceUTF8	0	0	System
+lgamma		0	0	System
+like		0	0	System
+ln	log	0	1	System
+locate		0	1	System
+log		0	1	System
+log10		0	1	System
+log1p		0	0	System
+log2		0	1	System
+logTrace		0	0	System
+lowCardinalityIndices		0	0	System
+lowCardinalityKeys		0	0	System
+lower		0	1	System
+lowerUTF8		0	0	System
+lpad	leftPad	0	1	System
+ltrim	trimLeft	0	0	System
+lttb	largestTriangleThreeBuckets	1	0	System
+makeDate		0	1	System
+makeDate32		0	1	System
+makeDateTime		0	1	System
+makeDateTime64		0	1	System
+mannWhitneyUTest		1	0	System
+map		0	0	System
+mapAdd		0	0	System
+mapAll		0	0	System
+mapApply		0	0	System
+mapConcat		0	0	System
+mapContains	mapContainsKey	0	0	System
+mapContainsKey		0	0	System
+mapContainsKeyLike		0	0	System
+mapContainsValue		0	0	System
+mapContainsValueLike		0	0	System
+mapExists		0	0	System
+mapExtractKeyLike		0	0	System
+mapExtractValueLike		0	0	System
+mapFilter		0	0	System
+mapFromArrays		0	0	System
+mapFromString	extractKeyValuePairs	0	0	System
+mapKeys		0	0	System
+mapPartialReverseSort		0	0	System
+mapPartialSort		0	0	System
+mapPopulateSeries		0	0	System
+mapReverseSort		0	0	System
+mapSort		0	0	System
+mapSubtract		0	0	System
+mapUpdate		0	0	System
+mapValues		0	0	System
+match		0	0	System
+materialize		0	0	System
+max		1	1	System
+max2		0	1	System
+maxIntersections		1	0	System
+maxIntersectionsPosition		1	0	System
+maxMappedArrays		1	0	System
+meanZTest		1	0	System
+median	quantile	1	0	System
+medianBFloat16	quantileBFloat16	1	0	System
+medianBFloat16Weighted	quantileBFloat16Weighted	1	0	System
+medianDD	quantileDD	1	0	System
+medianDeterministic	quantileDeterministic	1	0	System
+medianExact	quantileExact	1	0	System
+medianExactHigh	quantileExactHigh	1	0	System
+medianExactLow	quantileExactLow	1	0	System
+medianExactWeighted	quantileExactWeighted	1	0	System
+medianExactWeightedInterpolated	quantileExactWeightedInterpolated	1	0	System
+medianGK	quantileGK	1	0	System
+medianInterpolatedWeighted	quantileInterpolatedWeighted	1	0	System
+medianTDigest	quantileTDigest	1	0	System
+medianTDigestWeighted	quantileTDigestWeighted	1	0	System
+medianTiming	quantileTiming	1	0	System
+medianTimingWeighted	quantileTimingWeighted	1	0	System
+mergeTreePartInfo		0	1	System
+metroHash64		0	0	System
+mid	substring	0	1	System
+midpoint		0	1	System
+min		1	1	System
+min2		0	1	System
+minMappedArrays		1	0	System
+minSampleSizeContinous	minSampleSizeContinuous	0	0	System
+minSampleSizeContinuous		0	0	System
+minSampleSizeConversion		0	0	System
+minus		0	0	System
+mismatches	byteHammingDistance	0	0	System
+mod	modulo	0	1	System
+modOrNull	moduloOrNull	0	1	System
+modulo		0	0	System
+moduloLegacy		0	0	System
+moduloOrNull		0	0	System
+moduloOrZero		0	0	System
+monthName		0	1	System
+mortonDecode		0	0	System
+mortonEncode		0	0	System
+multiFuzzyMatchAllIndices		0	0	System
+multiFuzzyMatchAny		0	0	System
+multiFuzzyMatchAnyIndex		0	0	System
+multiIf		0	0	System
+multiMatchAllIndices		0	0	System
+multiMatchAny		0	0	System
+multiMatchAnyIndex		0	0	System
+multiSearchAllPositions		0	0	System
+multiSearchAllPositionsCaseInsensitive		0	0	System
+multiSearchAllPositionsCaseInsensitiveUTF8		0	0	System
+multiSearchAllPositionsUTF8		0	0	System
+multiSearchAny		0	0	System
+multiSearchAnyCaseInsensitive		0	0	System
+multiSearchAnyCaseInsensitiveUTF8		0	0	System
+multiSearchAnyUTF8		0	0	System
+multiSearchFirstIndex		0	0	System
+multiSearchFirstIndexCaseInsensitive		0	0	System
+multiSearchFirstIndexCaseInsensitiveUTF8		0	0	System
+multiSearchFirstIndexUTF8		0	0	System
+multiSearchFirstPosition		0	0	System
+multiSearchFirstPositionCaseInsensitive		0	0	System
+multiSearchFirstPositionCaseInsensitiveUTF8		0	0	System
+multiSearchFirstPositionUTF8		0	0	System
+multiply		0	0	System
+multiplyDecimal		0	0	System
+murmurHash2_32		0	0	System
+murmurHash2_64		0	0	System
+murmurHash3_128		0	0	System
+murmurHash3_32		0	0	System
+murmurHash3_64		0	0	System
+naiveBayesClassifier		0	0	System
+naturalSortKey		0	0	System
+negate		0	0	System
+neighbor		0	0	System
+nested		0	0	System
+netloc		0	0	System
+ngramDistance		0	0	System
+ngramDistanceCaseInsensitive		0	0	System
+ngramDistanceCaseInsensitiveUTF8		0	0	System
+ngramDistanceUTF8		0	0	System
+ngramMinHash		0	0	System
+ngramMinHashArg		0	0	System
+ngramMinHashArgCaseInsensitive		0	0	System
+ngramMinHashArgCaseInsensitiveUTF8		0	0	System
+ngramMinHashArgUTF8		0	0	System
+ngramMinHashCaseInsensitive		0	0	System
+ngramMinHashCaseInsensitiveUTF8		0	0	System
+ngramMinHashUTF8		0	0	System
+ngramSearch		0	0	System
+ngramSearchCaseInsensitive		0	0	System
+ngramSearchCaseInsensitiveUTF8		0	0	System
+ngramSearchUTF8		0	0	System
+ngramSimHash		0	0	System
+ngramSimHashCaseInsensitive		0	0	System
+ngramSimHashCaseInsensitiveUTF8		0	0	System
+ngramSimHashUTF8		0	0	System
+ngrams		0	0	System
+nonNegativeDerivative		1	0	System
+normL1	L1Norm	0	1	System
+normL2	L2Norm	0	1	System
+normL2Squared	L2SquaredNorm	0	1	System
+normLinf	LinfNorm	0	1	System
+normLp	LpNorm	0	1	System
+normalizeL1	L1Normalize	0	1	System
+normalizeL2	L2Normalize	0	1	System
+normalizeLinf	LinfNormalize	0	1	System
+normalizeLp	LpNormalize	0	1	System
+normalizeQuery		0	0	System
+normalizeQueryKeepNames		0	0	System
+normalizeUTF8NFC		0	0	System
+normalizeUTF8NFD		0	0	System
+normalizeUTF8NFKC		0	0	System
+normalizeUTF8NFKCCasefold		0	0	System
+normalizeUTF8NFKD		0	0	System
+normalizedQueryHash		0	0	System
+normalizedQueryHashKeepNames		0	0	System
+not		0	1	System
+notEmpty		0	0	System
+notEquals		0	0	System
+notILike		0	0	System
+notIn		0	0	System
+notInIgnoreSet		0	0	System
+notLike		0	0	System
+notNullIn		0	0	System
+notNullInIgnoreSet		0	0	System
+nothing		1	0	System
+nothingNull		1	0	System
+nothingUInt64		1	0	System
+now		0	1	System
+now64		0	1	System
+nowInBlock		0	0	System
+nowInBlock64		0	0	System
+nth_value		1	1	System
+ntile		1	1	System
+nullIf		0	1	System
+nullIn		0	0	System
+nullInIgnoreSet		0	0	System
+numericIndexedVectorAllValueSum		0	0	System
+numericIndexedVectorBuild		0	0	System
+numericIndexedVectorCardinality		0	0	System
+numericIndexedVectorGetValue		0	0	System
+numericIndexedVectorPointwiseAdd		0	0	System
+numericIndexedVectorPointwiseDivide		0	0	System
+numericIndexedVectorPointwiseEqual		0	0	System
+numericIndexedVectorPointwiseGreater		0	0	System
+numericIndexedVectorPointwiseGreaterEqual		0	0	System
+numericIndexedVectorPointwiseLess		0	0	System
+numericIndexedVectorPointwiseLessEqual		0	0	System
+numericIndexedVectorPointwiseMultiply		0	0	System
+numericIndexedVectorPointwiseNotEqual		0	0	System
+numericIndexedVectorPointwiseSubtract		0	0	System
+numericIndexedVectorShortDebugString		0	0	System
+numericIndexedVectorToMap		0	0	System
+or		0	0	System
+overlay		0	1	System
+overlayUTF8		0	0	System
+parseDateTime		0	0	System
+parseDateTime32BestEffort		0	0	System
+parseDateTime32BestEffortOrNull		0	0	System
+parseDateTime32BestEffortOrZero		0	0	System
+parseDateTime64		0	0	System
+parseDateTime64BestEffort		0	0	System
+parseDateTime64BestEffortOrNull		0	0	System
+parseDateTime64BestEffortOrZero		0	0	System
+parseDateTime64BestEffortUS		0	0	System
+parseDateTime64BestEffortUSOrNull		0	0	System
+parseDateTime64BestEffortUSOrZero		0	0	System
+parseDateTime64InJodaSyntax		0	0	System
+parseDateTime64InJodaSyntaxOrNull		0	0	System
+parseDateTime64InJodaSyntaxOrZero		0	0	System
+parseDateTime64OrNull		0	0	System
+parseDateTime64OrZero		0	0	System
+parseDateTimeBestEffort		0	0	System
+parseDateTimeBestEffortOrNull		0	0	System
+parseDateTimeBestEffortOrZero		0	0	System
+parseDateTimeBestEffortUS		0	0	System
+parseDateTimeBestEffortUSOrNull		0	0	System
+parseDateTimeBestEffortUSOrZero		0	0	System
+parseDateTimeInJodaSyntax		0	0	System
+parseDateTimeInJodaSyntaxOrNull		0	0	System
+parseDateTimeInJodaSyntaxOrZero		0	0	System
+parseDateTimeOrNull		0	0	System
+parseDateTimeOrZero		0	0	System
+parseReadableSize		0	0	System
+parseReadableSizeOrNull		0	0	System
+parseReadableSizeOrZero		0	0	System
+parseTimeDelta		0	0	System
+partitionID	partitionId	0	0	System
+partitionId		0	0	System
+path		0	0	System
+pathFull		0	0	System
+percentRank		1	0	System
+percent_rank	percentRank	1	1	System
+perimeterCartesian		0	0	System
+perimeterSpherical		0	0	System
+pi		0	1	System
+plus		0	0	System
+pmod	positiveModulo	0	1	System
+pmodOrNull	positiveModuloOrNull	0	1	System
+pointInEllipses		0	0	System
+pointInPolygon		0	0	System
+polygonAreaCartesian		0	0	System
+polygonAreaSpherical		0	0	System
+polygonConvexHullCartesian		0	0	System
+polygonPerimeterCartesian		0	0	System
+polygonPerimeterSpherical		0	0	System
+polygonsDistanceCartesian		0	0	System
+polygonsDistanceSpherical		0	0	System
+polygonsEqualsCartesian		0	0	System
+polygonsIntersectCartesian		0	0	System
+polygonsIntersectSpherical		0	0	System
+polygonsIntersectionCartesian		0	0	System
+polygonsIntersectionSpherical		0	0	System
+polygonsSymDifferenceCartesian		0	0	System
+polygonsSymDifferenceSpherical		0	0	System
+polygonsUnionCartesian		0	0	System
+polygonsUnionSpherical		0	0	System
+polygonsWithinCartesian		0	0	System
+polygonsWithinSpherical		0	0	System
+port		0	0	System
+portRFC		0	0	System
+position		0	1	System
+positionCaseInsensitive		0	0	System
+positionCaseInsensitiveUTF8		0	0	System
+positionUTF8		0	0	System
+positiveModulo		0	1	System
+positiveModuloOrNull		0	1	System
+positive_modulo	positiveModulo	0	1	System
+positive_modulo_or_null	positiveModuloOrNull	0	1	System
+pow		0	1	System
+power	pow	0	1	System
+printf		0	0	System
+proportionsZTest		0	0	System
+protocol		0	0	System
+punycodeDecode		0	0	System
+punycodeEncode		0	0	System
+quantile		1	0	System
+quantileBFloat16		1	0	System
+quantileBFloat16Weighted		1	0	System
+quantileDD		1	0	System
+quantileDeterministic		1	0	System
+quantileExact		1	0	System
+quantileExactExclusive		1	0	System
+quantileExactHigh		1	0	System
+quantileExactInclusive		1	0	System
+quantileExactLow		1	0	System
+quantileExactWeighted		1	0	System
+quantileExactWeightedInterpolated		1	0	System
+quantileGK		1	0	System
+quantileInterpolatedWeighted		1	0	System
+quantilePrometheusHistogram		1	0	System
+quantileTDigest		1	0	System
+quantileTDigestWeighted		1	0	System
+quantileTiming		1	0	System
+quantileTimingWeighted		1	0	System
+quantiles		1	0	System
+quantilesBFloat16		1	0	System
+quantilesBFloat16Weighted		1	0	System
+quantilesDD		1	0	System
+quantilesDeterministic		1	0	System
+quantilesExact		1	0	System
+quantilesExactExclusive		1	0	System
+quantilesExactHigh		1	0	System
+quantilesExactInclusive		1	0	System
+quantilesExactLow		1	0	System
+quantilesExactWeighted		1	0	System
+quantilesExactWeightedInterpolated		1	0	System
+quantilesGK		1	0	System
+quantilesInterpolatedWeighted		1	0	System
+quantilesPrometheusHistogram		1	0	System
+quantilesTDigest		1	0	System
+quantilesTDigestWeighted		1	0	System
+quantilesTiming		1	0	System
+quantilesTimingWeighted		1	0	System
+queryID		0	0	System
+queryString		0	0	System
+queryStringAndFragment		0	0	System
+query_id	queryID	0	1	System
+radians		0	1	System
+rand		0	1	System
+rand32	rand	0	0	System
+rand64		0	0	System
+randBernoulli		0	0	System
+randBinomial		0	0	System
+randCanonical		0	0	System
+randChiSquared		0	0	System
+randConstant		0	0	System
+randExponential		0	0	System
+randFisherF		0	0	System
+randLogNormal		0	0	System
+randNegativeBinomial		0	0	System
+randNormal		0	0	System
+randPoisson		0	0	System
+randStudentT		0	0	System
+randUniform		0	0	System
+randomFixedString		0	0	System
+randomPrintableASCII		0	0	System
+randomString		0	0	System
+randomStringUTF8		0	0	System
+range		0	0	System
+rank		1	1	System
+rankCorr		1	0	System
+readWKB		0	0	System
+readWKBLineString		0	0	System
+readWKBMultiLineString		0	0	System
+readWKBMultiPolygon		0	0	System
+readWKBPoint		0	0	System
+readWKBPolygon		0	0	System
+readWKT		0	0	System
+readWKTLineString		0	0	System
+readWKTMultiLineString		0	0	System
+readWKTMultiPolygon		0	0	System
+readWKTPoint		0	0	System
+readWKTPolygon		0	0	System
+readWKTRing		0	0	System
+readWkb	readWKB	0	0	System
+readWkt	readWKT	0	0	System
+regexpExtract		0	0	System
+regexpQuoteMeta		0	0	System
+regionHierarchy		0	0	System
+regionIn		0	0	System
+regionToArea		0	0	System
+regionToCity		0	0	System
+regionToContinent		0	0	System
+regionToCountry		0	0	System
+regionToDistrict		0	0	System
+regionToName		0	0	System
+regionToPopulation		0	0	System
+regionToTopContinent		0	0	System
+reinterpret		0	0	System
+reinterpretAsDate		0	0	System
+reinterpretAsDateTime		0	0	System
+reinterpretAsFixedString		0	0	System
+reinterpretAsFloat32		0	0	System
+reinterpretAsFloat64		0	0	System
+reinterpretAsInt128		0	0	System
+reinterpretAsInt16		0	0	System
+reinterpretAsInt256		0	0	System
+reinterpretAsInt32		0	0	System
+reinterpretAsInt64		0	0	System
+reinterpretAsInt8		0	0	System
+reinterpretAsString		0	0	System
+reinterpretAsUInt128		0	0	System
+reinterpretAsUInt16		0	0	System
+reinterpretAsUInt256		0	0	System
+reinterpretAsUInt32		0	0	System
+reinterpretAsUInt64		0	0	System
+reinterpretAsUInt8		0	0	System
+reinterpretAsUUID		0	0	System
+removeAccentsUTF8	removeDiacriticsUTF8	0	0	System
+removeDiacriticsUTF8		0	0	System
+repeat		0	1	System
+replace	replaceAll	0	1	System
+replaceAll		0	0	System
+replaceOne		0	0	System
+replaceRegexpAll		0	0	System
+replaceRegexpOne		0	0	System
+replicate		0	0	System
+retention		1	0	System
+reverse		0	1	System
+reverseBySeparator		0	0	System
+reverseUTF8		0	0	System
+revision		0	1	System
+right		0	1	System
+rightPad		0	0	System
+rightPadUTF8		0	0	System
+rightUTF8		0	0	System
+round		0	1	System
+roundAge		0	0	System
+roundBankers		0	0	System
+roundDown		0	0	System
+roundDuration		0	0	System
+roundToExp2		0	0	System
+rowNumberInAllBlocks		0	0	System
+rowNumberInBlock		0	0	System
+row_number		1	1	System
+rpad	rightPad	0	1	System
+rtrim	trimRight	0	0	System
+runningAccumulate		0	0	System
+runningConcurrency		0	0	System
+runningDifference		0	0	System
+runningDifferenceStartingWithFirstValue		0	0	System
+s2CapContains		0	0	System
+s2CapUnion		0	0	System
+s2CellsIntersect		0	0	System
+s2GetNeighbors		0	0	System
+s2RectAdd		0	0	System
+s2RectContains		0	0	System
+s2RectIntersection		0	0	System
+s2RectUnion		0	0	System
+s2ToGeo		0	0	System
+scalarProduct	dotProduct	0	1	System
+sequenceCount		1	0	System
+sequenceMatch		1	0	System
+sequenceMatchEvents		1	0	System
+sequenceNextNode		1	0	System
+seriesDecomposeSTL		0	0	System
+seriesOutliersDetectTukey		0	0	System
+seriesPeriodDetectFFT		0	0	System
+serverTimeZone	serverTimezone	0	0	System
+serverTimezone		0	0	System
+serverUUID		0	0	System
+shardCount		0	0	System
+shardNum		0	0	System
+showCertificate		0	0	System
+sigmoid		0	0	System
+sign		0	1	System
+simpleJSONExtractBool		0	0	System
+simpleJSONExtractFloat		0	0	System
+simpleJSONExtractInt		0	0	System
+simpleJSONExtractRaw		0	0	System
+simpleJSONExtractString		0	0	System
+simpleJSONExtractUInt		0	0	System
+simpleJSONHas		0	0	System
+simpleLinearRegression		1	0	System
+sin		0	1	System
+singleValueOrNull		1	0	System
+sinh		0	0	System
+sipHash128		0	0	System
+sipHash128Keyed		0	0	System
+sipHash128Reference		0	0	System
+sipHash128ReferenceKeyed		0	0	System
+sipHash64		0	0	System
+sipHash64Keyed		0	0	System
+skewPop		1	0	System
+skewSamp		1	0	System
+sleep		0	0	System
+sleepEachRow		0	0	System
+snowflakeIDToDateTime		0	0	System
+snowflakeIDToDateTime64		0	0	System
+snowflakeToDateTime		0	0	System
+snowflakeToDateTime64		0	0	System
+soundex		0	1	System
+space		0	1	System
+sparkBar	sparkbar	1	0	System
+sparkbar		1	0	System
+sparseGrams		0	0	System
+sparseGramsHashes		0	0	System
+sparseGramsHashesUTF8		0	0	System
+sparseGramsUTF8		0	0	System
+splitByAlpha	alphaTokens	0	0	System
+splitByChar		0	0	System
+splitByNonAlpha		0	0	System
+splitByRegexp		0	0	System
+splitByString		0	0	System
+splitByWhitespace		0	0	System
+sqid	sqidEncode	0	0	System
+sqidDecode		0	0	System
+sqidEncode		0	0	System
+sqrt		0	1	System
+startsWith		0	0	System
+startsWithCaseInsensitive		0	0	System
+startsWithCaseInsensitiveUTF8		0	0	System
+startsWithUTF8		0	0	System
+stddevPop		1	0	System
+stddevPopStable		1	0	System
+stddevSamp		1	0	System
+stddevSampStable		1	0	System
+stem		0	0	System
+stochasticLinearRegression		1	0	System
+stochasticLogisticRegression		1	0	System
+str_to_date	parseDateTimeOrNull	0	1	System
+str_to_map	extractKeyValuePairs	0	1	System
+stringBytesEntropy		0	0	System
+stringBytesUniq		0	0	System
+stringJaccardIndex		0	0	System
+stringJaccardIndexUTF8		0	0	System
+stringToH3		0	0	System
+structureToCapnProtoSchema		0	0	System
+structureToProtobufSchema		0	0	System
+studentTTest		1	0	System
+studentTTestOneSample		1	0	System
+subBitmap		0	0	System
+subDate		0	1	System
+substr	substring	0	1	System
+substring		0	1	System
+substringIndex		0	0	System
+substringIndexUTF8		0	0	System
+substringUTF8		0	0	System
+subtractDays		0	0	System
+subtractHours		0	0	System
+subtractInterval		0	0	System
+subtractMicroseconds		0	0	System
+subtractMilliseconds		0	0	System
+subtractMinutes		0	0	System
+subtractMonths		0	0	System
+subtractNanoseconds		0	0	System
+subtractQuarters		0	0	System
+subtractSeconds		0	0	System
+subtractTupleOfIntervals		0	0	System
+subtractWeeks		0	0	System
+subtractYears		0	0	System
+sum		1	1	System
+sumCount		1	0	System
+sumKahan		1	0	System
+sumMapFiltered		1	0	System
+sumMapFilteredWithOverflow		1	0	System
+sumMapWithOverflow		1	0	System
+sumMappedArrays		1	0	System
+sumWithOverflow		1	0	System
+svg		0	0	System
+synonyms		0	1	System
+tan		0	1	System
+tanh		0	1	System
+tcpPort		0	0	System
+tgamma		0	0	System
+theilsU		1	0	System
+throwIf		0	0	System
+tid		0	0	System
+timeDiff		0	1	System
+timeSeriesChangesToGrid		1	0	System
+timeSeriesCopyTag		0	0	System
+timeSeriesCopyTags		0	0	System
+timeSeriesDeltaToGrid		1	0	System
+timeSeriesDerivToGrid		1	0	System
+timeSeriesExtractTag		0	0	System
+timeSeriesFromGrid		0	0	System
+timeSeriesGroupArray		1	0	System
+timeSeriesGroupToTags		0	0	System
+timeSeriesIdToGroup		0	0	System
+timeSeriesIdToTags		0	0	System
+timeSeriesIdToTagsGroup	timeSeriesIdToGroup	0	0	System
+timeSeriesInstantDeltaToGrid		1	0	System
+timeSeriesInstantRateToGrid		1	0	System
+timeSeriesJoinTags		0	0	System
+timeSeriesLastToGrid	timeSeriesResampleToGridWithStaleness	1	0	System
+timeSeriesLastTwoSamples		1	0	System
+timeSeriesPredictLinearToGrid		1	0	System
+timeSeriesRange		0	0	System
+timeSeriesRateToGrid		1	0	System
+timeSeriesRemoveAllTagsExcept		0	0	System
+timeSeriesRemoveTag		0	0	System
+timeSeriesRemoveTags		0	0	System
+timeSeriesReplaceTag		0	0	System
+timeSeriesResampleToGridWithStaleness		1	0	System
+timeSeriesResetsToGrid		1	0	System
+timeSeriesStoreTags		0	0	System
+timeSeriesTagsGroupToTags	timeSeriesGroupToTags	0	0	System
+timeSeriesTagsToGroup		0	0	System
+timeSeriesThrowDuplicateSeriesIf		0	0	System
+timeSlot		0	0	System
+timeSlots		0	0	System
+timeZone	timezone	0	1	System
+timeZoneOf	timezoneOf	0	0	System
+timeZoneOffset	timezoneOffset	0	0	System
+time_bucket	toStartOfInterval	0	1	System
+timestamp		0	1	System
+timestampDiff	dateDiff	0	0	System
+timestamp_diff	dateDiff	0	0	System
+timezone		0	1	System
+timezoneOf		0	0	System
+timezoneOffset		0	0	System
+toBFloat16		0	0	System
+toBFloat16OrNull		0	0	System
+toBFloat16OrZero		0	0	System
+toBool		0	0	System
+toColumnTypeName		0	0	System
+toDate		0	0	System
+toDate32		0	0	System
+toDate32OrDefault		0	0	System
+toDate32OrNull		0	0	System
+toDate32OrZero		0	0	System
+toDateOrDefault		0	0	System
+toDateOrNull		0	0	System
+toDateOrZero		0	0	System
+toDateTime		0	0	System
+toDateTime32		0	0	System
+toDateTime64		0	0	System
+toDateTime64OrDefault		0	0	System
+toDateTime64OrNull		0	0	System
+toDateTime64OrZero		0	0	System
+toDateTimeOrDefault		0	0	System
+toDateTimeOrNull		0	0	System
+toDateTimeOrZero		0	0	System
+toDayOfMonth		0	0	System
+toDayOfWeek		0	0	System
+toDayOfYear		0	0	System
+toDaysInMonth		0	0	System
+toDaysSinceYearZero		0	0	System
+toDecimal128		0	0	System
+toDecimal128OrDefault		0	0	System
+toDecimal128OrNull		0	0	System
+toDecimal128OrZero		0	0	System
+toDecimal256		0	0	System
+toDecimal256OrDefault		0	0	System
+toDecimal256OrNull		0	0	System
+toDecimal256OrZero		0	0	System
+toDecimal32		0	0	System
+toDecimal32OrDefault		0	0	System
+toDecimal32OrNull		0	0	System
+toDecimal32OrZero		0	0	System
+toDecimal64		0	0	System
+toDecimal64OrDefault		0	0	System
+toDecimal64OrNull		0	0	System
+toDecimal64OrZero		0	0	System
+toDecimalString		0	1	System
+toFixedString		0	0	System
+toFloat32		0	0	System
+toFloat32OrDefault		0	0	System
+toFloat32OrNull		0	0	System
+toFloat32OrZero		0	0	System
+toFloat64		0	0	System
+toFloat64OrDefault		0	0	System
+toFloat64OrNull		0	0	System
+toFloat64OrZero		0	0	System
+toHour		0	0	System
+toIPv4		0	0	System
+toIPv4OrDefault		0	0	System
+toIPv4OrNull		0	0	System
+toIPv4OrZero		0	0	System
+toIPv6		0	0	System
+toIPv6OrDefault		0	0	System
+toIPv6OrNull		0	0	System
+toIPv6OrZero		0	0	System
+toISOWeek		0	0	System
+toISOYear		0	0	System
+toInt128		0	0	System
+toInt128OrDefault		0	0	System
+toInt128OrNull		0	0	System
+toInt128OrZero		0	0	System
+toInt16		0	0	System
+toInt16OrDefault		0	0	System
+toInt16OrNull		0	0	System
+toInt16OrZero		0	0	System
+toInt256		0	0	System
+toInt256OrDefault		0	0	System
+toInt256OrNull		0	0	System
+toInt256OrZero		0	0	System
+toInt32		0	0	System
+toInt32OrDefault		0	0	System
+toInt32OrNull		0	0	System
+toInt32OrZero		0	0	System
+toInt64		0	0	System
+toInt64OrDefault		0	0	System
+toInt64OrNull		0	0	System
+toInt64OrZero		0	0	System
+toInt8		0	0	System
+toInt8OrDefault		0	0	System
+toInt8OrNull		0	0	System
+toInt8OrZero		0	0	System
+toInterval		0	0	System
+toIntervalDay		0	0	System
+toIntervalHour		0	0	System
+toIntervalMicrosecond		0	0	System
+toIntervalMillisecond		0	0	System
+toIntervalMinute		0	0	System
+toIntervalMonth		0	0	System
+toIntervalNanosecond		0	0	System
+toIntervalQuarter		0	0	System
+toIntervalSecond		0	0	System
+toIntervalWeek		0	0	System
+toIntervalYear		0	0	System
+toJSONString		0	0	System
+toLastDayOfMonth		0	0	System
+toLastDayOfWeek		0	0	System
+toLowCardinality		0	0	System
+toMillisecond		0	0	System
+toMinute		0	0	System
+toModifiedJulianDay		0	0	System
+toModifiedJulianDayOrNull		0	0	System
+toMonday		0	0	System
+toMonth		0	0	System
+toMonthNumSinceEpoch		0	0	System
+toNullable		0	0	System
+toQuarter		0	0	System
+toRelativeDayNum		0	0	System
+toRelativeHourNum		0	0	System
+toRelativeMinuteNum		0	0	System
+toRelativeMonthNum		0	0	System
+toRelativeQuarterNum		0	0	System
+toRelativeSecondNum		0	0	System
+toRelativeWeekNum		0	0	System
+toRelativeYearNum		0	0	System
+toSecond		0	0	System
+toStartOfDay		0	0	System
+toStartOfFifteenMinutes		0	0	System
+toStartOfFiveMinute	toStartOfFiveMinutes	0	0	System
+toStartOfFiveMinutes		0	0	System
+toStartOfHour		0	0	System
+toStartOfISOYear		0	0	System
+toStartOfInterval		0	0	System
+toStartOfMicrosecond		0	0	System
+toStartOfMillisecond		0	0	System
+toStartOfMinute		0	0	System
+toStartOfMonth		0	0	System
+toStartOfNanosecond		0	0	System
+toStartOfQuarter		0	0	System
+toStartOfSecond		0	0	System
+toStartOfTenMinutes		0	0	System
+toStartOfWeek		0	0	System
+toStartOfYear		0	0	System
+toString		0	0	System
+toStringCutToZero		0	0	System
+toTime		0	0	System
+toTime64		0	0	System
+toTime64OrNull		0	0	System
+toTime64OrZero		0	0	System
+toTimeOrNull		0	0	System
+toTimeOrZero		0	0	System
+toTimeWithFixedDate		0	0	System
+toTimeZone	toTimezone	0	0	System
+toTimezone		0	0	System
+toTypeName		0	0	System
+toUInt128		0	0	System
+toUInt128OrDefault		0	0	System
+toUInt128OrNull		0	0	System
+toUInt128OrZero		0	0	System
+toUInt16		0	0	System
+toUInt16OrDefault		0	0	System
+toUInt16OrNull		0	0	System
+toUInt16OrZero		0	0	System
+toUInt256		0	0	System
+toUInt256OrDefault		0	0	System
+toUInt256OrNull		0	0	System
+toUInt256OrZero		0	0	System
+toUInt32		0	0	System
+toUInt32OrDefault		0	0	System
+toUInt32OrNull		0	0	System
+toUInt32OrZero		0	0	System
+toUInt64		0	0	System
+toUInt64OrDefault		0	0	System
+toUInt64OrNull		0	0	System
+toUInt64OrZero		0	0	System
+toUInt8		0	0	System
+toUInt8OrDefault		0	0	System
+toUInt8OrNull		0	0	System
+toUInt8OrZero		0	0	System
+toUTCTimestamp		0	0	System
+toUUID		0	0	System
+toUUIDOrDefault		0	0	System
+toUUIDOrNull		0	0	System
+toUUIDOrZero		0	0	System
+toUnixTimestamp		0	0	System
+toUnixTimestamp64Micro		0	0	System
+toUnixTimestamp64Milli		0	0	System
+toUnixTimestamp64Nano		0	0	System
+toUnixTimestamp64Second		0	0	System
+toValidUTF8		0	0	System
+toWeek		0	0	System
+toYYYYMM		0	0	System
+toYYYYMMDD		0	0	System
+toYYYYMMDDhhmmss		0	0	System
+toYear		0	0	System
+toYearNumSinceEpoch		0	0	System
+toYearWeek		0	0	System
+to_utc_timestamp	toUTCTimestamp	0	1	System
+today		0	1	System
+tokens		0	0	System
+tokensForLikePattern		0	0	System
+topK		1	0	System
+topKWeighted		1	0	System
+topLevelDomain		0	0	System
+topLevelDomainRFC		0	0	System
+transactionID		0	0	System
+transactionLatestSnapshot		0	0	System
+transactionOldestSnapshot		0	0	System
+transform		0	0	System
+translate		0	0	System
+translateUTF8		0	0	System
+trim	trimBoth	0	0	System
+trimBoth		0	0	System
+trimLeft		0	0	System
+trimRight		0	0	System
+trunc		0	1	System
+truncate	trunc	0	1	System
+tryBase32Decode		0	0	System
+tryBase58Decode		0	0	System
+tryBase64Decode		0	0	System
+tryBase64URLDecode		0	0	System
+tryDecrypt		0	0	System
+tryIdnaEncode		0	0	System
+tryPunycodeDecode		0	0	System
+tumble		0	0	System
+tumbleEnd		0	0	System
+tumbleStart		0	0	System
+tuple		0	0	System
+tupleConcat		0	0	System
+tupleDivide		0	0	System
+tupleDivideByNumber		0	0	System
+tupleElement		0	0	System
+tupleHammingDistance		0	0	System
+tupleIntDiv		0	0	System
+tupleIntDivByNumber		0	0	System
+tupleIntDivOrZero		0	0	System
+tupleIntDivOrZeroByNumber		0	0	System
+tupleMinus		0	0	System
+tupleModulo		0	0	System
+tupleModuloByNumber		0	0	System
+tupleMultiply		0	0	System
+tupleMultiplyByNumber		0	0	System
+tupleNames		0	0	System
+tupleNegate		0	0	System
+tuplePlus		0	0	System
+tupleToNameValuePairs		0	0	System
+ucase	upper	0	1	System
+unbin		0	1	System
+unhex		0	1	System
+uniq		1	0	System
+uniqCombined		1	0	System
+uniqCombined64		1	0	System
+uniqExact		1	0	System
+uniqHLL12		1	0	System
+uniqTheta		1	0	System
+uniqThetaIntersect		0	0	System
+uniqThetaNot		0	0	System
+uniqThetaUnion		0	0	System
+uniqUpTo		1	0	System
+upper		0	1	System
+upperUTF8		0	0	System
+uptime		0	0	System
+user	currentUser	0	1	System
+validateNestedArraySizes		0	0	System
+varPop		1	0	System
+varPopStable		1	0	System
+varSamp		1	0	System
+varSampStable		1	0	System
+variantElement		0	0	System
+variantType		0	0	System
+vectorDifference	tupleMinus	0	1	System
+vectorSum	tuplePlus	0	1	System
+version		0	1	System
+visibleWidth		0	0	System
+visitParamExtractBool	simpleJSONExtractBool	0	0	System
+visitParamExtractFloat	simpleJSONExtractFloat	0	0	System
+visitParamExtractInt	simpleJSONExtractInt	0	0	System
+visitParamExtractRaw	simpleJSONExtractRaw	0	0	System
+visitParamExtractString	simpleJSONExtractString	0	0	System
+visitParamExtractUInt	simpleJSONExtractUInt	0	0	System
+visitParamHas	simpleJSONHas	0	0	System
+week	toWeek	0	1	System
+welchTTest		1	0	System
+widthBucket		0	0	System
+width_bucket	widthBucket	0	1	System
+windowFunnel		1	0	System
+windowID		0	0	System
+wkb		0	0	System
+wkt		0	0	System
+wordShingleMinHash		0	0	System
+wordShingleMinHashArg		0	0	System
+wordShingleMinHashArgCaseInsensitive		0	0	System
+wordShingleMinHashArgCaseInsensitiveUTF8		0	0	System
+wordShingleMinHashArgUTF8		0	0	System
+wordShingleMinHashCaseInsensitive		0	0	System
+wordShingleMinHashCaseInsensitiveUTF8		0	0	System
+wordShingleMinHashUTF8		0	0	System
+wordShingleSimHash		0	0	System
+wordShingleSimHashCaseInsensitive		0	0	System
+wordShingleSimHashCaseInsensitiveUTF8		0	0	System
+wordShingleSimHashUTF8		0	0	System
+wyHash64		0	0	System
+xor		0	0	System
+xxHash32		0	0	System
+xxHash64		0	0	System
+xxh3		0	0	System
+xxh3_128		0	0	System
+yandexConsistentHash	kostikConsistentHash	0	0	System
+yearweek	toYearWeek	0	1	System
+yesterday		0	0	System
+zookeeperSessionUptime		0	0	System
