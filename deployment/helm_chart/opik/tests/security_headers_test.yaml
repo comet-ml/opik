@@ -1,0 +1,38 @@
+suite: frontend nginx security headers (Referrer-Policy, Permissions-Policy)
+
+# OPIK-9260: the frontend nginx must send Referrer-Policy and Permissions-Policy
+# by default, via component.frontend.extraServerHeaders, and allow overriding them.
+templates:
+  - templates/configmap-frontend-nginx.yaml
+
+documentSelector:
+  path: metadata.name
+  value: opik-frontend-nginx
+
+tests:
+  - it: sends Referrer-Policy by default
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Referrer-Policy 'strict-origin-when-cross-origin' always;"
+
+  - it: sends a restrictive Permissions-Policy by default
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Permissions-Policy 'accelerometer=\\(\\), camera=\\(\\), geolocation=\\(\\), gyroscope=\\(\\), magnetometer=\\(\\), microphone=\\(\\), payment=\\(\\), usb=\\(\\)' always;"
+      # clipboard-write is used by the assistant iframe and must not be blocked
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "clipboard-write=\\(\\)"
+
+  - it: lets operators override Referrer-Policy
+    set:
+      component.frontend.extraServerHeaders.Referrer-Policy: "no-referrer"
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Referrer-Policy 'no-referrer' always;"
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "strict-origin-when-cross-origin"
