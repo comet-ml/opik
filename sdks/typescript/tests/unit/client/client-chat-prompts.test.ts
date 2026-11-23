@@ -517,6 +517,13 @@ describe("OpikClient - Chat Prompts", () => {
   });
 
   describe("searchPrompts with chat prompts", () => {
+    beforeEach(() => {
+      vi.spyOn(client.api.projects, "retrieveProject").mockResolvedValue({
+        id: "project-id",
+        name: "opik-sdk-typescript",
+      } as OpikApi.ProjectPublic);
+    });
+
     it("should return both text and chat prompts", async () => {
       const textMessages = "Hello {{name}}";
       const chatMessages: ChatMessage[] = [

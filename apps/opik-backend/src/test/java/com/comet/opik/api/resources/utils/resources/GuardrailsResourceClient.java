@@ -34,4 +34,13 @@ public class GuardrailsResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new GuardrailBatch(guardrails)));
     }
+
+    public Response validate(Object request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("validations")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
 }

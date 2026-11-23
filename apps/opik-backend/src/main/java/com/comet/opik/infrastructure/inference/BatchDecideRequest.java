@@ -5,9 +5,9 @@ import lombok.NonNull;
 
 import java.util.List;
 
-/** Callers leave {@code request_id} null: the client sets one per submit call. */
+/** The client adds a {@code request_id} per submit call to the body it sends. */
 @Builder(toBuilder = true)
-public record BatchDecideRequest(@NonNull String orgId, String workspaceId, String requestId, boolean cache,
+public record BatchDecideRequest(@NonNull String orgId, String workspaceId, boolean cache,
         @NonNull List<BatchDecideItem> items) {
 
     public BatchDecideRequest {

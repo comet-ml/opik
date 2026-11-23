@@ -20,7 +20,7 @@ const AnnotatorViewBanner: React.FC<AnnotatorViewBannerProps> = ({
       case "credits":
         return [
           "You need more Ollie credits to edit the Annotator view. A workspace admin can add more.",
-          BillingLink && <BillingLink variant="button" />,
+          BillingLink && <BillingLink key="billing" variant="button" />,
         ];
       case "no-data":
         return [

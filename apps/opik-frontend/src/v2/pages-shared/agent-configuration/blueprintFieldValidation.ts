@@ -25,5 +25,5 @@ export const validateBlueprintFieldValue = (
   const schema = FIELD_SCHEMAS[type];
   if (!schema) return "";
   const result = schema.safeParse(value.trim());
-  return result.success ? "" : result.error.issues[0]?.message ?? "Invalid";
+  return result.success ? "" : (result.error.issues[0]?.message ?? "Invalid");
 };

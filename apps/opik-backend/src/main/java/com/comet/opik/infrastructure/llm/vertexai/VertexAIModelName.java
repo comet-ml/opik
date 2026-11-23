@@ -38,8 +38,14 @@ public enum VertexAIModelName implements StructuredOutputSupported {
     GEMINI_4_ARGON("vertex_ai/gemini-4-argon", "gemini-4-argon", true),
     GEMINI_4_ARGON_CYBER_PERMISSIVE("vertex_ai/gemini-4-argon-cyber-permissive",
             "gemini-4-argon-cyber-permissive", true),
+    GEMINI_4_CARBON("vertex_ai/gemini-4-carbon", "gemini-4-carbon", true),
+    GEMINI_4_CARBON_CYBER_PERMISSIVE("vertex_ai/gemini-4-carbon-cyber-permissive",
+            "gemini-4-carbon-cyber-permissive", true),
+    GEMINI_4_HYDROGEN("vertex_ai/gemini-4-hydrogen", "gemini-4-hydrogen", true),
+    GEMINI_4_NEON("vertex_ai/gemini-4-neon", "gemini-4-neon", true),
     GEMINI_OMNI_1_1_FLASH("vertex_ai/gemini-omni-1.1-flash", "gemini-omni-1.1-flash", false),
     GEMINI_OMNI_1_1_FLASH_PREVIEW("vertex_ai/gemini-omni-1.1-flash-preview", "gemini-omni-1.1-flash-preview", false),
+    GEMINI_OMNI_1_2_FLASH("vertex_ai/gemini-omni-1.2-flash", "gemini-omni-1.2-flash", false),
     GEMINI_ROBOTICS_ER_2("vertex_ai/gemini-robotics-er-2", "gemini-robotics-er-2", false),
     GEMINI_ROBOTICS_ER_2_PREVIEW("vertex_ai/gemini-robotics-er-2-preview", "gemini-robotics-er-2-preview", true);
 

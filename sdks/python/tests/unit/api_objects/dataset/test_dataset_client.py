@@ -803,6 +803,27 @@ def test_update__failed_on_unserializable_item__retry_sends_items_hashed_before_
     )
 
 
+def test_delete__content_hash_shared_by_a_surviving_item__reinsert_is_deduplicated():
+    """One content hash can map to several ids; deleting one must not drop it."""
+    capture = _StoringCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    first = {"id": "0199a5b4-8f2e-7c3d-9a1b-2c3d4e5f6a01", "input": {"key": "same"}}
+    second = {"id": "0199a5b4-8f2e-7c3d-9a1b-2c3d4e5f6a02", "input": {"key": "same"}}
+
+    with _serve_stored_items(capture):
+        dataset.insert([first, second], deduplication=False)
+        # A deduplicated insert syncs the cache from the backend and skips the content.
+        dataset.insert([{"input": {"key": "same"}}])
+        assert capture.request_count == 1
+
+        dataset.delete([first["id"]])
+        dataset.insert([{"input": {"key": "same"}}])
+
+    assert capture.request_count == 1, (
+        "The second item still stores the content, so the re-insert must be deduplicated"
+    )
+
+
 def test_insert__succeeded__next_deduplicated_insert_does_not_resync():
     capture = _StoringCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
