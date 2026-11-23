@@ -89,14 +89,17 @@ Internal `@/` imports have no strict order. Do not reorder existing imports for 
 ## Dependency Architecture
 
 **CRITICAL: After modifying imports, run:**
+
 ```bash
 cd apps/opik-frontend && npm run deps:validate
 ```
 
 ### Layer Hierarchy (one-way only)
+
 `ui → shared → pages-shared → pages`
 
 ### Rules
+
 - No circular dependencies
 - No importing from higher layers
 - No cross-page imports
@@ -107,11 +110,13 @@ cd apps/opik-frontend && npm run deps:validate
 When a page-level component crosses ~500–600 lines and contains a sub-region with its own state, queries, mutations, and handlers — peel that region into a sibling component. Don't pull a region out just because it's visually distinct; extract when it has *independent data dependencies*.
 
 ### Good extraction candidates
+
 - A dropdown menu that owns its own `useQuery`/`useMutation` and a derived map/list
 - A dialog that manages its own form state and validation
 - A toolbar section that uses 3+ hooks the rest of the page doesn't need
 
 ### Anti-pattern
+
 Pulling out a small JSX block that only takes props — that's "needless component", not cleanup.
 
 ```tsx

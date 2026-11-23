@@ -1,6 +1,7 @@
 # Database Migration Patterns
 
 ## Migration Locations
+
 - **MySQL**: `apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/`
 - **ClickHouse**: `apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/`
 
@@ -18,6 +19,7 @@ Always use **plural** names for database tables: `traces`, `spans`, `feedback_sc
 -- Your SQL here
 
 ```
+
 **Always end with empty line.**
 
 ## MySQL Migration Example
