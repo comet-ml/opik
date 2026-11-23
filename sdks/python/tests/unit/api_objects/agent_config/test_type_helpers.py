@@ -443,3 +443,33 @@ class TestPythonTypeToBackendTypeOptional:
     )
     def test_optional_primitives__returns_inner_backend_type(self, py_type, expected):
         assert type_helpers.python_type_to_backend_type(py_type) == expected
+
+
+class TestValuesOfOptionalType:
+    @pytest.mark.parametrize(
+        "value, py_type, expected",
+        [
+            ("hello", Optional[str], "hello"),
+            (42, Optional[int], "42"),
+            (0.6, Optional[float], "0.6"),
+            (True, Optional[bool], "true"),
+        ],
+        ids=["Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]"],
+    )
+    def test_python_value__converted_like_the_inner_type(
+        self, value, py_type, expected
+    ):
+        assert type_helpers.python_value_to_backend_value(value, py_type) == expected
+
+    @pytest.mark.parametrize(
+        "value, py_type, expected",
+        [
+            ("hello", Optional[str], "hello"),
+            ("42", Optional[int], 42),
+            ("0.6", Optional[float], 0.6),
+            ("true", Optional[bool], True),
+        ],
+        ids=["Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]"],
+    )
+    def test_backend_value__parsed_like_the_inner_type(self, value, py_type, expected):
+        assert type_helpers.backend_value_to_python_value(value, py_type) == expected

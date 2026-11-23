@@ -82,6 +82,11 @@ def python_value_to_backend_value(
 ) -> typing.Optional[str]:
     if value is None:
         return None
+    # Optional[T] is accepted by is_supported_type/python_type_to_backend_type, which
+    # unwrap it; the value of an optional field is a plain T, so unwrap it here too.
+    inner = unwrap_optional(py_type)
+    if inner is not None:
+        py_type = inner
     if py_type is bool:
         return "true" if value else "false"
     if py_type in (int, float):
@@ -112,6 +117,10 @@ def backend_value_to_python_value(
 ) -> typing.Any:
     if value is None:
         return None
+
+    inner = unwrap_optional(py_type)
+    if inner is not None:
+        py_type = inner
 
     if py_type is bool:
         if isinstance(value, bool):
