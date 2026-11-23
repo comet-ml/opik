@@ -146,19 +146,17 @@ const FeedbackScoresEditor = ({
 
   const rows: FeedbackScoreRow[] = useMemo(() => {
     return sortBy(
-      [
-        ...feedbackDefinitions.map((feedbackDefinition) => {
-          const feedbackScore = feedbackScoresUI.find(
-            (feedbackScore) => feedbackScore.name === feedbackDefinition.name,
-          );
+      feedbackDefinitions.map((feedbackDefinition) => {
+        const feedbackScore = feedbackScoresUI.find(
+          (feedbackScore) => feedbackScore.name === feedbackDefinition.name,
+        );
 
-          return {
-            feedbackDefinition,
-            feedbackScore,
-            name: feedbackDefinition.name,
-          };
-        }),
-      ],
+        return {
+          feedbackDefinition,
+          feedbackScore,
+          name: feedbackDefinition.name,
+        };
+      }),
       "name",
     );
   }, [feedbackDefinitions, feedbackScoresUI]);

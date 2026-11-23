@@ -13,7 +13,7 @@ import {
   ChevronRight,
   Sparkles,
 } from "lucide-react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 import isEqual from "lodash/isEqual";
 

@@ -100,7 +100,9 @@ export const useSwipeableSteps = ({
   const targetLeft = useRef<number | null>(null);
 
   const prevStep = useRef(step);
-  const outResetTimer = useRef<ReturnType<typeof setTimeout>>();
+  const outResetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const [panelAnim, setPanelAnim] = useState<PanelAnim[]>(() =>
     Array.from({ length: totalSteps }, () => ({ seq: 0, mode: "in" })),
   );

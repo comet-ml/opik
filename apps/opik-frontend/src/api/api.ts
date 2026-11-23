@@ -77,6 +77,8 @@ export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
 export const AI_SPEND_REST_ENDPOINT = "/v1/private/ai-spend/";
 export const MODEL_PRICES_REST_ENDPOINT = "/v1/private/model-prices";
 export const AGENT_INSIGHTS_REST_ENDPOINT = "/v1/private/agent-insights/";
+export const GUARDRAIL_POLICIES_REST_ENDPOINT =
+  "/v1/private/guardrails/policies/";
 // OAuth endpoints are public (no /v1/private prefix); served by opik-backend's MCP OAuth AS.
 export const OAUTH_REST_ENDPOINT = "/oauth/";
 export const OAUTH_AUTHORIZE_CONTEXT_KEY = "oauth-authorize-context";
@@ -113,6 +115,9 @@ export const AGENT_INSIGHTS_ISSUES_KEY = "agent-insights-issues";
 export const AGENT_INSIGHTS_ISSUE_KEY = "agent-insights-issue";
 export const AGENT_INSIGHTS_JOB_KEY = "agent-insights-job";
 export const OLLIE_CREDITS_KEY = "ollie-credits";
+export const GUARDRAILS_ENABLED_KEY = "guardrails-enabled";
+export const GUARDRAIL_POLICIES_KEY = "guardrail-policies";
+export const GUARDRAIL_POLICY_KEY = "guardrail-policy";
 export const MODEL_PRICES_KEY = "model-prices";
 export const MODEL_PRICE_HISTORY_KEY = "model-price-history";
 export const MODELS_USED_KEY = "models-used";

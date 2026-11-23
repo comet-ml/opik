@@ -25,9 +25,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -60,13 +63,25 @@ class ModelUsageServiceTest {
     }
 
     @Test
-    void saveOfAModelAlreadyClaimedTodaySkipsMySql() {
+    void saveOfAModelAlreadyClaimedTodaySkipsMySqlAndTheCleanUpClaim() {
         doReturn(bucket).when(redisClient).getBucket(anyString(), any(Codec.class));
         when(bucket.setIfAbsent(any(), any(Duration.class))).thenReturn(Mono.just(false));
 
         service.save(ORGANIZATION_LAYERS, "ws-a", "team-a", GPT_5_MINI).block();
 
+        verify(redisClient, never()).getBucket(contains("clean-up:"), any(Codec.class));
         verifyNoInteractions(transactionTemplate);
+    }
+
+    @Test
+    void theFirstSaveOfTheDayAlsoDeletesTheOldDays() {
+        doReturn(bucket).when(redisClient).getBucket(anyString(), any(Codec.class));
+        when(bucket.setIfAbsent(any(), any(Duration.class))).thenReturn(Mono.just(true));
+
+        service.save(ORGANIZATION_LAYERS, "ws-a", "team-a", GPT_5_MINI).block();
+
+        verify(redisClient).getBucket(contains("clean-up:org-1:"), any(Codec.class));
+        verify(transactionTemplate, times(2)).inTransaction(any(TxConfig.class), any());
     }
 
     @Test

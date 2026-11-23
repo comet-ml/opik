@@ -292,10 +292,15 @@ class ModelPricesResourceTest {
                 expected.remove(List.of("id", "created_at", "created_by", "last_updated_at", "last_updated_by"));
                 assertThat(afterByRowId.get(row.id().toString())).isEqualTo(expected);
             });
-            assertThat(afterByRowId.values())
-                    .anySatisfy(after -> assertThat(after.path("input_price").asText()).isEqualTo("0.0000000001"))
-                    .anySatisfy(after -> assertThat(after.path("alias_of").path("provider").asText())
-                            .isEqualTo("openai"));
+            // The alias was sent as bifrost/gpt-4o under no provider and is saved the way a span with that name
+            // looks it up: the prefix becomes the provider.
+            assertThat(afterByRowId.values()).containsExactlyInAnyOrder(
+                    JsonUtils.getJsonNodeFromString("""
+                            {"model": "gpt-4o", "provider": "openai", "kind": "fixed",
+                             "input_price": "0.0000000001", "output_price": "8"}"""),
+                    JsonUtils.getJsonNodeFromString("""
+                            {"model": "gpt-4o", "provider": "bifrost", "kind": "alias",
+                             "alias_of": {"model": "gpt-4o", "provider": "openai"}}"""));
         }
     }
 

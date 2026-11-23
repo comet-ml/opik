@@ -102,11 +102,11 @@ const WorkspacePreferencesTab: React.FC = () => {
           timeout_to_mark_thread_as_inactive:
             updates.timeout_to_mark_thread_as_inactive !== undefined
               ? updates.timeout_to_mark_thread_as_inactive
-              : workspaceConfig?.timeout_to_mark_thread_as_inactive ?? null,
+              : (workspaceConfig?.timeout_to_mark_thread_as_inactive ?? null),
           truncation_on_tables:
             updates.truncation_on_tables !== undefined
               ? updates.truncation_on_tables
-              : workspaceConfig?.truncation_on_tables ?? null,
+              : (workspaceConfig?.truncation_on_tables ?? null),
           color_map: workspaceConfig?.color_map ?? null,
         },
       });

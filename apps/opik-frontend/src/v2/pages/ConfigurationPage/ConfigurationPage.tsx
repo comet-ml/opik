@@ -44,8 +44,7 @@ const ConfigurationPage = () => {
 
       <div className="mt-6">
         <Tabs
-          defaultValue="feedback-definitions"
-          value={visibleTab as string}
+          value={visibleTab ?? DEFAULT_TAB}
           onValueChange={setTab}
         >
           <TabsList variant="underline">

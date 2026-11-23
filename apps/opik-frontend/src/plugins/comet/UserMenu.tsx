@@ -273,7 +273,7 @@ const UserMenu = () => {
                   toast({ description: "Successfully copied version" });
                 }}
               >
-                <span className="comet-body-xs-accented truncate ">
+                <span className="comet-body-xs-accented truncate">
                   VERSION {APP_VERSION}
                 </span>
                 <Copy className="ml-2 size-3 shrink-0" />

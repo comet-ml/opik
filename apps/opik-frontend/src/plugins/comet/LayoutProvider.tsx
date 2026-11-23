@@ -33,7 +33,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // falls back to the active (hidden spend) workspace — chrome links built in
   // that frame point at `/$spendWs/home`, which renders "private project".
   const opikWorkspaceOverride = isSpendWorkspaceActive
-    ? previousWorkspaceName ?? user?.defaultWorkspace ?? null
+    ? (previousWorkspaceName ?? user?.defaultWorkspace ?? null)
     : null;
   if (useAppStore.getState().opikWorkspaceOverride !== opikWorkspaceOverride) {
     useAppStore.getState().setOpikWorkspaceOverride(opikWorkspaceOverride);

@@ -67,10 +67,10 @@ describe("validateCsvFile", () => {
 
   it("should return an error if the number of rows exceeds the limit", async () => {
     const mockFile = new File(["content"], "test.csv", { type: "text/csv" });
-    const mockData = new Array(maxItems + 1).fill({
+    const mockData = Array.from({ length: maxItems + 1 }, () => ({
       input: "value",
       output: "value",
-    });
+    }));
     vi.mocked(csv2json).mockResolvedValue(mockData);
     const result = await validateCsvFile(mockFile, maxSize, maxItems);
     expect(result).toEqual({

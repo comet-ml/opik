@@ -11,8 +11,6 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import lombok.ToString;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -29,9 +27,6 @@ public class AiLabelsConfig {
     /** Optional directory of task YAML, loaded instead of the classpath tasks, so prompts can live outside the repo. */
     @JsonProperty
     private String tasksDir;
-
-    @Valid @NotNull @JsonProperty
-    private InferenceConfig inference = new InferenceConfig();
 
     /**
      * Global in-flight work: the cost of every submitted, not yet loaded, item (see {@link #perCallBytes} and
@@ -172,13 +167,6 @@ public class AiLabelsConfig {
     private SweepConfig sweep = new SweepConfig();
 
     @JsonIgnore
-    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
-    public boolean isInferenceConfigured() {
-        return !enabled || (inference != null && StringUtils.isNotBlank(inference.getUrl())
-                && StringUtils.isNotBlank(inference.getCredential()));
-    }
-
-    @JsonIgnore
     @AssertTrue(message = "aiLabels.tickBudget must be shorter than aiLabels.tickInterval") public boolean isTickBudgetValid() {
         return tickBudget == null || tickInterval == null
                 || tickBudget.toMilliseconds() < tickInterval.toMilliseconds();
@@ -199,25 +187,6 @@ public class AiLabelsConfig {
     @AssertTrue(message = "aiLabels.renderMaxExecutionTime must not be longer than aiLabels.tickBudget") public boolean isRenderMaxExecutionTimeValid() {
         return renderMaxExecutionTime == null || tickBudget == null
                 || renderMaxExecutionTime.toMilliseconds() <= tickBudget.toMilliseconds();
-    }
-
-    @Data
-    public static class InferenceConfig {
-
-        @JsonProperty
-        private String url;
-
-        @ToString.Exclude
-        @JsonProperty
-        private String credential;
-
-        @NotNull @JsonProperty
-        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        private Duration connectTimeout = Duration.seconds(5);
-
-        @NotNull @JsonProperty
-        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        private Duration readTimeout = Duration.seconds(30);
     }
 
     @Data

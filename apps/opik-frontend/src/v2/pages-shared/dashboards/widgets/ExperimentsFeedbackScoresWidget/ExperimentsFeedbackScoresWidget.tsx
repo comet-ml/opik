@@ -148,8 +148,8 @@ function transformGroupedExperimentsToChartData(
         });
 
         // pass_rate is a top-level metric, not subject to feedbackScores filtering
-        if (isNumber(value.aggregations.pass_rate)) {
-          scores[PASS_RATE_LABEL] = value.aggregations.pass_rate;
+        if (isNumber(value.aggregations.pass_rate_avg)) {
+          scores[PASS_RATE_LABEL] = value.aggregations.pass_rate_avg;
           allLines.push(PASS_RATE_LABEL);
         }
 

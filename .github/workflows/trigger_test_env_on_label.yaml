@@ -36,7 +36,7 @@ jobs:
       version: ${{ steps.get-tag.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Only merge-base + describe below: they need commits and tags, not
           # trees or files, so skip both (the HEAD checkout alone is ~300 MB).
@@ -68,7 +68,7 @@ jobs:
           echo "**Base Version**: \`${BASE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR - Deployment Started
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         # HEAD_REF must be passed via env: — interpolating `${{ github.event.pull_request.head.ref }}`
         # directly into the script body would let a crafted branch name break out of the string
         # context. See: https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks
@@ -122,7 +122,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Trigger deployment with base version
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           VERSION_NAME: ${{ needs.start.outputs.version }}
         with:
@@ -147,7 +147,7 @@ jobs:
 
       - name: Handle trigger failure
         if: failure()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -172,7 +172,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Trigger deployment with new version
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           VERSION_NAME: ${{ needs.build-apps.outputs.version }}
         with:
@@ -197,7 +197,7 @@ jobs:
 
       - name: Handle trigger failure
         if: failure()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

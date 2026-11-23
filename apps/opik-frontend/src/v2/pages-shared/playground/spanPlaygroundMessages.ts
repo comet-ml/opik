@@ -78,21 +78,24 @@ const getBlockMediaParts = (block: LLMBlockDescriptor): MediaPart[] => {
     case "image":
       return block.props.images
         .filter(isSendable)
-        .map(
-          ({ url }): ImagePart => ({ type: "image_url", image_url: { url } }),
-        );
+        .map(({ url }): ImagePart => ({
+          type: "image_url",
+          image_url: { url },
+        }));
     case "video":
       return block.props.videos
         .filter(isSendable)
-        .map(
-          ({ url }): VideoPart => ({ type: "video_url", video_url: { url } }),
-        );
+        .map(({ url }): VideoPart => ({
+          type: "video_url",
+          video_url: { url },
+        }));
     case "audio":
       return block.props.audios
         .filter(isSendable)
-        .map(
-          ({ url }): AudioPart => ({ type: "audio_url", audio_url: { url } }),
-        );
+        .map(({ url }): AudioPart => ({
+          type: "audio_url",
+          audio_url: { url },
+        }));
     default:
       return [];
   }

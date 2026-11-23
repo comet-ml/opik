@@ -67,14 +67,14 @@ def get_span_type(instance: Any) -> types.SpanType:
 
 def extract_lm_info_from_history(
     lm_instance: Any,
-    expected_messages: Optional[Any],
+    expected_call_input: Optional[Any],
 ) -> LMHistoryInfo:
     """
     Extract token usage, cache status, actual provider, and cost from the LM's history.
 
     DSPy stores usage information in the LM's history after each call.
-    We verify the history entry matches our expected messages to handle
-    potential race conditions with concurrent LM calls.
+    We verify the history entry matches the call's input (messages or prompt)
+    to handle potential race conditions with concurrent LM calls.
 
     For routers like OpenRouter, the response contains the actual provider
     that served the request (e.g., "Novita", "Together"), which differs from
@@ -85,7 +85,8 @@ def extract_lm_info_from_history(
 
     Args:
         lm_instance: The DSPy LM instance that has the history.
-        expected_messages: The expected messages to match in the history entry.
+        expected_call_input: The messages or prompt the LM was called with,
+            used to match the history entry.
 
     Returns:
         LMHistoryInfo containing usage, cache_hit, actual_provider, and total_cost.
@@ -104,10 +105,17 @@ def extract_lm_info_from_history(
     try:
         last_entry = lm_instance.history[-1]
 
-        # Verify we have the correct history entry by checking messages match
-        if last_entry.get("messages") != expected_messages:
+        # dspy<3.5 stores the caller's `messages`/`prompt` as given. dspy>=3.5 adapters
+        # pass an lm15 Request as `prompt`, which history keeps under "request" while
+        # "messages" is re-derived from it, so any of the three can hold the call input.
+        # A None input would equal every missing key (3.5 entries always carry
+        # "prompt": None), so it never identifies an entry.
+        if expected_call_input is None or not any(
+            last_entry.get(key) == expected_call_input
+            for key in ("messages", "prompt", "request")
+        ):
             LOGGER.debug(
-                "History entry messages don't match expected messages, "
+                "History entry doesn't match the LM call input, "
                 "skipping usage extraction (possibly due to concurrent LM calls)"
             )
             return empty_result
@@ -115,21 +123,35 @@ def extract_lm_info_from_history(
         response = last_entry.get("response")
         usage_dict = last_entry.get("usage")
 
-        # Extract actual provider and model from response (useful for routers like OpenRouter)
-        # The response is a LiteLLM ModelResponse object with 'provider' and 'model' attributes
-        # when using routers like OpenRouter
+        # Routers like OpenRouter report the provider that actually served the call.
+        # dspy<3.5 returns a LiteLLM ModelResponse with a `provider` attribute. dspy>=3.5
+        # returns an lm15 Response, which keeps the raw OpenAI-compatible reply (with its
+        # top-level "provider") in `provider_data`.
+        provider_data = getattr(response, "provider_data", None)
+        if not isinstance(provider_data, dict):
+            provider_data = {}
         actual_provider: Optional[str] = None
         actual_model: Optional[str] = None
         if response is not None:
             if hasattr(response, "provider"):
                 actual_provider = response.provider
+            else:
+                actual_provider = provider_data.get("provider")
             if hasattr(response, "model"):
                 actual_model = response.model
 
-        # Extract cost from history entry or usage dict
-        # OpenRouter and other providers return accurate cost including all token types
+        # Prefer the cost the provider billed (e.g. OpenRouter includes all token types).
+        # On dspy<3.5 the entry's cost is LiteLLM's response_cost, which is the provider's
+        # reported cost (OpenRouter's usage.cost) when there is one. dspy>=3.5 stores its own
+        # price-table estimate there instead, so read the reported cost from the raw reply,
+        # with the same rule as before: used when > 0, otherwise left as None so the backend
+        # prices the call from its table.
         total_cost: Optional[float] = None
-        if (cost := last_entry.get("cost") or 0) > 0:
+        provider_usage = provider_data.get("usage") or {}
+        if "cost" in provider_usage:
+            if (cost := provider_usage.get("cost") or 0) > 0:
+                total_cost = cost
+        elif (cost := last_entry.get("cost") or 0) > 0:
             total_cost = cost
         elif usage_dict and (cost := usage_dict.get("cost") or 0) > 0:
             total_cost = cost
