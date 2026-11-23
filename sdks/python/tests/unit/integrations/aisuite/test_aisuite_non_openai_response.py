@@ -11,7 +11,7 @@ from aisuite.framework.message import (
 import opik
 from opik.integrations.aisuite import track_aisuite
 
-MODEL = "claude-haiku-4-5"
+from .... import llm_constants
 
 
 class _FakeProvider:
@@ -55,7 +55,7 @@ def test_aisuite_non_openai_provider__tool_calls_and_usage_logged(fake_backend, 
     wrapped_client = track_aisuite(client)
 
     wrapped_client.chat.completions.create(
-        model=f"anthropic:{MODEL}",
+        model=llm_constants.AISUITE_ANTHROPIC_CLAUDE_HAIKU,
         messages=[{"role": "user", "content": "What's the weather in Paris?"}],
     )
 
