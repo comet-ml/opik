@@ -1753,6 +1753,15 @@ areas:
       # Still uncovered: the refresh control, the expand-ALL toggle (one row at a
       # time is covered), and column resizing.
       automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders, failing-judge rules only: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); Evaluating / Sending / ERROR rows for one seeded trace id (provider-error-classification, oss only — it needs the host-run mock gateway); and the whole stream pinned by exhaustion against the rule-logs API, plus the trace_id marker column, newest-first order and a single ERROR row expanded to reveal the provider status (llm-judge-provider-failure, every deployment). Refresh, expand-all and column resize are not exercised" }
+      # Added for the 2.2.155 release from coverage/pending/9675.yaml. opik#9675
+      # turns PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION and
+      # PYTHON_CODE_EXECUTOR_DOCKER_HARDENING on by default, so "user code has
+      # no network" is now the behaviour of every fresh install. No existing key
+      # names it: python-rule-scores and scores-in-trace-panel are about whether
+      # the evaluator ran and what it concluded, and both are satisfied whether
+      # or not the sandbox is applied. `covered:` is left false here — nightly
+      # reconcile.py derives it from the tags the spec carries.
+      python-executor-isolation: { covered: false, note: "A python metric's own runtime is sandboxed: it reaches nothing over the network, and a refusal it does not expect surfaces as an ERROR row naming its own frame rather than as a silently missing score. Asserted on the property both executor strategies must have — nothing was reached — never on the errno or exception type, which differ between the seccomp filter the process strategy installs and the network_disabled container the docker strategy creates (online-evaluation-python-executor-network-isolation.spec.ts)" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
