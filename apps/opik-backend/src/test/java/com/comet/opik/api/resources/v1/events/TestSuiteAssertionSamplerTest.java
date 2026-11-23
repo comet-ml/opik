@@ -28,13 +28,11 @@ import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import dev.langchain4j.data.message.ChatMessageType;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +49,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -243,23 +242,28 @@ class TestSuiteAssertionSamplerTest {
             assertThat(message.scoreNameMapping()).containsEntry("assertion_1", "check");
         }
 
-        @ParameterizedTest
-        @NullSource
-        @ValueSource(strings = "org-1")
-        @DisplayName("judge messages carry the organization of the traces' event")
-        void judgeMessagesCarryTheEventsOrganization(String organizationId) {
-            String workspaceId = "test-workspace";
+        @Test
+        @DisplayName("judge messages carry the organization of the traces' event, and nothing else changes")
+        void judgeMessagesCarryTheEventsOrganization() {
+            var workspaceId = UUID.randomUUID().toString();
+            var userName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var organizationId = UUID.randomUUID().toString();
             var trace = traceWithOneItemEvaluator(workspaceId);
+            var event = TracesCreated.builder().traces(List.of(trace)).workspaceId(workspaceId).userName(userName);
 
-            sampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, "test-user", null, null,
-                    organizationId));
+            sampler.onTracesCreated(event.build());
+            sampler.onTracesCreated(event.organizationId(organizationId).build());
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
-            assertThat(captor.getValue()).singleElement()
-                    .extracting(TraceToScoreLlmAsJudge::organizationId)
-                    .isEqualTo(organizationId);
+            verify(onlineScorePublisher, times(2))
+                    .enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            var withoutOrganization = captor.getAllValues().getFirst();
+            var withOrganization = captor.getAllValues().getLast();
+            assertThat(withOrganization).containsExactly(
+                    withoutOrganization.getFirst().toBuilder().organizationId(organizationId).build());
+            assertThat(withoutOrganization).containsExactly(
+                    withOrganization.getFirst().toBuilder().organizationId(null).build());
         }
 
         @Test

@@ -3,13 +3,13 @@ package com.comet.opik.domain;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
@@ -73,14 +73,11 @@ public class ExperimentItemPublisher {
 
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        return organizationIdOrBlank()
-                .flatMapMany(organizationId -> Flux.fromIterable(messages)
-                        .map(message -> StringUtils.isBlank(message.organizationId())
-                                && StringUtils.isNotBlank(organizationId)
-                                        ? message.toBuilder().organizationId(organizationId).build()
-                                        : message))
-                .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
-                        ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
+        var organizationIdStamper = new OrganizationIdStamper(organizationResolver);
+        return Flux.fromIterable(messages)
+                .flatMap(message -> organizationIdStamper.stamp(message)
+                        .flatMap(stamped -> stream.add(RedisStreamUtils.buildAddArgs(
+                                ExperimentExecutionConfig.PAYLOAD_FIELD, stamped, config)))
                         .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
                         .map(id -> Map.entry(message.experimentId(), id)))
                 .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)
@@ -88,15 +85,6 @@ public class ExperimentItemPublisher {
                         messages.getFirst().workspaceId(), idsByExperiment))
                 .doOnSuccess(v -> log.info("Published '{}' experiment item messages for batch '{}'",
                         messages.size(), batchId));
-    }
-
-    private Mono<String> organizationIdOrBlank() {
-        return organizationResolver.organizationId()
-                .onErrorResume(error -> {
-                    log.warn("Failed to resolve the organization; publishing experiment items without it", error);
-                    return Mono.empty();
-                })
-                .defaultIfEmpty("");
     }
 
     /**
