@@ -1182,9 +1182,9 @@ class TopicVectorsTickTest {
         }
 
         @Test
-        @DisplayName("a slow trace_topics insert that still answers takes at most topics.arrival.timeout of the tick in "
-                + "all: once the steps' time together leaves less than a second, the later chunks count as "
-                + "over_budget, and every vector is written")
+        @DisplayName("a slow trace_topics insert that still answers takes at most topics.arrival.timeout of the "
+                + "workspace's tick in all: once the steps' time together leaves less than a second, the later chunks "
+                + "count as over_budget, and every vector is written")
         void slowButWorkingInsert() {
             var slowDAO = mock(TraceTopicsDAO.class);
             when(slowDAO.insert(any())).thenAnswer(invocation -> Mono.delay(Duration.ofMillis(1_100))
@@ -1212,6 +1212,40 @@ class TopicVectorsTickTest {
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
                     "workspace_id", workspaceId))
                     .isEqualTo(2);
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("topics.arrival.timeout is each workspace's: the time one workspace's steps take leaves another "
+                + "workspace's budget whole")
+        void timeoutPerWorkspace() {
+            var slowDAO = mock(TraceTopicsDAO.class);
+            when(slowDAO.insert(any())).thenAnswer(invocation -> Mono.delay(Duration.ofMillis(1_100))
+                    .thenReturn((long) invocation.<List<TraceTopic>>getArgument(0).size()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, template, slowDAO, algorithm));
+            // 2s per workspace: its first step of about 1.1s fits, its second has about 0.9s left.
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
+            config().setEmbedBatchSize(2);
+            // One workspace after the other, so a budget shared by the tick would leave the second one nothing.
+            config().setEmbedConcurrency(1);
+            var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
+            for (var workspaceId : workspaceIds) {
+                var projectId = UUID.randomUUID();
+                saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+                labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10), intent(15)));
+            }
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(8);
+
+            for (var workspaceId : workspaceIds) {
+                assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic",
+                        "workspace_id", workspaceId))
+                        .isEqualTo(2);
+                assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
+                        "workspace_id", workspaceId))
+                        .isEqualTo(2);
+            }
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
         }
 

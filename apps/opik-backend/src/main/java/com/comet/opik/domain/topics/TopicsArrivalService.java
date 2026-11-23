@@ -58,8 +58,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * a step) stops arrival for the rest of the tick, so a failing MySQL or ClickHouse costs the tick at most one step's
  * time per workspace in flight. The traces of the later chunks count as {@value #AFTER_FAILURE}.
  *
- * <p>Bounded in time: the steps of one tick take {@code topics.arrival.timeout} in all, summed over the workspaces the
- * tick visits at once, and each one ends before the tick's deadline. A step with less than a second left does not
+ * <p>Bounded in time: the steps of one workspace in one tick take {@code topics.arrival.timeout} in all, and each one
+ * ends before the tick's deadline. A workspace's steps run one after another, so its time spent is exact while the
+ * tick visits several workspaces at once. A step with less than a second left does not
  * start; its traces count as {@value #OVER_BUDGET}. A read or insert that outlasts the time left fails with error type
  * {@code TimeoutException}.
  */
@@ -142,7 +143,8 @@ public class TopicsArrivalService {
         private final Map<UUID, Optional<TopicLabeller>> labellers = new ConcurrentHashMap<>();
         // Set by any failure: arrival does nothing more this tick.
         private final AtomicBoolean stopped = new AtomicBoolean();
-        private final AtomicLong spentNanos = new AtomicLong();
+        // Per workspace: the time its steps took this tick.
+        private final Map<String, AtomicLong> spentNanos = new ConcurrentHashMap<>();
 
         private Tick(boolean enabled) {
             this.enabled = enabled;
@@ -150,7 +152,8 @@ public class TopicsArrivalService {
 
         /**
          * Labels the vectors one insert wrote, all of one workspace, and writes their {@code trace_topics} rows, within
-         * what is left of {@code topics.arrival.timeout} for the tick and before {@code tickDeadline}. Completes empty,
+         * what is left of the workspace's {@code topics.arrival.timeout} for the tick and before {@code tickDeadline}.
+         * Completes empty,
          * and never with an error.
          */
         public Mono<Void> label(@NonNull String workspaceId, @NonNull List<TopicVector> vectors,
@@ -165,7 +168,8 @@ public class TopicsArrivalService {
                     return Mono.<Void>empty();
                 }
                 var now = clock.instant();
-                var left = config.getArrival().getTimeout().toJavaDuration().minusNanos(spentNanos.get());
+                var spent = spentNanos.computeIfAbsent(workspaceId, __ -> new AtomicLong());
+                var left = config.getArrival().getTimeout().toJavaDuration().minusNanos(spent.get());
                 var until = min(now.plus(left), tickDeadline);
                 if (Duration.between(now, until).compareTo(MIN_TIME) < 0) {
                     count(workspaceId, workspaceName, OVER_BUDGET, vectors.size());
@@ -181,7 +185,7 @@ public class TopicsArrivalService {
                         })
                         .doFinally(signal -> {
                             long took = System.nanoTime() - started;
-                            spentNanos.addAndGet(took);
+                            spent.addAndGet(took);
                             duration.record(took / 1e9, TopicVectorsMetrics.workspace(workspaceId, workspaceName)
                                     .build());
                         });

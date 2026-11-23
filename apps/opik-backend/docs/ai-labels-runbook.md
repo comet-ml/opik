@@ -1036,8 +1036,8 @@ These rows hold the old list's topic until the next run of the project.
 
 - `TOPICS_ARRIVAL_ENABLED` (`topics.arrival.enabled`, default `true`). Off: the tick reads no list and writes no
   `trace_topics` row. It needs `topics.enabled`: without the vectors tick there is no arrival.
-- `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). All the arrival steps of one
-  tick take this in total, summed over the workspaces the tick visits at once.
+- `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). The arrival steps of one
+  workspace in one tick take this in total.
 
 ### Failures
 
@@ -1045,8 +1045,8 @@ These rows hold the old list's topic until the next run of the project.
 - Any failure stops arrival for the rest of the tick: the read, the insert, or anything else in a step. The traces of
   the later chunks count as `after_failure`. The next run labels them.
 - A shutdown is not a failure. It cancels the tick, its arrival steps included.
-- The time bound: all steps of one tick take `topics.arrival.timeout` in all, summed over the workspaces the tick
-  visits at once, and each one ends before the tick's deadline.
+- The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
+  before the tick's deadline.
   A step that would start with less than 1s left does not start: its traces count as `over_budget`. A step that has
   built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A read or
   insert that runs out of time fails with `error_type = TimeoutException`.

@@ -57,7 +57,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * budget does not reach them all, the ones left out differ from tick to tick.
  *
  * <p>After each vectors insert, in both phases, {@link TopicsArrivalService} gives the chunk's traces their topic on
- * arrival, best effort and within {@code topics.arrival.timeout} per tick in all.
+ * arrival, best effort and within {@code topics.arrival.timeout} per workspace and tick.
  */
 @Slf4j
 @Singleton

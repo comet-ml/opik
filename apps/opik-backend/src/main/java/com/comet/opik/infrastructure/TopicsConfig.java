@@ -174,8 +174,8 @@ public class TopicsConfig {
         private boolean enabled;
 
         /**
-         * All the arrival steps of one vectors tick (the prototypes read and the insert after each vectors insert) end
-         * within this, in total.
+         * The arrival steps of one workspace in one vectors tick (the saved lists read and the insert after each vectors
+         * insert) end within this, in total.
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
