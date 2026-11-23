@@ -51,7 +51,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
  * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, direct catalog reads, table functions,
  * and listed environment or identity functions before execution. Every query is also pre-flighted through
- * {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree restricts table reads to the analytics database
+ * {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree restricts table reads to the account's tables
  * and catches function aliases whose AST spelling is not listed, while allowing columns or aliases with a
  * metadata-function name. The same tree is reused for the scalar-subquery check. Execution never runs on a validation
  * failure. The workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row
@@ -126,6 +126,11 @@ public class FreeFormSqlQueryService {
     private static final String TABLE_QUERY_TREE_PREFIX = "TABLE ";
     private static final String TABLE_FUNCTION_QUERY_TREE_PREFIX = "TABLE_FUNCTION ";
     private static final Pattern RESOLVED_TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
+    /** Logical tables exposed to each account. Keep in sync with the read-only grants and row policies. */
+    private static final Map<FreeFormSqlAccount, Set<String>> ALLOWED_TABLES = Map.of(
+            FreeFormSqlAccount.STANDARD, Set.of("spans", "traces", "authored_feedback_scores"),
+            FreeFormSqlAccount.EXTENDED, Set.of("spans", "traces", "authored_feedback_scores", "feedback_scores",
+                    "trace_threads", "experiments", "experiment_items", "dataset_items", "dataset_item_versions"));
 
     /**
      * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
@@ -276,7 +281,7 @@ public class FreeFormSqlQueryService {
                         throw mapExecutionError(error, startMillis);
                     }
                     try {
-                        if (containsForbiddenResolvedTable(queryTree)) {
+                        if (containsForbiddenResolvedTable(account, queryTree)) {
                             throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
                         }
                         if (containsForbiddenResolvedMetadataFunction(queryTree)) {
@@ -513,7 +518,7 @@ public class FreeFormSqlQueryService {
     }
 
     /** The resolved tree includes implicit system.one for a FROM-less SELECT; explicit reads fail the AST check. */
-    private boolean containsForbiddenResolvedTable(List<String> queryTree) {
+    private boolean containsForbiddenResolvedTable(FreeFormSqlAccount account, List<String> queryTree) {
         return queryTree.stream().map(String::stripLeading)
                 .filter(line -> line.startsWith(TABLE_QUERY_TREE_PREFIX)
                         || line.startsWith(TABLE_FUNCTION_QUERY_TREE_PREFIX))
@@ -526,7 +531,12 @@ public class FreeFormSqlQueryService {
                         return true;
                     }
                     String table = matcher.group(1);
-                    return !table.startsWith(database + ".") && !table.equals("system.one");
+                    if (table.equals("system.one")) {
+                        return false;
+                    }
+                    String prefix = database + ".";
+                    return !table.startsWith(prefix)
+                            || !ALLOWED_TABLES.get(account).contains(table.substring(prefix.length()));
                 });
     }
 

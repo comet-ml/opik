@@ -206,24 +206,32 @@ class FreeFormSqlQueryServiceTest {
 
     private static Stream<Arguments> forbiddenResolvedTables() {
         return Stream.of(
-                arguments("system catalog", "TABLE id: 1, table_name: system.tables"),
-                arguments("information schema", "TABLE id: 1, table_name: information_schema.tables"),
-                arguments("other database", "TABLE id: 1, table_name: other.traces"),
-                arguments("missing table name", "TABLE id: 1, alias: hidden"),
-                arguments("table function", "TABLE_FUNCTION id: 1, table_function_name: merge"));
+                arguments("system catalog", FreeFormSqlAccount.STANDARD, "TABLE id: 1, table_name: system.tables"),
+                arguments("information schema", FreeFormSqlAccount.STANDARD,
+                        "TABLE id: 1, table_name: information_schema.tables"),
+                arguments("other database", FreeFormSqlAccount.STANDARD, "TABLE id: 1, table_name: other.traces"),
+                arguments("extended-only table", FreeFormSqlAccount.STANDARD,
+                        "TABLE id: 1, table_name: opik.experiments"),
+                arguments("ungranted analytics table", FreeFormSqlAccount.EXTENDED,
+                        "TABLE id: 1, table_name: opik.projects"),
+                arguments("physical local table", FreeFormSqlAccount.EXTENDED,
+                        "TABLE id: 1, table_name: opik.traces_local"),
+                arguments("missing table name", FreeFormSqlAccount.STANDARD, "TABLE id: 1, alias: hidden"),
+                arguments("table function", FreeFormSqlAccount.STANDARD,
+                        "TABLE_FUNCTION id: 1, table_function_name: merge"));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("forbiddenResolvedTables")
-    @DisplayName("resolved reads outside the analytics database are rejected in audit mode")
-    void forbiddenResolvedTableIsRejected(String label, String tableNode) {
+    @DisplayName("resolved reads outside the account's tables are rejected in audit mode")
+    void forbiddenResolvedTableIsRejected(String label, FreeFormSqlAccount account, String tableNode) {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
                 .thenReturn(
                         CompletableFuture.completedFuture(List.of("QUERY id: 0", "  JOIN TREE", "    " + tableNode)));
 
-        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+        assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null, QUERY).join())
                 .cause().satisfies(error -> {
                     assertThat(error).isInstanceOf(BadRequestException.class);
                     assertThat(((WebApplicationException) error).getResponse().getEntity())

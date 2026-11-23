@@ -351,6 +351,27 @@ class AnalyticsQueriesResourceTest {
         }
     }
 
+    private Stream<Arguments> allowedTablesByEndpoint() {
+        var standard = Stream.of("spans", "traces", "authored_feedback_scores")
+                .map(table -> arguments(Endpoint.EXECUTE, table));
+        var extended = Stream.of("spans", "traces", "authored_feedback_scores", "feedback_scores", "trace_threads",
+                "experiments", "experiment_items", "dataset_items", "dataset_item_versions")
+                .map(table -> arguments(Endpoint.EXECUTE_SCOPED, table));
+        return Stream.concat(standard, extended);
+    }
+
+    @ParameterizedTest(name = "{0} reads {1}")
+    @MethodSource("allowedTablesByEndpoint")
+    @DisplayName("each account can query only its listed logical tables")
+    void allowedTable__thenReturnsResult(Endpoint endpoint, String table) {
+        String query = "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + table;
+        try (Response response = call(endpoint, query)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+            assertThat(response.readEntity(AnalyticsQueryResponse.class).results())
+                    .singleElement().satisfies(node -> assertThat(node.get("n").asText()).isNotBlank());
+        }
+    }
+
     private Stream<Arguments> invalidResultShapesByEndpoint() {
         return Stream.of(
                 arguments("extra column beside result", "SELECT toJSONString(map('n', '1')) AS result, 1 AS extra"),
