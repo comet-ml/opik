@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
+import io.dropwizard.util.Duration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
@@ -297,17 +298,19 @@ public class OpikConfiguration extends JobConfiguration {
     @AssertTrue(message = "topics.build.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
         var build = topics.getBuild();
         var limits = inference.getLimits();
-        return build == null || build.getLlmDeadline() == null || limits == null
-                || limits.getMaxGenerateBatchDeadline() == null
-                || build.getLlmDeadline().toMilliseconds() <= limits.getMaxGenerateBatchDeadline().toMilliseconds();
+        return build == null || limits == null
+                || notAbove(build.getLlmDeadline(), limits.getMaxGenerateBatchDeadline());
     }
 
     @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedTimeout must not be above inference.limits.maxEmbedDeadline") public boolean isTopicsEmbedTimeoutWithinLimits() {
         var vectors = topics.getVectors();
         var limits = inference.getLimits();
-        return vectors == null || vectors.getEmbedTimeout() == null || limits == null
-                || limits.getMaxEmbedDeadline() == null
-                || vectors.getEmbedTimeout().toMilliseconds() <= limits.getMaxEmbedDeadline().toMilliseconds();
+        return vectors == null || limits == null || notAbove(vectors.getEmbedTimeout(), limits.getMaxEmbedDeadline());
+    }
+
+    /** A bound left unset is checked by its own field's validation, not here. */
+    private static boolean notAbove(Duration value, Duration limit) {
+        return value == null || limit == null || value.toMilliseconds() <= limit.toMilliseconds();
     }
 }
