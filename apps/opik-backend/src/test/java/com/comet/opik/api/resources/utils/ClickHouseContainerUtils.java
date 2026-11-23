@@ -51,7 +51,7 @@ public class ClickHouseContainerUtils {
     }
 
     public static GenericContainer<?> newZookeeperContainer(boolean reusable, Network network) {
-        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.4"))
+        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.7"))
                 .withExposedPorts(2181)
                 .withNetworkAliases("zookeeper")
                 .withNetwork(network)

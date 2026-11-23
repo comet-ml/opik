@@ -2,7 +2,6 @@
 
 > 注意：此文件使用AI进行机器翻译。欢迎对翻译进行改进！
 
-
 <h1 align="center" style="border-bottom: none">
     <div>
         <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik"><picture>
@@ -47,6 +46,7 @@
 [![Opik 平台截图（缩略图）](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
 <a id="-what-is-opik"></a>
+
 ## 🚀 什么是 Opik？
 
 Opik 覆盖了 LLM 应用的完整生命周期，从开发阶段的第一条追踪到生产监控，服务于构建 LLM 应用和 AI 智能体的团队。核心能力包括：
@@ -89,6 +89,7 @@ Opik 覆盖了 LLM 应用的完整生命周期，从开发阶段的第一条追�
 <br>
 
 <a id="-quick-start"></a>
+
 ## ⚡ 快速开始
 
 安装 Python SDK 并进行配置：
@@ -126,6 +127,7 @@ uvx opik mcp configure
 <br>
 
 <a id="-how-opik-compares"></a>
+
 ## 📊 Opik 如何对比？
 
 Opik 与 **LangSmith、Arize（Phoenix 和 Arize AX）、Weights & Biases（Weave）、Langfuse 和 Braintrust** 一同竞争于 **LLM 可观测性 / AI 智能体评估** 这一领域。
@@ -145,26 +147,33 @@ Opik 与 **LangSmith、Arize（Phoenix 和 Arize AX）、Weights & Biases（Weav
 <br>
 
 <a id="-frequently-asked-questions"></a>
+
 ## ❓ 常见问题
 
 #### Opik 是开源的吗？
+
 Opik 采用 Apache 2.0 许可。其服务器、Web 应用以及核心的可观测性和评估功能均可在无需商业许可的情况下自托管。
 
 #### 我可以自托管 Opik 吗？
+
 可以。你可以按照文档中的自托管选项在本地或你自己的基础设施中部署 Opik。
 
 #### Opik 支持 AI 智能体追踪吗？
+
 支持。Opik 可捕获包含 LLM 调用、工具执行、检索步骤和其他智能体活动的多步骤追踪。
 
 #### Opik 支持 LLM 评估吗？
+
 支持。Opik 支持数据集、实验、基于代码的指标、LLM 作为评判者的评估以及在线评估。
 
 #### Opik 是否绑定到某个特定的智能体框架？
+
 否。Opik 框架无关，支持其自有 SDK、OpenTelemetry 以及针对特定框架的集成。
 
 <br>
 
 <a id="%EF%B8%8F-opik-server-installation"></a>
+
 ## 🛠️ Opik 服务器安装
 
 几分钟内即可让你的 Opik 服务器运行起来。选择最适合你需求的方式：
@@ -253,6 +262,7 @@ powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
 <a id="-opik-client-sdk"></a>
+
 ## 💻 Opik 客户端 SDK
 
 Opik 提供一套客户端库和一个 REST API 用于与 Opik 服务器交互。这包括面向 Python 和 TypeScript 的 SDK，以及第一方 [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik) 支持：任何具有 OpenTelemetry SDK 的语言（包括 [Java](https://www.comet.com/docs/opik/integrations/spring-ai?from=llm&utm_source=opik&utm_medium=github&utm_content=java_link&utm_campaign=opik)、[Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) 和 .NET）都可以将追踪数据发送到 Opik。有关详细的 API 和 SDK 参考，请参阅 [Opik 客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
@@ -283,6 +293,7 @@ opik configure
 现在你已准备好使用 [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik) 开始记录追踪了。
 
 <a id="-logging-traces-with-integrations"></a>
+
 ### 📝 通过集成记录追踪
 
 记录追踪最简单的方式是使用我们的某个直接集成。Opik 支持种类繁多的框架，包括近期新增的 **Google ADK**、**Autogen**、**AG2** 和 **Flowise AI**：
@@ -374,6 +385,7 @@ def my_llm_function(user_question: str) -> str:
 > track 装饰器可以与我们的任何集成结合使用，也可用于追踪嵌套的函数调用。
 
 <a id="-llm-as-a-judge-metrics"></a>
+
 ### 🧑‍⚖️ LLM 作为评判者的指标
 
 Python Opik SDK 包含许多 LLM 作为评判者的指标，帮助你评估 LLM 应用。请在[指标文档](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik)中了解更多。
@@ -395,11 +407,13 @@ print(score)
 Opik 还包含许多预构建的启发式指标，并支持创建你自己的指标。请在[指标文档](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik)中了解更多。
 
 <a id="-evaluating-your-llm-application"></a>
+
 ### 🔍 评估你的 LLM 应用
 
 Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/evaluation/advanced/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)评估你的 LLM 应用。Opik 仪表盘为实验提供了增强的图表，并能更好地处理大型追踪。你还可以使用我们的 [PyTest 集成](https://www.comet.com/docs/opik/evaluation/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)将评估作为 CI/CD 流水线的一部分运行。
 
 <a id="-star-us-on-github"></a>
+
 ## ⭐ 在 GitHub 上为我们点亮 Star
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
@@ -412,6 +426,7 @@ Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/e
 </a>
 
 <a id="-contributing"></a>
+
 ## 🤝 参与贡献
 
 为 Opik 做贡献的方式有很多：

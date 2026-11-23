@@ -71,9 +71,6 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE id = :id AND workspace_id = :workspace_id")
     void delete(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
 
-    @SqlUpdate("DELETE FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
-    void delete(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
-
     @SqlUpdate("DELETE FROM datasets WHERE id IN (<ids>) AND workspace_id = :workspace_id")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
 
@@ -193,11 +190,16 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " <if(project_id)> AND project_id = :project_id <endif>")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND name = :name
+            <if(project_id)> AND project_id = :project_id <endif>
+            ORDER BY id
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+    List<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
             @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%') ESCAPE '\\\\'")
