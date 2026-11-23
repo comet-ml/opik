@@ -4,6 +4,7 @@ import com.clickhouse.client.api.ClickHouseException;
 import com.clickhouse.client.api.Client;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.jackson.Jackson;
@@ -14,12 +15,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -120,5 +124,38 @@ class JsonEachRowBulkInsertClickHouseTest {
 
         assertThat(written).isEqualTo(items.size());
         assertThat(count(table)).isEqualTo(items.size());
+    }
+
+    static Stream<JsonNode> deepPayloads() {
+        return JsonRowValuesTest.deepPayloads();
+    }
+
+    @ParameterizedTest
+    @MethodSource("deepPayloads")
+    @DisplayName("streamed: a payload as deep as a request body can be is stored verbatim, though its row is one level deeper")
+    void streamedDeepestPayloadIsStored(JsonNode payload) {
+        var table = "rows_%s".formatted(RandomStringUtils.secure().nextAlphabetic(12).toLowerCase());
+        client.queryAll(
+                "CREATE TABLE %s (name String, input String, input_slim String) ENGINE = MergeTree ORDER BY name"
+                        .formatted(table));
+        var name = RandomStringUtils.secure().nextAlphanumeric(32);
+        Function<String, ObjectNode> rowMapper = item -> {
+            var node = row(item);
+            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
+            return node;
+        };
+
+        Long written = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamPayloads(true))
+                .insert(table, "log-comment", List.of(name), rowMapper)
+                .block();
+
+        // Compared as text: a recursive tree comparison would overflow the stack this deep.
+        var record = client.queryAll("SELECT name, input, input_slim FROM %s".formatted(table)).getFirst();
+        var actual = Map.of("name", record.getString("name"),
+                "input", record.getString("input"),
+                "input_slim", record.getString("input_slim"));
+        var json = payload.toString();
+        assertThat(written).isEqualTo(1L);
+        assertThat(actual).isEqualTo(Map.of("name", name, "input", json, "input_slim", json));
     }
 }

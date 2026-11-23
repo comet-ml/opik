@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -54,6 +55,7 @@ public class PayloadCases {
     }
 
     /** A payload with strings past the slim limit, and its slim copy: each such string cut to the limit, then marked. */
+    @Builder(toBuilder = true)
     public record SlimCase(JsonNode payload, JsonNode slim) {
     }
 
@@ -70,7 +72,7 @@ public class PayloadCases {
         payload.putObject(nestedKey).putArray(arrayKey).add(longItem).add(shortItem);
         var slim = JsonNodeFactory.instance.objectNode().put(key, cut(longText));
         slim.putObject(nestedKey).putArray(arrayKey).add(cut(longItem)).add(shortItem);
-        return new SlimCase(payload, slim);
+        return SlimCase.builder().payload(payload).slim(slim).build();
     }
 
     /** A trace in {@code projectName} carrying {@code payload} as its input and output. */
