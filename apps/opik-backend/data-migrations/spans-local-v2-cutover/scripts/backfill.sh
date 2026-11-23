@@ -166,14 +166,15 @@
 #   --min-free-factor F       abort at startup unless node free disk >= F x the PROJECTED DESTINATION size (see
 #                             --dest-compression-ratio). Default 1.35; must be 0 or at least 1.
 #                             ON RESUME the gate credits what the destination already holds: whenever spans_local_v2
-#                             is non-empty (whatever --from-week says) it requires the projection's REMAINING part
-#                             (projection - destination on disk, floored at 0) plus the same (F - 1) x projection
-#                             margin a fresh start reserves. The margin is not scaled down with progress: merge scratch
+#                             is non-empty (whatever --from-week says) it requires the REMAINING work plus the same
+#                             (F - 1) x projection margin a fresh start reserves. The remaining work is the larger of
+#                             the projection minus the destination on disk, and the uncopied rows at the higher of the
+#                             projected and measured destination bytes per row, so an optimistic ratio cannot zero it. The margin is not scaled down with progress: merge scratch
 #                             grows with the destination, it does not shrink as the copy nears its end. On an empty
 #                             destination this is exactly F x the projection.
 #                             The same (F - 1) x projection is the free-space floor re-checked after every week.
 #                             Passing 0 skips BOTH the startup gate and that per-week floor, so it is strictly worse
-#                             than a lowered factor, which keeps the floor.
+#                             than a lowered factor above 1, which keeps a floor (at exactly 1 the floor is zero).
 #                             THIS IS THE THRESHOLD THE TRACES RUNBOOK COULD NOT LEND US. Its gate multiplied the
 #                             SOURCE size by 2.0 — deliberately conservative, because a driver cannot know the
 #                             destination's compression — and on spans it can demand more than the whole volume:
@@ -473,8 +474,10 @@ part_totals() {
 # The compression the copy is actually achieving: destination bytes/row over source bytes/row. Per row, so a partial
 # destination compares fairly against the whole source. n/a until both sides hold rows.
 measured_ratio() {
-    local src_bytes src_rows dst_bytes dst_rows
-    read -r src_bytes src_rows dst_bytes dst_rows <<<"$(part_totals)"
+    local totals src_bytes src_rows dst_bytes dst_rows
+    # Reported rather than fatal: it only feeds log lines, the last of which follows a completed copy.
+    totals="$(part_totals)" || { printf "unavailable (system.parts read failed)"; return 0; }
+    read -r src_bytes src_rows dst_bytes dst_rows <<<"$totals"
     awk -v sb="$src_bytes" -v sr="$src_rows" -v db="$dst_bytes" -v dr="$dst_rows" \
         'BEGIN { if (sb > 0 && sr > 0 && dr > 0) printf "%.3f", (db / dr) / (sb / sr); else printf "n/a" }'
 }
@@ -488,20 +491,29 @@ measured_ratio() {
 # The resume test is "the destination holds bytes", not "--from-week > 0": a resume from week 0 is legitimate (copied
 # windows are skipped), and a later --from-week over an empty destination has copied nothing to credit.
 preflight_capacity() {
-    local totals spans_bytes dst_on_disk free_bytes dest_bytes remaining margin need resuming src_policy dst_policy
+    local totals spans_bytes spans_rows dst_on_disk dst_rows free_bytes dest_bytes remaining margin need resuming
+    local src_policy dst_policy
     # Assigned before splitting: set -e ignores a failed substitution inside a here-string, and empty totals would size
     # the gate and the per-week floor at zero, passing both.
     totals="$(part_totals)"
-    read -r spans_bytes _ dst_on_disk _ <<<"$totals"
+    read -r spans_bytes spans_rows dst_on_disk dst_rows <<<"$totals"
     free_bytes="$(ch "SELECT sum(free_space) FROM system.disks")"
     dest_bytes="$(awk -v s="$spans_bytes" -v r="$DEST_COMPRESSION_RATIO" 'BEGIN { printf "%d", s * r }')"
-    remaining="$(awk -v d="$dest_bytes" -v c="$dst_on_disk" 'BEGIN { printf "%d", (d > c) ? d - c : 0 }')"
+    # Remaining work is the larger of two estimates. The projection's unwritten bytes alone reach zero once an optimistic
+    # ratio is outgrown while rows are still uncopied, so the uncopied rows are also costed, at the higher of the
+    # projected and the measured destination bytes per row. On an empty destination both are exactly the projection.
+    remaining="$(awk -v p="$dest_bytes" -v d="$dst_on_disk" -v sr="$spans_rows" -v dr="$dst_rows" 'BEGIN {
+        per_row = (sr > 0) ? p / sr : 0
+        if (dr > 0 && d / dr > per_row) per_row = d / dr
+        by_rows = (sr > dr) ? (sr - dr) * per_row : 0
+        r = (p - d > by_rows) ? p - d : by_rows
+        printf "%d", (r > 0) ? r : 0 }')"
     resuming="$(awk -v c="$dst_on_disk" 'BEGIN { print (c > 0) ? 1 : 0 }')"
     if [[ "$resuming" == "1" ]]; then
         log "Capacity (resume): $SRC_TABLE on-disk $(bytes_tib "$spans_bytes") TiB, projected destination $(bytes_tib "$dest_bytes") TiB (x${DEST_COMPRESSION_RATIO}), $DST_TABLE already on disk $(bytes_tib "$dst_on_disk") TiB, remaining $(bytes_tib "$remaining") TiB, node free $(bytes_tib "$free_bytes") TiB, need >= the remaining + (${MIN_FREE_FACTOR} - 1)x the projection"
         log "Measured dest/src bytes-per-row ratio so far: $(measured_ratio) (a mid-run reading; see --dest-compression-ratio)"
-        if [[ "$remaining" == "0" ]]; then
-            log "WARNING: $DST_TABLE already holds at least the whole projected destination, so the gate below can only require its margin. On a copy that is complete or nearly so, unmerged parts explain this; earlier in the copy it means --dest-compression-ratio is optimistic for this estate, so compare it with the measured ratio." >&2
+        if [[ "$(awk -v d="$dst_on_disk" -v p="$dest_bytes" 'BEGIN { print (d >= p) ? 1 : 0 }')" == "1" ]]; then
+            log "WARNING: $DST_TABLE already holds at least the whole projected destination, so the remaining work is sized from the uncopied rows. On a copy that is complete or nearly so, unmerged parts explain this; earlier in the copy it means --dest-compression-ratio is optimistic for this estate, so compare it with the measured ratio." >&2
         fi
     else
         log "Capacity: $SRC_TABLE on-disk $(bytes_tib "$spans_bytes") TiB, projected destination $(bytes_tib "$dest_bytes") TiB (x${DEST_COMPRESSION_RATIO}), node free $(bytes_tib "$free_bytes") TiB, need >= ${MIN_FREE_FACTOR}x the projection"
@@ -513,8 +525,8 @@ preflight_capacity() {
         need="$(awk -v r="$remaining" -v m="$margin" 'BEGIN { printf "%d", r + m }')"
         if [[ "$(awk -v f="$free_bytes" -v n="$need" 'BEGIN { print (f < n) ? 1 : 0 }')" == "1" ]]; then
             if [[ "$resuming" == "1" ]]; then
-                log "ABORT: node free disk $(bytes_tib "$free_bytes") TiB is below what the rest of this resumed copy needs ($(bytes_tib "$need") TiB" >&2
-                log "       = $(bytes_tib "$remaining") TiB still to copy + $(bytes_tib "$margin") TiB, the (${MIN_FREE_FACTOR} - 1)x projection margin)." >&2
+                log "ABORT: node free disk $(bytes_tib "$free_bytes") TiB is below what the rest of this resumed copy needs, $(bytes_tib "$need") TiB:" >&2
+                log "       $(bytes_tib "$remaining") TiB still to copy + $(bytes_tib "$margin") TiB, the (${MIN_FREE_FACTOR} - 1)x projection margin." >&2
                 log "       The $(bytes_tib "$dst_on_disk") TiB $DST_TABLE already holds is credited, so this is a real shortfall" >&2
                 log "       against the remaining work, not the full-copy requirement. Free space before resuming; the" >&2
                 log "       runbook's headroom section names the levers. Lowering --min-free-factor shrinks the margin left" >&2

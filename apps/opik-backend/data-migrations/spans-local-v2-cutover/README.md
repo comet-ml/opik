@@ -139,8 +139,10 @@ only guard left once the copy is running.
 
 **A resume is sized from the remaining work.** Free space falls as the copy writes, so a gate pinned to the full
 projection refuses a resume more firmly the further the copy has got. Whenever `spans_local_v2` already holds data
-(whatever `--from-week` says), `backfill.sh` instead requires the projection minus what the destination holds on disk,
-plus the same `(--min-free-factor − 1) ×` projection margin a fresh start reserves. The margin is deliberately not
+(whatever `--from-week` says), `backfill.sh` instead requires the remaining work plus the same
+`(--min-free-factor − 1) ×` projection margin a fresh start reserves. The remaining work is the larger of the projection
+minus what the destination holds on disk, and the uncopied rows costed at the higher of the projected and the measured
+destination bytes per row — so a ratio the copy has already outgrown cannot size it at zero. The margin is deliberately not
 scaled down with progress: merge scratch grows with the destination rather than shrinking as the copy nears its end, and
 the same figure is the per-week floor, so a resumed run keeps the protection a fresh one has. On an empty destination the
 requirement is exactly `--min-free-factor ×` the projection, as before. A resume abort therefore means the remaining work
@@ -2996,8 +2998,8 @@ floor.
   **resume**: stop a backfill with `--to-week`, resume it with `--from-week`, and confirm it logs `Capacity (resume)`
   crediting what `spans_local_v2` holds, that a forced abort gives the resume form of the message, and that
   `--from-week` over an empty destination still sizes as a fresh start. Resumed with `--dest-compression-ratio 0.01`,
-  the projection falls below what the destination holds: confirm it logs `remaining 0.00 TiB` and the WARNING that the
-  destination already holds the whole projection. Confirm the measured ratio is logged
+  the projection falls below what the destination holds: confirm it logs the WARNING that the destination already holds
+  the whole projection and sizes the remaining work from the uncopied rows. Confirm the measured ratio is logged
   after every window, and that the run stopped by `--to-week` labels its final reading a mid-run sample while the run
   reaching the last week labels it the completion figure;
 - **`reconcile.sh`'s reverse usage-range precheck.** Plant a `usage` value above `2^31` in the parked successor and
