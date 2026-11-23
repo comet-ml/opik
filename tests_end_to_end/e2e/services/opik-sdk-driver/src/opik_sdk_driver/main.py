@@ -10,6 +10,7 @@ from .routes import (
     health,
     integrations,
     metrics,
+    numpy_payloads,
     projects,
     prompts,
     test_suites,
@@ -42,3 +43,4 @@ app.include_router(annotation_queues.router)
 app.include_router(threads.router)
 app.include_router(integrations.router)
 app.include_router(tracked_generators.router)
+app.include_router(numpy_payloads.router)

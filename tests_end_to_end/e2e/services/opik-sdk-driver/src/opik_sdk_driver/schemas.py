@@ -1178,3 +1178,33 @@ class MixedScoreEvaluateResponse(BaseModel):
     #: The values that DID make it into the mean, so a caller can assert the
     #: denominator rather than inferring it.
     aggregate_values: list[float] = []
+
+
+class NumpyPayloadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    #: The two traces' names, supplied by the caller so each is addressable in
+    #: the UI and in a REST read without the bridge and the spec having to agree
+    #: on a naming scheme. They land in the same project on purpose: the
+    #: project then holds exactly these two rows, which is what lets a caller
+    #: assert a filtered read by EXHAUSTION rather than by finding its own row
+    #: in whatever else was there.
+    numpy_trace_name: str
+    control_trace_name: str
+    workspace: str | None = None
+
+
+class NumpyPayloadResponse(BaseModel):
+    numpy_trace_id: str
+    control_trace_id: str
+    #: The control payload as the plain-Python dict it was built from — what
+    #: `jsonable_encoder.encode` must produce for the numpy payload too. Handed
+    #: back rather than restated in the spec so the two can never drift apart
+    #: silently; the spec still holds its own literal and compares the two, so a
+    #: change on this side fails loudly instead of redefining the expectation.
+    expected: dict[str, Any]
+    #: Attached as a diagnostic, never asserted. The conversion is a property of
+    #: the encoder rather than of any numpy release, but a failure here is much
+    #: cheaper to read with the version in hand.
+    numpy_version: str

@@ -20,6 +20,14 @@ dependencies = [
     # here: the tracker is driven against a mock /api/chat served by this
     # app, so no model and no running Ollama are involved.
     "ollama>=0.4.0",
+    # `jsonable_encoder.encode`'s numpy branches (opik#9573) cannot be reached
+    # from a JSON request body: a numpy scalar has no JSON spelling, so a value
+    # that survived the trip would already have been converted. The payload has
+    # to be constructed in the process that calls the SDK, which is this one.
+    # Unpinned, like textstat above: the encoder's behaviour is a property of
+    # `np.bool_` / `np.integer` / `np.floating` as types, not of any release,
+    # and `routes/numpy_payloads.py` asserts no version number.
+    "numpy",
 ]
 
 # Resolve `opik` from this repo rather than PyPI. The bridge exists so SDK

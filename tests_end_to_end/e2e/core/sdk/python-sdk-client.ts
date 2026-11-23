@@ -752,6 +752,38 @@ export interface PythonSdkClient {
       caught: string | null;
     }>;
   }>;
+  /**
+   * Log one `@opik.track`ed trace whose input, output and metadata carry numpy
+   * scalars, and a second built from the equivalent plain Python values.
+   *
+   * The payload is built inside the bridge rather than passed in, and it has to
+   * be: a numpy scalar has no JSON spelling, so a value sent through this
+   * request body would already have been converted by the time the SDK saw it —
+   * which is the conversion under test. See `routes/numpy_payloads.py`.
+   *
+   * Both traces go into one project in one request, so the project holds
+   * exactly these two rows and a filtered read over it can be asserted by
+   * exhaustion rather than by the caller finding its own row.
+   */
+  numpyPayloadTraces(args: {
+    project_name: string;
+    numpy_trace_name: string;
+    control_trace_name: string;
+    workspace?: string;
+  }): Promise<{
+    numpy_trace_id: string;
+    control_trace_id: string;
+    /**
+     * The control payload as the plain-Python dict the bridge built it from —
+     * what `jsonable_encoder.encode` must produce for the numpy payload too.
+     * The caller is expected to compare it to its own literal rather than take
+     * it on trust, so a change on the bridge side fails loudly instead of
+     * quietly redefining the expectation.
+     */
+    expected: Record<string, unknown>;
+    /** Diagnostic only — nothing asserts a numpy version. */
+    numpy_version: string;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -1182,6 +1214,18 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           caught: string | null;
         }>;
       }>('POST', '/traces/track-generator', args, { timeoutMs: 150_000 });
+    },
+    async numpyPayloadTraces(args) {
+      // One request logs both traces, flushes once and reads both back by id
+      // before answering, so the budget has to cover the upload — which is
+      // rate-limited on a shared cloud workspace, where a 429 makes the SDK
+      // back off for up to a minute.
+      return request<{
+        numpy_trace_id: string;
+        control_trace_id: string;
+        expected: Record<string, unknown>;
+        numpy_version: string;
+      }>('POST', '/traces/numpy-payload', args, { timeoutMs: 150_000 });
     },
   };
 }
