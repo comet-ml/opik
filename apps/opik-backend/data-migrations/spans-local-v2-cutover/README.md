@@ -2727,28 +2727,39 @@ and escalate rather than passing it — arbitrary is not the same as benign.
 
 **Feasibility at scale.** `spans` is unpartitioned and `created_at` is not in its sorting key, so a week's window is
 narrowed only by the `created_at` minmax skip index, granule by granule — and a granule whose rows span many weeks is
-read again by every week it touches. The default walk, one query per week, therefore reads the source several times
-over, and on a full-size estate that is the whole of its cost: storage-bound, with CPU largely idle. Raising
+read again by every week it touches. Under `FINAL`, `use_skip_indexes_if_final_exact_mode` (on by default on servers
+that have it) also re-reads the key neighbours of every selected granule, which can widen one week to most of both
+tables. The default walk, one query per week, therefore reads the estate up to once per week, and each `confirm-keys`
+re-check of a differing week costs up to another full read; on a full-size estate that is the whole of its cost:
+storage-bound, with CPU largely idle. Raising
 `max_threads` does not help a read that is waiting on the volume.
 
 - `--single-pass` reads the range **once** and reports every week's verdict from that read (`000005`'s `compare-weeks`
   block): the same fingerprint, normalization and per-week output, so it is exact, not a sample, and a week that differs
   is resolved on its own window exactly as in the walk. The one difference is in `FINAL`'s favour: a wider read sees
   more of each key's versions, so a superseded-version artifact the walk reports as `OK — superseded-version artifact`
-  may read plain `OK`. The old side's `GROUP BY` covers every key in the range; it is streamed in sorting-key order
-  (`optimize_aggregation_in_order`), so memory is held per key prefix rather than per estate, with
-  `max_bytes_before_external_group_by` as the spill bound. `--batch-weeks N` splits the range into queries of N weeks —
-  resumable at batch granularity, at the cost of re-reading what the batches share. It stays off by default until its
-  runtime is measured on prod-test against the walk's; `--estimate-only` shows the two modes' estimated reads
-  beforehand.
+  may read plain `OK`. The old side's `GROUP BY` covers every key in the range, bounded by
+  `max_bytes_before_external_group_by` (4 GB). Past it, the state of every key in the range spills to the server's
+  temporary path, about 70 bytes per key compressed in a local measurement, written and read back once: a small fraction
+  of the table read, but held all at once where the walk holds one week's, and covered by neither `--io-budget-pct` nor
+  the estimate. Check the temporary path's free space against it before the run. The block sets
+  `optimize_aggregation_in_order = 0`: that `GROUP BY` shares only a key prefix with the source's sorting key, and
+  in-order aggregation under `FINAL` ran on one thread, several times slower than the walk. `--batch-weeks N` splits the
+  range into queries of N weeks — resumable at batch granularity and holding one batch's spill, but each batch can cost
+  up to a full read of both tables, so use as few as resuming and the temporary path allow. In a local volume test it
+  returned the walk's verdict lines in a fraction of the walk's time; the walk stays the default, and `--estimate-only`
+  shows the two modes' estimated reads beforehand.
 - `--coverage PCT` compares PCT% of the rows: those created in the first `36 × PCT` seconds of every UTC hour. The slice
   is a condition on `created_at` alone, so it selects the *same* rows on both sides, every week and every hour is
   represented, and — unlike a hash of the `id` — the skip index can drop granules lying wholly outside it, so the read
-  shrinks with the coverage. Two properties to read it by, both printed by the driver: the **bias** — each project counts
-  in proportion to its activity inside the slices, so traffic periodic on the hour is over- or under-represented; and
-  the **floor** — a granule whose `created_at` spans more than an hour (a quiet project, non-time-ordered trace ids) is
-  read whatever the coverage, so runtime falls with the coverage only as far as the estate's granules are narrow. The
-  estimate printed before the run shows how far that is on a given estate. On server versions that have
+  shrinks as far as the granules allow. Two properties to read it by, both printed by the driver: the **bias** — each
+  project counts in proportion to its activity inside the slices, so traffic periodic on the hour is over- or
+  under-represented; and the **floor** — a granule whose `created_at` spans more than an hour is read whatever the
+  coverage. On the source that is a quiet project's or a non-time-ordered trace's granule; on `spans_local_v2`, whose
+  granules are cut at 40 MiB (`index_granularity_bytes`), it is most granules, so the destination's read barely
+  shrinks. **Runtime therefore does not fall in proportion to the coverage**: use `--coverage` to sample every week
+  cheaply on the source side, not as a cost lever for the whole compare. The estimate printed before the run shows how
+  far the read falls on a given estate. On server versions that have
   `use_skip_indexes_if_final_exact_mode`, the driver disables it for a coverage run: under `FINAL` it re-reads the key
   neighbours of every granule the skip index selects, which for slices scattered across the table is nearly all of it.
   A slice can then surface a superseded version on one side, which `confirm-keys` resolves as usual.
@@ -2904,8 +2915,9 @@ below, alongside the other driver guards, rather than in a suite that drives SQL
 So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and the
 `verify.sh` behaviours worth separating from the rest because they decide a *verdict*
 rather than reject an argument — and a wrong verdict from a fidelity gate is the failure this whole procedure exists to
-avoid. The rehearsal is also where the compare modes get their **measured runtimes** on a prod-test-sized estate —
-walk, `--single-pass`, and `--coverage` at 1%, 10% and 50% — which the Go/No-Go's fidelity item records:
+avoid. The rehearsal is also where the gate's compare gets its **measured cost** on a production-sized estate — the
+walk's and `--single-pass`'s runtime, and the single pass's temporary-disk use — which the Go/No-Go's fidelity item
+records:
 
 - refusing to report `PASSED` when the bounds selected **no** window, or when every window it compared was empty on
   both sides (a pass over nothing would be vacuous);
@@ -3171,9 +3183,11 @@ these is working the wrong problem.
       `--batch-weeks`) reports the same per-week verdicts from one read and satisfies the gate exactly as the weekly
       walk does; and the gate may be **resumed** on a pinned `--anchor` — a run labelled `RESUMED at week N …` together
       with the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no
-      `delta_replay.sh` ran between the two runs. Use whichever the Go/No-Go's measured
-      runtimes make affordable, run it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the
-      ETA printed before the run and the runtime measured after it. Reserve coverage/ranged runs for follow-up confidence
+      `delta_replay.sh` ran between the two runs. Prefer `--single-pass`, which reads each table once, where the
+      server's temporary path holds its spill (see "Feasibility at scale"; otherwise `--batch-weeks` or the walk); run
+      it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the ETA printed before the run, the
+      runtime measured after it and, for a single pass, its temporary-disk use (`ExternalAggregationCompressedBytes` in
+      `system.query_log`, by the driver's `log_comment`). Reserve coverage/ranged runs for follow-up confidence
       *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh`, and read the result for what it can be
       under live traffic: windows bound on `created_at`, so spans updated after the last delta read differ inside their
       own week and a clean `PASSED` is not generally obtainable. The gate passes when every `genuinely_differing_keys`
