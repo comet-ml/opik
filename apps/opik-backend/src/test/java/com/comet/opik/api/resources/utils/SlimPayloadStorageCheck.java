@@ -3,12 +3,10 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.NonNull;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -36,8 +34,8 @@ public record SlimPayloadStorageCheck(
     public void assertBatchAndSingleCreateStoreTheSameSlimPayload() {
         var slimCase = PayloadCases.slimCase();
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-        var batchTrace = trace(projectName, slimCase.payload());
-        var singleTrace = trace(projectName, slimCase.payload());
+        var batchTrace = PayloadCases.trace(factory, projectName, slimCase.payload());
+        var singleTrace = PayloadCases.trace(factory, projectName, slimCase.payload());
         traceResourceClient.batchCreateTraces(List.of(batchTrace), apiKey, workspaceName);
         traceResourceClient.createTrace(singleTrace, apiKey, workspaceName);
 
@@ -75,15 +73,5 @@ public record SlimPayloadStorageCheck(
                 .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                 .toList();
         ExperimentTestAssertions.assertExperimentResults(actualItems, expectedItems, user);
-    }
-
-    private Trace trace(String projectName, JsonNode payload) {
-        return factory.manufacturePojo(Trace.class).toBuilder()
-                .projectName(projectName)
-                .usage(null)
-                .feedbackScores(null)
-                .input(payload)
-                .output(payload)
-                .build();
     }
 }

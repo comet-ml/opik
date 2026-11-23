@@ -2425,20 +2425,8 @@ class TracesResourceTest {
         @DisplayName("a batch create and a single create store the same input and output")
         void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var batchTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .input(payload)
-                    .output(payload)
-                    .build();
-            var singleTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .input(payload)
-                    .output(payload)
-                    .build();
+            var batchTrace = PayloadCases.trace(factory, projectName, payload);
+            var singleTrace = PayloadCases.trace(factory, projectName, payload);
 
             traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, TEST_WORKSPACE);
             traceResourceClient.createTrace(singleTrace, API_KEY, TEST_WORKSPACE);

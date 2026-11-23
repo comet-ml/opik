@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.api.Span;
+import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.slim.SlimJson;
 import com.fasterxml.jackson.core.StreamReadConstraints;
@@ -11,6 +13,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Map;
 import java.util.stream.Stream;
@@ -67,6 +70,28 @@ public class PayloadCases {
         var slim = JsonNodeFactory.instance.objectNode().put(key, cut(longText));
         slim.putObject(nestedKey).putArray(arrayKey).add(cut(longItem)).add(shortItem);
         return new SlimCase(payload, slim);
+    }
+
+    /** A trace in {@code projectName} carrying {@code payload} as its input and output. */
+    public static Trace trace(PodamFactory factory, String projectName, JsonNode payload) {
+        return factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .input(payload)
+                .output(payload)
+                .build();
+    }
+
+    /** A root span in {@code projectName} carrying {@code payload} as its input and output. */
+    public static Span span(PodamFactory factory, String projectName, JsonNode payload) {
+        return factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .parentSpanId(null)
+                .feedbackScores(null)
+                .input(payload)
+                .output(payload)
+                .build();
     }
 
     private static String cut(String text) {

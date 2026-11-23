@@ -2541,20 +2541,8 @@ class SpansResourceTest {
         @DisplayName("a batch create and a single create store the same input and output")
         void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var batchSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(projectName)
-                    .parentSpanId(null)
-                    .feedbackScores(null)
-                    .input(payload)
-                    .output(payload)
-                    .build();
-            var singleSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(projectName)
-                    .parentSpanId(null)
-                    .feedbackScores(null)
-                    .input(payload)
-                    .output(payload)
-                    .build();
+            var batchSpan = PayloadCases.span(podamFactory, projectName, payload);
+            var singleSpan = PayloadCases.span(podamFactory, projectName, payload);
 
             spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, TEST_WORKSPACE);
             spanResourceClient.createSpan(singleSpan, API_KEY, TEST_WORKSPACE);

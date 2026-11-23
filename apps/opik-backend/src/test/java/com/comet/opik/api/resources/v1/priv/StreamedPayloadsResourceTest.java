@@ -1,7 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.Span;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -132,8 +130,8 @@ class StreamedPayloadsResourceTest {
     @DisplayName("traces: a batch create and a single create store the same input and output")
     void tracesBatchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-        var batchTrace = trace(projectName, payload);
-        var singleTrace = trace(projectName, payload);
+        var batchTrace = PayloadCases.trace(factory, projectName, payload);
+        var singleTrace = PayloadCases.trace(factory, projectName, payload);
 
         traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, WORKSPACE_NAME);
         traceResourceClient.createTrace(singleTrace, API_KEY, WORKSPACE_NAME);
@@ -153,8 +151,8 @@ class StreamedPayloadsResourceTest {
     @DisplayName("spans: a batch create and a single create store the same input and output")
     void spansBatchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-        var batchSpan = span(projectName, payload);
-        var singleSpan = span(projectName, payload);
+        var batchSpan = PayloadCases.span(factory, projectName, payload);
+        var singleSpan = PayloadCases.span(factory, projectName, payload);
 
         spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, WORKSPACE_NAME);
         spanResourceClient.createSpan(singleSpan, API_KEY, WORKSPACE_NAME);
@@ -178,25 +176,5 @@ class StreamedPayloadsResourceTest {
                 .user(USER)
                 .build()
                 .assertBatchAndSingleCreateStoreTheSameSlimPayload();
-    }
-
-    private Trace trace(String projectName, JsonNode payload) {
-        return factory.manufacturePojo(Trace.class).toBuilder()
-                .projectName(projectName)
-                .usage(null)
-                .feedbackScores(null)
-                .input(payload)
-                .output(payload)
-                .build();
-    }
-
-    private Span span(String projectName, JsonNode payload) {
-        return factory.manufacturePojo(Span.class).toBuilder()
-                .projectName(projectName)
-                .parentSpanId(null)
-                .feedbackScores(null)
-                .input(payload)
-                .output(payload)
-                .build();
     }
 }
