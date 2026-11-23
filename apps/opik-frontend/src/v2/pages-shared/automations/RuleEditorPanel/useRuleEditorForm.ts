@@ -62,6 +62,8 @@ import {
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
+import useRuleEditorHistory from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
+
 const DERIVED_FIELDS = [
   "llmJudgeDetails.variables",
   "llmJudgeDetails.parsingVariablesError",
@@ -216,26 +218,6 @@ type ScopeDraft = {
   [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
 } & { autoName: string };
 
-type EditorSnapshot = {
-  llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
-  ruleName: string;
-  autoName: string;
-  isPickingTemplate: boolean;
-};
-
-type EditorAction = { before: EditorSnapshot; after: EditorSnapshot };
-
-const isSameContent = (a: EditorSnapshot, b: EditorSnapshot) =>
-  a.ruleName === b.ruleName &&
-  isEqual(a.llmJudgeDetails.messages, b.llmJudgeDetails.messages) &&
-  isEqual(a.llmJudgeDetails.schema, b.llmJudgeDetails.schema);
-
-const isUndoShortcut = (event: KeyboardEvent) =>
-  event.key.toLowerCase() === "z" &&
-  (event.metaKey || event.ctrlKey) &&
-  !event.shiftKey &&
-  !event.altKey;
-
 type UseRuleEditorFormParams = {
   ruleType: UI_EVALUATORS_RULE_TYPE;
   projectId?: string;
@@ -306,14 +288,12 @@ const useRuleEditorForm = ({
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
   const autoNameRef = useRef("");
-  const actionsRef = useRef<EditorAction[]>([]);
-  const isPickingTemplateRef = useRef(false);
-  const [isPickingTemplate, setIsPickingTemplateState] = useState(false);
-
-  const setIsPickingTemplate = useCallback((isPicking: boolean) => {
-    isPickingTemplateRef.current = isPicking;
-    setIsPickingTemplateState(isPicking);
-  }, []);
+  const {
+    isPickingTemplate,
+    setIsPickingTemplate,
+    recordAction,
+    resetHistory,
+  } = useRuleEditorHistory(form, autoNameRef);
 
   const isDefaultName = useCallback(() => {
     const name = form.getValues("ruleName").trim();
@@ -330,97 +310,42 @@ const useRuleEditorForm = ({
 
   const changeScope = useCallback(
     (scope: EVALUATORS_RULE_SCOPE) => {
-      const uiType = form.getValues("uiType");
-      const llmJudgeDetails = form.getValues("llmJudgeDetails");
-      scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
-        triggerScope: form.getValues("triggerScope"),
-        filters: form.getValues("filters"),
-        llmJudgeDetails,
-        pythonCodeDetails: form.getValues("pythonCodeDetails"),
-        autoName: autoNameRef.current,
+      resetHistory(() => {
+        const uiType = form.getValues("uiType");
+        const llmJudgeDetails = form.getValues("llmJudgeDetails");
+        scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
+          triggerScope: form.getValues("triggerScope"),
+          filters: form.getValues("filters"),
+          llmJudgeDetails,
+          pythonCodeDetails: form.getValues("pythonCodeDetails"),
+          autoName: autoNameRef.current,
+        });
+        const draft = scopeDraftsRef.current[scope];
+
+        if (isDefaultName()) setAutoName(draft?.autoName ?? "");
+
+        form.setValue("scope", scope);
+        form.setValue("type", getBackendRuleType(scope, uiType));
+        form.setValue(
+          "triggerScope",
+          draft?.triggerScope ?? EVAL_TRIGGER_SCOPE.production,
+        );
+        form.setValue("filters", draft?.filters ?? withEmptyRuleFilter([]));
+        form.setValue("llmJudgeDetails", {
+          ...(draft?.llmJudgeDetails ??
+            cloneDeep(getDefaultJudgeData(uiType)[scope])),
+          model: llmJudgeDetails.model,
+          config: llmJudgeDetails.config,
+        });
+        form.setValue(
+          "pythonCodeDetails",
+          draft?.pythonCodeDetails ??
+            cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+        );
       });
-      const draft = scopeDraftsRef.current[scope];
-      actionsRef.current = [];
-
-      if (isDefaultName()) setAutoName(draft?.autoName ?? "");
-
-      form.setValue("scope", scope);
-      form.setValue("type", getBackendRuleType(scope, uiType));
-      form.setValue(
-        "triggerScope",
-        draft?.triggerScope ?? EVAL_TRIGGER_SCOPE.production,
-      );
-      form.setValue("filters", draft?.filters ?? withEmptyRuleFilter([]));
-      form.setValue("llmJudgeDetails", {
-        ...(draft?.llmJudgeDetails ??
-          cloneDeep(getDefaultJudgeData(uiType)[scope])),
-        model: llmJudgeDetails.model,
-        config: llmJudgeDetails.config,
-      });
-      form.setValue(
-        "pythonCodeDetails",
-        draft?.pythonCodeDetails ?? cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
-      );
     },
-    [form, isDefaultName, setAutoName],
+    [form, isDefaultName, setAutoName, resetHistory],
   );
-
-  const takeSnapshot = useCallback(
-    (): EditorSnapshot =>
-      cloneDeep({
-        llmJudgeDetails: form.getValues("llmJudgeDetails"),
-        ruleName: form.getValues("ruleName"),
-        autoName: autoNameRef.current,
-        isPickingTemplate: isPickingTemplateRef.current,
-      }),
-    [form],
-  );
-
-  const recordAction = useCallback(
-    (action: () => void) => {
-      const before = takeSnapshot();
-      action();
-      actionsRef.current.push({ before, after: takeSnapshot() });
-    },
-    [takeSnapshot],
-  );
-
-  const undoAction = useCallback(() => {
-    const lastAction = actionsRef.current.at(-1);
-    if (!lastAction || !isSameContent(takeSnapshot(), lastAction.after)) {
-      return false;
-    }
-    actionsRef.current.pop();
-    const { before, after } = lastAction;
-    if (!isSameContent(before, after)) {
-      const current = form.getValues("llmJudgeDetails");
-      autoNameRef.current = before.autoName;
-      form.setValue("ruleName", before.ruleName, { shouldDirty: true });
-      form.setValue(
-        "llmJudgeDetails",
-        {
-          ...before.llmJudgeDetails,
-          model: current.model,
-          config: current.config,
-          maxCostUsd: current.maxCostUsd,
-        },
-        { shouldDirty: true },
-      );
-      form.clearErrors("llmJudgeDetails");
-    }
-    setIsPickingTemplate(before.isPickingTemplate);
-    return true;
-  }, [form, takeSnapshot, setIsPickingTemplate]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isUndoShortcut(event) || !undoAction()) return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [undoAction]);
 
   const openTemplates = useCallback(
     () => recordAction(() => setIsPickingTemplate(true)),

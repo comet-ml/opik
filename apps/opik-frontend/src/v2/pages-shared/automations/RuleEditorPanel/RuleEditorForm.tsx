@@ -26,6 +26,7 @@ import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPa
 import DecisionModelQuestionsField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsField";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
+import { RULE_HISTORY_SCOPE_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
@@ -138,6 +139,10 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
   const hasPrompt = form.watch("llmJudgeDetails.messages").length > 0;
+  const historyScope =
+    isLLMJudge || isDecisionModelRule
+      ? { [RULE_HISTORY_SCOPE_ATTRIBUTE]: "" }
+      : {};
   const isCodeBlocked =
     ruleType === UI_EVALUATORS_RULE_TYPE.python_code &&
     !isPythonEvaluatorEnabled;
@@ -152,7 +157,10 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
           >
             <ResizablePanel id="rule-editor-main" defaultSize={55} minSize={30}>
               <div className="h-full overflow-y-auto">
-                <div className="flex min-h-full flex-col gap-4 pb-3 pt-5">
+                <div
+                  className="flex min-h-full flex-col gap-4 pb-3 pt-5"
+                  {...historyScope}
+                >
                   <RuleNameField form={form} />
                   {isLLMJudge && (
                     <JudgePromptField
@@ -192,12 +200,18 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                     traceScopeOnly={traceScopeOnly}
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
-                  {isLLMJudge && <ScoreConfigurationCard form={form} />}
+                  {isLLMJudge && (
+                    <div {...historyScope}>
+                      <ScoreConfigurationCard form={form} />
+                    </div>
+                  )}
                   {isDecisionModelRule && hasPrompt && (
-                    <DecisionModelPromptField
-                      form={form}
-                      datasetColumnNames={datasetColumnNames}
-                    />
+                    <div className="flex flex-col" {...historyScope}>
+                      <DecisionModelPromptField
+                        form={form}
+                        datasetColumnNames={datasetColumnNames}
+                      />
+                    </div>
                   )}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>

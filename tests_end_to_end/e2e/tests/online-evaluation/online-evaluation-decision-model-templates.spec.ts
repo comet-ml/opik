@@ -227,7 +227,7 @@ test.describe(
     );
 
     test(
-      'Ctrl+Z after a template brings back the author\'s own question',
+      'Ctrl+Z steps back through a template pick, a tab switch and typing',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
       async ({ project, page }) => {
         const OWN_QUESTION = 'Does the output offer the user a refund?';
@@ -256,6 +256,13 @@ test.describe(
           await expect
             .poll(() => rules.readQuestions(), { message: 'only the author\'s own question' })
             .toEqual([OWN_QUESTION]);
+        });
+
+        await test.step('The next undo removes the typed question', async () => {
+          await page.keyboard.press('ControlOrMeta+z');
+          await expect
+            .poll(() => rules.readQuestions(), { message: 'the question is empty again' })
+            .toEqual(['']);
           await rules.cancelPanel();
         });
       },
