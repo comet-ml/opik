@@ -58,7 +58,8 @@ class TopicsRunReconciler {
         var stale = now.minus(runs.getAbandonGrace().toJavaDuration());
         return switch (run.runStatus()) {
             case QUEUED -> reason.isPresent()
-                    ? store.dropQueued(run, reason.get()).map(dropped -> !dropped)
+                    ? store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason.get())
+                            .map(dropped -> !dropped)
                     : republishIfStale(run, night, now);
             case RUNNING -> {
                 if (run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)) {

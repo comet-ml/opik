@@ -1,0 +1,57 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.TestConfigUtils;
+import com.comet.opik.infrastructure.TopicsConfig;
+import jakarta.ws.rs.ServiceUnavailableException;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@DisplayName("topics run planner")
+class TopicsRunPlannerTest {
+
+    private static final TopicsConfig CONFIG = TestConfigUtils.loadConfigTest().getTopics();
+
+    @Test
+    @DisplayName("a run by hand that cannot be published is dropped, and the caller gets an error")
+    void runByHandDropsAnUnpublishedRun() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        var night = LocalDate.now(ZoneOffset.UTC).plusDays(1);
+
+        var workspaces = mock(TopicWorkspaceService.class);
+        var store = mock(TopicRunStore.class);
+        var candidates = mock(TopicsFirstBuildCandidates.class);
+        var publisher = mock(TopicsRunPublisher.class);
+        when(workspaces.isEnabled(workspaceId)).thenReturn(true);
+        when(candidates.findListless(workspaceId, projectId, night)).thenReturn(Mono.just(Optional.of(
+                ListlessProject.builder().workspaceId(workspaceId).projectId(projectId).build())));
+        when(candidates.windowVectors(workspaceId, projectId, night))
+                .thenReturn(Mono.just((long) CONFIG.getBuild().getMinVectors()));
+        when(store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD))
+                .thenReturn(Mono.just(Optional.of(runId)));
+        when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
+        when(store.dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull())).thenReturn(Mono.just(true));
+        var planner = new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), workspaces, store,
+                mock(TopicsRunReconciler.class), candidates, publisher, new TopicsBackfillGate(CONFIG));
+
+        assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, night, true).block())
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(store).dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull());
+    }
+}
