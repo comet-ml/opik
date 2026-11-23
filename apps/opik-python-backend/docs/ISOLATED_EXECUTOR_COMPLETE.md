@@ -136,9 +136,11 @@ with IsolatedSubprocessExecutor() as executor:
 ## File Structure
 
 ### 1. `executor_isolated.py` - Main Executor Class
+
 **Location**: `apps/opik-python-backend/src/opik_backend/executor_isolated.py`
 
 **Responsibilities**:
+
 - Creates isolated subprocesses for each code execution
 - Passes data via JSON over stdin/stdout
 - Scopes environment variables per execution
@@ -147,6 +149,7 @@ with IsolatedSubprocessExecutor() as executor:
 - Integrates with `BatchLogCollector` for optional log streaming
 
 **Key Methods**:
+
 ```python
 # Execute code with isolated environment
 result = executor.execute(
@@ -171,13 +174,16 @@ with executor:
 ```
 
 ### 2. `subprocess_logger.py` - Log Collection & Streaming
+
 **Location**: `apps/opik-python-backend/src/opik_backend/subprocess_logger.py`
 
 **Key Classes**:
+
 - `SubprocessLogRecord`: Represents a single log entry with timestamp, level, message, attributes
 - `BatchLogCollector`: Collects, batches, and sends logs via HTTP
 
 **Features**:
+
 - Captures stdout/stderr from subprocesses
 - Parses JSON-formatted logs with fallback to plain text
 - Batches logs by time (1 second default) or size (10MB default)
@@ -187,6 +193,7 @@ with executor:
 - Graceful error handling (logs warnings, doesn't crash)
 
 **Usage**:
+
 ```python
 logger = BatchLogCollector(
     backend_url="http://api.example.com/logs",
@@ -201,14 +208,17 @@ logger.process_subprocess_output(stdout, stderr)
 ```
 
 ### 3. `subprocess_log_config.py` - Centralized Configuration
+
 **Location**: `apps/opik-python-backend/src/opik_backend/subprocess_log_config.py`
 
 **Responsibilities**:
+
 - Centralized environment variable reading (single source of truth)
 - Configuration validation and defaults
 - No side effects (only getenv calls)
 
 **Methods**:
+
 - `get_backend_url()` - Log backend HTTP endpoint
 - `is_enabled()` - Check if logging is enabled
 - `get_flush_interval_ms()` - Time-based flush interval
@@ -345,6 +355,7 @@ if SubprocessLogConfig.is_enabled():
 ## Resource Limiting
 
 ### Memory Limiting
+
 - **Limit Type**: Stack memory only (RLIMIT_STACK)
 - **Limit Size**: 20MB per subprocess
 - **Effect**: Prevents infinite recursion and stack overflow
@@ -469,16 +480,20 @@ executor.execute(
 ## Error Handling Modes
 
 ### Graceful Mode (Default)
+
 ```bash
 SUBPROCESS_LOG_FAIL_ON_MISSING_BACKEND=false
 ```
+
 - If backend_url not configured: Logs warning, skips logging, continues execution
 - Execution succeeds even if logging fails
 
 ### Strict Mode
+
 ```bash
 SUBPROCESS_LOG_FAIL_ON_MISSING_BACKEND=true
 ```
+
 - If backend_url not configured: Raises ValueError
 - Execution fails with clear error message
 
@@ -614,6 +629,7 @@ executor.kill_all_processes()
 ## Log Structure
 
 ### Log Entry Format
+
 ```json
 {
     "timestamp": 1697539200000,
@@ -625,6 +641,7 @@ executor.kill_all_processes()
 ```
 
 ### Supported Log Sources
+
 1. **Python logging module** - JSON-formatted logs to stderr
 2. **Print to stdout** - Plain text lines
 3. **Print to stderr** - Plain text lines
@@ -698,6 +715,7 @@ Content-Encoding: gzip
 **Cause**: `SUBPROCESS_LOG_ENABLED=true` but `OPIK_SUBPROCESS_LOG_BACKEND_URL` not set
 
 **Solution**:
+
 ```bash
 # Either disable logging
 export SUBPROCESS_LOG_ENABLED=false
@@ -711,6 +729,7 @@ export OPIK_SUBPROCESS_LOG_BACKEND_URL=http://api.example.com/logs
 **Cause**: `requests` library not installed
 
 **Solution**:
+
 ```bash
 pip install requests
 ```
@@ -720,6 +739,7 @@ pip install requests
 **Cause**: Code execution takes longer than timeout
 
 **Solution**:
+
 ```python
 # Increase timeout
 executor = IsolatedSubprocessExecutor(timeout_secs=60)
@@ -764,4 +784,3 @@ A: Yes, the subprocess has access to the filesystem (OS-level resources are shar
 **Version**: 2.1  
 **Test Coverage**: 23 tests, 100% passing  
 **Key Feature**: Per-process log collectors with zero log loss guarantee for concurrent execution
-

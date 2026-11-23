@@ -1,11 +1,13 @@
 # TypeScript SDK Testing
 
 ## Test Runner
+
 Vitest - run with `npm test` in `sdks/typescript`
 
 ## Key Patterns
 
 ### Always Flush Before Assertions
+
 ```typescript
 // Data only persists after flush
 const client = new Opik();
@@ -17,6 +19,7 @@ expect(mockFetch).toHaveBeenCalledWith(/* ... */);
 ```
 
 ### Mock Network and Timers
+
 ```typescript
 import { vi } from 'vitest';
 
@@ -30,6 +33,7 @@ vi.advanceTimersByTime(1000);  // Trigger batch flush
 ```
 
 ### Control Batching in Tests
+
 ```typescript
 // Option 1: Small delays
 const client = new Opik({ batchDelay: 10 });
@@ -61,6 +65,7 @@ expect(mockFetch).toHaveBeenCalledWith(
 ```
 
 ## Best Practices
+
 - Test public API only, avoid `rest_api` internals
 - Mock network to keep tests deterministic
 - Assert no `ERROR` level logs unintentionally

@@ -21,7 +21,7 @@ export const formatPassRate = (
 
 // The backend sends exactly 1 only when every item passed; anything below
 // rounds no higher than 99% so the label never reads "100%" in red.
-const formatPercent = (passRate: number) =>
+export const formatPassRatePercent = (passRate: number) =>
   formatAsPercentage(passRate < 1 ? Math.min(passRate, 0.99) : passRate);
 
 const PASS_RATE_DOT_COLOR = {
@@ -54,7 +54,9 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
           <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
             <div className="flex items-center gap-1">
               <CustomSquare className="size-3 shrink-0" />
-              <span className="truncate">{formatPercent(passRate)}</span>
+              <span className="truncate">
+                {formatPassRatePercent(passRate)}
+              </span>
             </div>
           </Tag>
         </TooltipWrapper>
@@ -116,7 +118,7 @@ const PassRateAggregationCell = <TData,>(
                 : PASS_RATE_DOT_COLOR.failed
             }
           >
-            {formatPercent(passRate)}
+            {formatPassRatePercent(passRate)}
           </StatusDotPill>
         </TooltipWrapper>
       )}

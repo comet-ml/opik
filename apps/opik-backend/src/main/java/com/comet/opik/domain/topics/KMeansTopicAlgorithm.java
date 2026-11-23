@@ -113,8 +113,8 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /** One group per {@code textsPerGroup} unique texts, within the configured bounds and never more than the texts. */
     private int groups(int unique) {
-        return Math.min(Math.min(config.getMaxGroups(),
-                Math.max(config.getMinGroups(), unique / config.getTextsPerGroup())), unique);
+        return KMeans.groupCount(unique, config.getTextsPerGroup(), config.getMinGroups(), config.getMaxGroups(),
+                unique);
     }
 
     /** {@code clamp(round(authorBudget / k), authorMinExamples, authorMaxExamples)}. */
