@@ -4,8 +4,17 @@ import { test, expect } from '@e2e/fixtures';
  * `GET /v1/private/datasets/{id}/items/experiments/items` — the read behind the
  * experiment compare Results tab — gained two parameters in opik#9263:
  * `experiment_ids` became optional (omit it and the server resolves the
- * dataset's own experiments), and `dataset_version` scopes that resolution to
- * one version.
+ * dataset's own experiments), and a version parameter scopes that resolution.
+ *
+ * That second parameter was `dataset_version`, one hash or tag, when 9263
+ * shipped it. opik#9448 (OPIK-9113) renamed it to `dataset_versions` and made it
+ * a JSON array, so the new experiment-item cursor stream could take the same
+ * scope. This spec sends the plural form. The rename is worth stating because an
+ * unrecognised query parameter is IGNORED rather than refused: a caller left on
+ * the singular name gets an unscoped 200, and on a one-version dataset — which
+ * is what this seed cuts — the row set it answers with is indistinguishable from
+ * a correctly scoped one. Only the unknown-version 404 below separates them,
+ * which is why that step is the load-bearing one rather than a tidy edge case.
  *
  * Neither has any e2e coverage. `compare-raw-sorted-paging.spec.ts`,
  * `compare-deep-paging.spec.ts` and `experiment-items-sdk-read.spec.ts` all
@@ -197,17 +206,17 @@ test.describe(
     );
 
     test(
-      'dataset_version scopes the all-experiments read, and is rejected for an unknown version or alongside experiment_ids',
+      'dataset_versions scopes the all-experiments read, and is rejected for an unknown version or alongside experiment_ids',
       { tag: ['@cap:experiments.compare-side-by-side'] },
       async ({ allDatasetExperiments, backendClient }) => {
         const { datasetId, itemIds, versionHash, regular } = allDatasetExperiments;
         const regularIds = regular.map((e) => e.id).sort();
 
-        await test.step('dataset_version=latest returns the full row set', async () => {
+        await test.step('dataset_versions=["latest"] returns the full row set', async () => {
           const latest = await backendClient.compareItemsAllExperiments({
             datasetId,
             size: ALL_EXPERIMENTS_MAX_PAGE_SIZE,
-            datasetVersion: 'latest',
+            datasetVersions: ['latest'],
           });
           expect(latest.total).toBe(itemIds.length);
           expect([...latest.ids].sort()).toEqual([...itemIds].sort());
@@ -222,7 +231,7 @@ test.describe(
           const byHash = await backendClient.compareItemsAllExperiments({
             datasetId,
             size: ALL_EXPERIMENTS_MAX_PAGE_SIZE,
-            datasetVersion: versionHash,
+            datasetVersions: [versionHash],
           });
           expect(byHash.total).toBe(itemIds.length);
           expect([...byHash.ids].sort()).toEqual([...itemIds].sort());
@@ -240,22 +249,22 @@ test.describe(
           // genuinely unused one.
           const unknown = await backendClient.compareItemsReadStatus({
             datasetId,
-            datasetVersion: 'deadbeefdeadbeefdeadbeefdeadbeef',
+            datasetVersions: JSON.stringify(['deadbeefdeadbeefdeadbeefdeadbeef']),
           });
           expect(unknown.status).toBe(404);
         });
 
         await test.step(
-          'dataset_version together with experiment_ids is refused',
+          'dataset_versions together with experiment_ids is refused',
           async () => {
             const both = await backendClient.compareItemsReadStatus({
               datasetId,
               experimentIds: JSON.stringify(regular.map((e) => e.id)),
-              datasetVersion: 'latest',
+              datasetVersions: JSON.stringify(['latest']),
             });
             expect(both.status).toBe(400);
             expect(both.message).toBe(
-              'dataset_version can only be used when experiment_ids is omitted',
+              'dataset_versions can only be used when experiment_ids is omitted',
             );
           },
         );

@@ -281,20 +281,40 @@ export class ExperimentsFilterControl {
   }
 
   /**
-   * Clear every applied filter through the popover's "Clear all".
+   * Clear every filter the USER applied, through the popover's "Clear all".
    *
-   * Resolves once the server has answered a read carrying NO `filters` param,
-   * which is the only evidence that the clear reached the wire rather than
-   * merely emptying the popover's local state.
+   * Resolves once the server has answered a read that no longer carries the
+   * item-source filter, which is the evidence that the clear reached the wire
+   * rather than merely emptying the popover's local state.
+   *
+   * **It does not wait for a read carrying no `filters` at all, because neither
+   * call site ever issues one.** Both tabs scope their listing with a baseline
+   * filter of their own, which "Clear all" neither owns nor should remove:
+   *
+   *  - the Experiments page's Datasets tab sends
+   *    `evaluation_method != evaluation_suite`, which is the tab PARTITION
+   *    opik#9611 split the page on (see `experiments-tab-split-partition.spec.ts`);
+   *  - the prompt detail tab sends `prompt_ids contains <promptId>`, which is
+   *    the only thing making it that prompt's tab.
+   *
+   * So `filters` is present on every read either page makes, before the user's
+   * filter and after it is cleared. Waiting for its absence timed out while the
+   * page had in fact cleared correctly, and a build that did drop its baseline
+   * filter — showing a prompt tab every experiment in the project — would have
+   * been the one to satisfy it.
    */
   async clearAll(): Promise<void> {
     return test.step('clear every filter', async () => {
       const unfilteredRead = this.page.waitForResponse(
         (response) => {
           const url = new URL(response.url());
+          if (!url.pathname.endsWith('/experiments')) return false;
+          const filters = url.searchParams.get('filters');
+          // The item-source filter gone, whatever the page's own baseline is.
+          // Armed before the click, so the read that preceded the filter cannot
+          // satisfy it.
           return (
-            url.pathname.endsWith('/experiments') &&
-            url.searchParams.get('filters') === null &&
+            !decodeURIComponent(filters ?? '').includes('"field":"dataset_id"') &&
             response.ok()
           );
         },

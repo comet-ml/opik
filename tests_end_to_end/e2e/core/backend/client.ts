@@ -4711,11 +4711,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * could be called either way would make "omitted" one typo away from
      * "blank", and the two answers are different by design.
      *
-     * `datasetVersion` travels verbatim as `dataset_version`, the second
-     * parameter 9263 added: a version hash or the `latest` tag, scoping the
-     * resolution to experiments run against that version. It is only legal with
+     * `datasetVersions` travels as `dataset_versions`, the second parameter 9263
+     * added: version hashes or the `latest` tag, scoping the resolution to
+     * experiments run against one of those versions. It is only legal with
      * `experiment_ids` omitted, so it lives here and not on the supplied-ids
      * readers.
+     *
+     * **Sent as a JSON array under the PLURAL name.** 9263 shipped this as a
+     * single `dataset_version` string; opik#9448 (OPIK-9113) generalised it to a
+     * set when it added the experiment-item cursor stream, which takes the same
+     * scope. The rename matters more than it looks: an unrecognised query
+     * parameter is silently ignored rather than refused, so a caller still
+     * sending the singular name gets an UNSCOPED read answering 200 — which
+     * reads as "version scoping is broken" and, on a one-version dataset, as a
+     * row set that happens to be right.
      *
      * Throws on anything but a 200. The validation and not-found paths are the
      * contract of `compareItemsReadStatus` below, which is built to report a
@@ -4725,13 +4734,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       datasetId: string;
       page?: number;
       size?: number;
-      datasetVersion?: string;
+      datasetVersions?: string[];
     }): Promise<CompareExperimentSetRef> {
       const query = new URLSearchParams({
         page: String(args.page ?? 1),
         size: String(args.size ?? 100),
         truncate: 'true',
-        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+        ...(args.datasetVersions === undefined
+          ? {}
+          : { dataset_versions: JSON.stringify(args.datasetVersions) }),
       });
       const { status, message, json } = await rawFetch(
         'GET',
@@ -4741,7 +4752,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (status !== 200) {
         throw new Error(
           `compareItemsAllExperiments(${args.datasetId}` +
-            `${args.datasetVersion === undefined ? '' : `, version=${args.datasetVersion}`}) ` +
+            `${args.datasetVersions === undefined ? '' : `, versions=${JSON.stringify(args.datasetVersions)}`}) ` +
             `-> ${status}: ${message}`,
         );
       }
@@ -4783,16 +4794,21 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * typed value, because what is under test is precisely the shapes a typed
      * signature would make unrepresentable: `experiment_ids` present but BLANK,
      * `experiment_ids=[]`, a page size above the all-experiments cap, a
-     * `dataset_version` that no version carries, and `dataset_version` sent
-     * TOGETHER with `experiment_ids`. Each has its own message, and the message
-     * is the contract — a 400 for the wrong reason is a different defect from
-     * the one a caller is asserting.
+     * `dataset_versions` entry that no version carries, and `dataset_versions`
+     * sent TOGETHER with `experiment_ids`. Each has its own message, and the
+     * message is the contract — a 400 for the wrong reason is a different defect
+     * from the one a caller is asserting.
+     *
+     * `datasetVersions` is the raw string that goes on the wire, not an array,
+     * for the same reason the other arguments are raw: the blank and malformed
+     * spellings are part of what this helper exists to send. See
+     * `compareItemsAllExperiments` on the singular-to-plural rename.
      */
     async compareItemsReadStatus(args: {
       datasetId: string;
       /** Omitted entirely when absent — not sent as an empty value. */
       experimentIds?: string;
-      datasetVersion?: string;
+      datasetVersions?: string;
       page?: number;
       size?: number;
     }): Promise<RawApiResult> {
@@ -4801,7 +4817,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         size: String(args.size ?? 100),
         truncate: 'true',
         ...(args.experimentIds === undefined ? {} : { experiment_ids: args.experimentIds }),
-        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+        ...(args.datasetVersions === undefined ? {} : { dataset_versions: args.datasetVersions }),
       });
       const { status, message } = await rawFetch(
         'GET',

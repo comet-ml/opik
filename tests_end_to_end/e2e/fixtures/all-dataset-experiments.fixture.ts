@@ -63,11 +63,12 @@ const ITEM_COUNT = 20;
  * variable and the SDK's evaluate path only ever writes `regular` — the same
  * reason `experiment-type-datasets.fixture.ts` seeds that way.
  *
- * `versionHash` is read back rather than computed: `dataset_version` is 9263's
- * other new parameter, and a spec pinning the read to a version needs the hash
- * the backend actually stored. It is asserted present here, in the fixture,
- * because a read scoped to `undefined` would silently become an unscoped read
- * and every row assertion after it would still pass.
+ * `versionHash` is read back rather than computed: `dataset_versions` is 9263's
+ * other new parameter (singular `dataset_version` until opik#9448 generalised it
+ * to a set), and a spec pinning the read to a version needs the hash the backend
+ * actually stored. It is asserted present here, in the fixture, because a read
+ * scoped to `undefined` would silently become an unscoped read and every row
+ * assertion after it would still pass.
  *
  * Teardown deletes the experiments before the dataset they reference. Datasets
  * do not cascade with their project, and experiments do not cascade with the
