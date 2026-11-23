@@ -40,7 +40,8 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
 });
 
 export interface TagProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof tagVariants> {}
 
 /**

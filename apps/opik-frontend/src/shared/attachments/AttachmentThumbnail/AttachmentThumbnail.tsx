@@ -36,7 +36,7 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   const expandClickHandler = useCallback(
     (event: React.MouseEvent<unknown>) => {
       event.stopPropagation();
-      isExpandable && onExpand(previewData);
+      if (isExpandable) onExpand(previewData);
     },
     [onExpand, previewData, isExpandable],
   );

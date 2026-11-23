@@ -40,13 +40,13 @@ jobs:
 
     steps:
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
             persist-credentials: false
 
         - name: Install Helm ${{ matrix.helm-version }}
-          uses: azure/setup-helm@v5.0.1
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
           with:
             version: ${{ matrix.helm-version }}
 
@@ -68,13 +68,13 @@ jobs:
 
     steps:
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
             persist-credentials: false
 
         - name: Install Helm
-          uses: azure/setup-helm@v5.0.1
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
           with:
             version: v3.21.0
 
@@ -100,7 +100,7 @@ jobs:
 
     steps:
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             # This job executes a script from the checked-out tree, which on a
             # pull_request is PR-controlled. Do not leave github.token in
@@ -108,7 +108,7 @@ jobs:
             persist-credentials: false
 
         - name: Install Helm
-          uses: azure/setup-helm@v5.0.1
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
           with:
             version: v3.21.0
 
@@ -130,13 +130,13 @@ jobs:
 
     steps:
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             # Read-only job (helm only, no git/gh calls): don't leave github.token in .git/config.
             persist-credentials: false
 
         - name: Render with Helm 3.x
-          uses: azure/setup-helm@v5.0.1
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
           with:
             version: v3.21.0
 
@@ -152,7 +152,7 @@ jobs:
               cd -
 
         - name: Render with Helm 4.x
-          uses: azure/setup-helm@v5.0.1
+          uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
           with:
             version: v4.2.0
 

@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.List;
@@ -24,7 +25,7 @@ public record ExperimentExecutionRequest(
         @NotBlank String datasetName,
         UUID datasetVersionId,
         @NotEmpty @Valid List<PromptVariant> prompts,
-        String projectName,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") String projectName,
         UUID projectId,
         @NotNull UUID datasetId,
         String versionHash,

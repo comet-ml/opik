@@ -28,7 +28,8 @@ const hotkeyDisplayVariants = cva(
 );
 
 export interface HotkeyDisplayProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
+  extends
+    React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof hotkeyDisplayVariants> {
   hotkey: string;
 }

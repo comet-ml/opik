@@ -3,8 +3,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ChipShell from "@/shared/filter-chips/chips/BaseChip/ChipShell";
 
-export interface BaseChipProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface BaseChipProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
   valueSummary?: string | null;
   valueSummaryFull?: string | null;

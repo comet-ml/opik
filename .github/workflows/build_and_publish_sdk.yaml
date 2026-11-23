@@ -113,13 +113,13 @@ jobs:
               echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             ref: ${{steps.setup.outputs.build_from}}
             fetch-tags: true
 
         - name: Set up Python 3.10
-          uses: actions/setup-python@v7
+          uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
           with:
                 python-version: "3.10"
 
@@ -134,7 +134,7 @@ jobs:
 
         - name: Publish package distributions to PyPI
           if: inputs.is_release
-          uses: pypa/gh-action-pypi-publish@v1.14.3
+          uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
           with:
             packages-dir: sdks/python/dist
             # Releases call this as a reusable workflow, and PyPI rejects the

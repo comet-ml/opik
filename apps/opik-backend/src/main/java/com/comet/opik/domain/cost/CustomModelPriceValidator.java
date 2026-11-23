@@ -293,7 +293,7 @@ public class CustomModelPriceValidator {
 
     private List<Problem> fixedRowWarnings(int index, CustomModelPrice price, ModelPrice base) {
         var warnings = new ArrayList<Problem>();
-        if (base.calculator() != SpanCostCalculator.DEFAULT_COST_CALCULATOR && !hasTokenPrices(base)) {
+        if (base.calculator() != SpanCostCalculator.DEFAULT_COST_CALCULATOR && !base.hasTokenPrices()) {
             warnings.add(new Problem(index, "model", "priced_per_unit",
                     "'%s' is priced per second or per character, so token prices don't apply"
                             .formatted(price.modelName())));
@@ -430,10 +430,5 @@ public class CustomModelPriceValidator {
 
     private String describeProvider(String provider) {
         return provider.isEmpty() ? "any provider" : "'%s'".formatted(provider);
-    }
-
-    private boolean hasTokenPrices(ModelPrice price) {
-        return price.inputPrice().signum() > 0 || price.outputPrice().signum() > 0
-                || price.cacheCreationInputTokenPrice().signum() > 0 || price.cacheReadInputTokenPrice().signum() > 0;
     }
 }

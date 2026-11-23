@@ -6,6 +6,7 @@ import {
   useRef,
   RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 import { EditorView, keymap, ViewUpdate } from "@codemirror/view";
 import { JsonValue } from "@/types/shared";
 
@@ -16,6 +17,31 @@ const MUSTACHE_CLOSE_LEN = MUSTACHE_CLOSE.length;
 const BRACE_OPEN = "{";
 const BRACE_CLOSE = "}";
 const BRACKET_OPEN = "[";
+
+const isInsideOpenTag = (view: EditorView, nameStart: number) => {
+  const cursorPos = view.state.selection.main.head;
+  const doc = view.state.doc;
+  return (
+    cursorPos >= nameStart &&
+    doc.sliceString(nameStart - MUSTACHE_OPEN_LEN, nameStart) ===
+      MUSTACHE_OPEN &&
+    !/[{}]/.test(doc.sliceString(nameStart, cursorPos))
+  );
+};
+
+// Opens the popover once the editor's measure is over (it rejects updates during one), committed at
+// once so the keymap and key listeners see it before the next key. Fast typing can close the tag
+// before the measure runs, and a popover opened then would take the next Enter.
+const openAfterMeasure = (
+  view: EditorView,
+  nameStart: number,
+  open: () => void,
+  cancel: () => void,
+) =>
+  queueMicrotask(() => {
+    if (isInsideOpenTag(view, nameStart)) flushSync(open);
+    else cancel();
+  });
 
 interface BraceKeyHandlerDeps {
   editorViewRef: RefObject<EditorView | null>;
@@ -70,15 +96,21 @@ const handleOpenBraceKey = (deps: BraceKeyHandlerDeps): boolean => {
         const editorRect = view.dom.getBoundingClientRect();
         return { coords, editorRect };
       },
-      write: ({ coords, editorRect }) => {
-        if (coords && editorRect) {
-          setPopoverPosition({
-            top: coords.bottom - editorRect.top,
-            left: coords.left - editorRect.left,
-          });
-        }
-        setIsJsonPopoverOpen(true);
-      },
+      write: ({ coords, editorRect }) =>
+        openAfterMeasure(
+          view,
+          newCursorPos,
+          () => {
+            if (coords && editorRect) {
+              setPopoverPosition({
+                top: coords.bottom - editorRect.top,
+                left: coords.left - editorRect.left,
+              });
+            }
+            setIsJsonPopoverOpen(true);
+          },
+          () => setBraceStartPos(null),
+        ),
     });
   }
 
@@ -327,15 +359,24 @@ export const useJsonPopover = ({
               coords: view.coordsAtPos(tag.nameStart),
               editorRect: view.dom.getBoundingClientRect(),
             }),
-            write: ({ coords, editorRect }) => {
-              if (coords && editorRect) {
-                setPopoverPosition({
-                  top: coords.bottom - editorRect.top,
-                  left: coords.left - editorRect.left,
-                });
-              }
-              setIsJsonPopoverOpen(true);
-            },
+            write: ({ coords, editorRect }) =>
+              openAfterMeasure(
+                update.view,
+                tag.nameStart,
+                () => {
+                  if (coords && editorRect) {
+                    setPopoverPosition({
+                      top: coords.bottom - editorRect.top,
+                      left: coords.left - editorRect.left,
+                    });
+                  }
+                  setIsJsonPopoverOpen(true);
+                },
+                () => {
+                  editsExistingTagRef.current = false;
+                  setBraceStartPos(null);
+                },
+              ),
           });
           return;
         }

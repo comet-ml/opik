@@ -100,8 +100,8 @@ describe("getOpenRouterMaxOutputTokens", () => {
     },
     {
       reads: "a variant's own row over its base model's",
-      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
-      limit: 8192,
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING_FREE,
+      limit: 65536,
     },
     {
       reads: "the base model's row for a variant without its own",

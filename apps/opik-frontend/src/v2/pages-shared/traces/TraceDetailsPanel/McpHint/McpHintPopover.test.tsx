@@ -105,7 +105,7 @@ describe("the hint card", () => {
     expect(screen.getByTestId("mcp-route-cursor")).toBeInTheDocument();
     expect(screen.getByText("Learn more")).toBeInTheDocument();
 
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    await act(() => vi.advanceTimersByTimeAsync(MCP_COPIED_FEEDBACK_MS));
     expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
   });
 
@@ -121,7 +121,7 @@ describe("the hint card", () => {
       screen.getByTestId("mcp-route-codex").querySelector(".lucide-copy"),
     ).toBeTruthy();
 
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    await act(() => vi.advanceTimersByTimeAsync(MCP_COPIED_FEEDBACK_MS));
     expect(cursor.querySelector(".lucide-copy")).toBeTruthy();
   });
 
@@ -232,7 +232,7 @@ describe("the hint card with a hosted server", () => {
     // stand in for it wherever the card asks.
     for (const el of [container, ...container.querySelectorAll("*")]) {
       (el as HTMLElement).matches = ((selector: string) =>
-        selector === ":hover") as HTMLElement["matches"];
+        selector === ":hover") as unknown as HTMLElement["matches"];
     }
     act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_DISMISS_MS));
 
@@ -252,7 +252,7 @@ describe("the hint card with a hosted server", () => {
       expect(button.querySelector(".lucide-check")).toBeTruthy(),
     );
 
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    await act(() => vi.advanceTimersByTimeAsync(MCP_COPIED_FEEDBACK_MS));
     expect(button.querySelector(".lucide-copy")).toBeTruthy();
   });
 

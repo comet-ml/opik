@@ -179,6 +179,27 @@ describe("Prompt - Instance Methods", () => {
       );
     });
 
+    it("should retrieve the version in the prompt's project", async () => {
+      const projectPrompt = new Prompt(
+        { ...basicPromptData, commit: "current123", projectName: "my-project" },
+        mockOpikClient
+      );
+      vi.mocked(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).mockResolvedValueOnce(
+        createMockVersionDetail({ commit: "abc123de", versionNumber: "v3" })
+      );
+
+      await projectPrompt.getVersion("v3");
+
+      expect(
+        mockOpikClient.api.prompts.retrievePromptVersion
+      ).toHaveBeenCalledWith(
+        { name: basicPromptData.name, projectName: "my-project", versionNumber: "v3" },
+        expect.anything()
+      );
+    });
+
     it("should retrieve specific version by sequential version identifier", async () => {
       const versionResponse = createMockVersionDetail({
         commit: "abc123de",

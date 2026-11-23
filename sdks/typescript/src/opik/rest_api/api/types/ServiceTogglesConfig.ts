@@ -6,6 +6,7 @@ export interface ServiceTogglesConfig {
     spanLlmAsJudgeEnabled: boolean;
     spanUserDefinedMetricPythonEnabled: boolean;
     guardrailsEnabled: boolean;
+    guardrailsValidationsEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
@@ -26,7 +27,6 @@ export interface ServiceTogglesConfig {
     agentInsightsEnabled: boolean;
     agentInsightsGuidanceEnabled: boolean;
     projectHomepageEnabled: boolean;
-    onlineScoringTracingEnabled: boolean;
     annotationQueueAutomationEnabled: boolean;
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;

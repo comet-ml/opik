@@ -14,6 +14,7 @@ import {
 } from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
 import ChartVerticalLegend from "@/shared/Charts/ChartVerticalLegend/ChartVerticalLegend";
+import ChartHorizontalLegend from "@/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
 
@@ -27,6 +28,8 @@ export type DataRecord = {
   scores: Record<string, number>;
 };
 
+export type ChartLegendPosition = "right" | "bottom";
+
 export type ChartData = {
   id: string;
   name: string | DropdownOption<string>[];
@@ -39,12 +42,14 @@ type FeedbackScoresChartContentProps = {
   chartId: string;
   chartData: ChartData;
   containerWidth: number;
+  legendPosition?: ChartLegendPosition;
 };
 
 const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
   chartId,
   chartData,
   containerWidth,
+  legendPosition = "right",
 }) => {
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
@@ -156,19 +161,30 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
             />
           }
         />
-        <ChartLegend
-          verticalAlign="top"
-          layout="vertical"
-          align="right"
-          content={
-            <ChartVerticalLegend
-              setActiveLine={setActiveLine}
-              chartId={chartId}
-            />
-          }
-          width={legendWidth}
-          height={128}
-        />
+        {legendPosition === "bottom" ? (
+          <ChartLegend
+            content={
+              <ChartHorizontalLegend
+                setActiveLine={setActiveLine}
+                chartId={chartId}
+              />
+            }
+          />
+        ) : (
+          <ChartLegend
+            verticalAlign="top"
+            layout="vertical"
+            align="right"
+            content={
+              <ChartVerticalLegend
+                setActiveLine={setActiveLine}
+                chartId={chartId}
+              />
+            }
+            width={legendWidth}
+            height={128}
+          />
+        )}
         {chartData.lines.map((line) => {
           const isActive = line === activeLine;
 

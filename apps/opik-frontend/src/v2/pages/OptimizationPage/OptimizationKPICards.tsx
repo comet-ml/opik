@@ -168,7 +168,7 @@ const OptimizationKPICards: React.FunctionComponent<
         // real result.
         const caption =
           config.key === "score"
-            ? getEmptyRunKPICaption(emptyRunCause, scoringHealth) ?? undefined
+            ? (getEmptyRunKPICaption(emptyRunCause, scoringHealth) ?? undefined)
             : undefined;
         return (
           <MetricKPICard

@@ -67,7 +67,7 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isStreamingText, setIsStreamingText] = useState(false);
   const [pendingToolCallCount, setPendingToolCallCount] = useState(0);
-  const abortControllerRef = useRef<AbortController>();
+  const abortControllerRef = useRef<AbortController | undefined>(undefined);
   const { toast } = useToast();
 
   // Derived state: thinking when stream is active but nothing visible is happening
