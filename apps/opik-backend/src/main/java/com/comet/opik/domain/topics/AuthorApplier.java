@@ -67,13 +67,13 @@ public class AuthorApplier {
     }
 
     /**
-     * Topics whose stored names ({@link TopicText#name}) are equal after {@link #nameKey} become one, at the place of
-     * the first of them in the answer. It keeps the name and definition of its largest member (by {@link #validSize},
-     * ties in answer order) and lists the members' group ids, largest member first, each id once.
+     * Topics whose names are equal after {@link #nameKey} become one, at the place of the first of them in the answer.
+     * It keeps the name and definition of its largest member (by {@link #validSize}, ties in answer order) and lists
+     * the members' group ids, largest member first, each id once.
      */
     private static List<AuthorTopic> mergeSameNames(List<AuthorTopic> topics, List<GroupSummary> groups) {
         return topics.stream()
-                .collect(Collectors.groupingBy(topic -> nameKey(TopicText.name(topic.name())), LinkedHashMap::new,
+                .collect(Collectors.groupingBy(topic -> nameKey(topic.name()), LinkedHashMap::new,
                         Collectors.toList()))
                 .values().stream()
                 .map(members -> members.size() == 1 ? members.getFirst() : merge(members, groups))
