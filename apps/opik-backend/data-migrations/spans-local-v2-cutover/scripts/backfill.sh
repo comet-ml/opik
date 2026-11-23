@@ -164,7 +164,16 @@
 #                             backlog a window leaves behind is spread over far more part sets. Size it from the
 #                             observed system.merges backlog on prod-test rather than from this note.
 #   --min-free-factor F       abort at startup unless node free disk >= F x the PROJECTED DESTINATION size (see
-#                             --dest-compression-ratio). Default 1.35. Pass 0 to skip the check.
+#                             --dest-compression-ratio). Default 1.35; must be 0 or at least 1.
+#                             ON RESUME the gate credits what the destination already holds: whenever spans_local_v2
+#                             is non-empty (whatever --from-week says) it requires the projection's REMAINING part
+#                             (projection - destination on disk, floored at 0) plus the same (F - 1) x projection
+#                             margin a fresh start reserves. The margin is not scaled down with progress: merge scratch
+#                             grows with the destination, it does not shrink as the copy nears its end. On an empty
+#                             destination this is exactly F x the projection.
+#                             The same (F - 1) x projection is the free-space floor re-checked after every week.
+#                             Passing 0 skips BOTH the startup gate and that per-week floor, so it is strictly worse
+#                             than a lowered factor, which keeps the floor.
 #                             THIS IS THE THRESHOLD THE TRACES RUNBOOK COULD NOT LEND US. Its gate multiplied the
 #                             SOURCE size by 2.0 — deliberately conservative, because a driver cannot know the
 #                             destination's compression — and on spans it can demand more than the whole volume:
@@ -176,10 +185,14 @@
 #                             `traces_pre_cutover_backup` (OPIK-8263) as the lever.
 #                             This is a whole-node floor; on tiered storage validate per-volume (hot) headroom too.
 #   --dest-compression-ratio C
-#                             the destination's projected on-disk size as a fraction of the source's. Default 0.381,
-#                             measured during OPIK-7400 on the 000116 codec set. Replace it with a value measured on
-#                             your own estate, on prod-test, before the production window — the runbook's acceptance
-#                             criterion 2 requires exactly that. A
+#                             the destination's projected on-disk size as a fraction of the source's. Default 0.420,
+#                             measured at the completion of a full prod-test copy (OPIK-8380) on the 000116 codec set.
+#                             Replace it with a value measured on your own estate, on prod-test, before the production
+#                             window — the runbook's Go/No-Go requires every threshold re-derived on your estate, and
+#                             for this one only the figure taken AT COMPLETION counts. The driver logs the measured ratio (destination
+#                             bytes/row over source bytes/row, from active parts) after every inserted window and at the
+#                             end, but a mid-run reading drifts substantially in either direction as the copy
+#                             advances, so it shows the trend, not the answer. A
 #                             value above 1.0 is refused: the destination cannot be larger than the source under any
 #                             codec set the DDL permits, so that is a typo rather than a choice.
 #   --confirm-tiered-headroom  REQUIRED when the destination storage_policy is tiered (multi-volume) or differs from the
@@ -222,7 +235,7 @@ MAX_INSERT_THREADS=""     # threads: SETTINGS max_insert_threads. EMPTY = inheri
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 60-120 on spans.
 MIN_FREE_FACTOR="1.35"    # multiple of the PROJECTED DESTINATION size node free space must clear before starting.
-DEST_COMPRESSION_RATIO="0.381"  # destination on-disk size as a fraction of the source's (measured in OPIK-7400).
+DEST_COMPRESSION_RATIO="0.420"  # destination on-disk size as a fraction of the source's (measured in OPIK-8380).
 STATE_FILE="./spans_cutover_backfill_start"  # backfill_start is persisted here and reused on resume (one anchor).
 CONFIRM_TIERED_HEADROOM=0 # required when the destination storage_policy is tiered/mismatched (see preflight_capacity).
 FREE_FLOOR_BYTES=0        # per-week free-space floor, set by preflight_capacity; 0 disables (as --min-free-factor 0 does).
@@ -308,9 +321,13 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
 [[ "$(awk -v p="$DIVERGENCE" 'BEGIN { print (p >= 0 && p < 1.0) ? 1 : 0 }')" == "1" ]] \
     || { echo "ERROR: --divergence must be a fraction in [0, 1.0). It is the tolerated shortfall ratio, so a value at or above 1.0 disables the shortfall abort entirely." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
+# A factor below 1 makes the (factor - 1) margin negative, which passes the gate short of the projection and disables
+# the per-week floor without saying so. Exactly 0 is the one way to skip both, and it is spelled 0.
+[[ "$MIN_FREE_FACTOR" == "0" || "$(awk -v k="$MIN_FREE_FACTOR" 'BEGIN { print (k >= 1) ? 1 : 0 }')" == "1" ]] \
+    || { echo "ERROR: --min-free-factor must be 0 (skip the gate and the per-week floor) or at least 1." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
-# A ratio above 1.0 would make the gate LOOSER than sizing from the source, which is the one direction this parameter
-# must never move: it exists to make a conservative gate satisfiable, not to make a satisfiable gate optimistic.
+# Zero projects an empty destination and passes the gate on any estate. Above 1.0 is a typo, most likely the inverse
+# (source / destination) ratio: the destination cannot be larger than the source under the 000115/000116 codec set.
 [[ "$(awk -v r="$DEST_COMPRESSION_RATIO" 'BEGIN { print (r > 0 && r <= 1.0) ? 1 : 0 }')" == "1" ]] \
     || { echo "ERROR: --dest-compression-ratio must be in (0, 1.0]. The destination cannot be larger than the source under the 000115/000116 codec set." >&2; exit 2; }
 [[ -f "$BACKFILL_SQL" ]] || { echo "ERROR: cannot find backfill SQL at $BACKFILL_SQL" >&2; exit 2; }
@@ -443,31 +460,81 @@ bytes_tib() {
     awk -v b="$1" 'BEGIN { printf "%.2f", b / 1099511627776 }'
 }
 
+# Active-part totals of both tables in one read, as "src_bytes src_rows dst_bytes dst_rows". They size the capacity gate
+# and the measured compression ratio. rows counts physical rows, as bytes_on_disk counts physical bytes, so the two stay
+# comparable before merges settle.
+part_totals() {
+    ch "SELECT sumIf(bytes_on_disk, table = '$SRC_TABLE'), sumIf(rows, table = '$SRC_TABLE'),
+               sumIf(bytes_on_disk, table = '$DST_TABLE'), sumIf(rows, table = '$DST_TABLE')
+        FROM system.parts
+        WHERE database = '$DATABASE' AND table IN ('$SRC_TABLE', '$DST_TABLE') AND active"
+}
+
+# The compression the copy is actually achieving: destination bytes/row over source bytes/row. Per row, so a partial
+# destination compares fairly against the whole source. n/a until both sides hold rows.
+measured_ratio() {
+    local src_bytes src_rows dst_bytes dst_rows
+    read -r src_bytes src_rows dst_bytes dst_rows <<<"$(part_totals)"
+    awk -v sb="$src_bytes" -v sr="$src_rows" -v db="$dst_bytes" -v dr="$dst_rows" \
+        'BEGIN { if (sb > 0 && sr > 0 && dr > 0) printf "%.3f", (db / dr) / (sb / sr); else printf "n/a" }'
+}
+
 # Capacity pre-flight, sized from the PROJECTED DESTINATION rather than the source — see --min-free-factor for why the
-# traces gate could not be carried over. The whole-node total is a necessary floor, not sufficient on tiered storage:
-# new parts land on the hot volume before they tier, so validate per-volume headroom separately. Also warn (not abort)
-# if the successor's storage_policy differs from the source's — a mismatch means the copy would not tier the same way
-# and could fill the hot volume even when the node total looks fine.
+# traces gate could not be carried over, and for how a resume is sized. The whole-node total is a necessary floor, not
+# sufficient on tiered storage: new parts land on the hot volume before they tier, so validate per-volume headroom
+# separately. Also warn (not abort) if the successor's storage_policy differs from the source's — a mismatch means the
+# copy would not tier the same way and could fill the hot volume even when the node total looks fine.
+#
+# The resume test is "the destination holds bytes", not "--from-week > 0": a resume from week 0 is legitimate (copied
+# windows are skipped), and a later --from-week over an empty destination has copied nothing to credit.
 preflight_capacity() {
-    local spans_bytes free_bytes dest_bytes need src_policy dst_policy
-    spans_bytes="$(ch "SELECT sum(bytes_on_disk) FROM system.parts WHERE database = '$DATABASE' AND table = '$SRC_TABLE' AND active")"
+    local totals spans_bytes dst_on_disk free_bytes dest_bytes remaining margin need resuming src_policy dst_policy
+    # Assigned before splitting: set -e ignores a failed substitution inside a here-string, and empty totals would size
+    # the gate and the per-week floor at zero, passing both.
+    totals="$(part_totals)"
+    read -r spans_bytes _ dst_on_disk _ <<<"$totals"
     free_bytes="$(ch "SELECT sum(free_space) FROM system.disks")"
     dest_bytes="$(awk -v s="$spans_bytes" -v r="$DEST_COMPRESSION_RATIO" 'BEGIN { printf "%d", s * r }')"
-    log "Capacity: $SRC_TABLE on-disk $(bytes_tib "$spans_bytes") TiB, projected destination $(bytes_tib "$dest_bytes") TiB (x${DEST_COMPRESSION_RATIO}), node free $(bytes_tib "$free_bytes") TiB, need >= ${MIN_FREE_FACTOR}x the projection"
+    remaining="$(awk -v d="$dest_bytes" -v c="$dst_on_disk" 'BEGIN { printf "%d", (d > c) ? d - c : 0 }')"
+    resuming="$(awk -v c="$dst_on_disk" 'BEGIN { print (c > 0) ? 1 : 0 }')"
+    if [[ "$resuming" == "1" ]]; then
+        log "Capacity (resume): $SRC_TABLE on-disk $(bytes_tib "$spans_bytes") TiB, projected destination $(bytes_tib "$dest_bytes") TiB (x${DEST_COMPRESSION_RATIO}), $DST_TABLE already on disk $(bytes_tib "$dst_on_disk") TiB, remaining $(bytes_tib "$remaining") TiB, node free $(bytes_tib "$free_bytes") TiB, need >= the remaining + (${MIN_FREE_FACTOR} - 1)x the projection"
+        log "Measured dest/src bytes-per-row ratio so far: $(measured_ratio) (a mid-run reading; see --dest-compression-ratio)"
+        if [[ "$remaining" == "0" ]]; then
+            log "WARNING: $DST_TABLE already holds at least the whole projected destination, so the gate below can only require its margin. On a copy that is complete or nearly so, unmerged parts explain this; earlier in the copy it means --dest-compression-ratio is optimistic for this estate, so compare it with the measured ratio." >&2
+        fi
+    else
+        log "Capacity: $SRC_TABLE on-disk $(bytes_tib "$spans_bytes") TiB, projected destination $(bytes_tib "$dest_bytes") TiB (x${DEST_COMPRESSION_RATIO}), node free $(bytes_tib "$free_bytes") TiB, need >= ${MIN_FREE_FACTOR}x the projection"
+    fi
     if [[ "$MIN_FREE_FACTOR" != "0" ]]; then
-        need="$(awk -v d="$dest_bytes" -v k="$MIN_FREE_FACTOR" 'BEGIN { printf "%d", d * k }')"
+        # --min-free-factor buys room for merge scratch and for the projection being wrong; (factor - 1) x projection IS
+        # that room. On an empty destination remaining + margin is exactly factor x projection.
+        margin="$(awk -v d="$dest_bytes" -v k="$MIN_FREE_FACTOR" 'BEGIN { printf "%d", d * (k - 1) }')"
+        need="$(awk -v r="$remaining" -v m="$margin" 'BEGIN { printf "%d", r + m }')"
         if [[ "$(awk -v f="$free_bytes" -v n="$need" 'BEGIN { print (f < n) ? 1 : 0 }')" == "1" ]]; then
-            log "ABORT: node free disk $(bytes_tib "$free_bytes") TiB is below ${MIN_FREE_FACTOR}x the projected destination ($(bytes_tib "$need") TiB)." >&2
-            log "       Free space before starting. The runbook's headroom section names the levers; the largest is" >&2
-            log "       retiring 'traces_pre_cutover_backup' (OPIK-8263), which is IRREVERSIBLE and needs its own" >&2
-            log "       authorisation. Lowering --min-free-factor or raising --dest-compression-ratio to get past this" >&2
-            log "       gate is NOT one of them: both would make the same copy run with less margin, not more room." >&2
+            if [[ "$resuming" == "1" ]]; then
+                log "ABORT: node free disk $(bytes_tib "$free_bytes") TiB is below what the rest of this resumed copy needs ($(bytes_tib "$need") TiB" >&2
+                log "       = $(bytes_tib "$remaining") TiB still to copy + $(bytes_tib "$margin") TiB, the (${MIN_FREE_FACTOR} - 1)x projection margin)." >&2
+                log "       The $(bytes_tib "$dst_on_disk") TiB $DST_TABLE already holds is credited, so this is a real shortfall" >&2
+                log "       against the remaining work, not the full-copy requirement. Free space before resuming; the" >&2
+                log "       runbook's headroom section names the levers. Lowering --min-free-factor shrinks the margin left" >&2
+                log "       for merges over a destination that is now mostly written, and --min-free-factor 0 is worse" >&2
+                log "       still: it also disables the free-space floor re-checked after every week." >&2
+            else
+                log "ABORT: node free disk $(bytes_tib "$free_bytes") TiB is below ${MIN_FREE_FACTOR}x the projected destination ($(bytes_tib "$need") TiB)." >&2
+                log "       Free space before starting. The runbook's headroom section names the levers; the largest is" >&2
+                log "       retiring 'traces_pre_cutover_backup' (OPIK-8263), which is IRREVERSIBLE and needs its own" >&2
+                log "       authorisation. Lowering --min-free-factor or --dest-compression-ratio to get past this" >&2
+                log "       gate is NOT one of them: both would make the same copy run with less margin, not more room." >&2
+                log "       --min-free-factor 0 is worse still: it also disables the free-space floor re-checked after" >&2
+                log "       every week." >&2
+            fi
             exit 1
         fi
-        # The margin the gate just required, published for the per-week re-check below. --min-free-factor buys room for
-        # merge scratch and for the projection being wrong; (factor - 1) x projection IS that room, so losing all of it
-        # mid-copy means the run is no longer inside the envelope the gate approved.
-        FREE_FLOOR_BYTES="$(awk -v d="$dest_bytes" -v k="$MIN_FREE_FACTOR" 'BEGIN { printf "%d", d * (k - 1) }')"
+        # The margin the gate just required, published for the per-week re-check below: losing all of it mid-copy means
+        # the run is no longer inside the envelope the gate approved. It is the same on a resume, so a resumed run keeps
+        # the protection a fresh one has.
+        FREE_FLOOR_BYTES="$margin"
         # Thin-headroom band. Not fatal — the gate passed — but a multi-day copy that also has to absorb merges on a
         # many-thousand-partition destination is exactly where a few hundred GiB of slack disappears without warning.
         if [[ "$(awk -v f="$free_bytes" -v n="$need" 'BEGIN { print (f - n < 3298534883328) ? 1 : 0 }')" == "1" ]]; then
@@ -626,6 +693,7 @@ insert_window() {
     else
         log "$label ($lo .. $hi): OK within tolerance (src_uniq=$src dst_uniq=$dst)"
     fi
+    log "$label ($lo .. $hi): measured dest/src bytes-per-row ratio $(measured_ratio) (--dest-compression-ratio $DEST_COMPRESSION_RATIO)"
 
     if [[ "$PAUSE_SECONDS" != "0" ]]; then
         log "pausing ${PAUSE_SECONDS}s for merges to catch up"
@@ -786,7 +854,7 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week++ )); do
     HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
     process_range "week $week" "$LO" "$HI"
     # RE-READ FREE SPACE BETWEEN WEEKS. preflight_capacity is one reading taken before a copy that runs for days, and on
-    # spans it approves a much thinner envelope than the traces gate did — 1.35 x a MEASURED 0.381 compression ratio,
+    # spans it approves a much thinner envelope than the traces gate did — 1.35 x a MEASURED 0.420 compression ratio,
     # about half the source, where traces demanded twice it. If that ratio is optimistic for this estate, nothing else
     # notices until the volume fills mid-window, which is the expensive moment: a full disk aborts the INSERT and leaves
     # the destination part-copied with merges still to settle. A week boundary is the cheap place to stop instead — the
@@ -801,7 +869,8 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week++ )); do
             log "       than allowed for, or something else on the node took the space." >&2
             log "       Nothing is lost: the anchor in '$STATE_FILE' stands and the copy is idempotent. Recover space" >&2
             log "       (the runbook's headroom section names the levers), then resume with --from-week $((week + 1))." >&2
-            log "       Re-measure the ratio against what the destination actually holds before resuming — raising" >&2
+            log "       Compare the measured ratio logged per window with --dest-compression-ratio before resuming —" >&2
+            log "       the resumed gate credits what $DST_TABLE holds, but sizes the rest from that ratio. Lowering" >&2
             log "       --dest-compression-ratio to clear this check would only shrink the same envelope further." >&2
             exit 1
         fi
@@ -809,3 +878,10 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week++ )); do
 done
 
 log "Backfill complete for weeks [$FROM_WEEK..$TO_WEEK]. Proceed to step 2 (delta + deletion replay)."
+if [[ "$DRY_RUN" != "1" ]]; then
+    if (( TO_WEEK >= LAST_WEEK )); then
+        log "Measured dest/src bytes-per-row ratio at completion: $(measured_ratio) (--dest-compression-ratio $DEST_COMPRESSION_RATIO). This is the figure to record; a mid-run sample is not."
+    else
+        log "Measured dest/src bytes-per-row ratio after week $TO_WEEK: $(measured_ratio) (--dest-compression-ratio $DEST_COMPRESSION_RATIO). Weeks after $TO_WEEK remain, so this is a mid-run sample, not the figure to record."
+    fi
+fi

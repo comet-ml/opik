@@ -80,8 +80,8 @@ recorded as such, with the reason, because silently changing a number to look di
 
 | knob | traces | spans | derived from |
 |---|---|---|---|
-| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. See ["Blocker 1"](#blocker-1--disk-headroom). |
-| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.381** | Destination bytes per source byte under the `000116` codec set, as measured during OPIK-7400 on representative spans data. It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. |
+| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. A resume credits what the destination already holds. See ["Blocker 1"](#blocker-1--disk-headroom). |
+| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.420** | Destination bytes per source byte under the `000116` codec set, measured at the completion of a full prod-test copy (OPIK-8380). It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. Take the figure **at completion**: `backfill.sh` logs the measured ratio after every window, and a mid-run reading drifts substantially in either direction as the copy advances, so it shows the trend, not the answer. |
 | `backfill.sh --max-partitions-per-insert-block` (and the delta's / sweep's) | 2,000 | **20,000** | A block cannot span more partitions than the table has, so the destination's TOTAL distinct partition count is a hard upper bound on a block's spread. Same sizing rule as traces, different input. 20,000 is above the SCHEMA's own ceiling — `UUIDv7ToDateTime` is honest from the epoch to 2299, ~17,000 weekly partitions — so it cannot be too low for any estate. It is a limit check rather than an allocation, so a generous value costs nothing; confirm against `estimate.sh` audit 1 and move on. |
 | `backfill.sh --min-insert-block-size-bytes` | — (stock 256 MiB, implicit) | **256 MiB, carried explicitly** | Same value as traces, made explicit because on spans it is the ONE dial over peak insert memory and it trades against part count. Measured on spans-shaped rows: 256 MiB → ~1.1 GiB peak and the fewest parts; 32 MiB → ~315 MiB peak and ~5× the parts. Lower it only if the data nodes are memory-constrained. See ["Partition spread"](#partition-spread-and-the-one-setting-that-matters). |
 | `backfill.sh --max-insert-block-size` | 1,048,576 (stock) | **1,048,576 (unchanged, and re-derived)** | Re-derived rather than inherited, and it lands on the stock value: at spans' uncompressed row width the BYTE bound above fires long before this row count, so lowering it would be cosmetic on the backfill. It is carried explicitly only so the delta's and the sweep's lower value reads as a deliberate difference rather than drift. |
@@ -116,7 +116,7 @@ a multi-day copy that also has to absorb merges.
 **The answer this runbook commits to: re-derive the factor from an explicit destination projection, and prove the
 projection before the production window.** Concretely:
 
-1. `backfill.sh --dest-compression-ratio` (default `0.381`) makes the projection an argument rather than an assumption,
+1. `backfill.sh --dest-compression-ratio` (default `0.420`) makes the projection an argument rather than an assumption,
    and `--min-free-factor` (default `1.35`) multiplies the **projection**, covering merge scratch on top of the finished
    copy rather than a second whole copy of the source. `estimate.sh` reports source size, projection, free space and the
    resulting margin as four numbers, so the decision is made on arithmetic rather than on a pass/fail flag.
@@ -133,7 +133,18 @@ projection before the production window.** Concretely:
 
 **What is explicitly NOT the answer: passing a lower `--min-free-factor`.** The gate is the only thing standing between
 a multi-day copy and a full volume, and lowering it makes the same copy run with less margin, not more room. The driver
-says this in its abort message, because the flag is right there.
+says this in its abort message, because the flag is right there. **`--min-free-factor 0` is worse than any lowered
+factor:** it skips the startup gate *and* the free-space floor `backfill.sh` re-checks after every week, which is the
+only guard left once the copy is running.
+
+**A resume is sized from the remaining work.** Free space falls as the copy writes, so a gate pinned to the full
+projection refuses a resume more firmly the further the copy has got. Whenever `spans_local_v2` already holds data
+(whatever `--from-week` says), `backfill.sh` instead requires the projection minus what the destination holds on disk,
+plus the same `(--min-free-factor − 1) ×` projection margin a fresh start reserves. The margin is deliberately not
+scaled down with progress: merge scratch grows with the destination rather than shrinking as the copy nears its end, and
+the same figure is the per-week floor, so a resumed run keeps the protection a fresh one has. On an empty destination the
+requirement is exactly `--min-free-factor ×` the projection, as before. A resume abort therefore means the remaining work
+genuinely does not fit, and the levers are the same as for a fresh start.
 
 **On tiered storage the whole-node figure is necessary and not sufficient.** New parts land on the hot volume before
 they tier, so validate per-volume headroom out of band; `backfill.sh` refuses a tiered or mismatched `storage_policy`
@@ -427,9 +438,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    retention note above first.
 8. **Sufficient free disk, sized from the DESTINATION** — see ["Blocker 1"](#blocker-1--disk-headroom), which is the
    single hardest prerequisite here and the one the traces runbook cannot lend us. Run `estimate.sh` and read its
-   headroom verdict; `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the source size
-   (defaults 1.35 and 0.381). **A pass with under 3 TiB of margin is
-   a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
+   headroom verdict; on a fresh start `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the
+   source size (defaults 1.35 and 0.420), and a resume is sized from the remaining work. **A pass with under 3 TiB of
+   margin is a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
    On tiered storage this whole-node floor is necessary but not sufficient — validate per-volume (hot) headroom too,
    since new parts land hot before they tier, and `backfill.sh` refuses a tiered policy without
    `--confirm-tiered-headroom`.
@@ -2971,14 +2982,24 @@ here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-mai
 be made at all), and `--settle-timeout` must refuse a leading zero as well as anything outside 0–7200. Keep that last
 check **lexical**, on the digit count, rather than turning it into a numeric comparison: bash arithmetic wraps silently
 past 2^63 instead of erroring, and a wrapped value is negative, so it both passes a `<=` test and leaves the gate's poll
-count negative — which skips every sample and passes the gate without reading replication at all.
+count negative — which skips every sample and passes the gate without reading replication at all. In both
+`backfill.sh` and `estimate.sh`, `--dest-compression-ratio` must refuse 0 and anything above 1.0 (such a value is
+almost certainly the inverse, source / destination, ratio), and `--min-free-factor` must refuse anything between 0 and
+1, including `0.0`: its negative margin would pass the gate short of the projection and silently disable the per-week
+floor.
 
 **Four `backfill.sh` guards are new for spans and have no traces counterpart, so they need exercising explicitly:**
 
-- **the destination-relative headroom gate.** Confirm it refuses below the requirement, that its abort message names
-  the levers and explicitly rules out lowering the flag, and that the thin-margin WARNING fires between the requirement
-  and +3 TiB. Also confirm `--dest-compression-ratio` above 1.0 is refused — that direction would make a conservative
-  gate optimistic, which is the one thing this parameter must never do;
+- **the destination-relative headroom gate.** Confirm it refuses below the requirement (a large `--min-free-factor`
+  forces that locally), that its abort message names the levers, rules out lowering the flag and says `0` also
+  disables the per-week floor, and that the thin-margin WARNING fires between the requirement and +3 TiB. Repeat on a
+  **resume**: stop a backfill with `--to-week`, resume it with `--from-week`, and confirm it logs `Capacity (resume)`
+  crediting what `spans_local_v2` holds, that a forced abort gives the resume form of the message, and that
+  `--from-week` over an empty destination still sizes as a fresh start. Resumed with `--dest-compression-ratio 0.01`,
+  the projection falls below what the destination holds: confirm it logs `remaining 0.00 TiB` and the WARNING that the
+  destination already holds the whole projection. Confirm the measured ratio is logged
+  after every window, and that the run stopped by `--to-week` labels its final reading a mid-run sample while the run
+  reaching the last week labels it the completion figure;
 - **`reconcile.sh`'s reverse usage-range precheck.** Plant a `usage` value above `2^31` in the parked successor and
   confirm the reverse direction REFUSES rather than importing it wrapped, and that `--report-only` reports it rather
   than staying silent.
