@@ -297,15 +297,6 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.build.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
-        var build = topics.getBuild();
-        var limits = inference.getLimits();
-        return build == null || build.getLlmDeadline() == null || limits == null
-                || limits.getMaxGenerateBatchDeadline() == null
-                || build.getLlmDeadline().toMilliseconds() <= limits.getMaxGenerateBatchDeadline().toMilliseconds();
-    }
-
-    @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedTimeout must not be above inference.limits.maxEmbedDeadline") public boolean isTopicsEmbedTimeoutWithinLimits() {
         var vectors = topics.getVectors();
         var limits = inference.getLimits();
