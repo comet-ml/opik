@@ -83,8 +83,8 @@ public class TopicsRebuildService {
             return new RunStats(stats, JsonUtils.createObjectNode());
         }
 
-        void add(ObjectNode phase) {
-            stats.setAll(phase);
+        void add(ObjectNode phaseStats) {
+            stats.setAll(phaseStats);
         }
 
         /** Adds a call's counts to the run's: a nightly update makes several calls. */
