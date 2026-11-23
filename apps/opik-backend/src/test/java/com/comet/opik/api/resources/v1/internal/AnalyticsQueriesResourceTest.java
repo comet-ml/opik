@@ -288,21 +288,21 @@ class AnalyticsQueriesResourceTest {
         assertRejected(endpoint, query, ACCESS_DENIED_MESSAGE);
     }
 
-    private Stream<Arguments> catalogMergeQueriesByEndpoint() {
-        return Stream.of("tables", "^tables$", "^columns$")
-                .flatMap(tablePattern -> Stream.of(Endpoint.values())
-                        .map(endpoint -> arguments(tablePattern, endpoint,
-                                "SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', '%s')"
-                                        .formatted(tablePattern))));
+    private Stream<Arguments> catalogTableFunctionsByEndpoint() {
+        return Stream.of(
+                arguments("merge with string catalog", "merge('system', '^tables$')"),
+                arguments("merge with identifier catalog", "merge(system, '^tables$')"),
+                arguments("remote catalog", "remote('localhost', 'system', 'tables')"),
+                arguments("cluster catalog", "cluster('default', 'system', 'tables')"))
+                .flatMap(testCase -> Stream.of(Endpoint.values()).map(endpoint -> arguments(testCase.get()[0], endpoint,
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + testCase.get()[1])));
     }
 
-    @ParameterizedTest(name = "merge('system', '{0}') via {1}")
-    @MethodSource("catalogMergeQueriesByEndpoint")
-    @DisplayName("the read-only account cannot resolve catalog tables through merge")
-    void catalogMergeQuery__thenExecutionFailed(String tablePattern, Endpoint endpoint, String query) {
-        // ClickHouse cannot find a matching table to derive the merge() schema; this is a database rejection,
-        // not evidence that the application's catalog-table AST guard recognized the table function.
-        assertRejected(endpoint, query, EXECUTION_FAILED_MESSAGE);
+    @ParameterizedTest(name = "{0} via {1}")
+    @MethodSource("catalogTableFunctionsByEndpoint")
+    @DisplayName("table functions are rejected before ClickHouse resolves their arguments")
+    void catalogTableFunction__thenAccessDenied(String label, Endpoint endpoint, String query) {
+        assertRejected(endpoint, query, ACCESS_DENIED_MESSAGE);
     }
 
     private Stream<Arguments> allowedQueries() {

@@ -188,6 +188,51 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("a table function is rejected before its arguments can be resolved")
+    void tableFunctionIsRejectedBeforeResolution() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
+                "SelectQuery (children 1)", "  TableExpression (children 1)", "   Function remote (children 1)")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static Stream<Arguments> forbiddenResolvedTables() {
+        return Stream.of(
+                arguments("system catalog", "TABLE id: 1, table_name: system.tables"),
+                arguments("information schema", "TABLE id: 1, table_name: information_schema.tables"),
+                arguments("other database", "TABLE id: 1, table_name: other.traces"),
+                arguments("missing table name", "TABLE id: 1, alias: hidden"),
+                arguments("table function", "TABLE_FUNCTION id: 1, table_function_name: merge"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenResolvedTables")
+    @DisplayName("resolved reads outside the analytics database are rejected in audit mode")
+    void forbiddenResolvedTableIsRejected(String label, String tableNode) {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(List.of("QUERY id: 0", "  JOIN TREE", "    " + tableNode)));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("a metadata-like identifier resolved as a column is allowed")
     void metadataNamedColumnIsAllowed() {
         givenClickHouseReturnsOneRow();

@@ -49,12 +49,13 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
- * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, tables in the {@code system} and
- * {@code information_schema} catalogs, and listed environment or identity functions before execution. Every query is
- * also pre-flighted through {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree catches aliases whose
- * AST spelling is not listed, while allowing columns or aliases with a metadata-function name. The same tree is reused
- * for the scalar-subquery check. Execution never runs on a validation failure. The workspace/project bounds are pushed
- * as ClickHouse server settings consumed by the restrictive row policies, never concatenated into the SQL.
+ * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, direct catalog reads, table functions,
+ * and listed environment or identity functions before execution. Every query is also pre-flighted through
+ * {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree restricts table reads to the analytics database
+ * and catches function aliases whose AST spelling is not listed, while allowing columns or aliases with a
+ * metadata-function name. The same tree is reused for the scalar-subquery check. Execution never runs on a validation
+ * failure. The workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row
+ * policies, never concatenated into the SQL.
  *
  * <p>On top of the row policies, a post-run check verifies from the query's {@code system.query_log} entries and its
  * plan that every table it read was read under a row policy ({@link FreeFormSqlPolicyCheck}). A scalar subquery
@@ -120,7 +121,11 @@ public class FreeFormSqlQueryService {
      * table references are rejected in the app even if those grants change.
      */
     private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final String TABLE_EXPRESSION_AST_PREFIX = "TableExpression ";
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
+    private static final String TABLE_QUERY_TREE_PREFIX = "TABLE ";
+    private static final String TABLE_FUNCTION_QUERY_TREE_PREFIX = "TABLE_FUNCTION ";
+    private static final Pattern RESOLVED_TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
 
     /**
      * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
@@ -262,7 +267,7 @@ public class FreeFormSqlQueryService {
                 });
     }
 
-    /** Resolve every function call to its canonical name before running the query. */
+    /** Resolve table reads and function calls before running the query. */
     private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
             String projectScope, String query, long startMillis) {
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
@@ -271,6 +276,9 @@ public class FreeFormSqlQueryService {
                         throw mapExecutionError(error, startMillis);
                     }
                     try {
+                        if (containsForbiddenResolvedTable(queryTree)) {
+                            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+                        }
                         if (containsForbiddenResolvedMetadataFunction(queryTree)) {
                             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
                         }
@@ -335,6 +343,9 @@ public class FreeFormSqlQueryService {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsForbiddenCatalogTableNode(nodeLabels)) {
+            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+        }
+        if (containsTableFunctionNode(nodeLabels)) {
             throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
@@ -484,6 +495,39 @@ public class FreeFormSqlQueryService {
                 .filter(label -> label.startsWith(TABLE_IDENTIFIER_AST_PREFIX))
                 .map(label -> label.substring(TABLE_IDENTIFIER_AST_PREFIX.length()).toLowerCase(Locale.ROOT))
                 .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
+    }
+
+    /** A function directly under a table expression is a table function; reject it before resolving it. */
+    private static boolean containsTableFunctionNode(List<String> nodeLabels) {
+        for (int i = 0; i + 1 < nodeLabels.size(); i++) {
+            String parent = nodeLabels.get(i);
+            String child = nodeLabels.get(i + 1);
+            if (parent.stripLeading().startsWith(TABLE_EXPRESSION_AST_PREFIX)
+                    && child.stripLeading().startsWith(FUNCTION_AST_PREFIX)
+                    && child.length() - child.stripLeading().length() > parent.length()
+                            - parent.stripLeading().length()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The resolved tree includes implicit system.one for a FROM-less SELECT; explicit reads fail the AST check. */
+    private boolean containsForbiddenResolvedTable(List<String> queryTree) {
+        return queryTree.stream().map(String::stripLeading)
+                .filter(line -> line.startsWith(TABLE_QUERY_TREE_PREFIX)
+                        || line.startsWith(TABLE_FUNCTION_QUERY_TREE_PREFIX))
+                .anyMatch(line -> {
+                    if (line.startsWith(TABLE_FUNCTION_QUERY_TREE_PREFIX)) {
+                        return true;
+                    }
+                    var matcher = RESOLVED_TABLE_NAME.matcher(line);
+                    if (!matcher.find()) {
+                        return true;
+                    }
+                    String table = matcher.group(1);
+                    return !table.startsWith(database + ".") && !table.equals("system.one");
+                });
     }
 
     private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
