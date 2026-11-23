@@ -155,11 +155,11 @@ final class TopicsTestData {
         var savedAt = night.plus(Duration.ofHours(2));
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
+            var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
+            projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(newId())
@@ -171,7 +171,7 @@ final class TopicsTestData {
                     .size(size)
                     .vectors(vectors)
                     .build()));
-            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+            projectDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
     }

@@ -9,7 +9,9 @@ import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.hash.Hashing;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -41,11 +43,15 @@ class TopicsLlm {
     private final @NonNull InferenceClient client;
     private final @NonNull TopicsMetrics metrics;
 
+    /** What the call returned, read, with the call's stats. */
+    record Answer<T>(T value, ObjectNode stats) {
+    }
+
     /**
      * The answer, turned by {@code read} into what the algorithm needs; when it cannot, {@code read} throws an
      * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}.
      */
-    <T> Mono<T> generate(@NonNull TopicRun run, @NonNull LlmRequest call, @NonNull Function<JsonNode, T> read) {
+    <T> Mono<Answer<T>> generate(@NonNull TopicRun run, @NonNull LlmRequest call, @NonNull Function<JsonNode, T> read) {
         return Mono.defer(() -> {
             var tag = call.call().getValue();
             log.info("Topics run '{}' prompt, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
@@ -61,14 +67,13 @@ class TopicsLlm {
                     .maxTokens(call.maxTokens())
                     .temperature(0)
                     .build();
-            run.add("llm_calls", 1);
             return client.generate(request, Instant.now().plus(deadline(call.call())))
                     .onErrorMap(InferenceException.class, exception -> failed(run, call.call(), exception))
                     .map(response -> answer(run, call.call(), response, read));
         });
     }
 
-    private <T> T answer(TopicRun run, LlmCall call, GenerateResponse response, Function<JsonNode, T> read) {
+    private <T> Answer<T> answer(TopicRun run, LlmCall call, GenerateResponse response, Function<JsonNode, T> read) {
         var tag = call.getValue();
         var output = response.result().output();
         log.info(
@@ -78,14 +83,16 @@ class TopicsLlm {
         var canonical = output == null ? "null" : InferenceJson.canonical(output);
         log.info("Topics run '{}' answer body, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
                 run.projectId(), canonical.length(), sha256(canonical));
-        run.add("llm_input_tokens", response.usage().inputTokens());
-        run.add("llm_output_tokens", response.usage().outputTokens());
-        run.stats().put("llm_cache_hit", response.cacheHit());
+        var stats = JsonUtils.createObjectNode();
+        stats.put("llm_calls", 1);
+        stats.put("llm_input_tokens", response.usage().inputTokens());
+        stats.put("llm_output_tokens", response.usage().outputTokens());
+        stats.put("llm_cache_hit", response.cacheHit());
         try {
             // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
             var answer = read.apply(output);
             metrics.llm(run.workspace(), call, "ok");
-            return answer;
+            return new Answer<>(answer, stats);
         } catch (TopicsRunException exception) {
             metrics.llm(run.workspace(), call, "bad_answer");
             throw exception;
