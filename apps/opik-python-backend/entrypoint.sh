@@ -3,7 +3,7 @@
 set -e
 
 if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
-  # Opt-in daemon hardening: prints a config merged from any mounted daemon.json, or nothing when off.
+  # Daemon hardening (on unless set to false): prints a config merged from any mounted daemon.json, or nothing when off.
   # A bad value or unreadable config fails startup (set -e).
   DOCKERD_CONFIG_FILE=$(python3 ./src/opik_backend/docker_daemon_config.py)
 
