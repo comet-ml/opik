@@ -92,9 +92,9 @@ public class TopicWindowDAO {
                 GROUP BY trace_id
             )
             WHERE live
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, priority = 100, optimize_aggregation_in_order = 1,
-                max_block_size = 8192, log_comment = '<log_comment>'
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>,
+                max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>, priority = <priority>,
+                optimize_aggregation_in_order = 1, max_block_size = <max_block_size>, log_comment = '<log_comment>'
             """;
 
     /**
@@ -243,12 +243,9 @@ public class TopicWindowDAO {
     public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
-        var find = config.getVectors().getFind();
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
-                "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+                "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
+        withGuards(template, maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -264,7 +261,10 @@ public class TopicWindowDAO {
                     for (int i = 0; i < Array.getLength(array); i++) {
                         bounds.add(Instant.EPOCH.plus(((Number) Array.get(array, i)).longValue(), ChronoUnit.MICROS));
                     }
-                    return new WindowBounds(((Number) row.get("traces", Object.class)).longValue(), bounds);
+                    return WindowBounds.builder()
+                            .traces(((Number) row.get("traces", Object.class)).longValue())
+                            .bounds(bounds)
+                            .build();
                 }))
                 .single();
     }
@@ -363,6 +363,7 @@ public class TopicWindowDAO {
     }
 
     /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
+    @Builder(toBuilder = true)
     public record WindowBounds(long traces, @NonNull List<Instant> bounds) {
     }
 

@@ -327,7 +327,7 @@ class TopicsRebuildServiceFaultsTest {
                 unit(d, 0, 0.96, 2, Math.sqrt(1 - 0.96 * 0.96)));
         var delta = unit(d, 3, 1, 0, 0);
         var texts = List.of("alpha request", "beta request", "gamma request", "delta request");
-        var vectors = List.of(alpha, gated.get(0), gated.get(1), delta);
+        var vectors = List.of(alpha, gated.getFirst(), gated.get(1), delta);
         var rows = new ArrayList<TopicWindowDAO.WindowRow>();
         for (int i = 0; i < 12; i++) {
             rows.add(TopicWindowDAO.WindowRow.builder()
@@ -469,7 +469,7 @@ class TopicsRebuildServiceFaultsTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TraceTopic>> traceTopics = ArgumentCaptor.forClass(List.class);
         verify(traceTopicsDAO).insert(traceTopics.capture());
-        var topicIds = List.of(saved.get(0).id(), saved.get(1).id(), TraceTopic.OTHER);
+        var topicIds = List.of(saved.getFirst().id(), saved.get(1).id(), TraceTopic.OTHER);
         assertThat(traceTopics.getValue()).containsExactlyElementsOf(IntStream.range(0, TRACES)
                 .mapToObj(i -> TraceTopic.builder()
                         .workspaceId(workspaceId)
