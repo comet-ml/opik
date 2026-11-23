@@ -32,9 +32,9 @@ class TopicsRunReconcilerTest {
         var store = mock(TopicRunStore.class);
         var publisher = mock(TopicsRunPublisher.class);
         var candidates = mock(TopicsFirstBuildCandidates.class);
-        var run = new InFlightRun("workspace", UUID.randomUUID(), UUID.randomUUID(),
-                TopicProject.RunMode.NIGHTLY_UPDATE, TopicProject.RunStatus.QUEUED, now.minus(1, ChronoUnit.DAYS), null,
-                null, false);
+        var run = InFlightRun.builder().workspaceId("workspace").projectId(UUID.randomUUID())
+                .runId(UUID.randomUUID()).runMode(TopicProject.RunMode.NIGHTLY_UPDATE)
+                .runStatus(TopicProject.RunStatus.QUEUED).runQueuedAt(now.minus(1, ChronoUnit.DAYS)).build();
         when(store.dropQueued(any(), any(), any(), any())).thenReturn(Mono.just(true));
 
         var inFlight = new TopicsRunReconciler(config, store, publisher, candidates)
