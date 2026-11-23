@@ -47,7 +47,9 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.SlimPayloadStorageCheck;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -2407,6 +2409,46 @@ class TracesResourceTest {
 
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
+    }
+
+    @Nested
+    @DisplayName("Payload storage:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PayloadStorage {
+
+        Stream<JsonNode> batchAndSingleCreateStoreTheSamePayload() {
+            return PayloadCases.payloads();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a batch create and a single create store the same input and output")
+        void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchTrace = PayloadCases.trace(factory, projectName, payload);
+            var singleTrace = PayloadCases.trace(factory, projectName, payload);
+
+            traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(singleTrace, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(batchTrace, null, API_KEY, TEST_WORKSPACE);
+            getAndAssert(singleTrace, null, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a batch create and a single create store the same slim input and output")
+        void batchAndSingleCreateStoreTheSameSlimPayload() {
+            SlimPayloadStorageCheck.builder()
+                    .traceResourceClient(traceResourceClient)
+                    .projectResourceClient(projectResourceClient)
+                    .experimentResourceClient(experimentResourceClient)
+                    .factory(factory)
+                    .apiKey(API_KEY)
+                    .workspaceName(TEST_WORKSPACE)
+                    .user(USER)
+                    .build()
+                    .assertBatchAndSingleCreateStoreTheSameSlimPayload();
+        }
     }
 
     private Trace getAndAssert(Trace expectedTrace, UUID expectedProjectId, String apiKey, String workspaceName) {
