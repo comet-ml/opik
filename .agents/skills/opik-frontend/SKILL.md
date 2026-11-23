@@ -6,6 +6,7 @@ description: React frontend patterns for Opik. Use when working in apps/opik-fro
 # Opik Frontend
 
 ## Architecture Decisions
+
 - **Routing**: TanStack Router (file-based)
 - **Data fetching**: TanStack Query (never raw fetch/useEffect)
 - **State**: Zustand for global, React state for local
@@ -15,6 +16,7 @@ description: React frontend patterns for Opik. Use when working in apps/opik-fro
 ## Critical Gotchas
 
 ### Never useEffect for Data Fetching
+
 ```typescript
 // ❌ BAD
 useEffect(() => {
@@ -29,6 +31,7 @@ const { data } = useQuery({
 ```
 
 ### Selective Memoization
+
 ```typescript
 // ✅ USE useMemo for: complex computations, large data transforms
 const filtered = useMemo(() =>
@@ -44,6 +47,7 @@ const name = data?.name ?? '';  // No useMemo needed
 ```
 
 ### Zustand Selectors
+
 ```typescript
 // ✅ GOOD - specific selector
 const selectedEntity = useEntityStore(state => state.selectedEntity);
@@ -53,41 +57,50 @@ const { selectedEntity, filters } = useEntityStore();
 ```
 
 ### Browser Translation Safety (Google Translate)
+
 Many users auto-translate the page; the translator wraps text nodes in `<font>` elements, so React throws `NotFoundError: removeChild` when it reconciles a **bare dynamic text node** it re-parented. Wrap dynamic/conditional strings in their own element instead of rendering bare text.
+
 ```typescript
 // ❌ bare dynamic text → crash under translation
 <button>{icon}{label}</button>
 // ✅ wrap it → React swaps a stable element, stays translatable
 <button>{icon}<span>{label}</span></button>
 ```
+
 For timer-driven text (typewriter/counter), also avoid per-tick `setState` — write into a ref'd node's `textContent` (React never reconciles it), or mark a decorative node `translate="no"`. Ref: [facebook/react#11538](https://github.com/facebook/react/issues/11538) (OPIK-7428, OPIK-7435).
 
 ## Layer Architecture
 
 ### Shared layers (used by all versions)
+
 `ui → shared` (one-way only)
 
 ### Per-version layers
+
 `ui → shared → v1/pages-shared → v1/pages` (one-way only)
 `ui → shared → v2/pages-shared → v2/pages` (one-way only)
 
 ### Module boundaries
+
 - v1/ CANNOT import from v2/
 - v2/ CANNOT import from v1/
 - `src/components/` is BLOCKED (old structure, no longer exists)
 - After modifying imports: `npm run deps:validate`
 
 ### Shared component rules
+
 - Backward-compatible changes only
 - Must not be version-aware (use `showProjectSelector={true}` not `isV2={true}`)
 - If behavior needs to change, create a new component instead
 
 ## State Location Decisions
+
 - **URL state**: filters, pagination, selected items
 - **Zustand**: user preferences, cross-component state
 - **React state**: form inputs, UI toggles
 
 ## Component Structure
+
 ```typescript
 const Component: React.FC<Props> = ({ prop }) => {
   // 1. State hooks
@@ -103,6 +116,7 @@ const Component: React.FC<Props> = ({ prop }) => {
 ```
 
 ## Query Patterns
+
 ```typescript
 // Query with params
 const { data } = useQuery({
@@ -120,6 +134,7 @@ const mutation = useMutation({
 ```
 
 ## Reference Files
+
 - [forms.md](forms.md) - React Hook Form + Zod patterns
 - [ui-components.md](ui-components.md) - Button variants, typography, dark theme
 - [responsive-design.md](responsive-design.md) - Tailwind breakpoints vs useIsPhone
