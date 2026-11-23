@@ -347,12 +347,7 @@ public class TopicsConfig {
      * would keep an empty list for the life of the process.
      */
     public Set<String> enabledWorkspaceIds() {
-        return workspaceIds(enabledWorkspaces);
-    }
-
-    /** A comma-separated workspace list, parsed: stripped ids, blanks dropped. Null and blank both mean none. */
-    static Set<String> workspaceIds(String list) {
-        return Arrays.stream(Objects.toString(list, "").split(","))
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
@@ -504,25 +499,6 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 20, unit = TimeUnit.HOURS)
         private Duration budget;
-
-        /**
-         * The workspaces nightly updates run for, comma-separated; blank means every workspace topics run for. A listed
-         * workspace runs only while it is also one topics run for. No getter: read it via {@link #workspaceIds()}.
-         */
-        @JsonProperty
-        @Getter(AccessLevel.NONE)
-        private String workspaces;
-
-        /** The parsed {@code workspaces}; empty means every workspace topics run for. */
-        public Set<String> workspaceIds() {
-            return TopicsConfig.workspaceIds(workspaces);
-        }
-
-        /** Whether nightly updates run for this workspace, among the ones topics run for. */
-        public boolean covers(String workspaceId) {
-            var listed = workspaceIds();
-            return listed.isEmpty() || listed.contains(workspaceId);
-        }
 
         @JsonIgnore
         @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
