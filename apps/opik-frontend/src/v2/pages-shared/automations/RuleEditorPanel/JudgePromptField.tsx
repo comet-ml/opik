@@ -1,10 +1,11 @@
 import React, { useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
+import { Text } from "lucide-react";
 import get from "lodash/get";
 
 import { FormErrorSkeleton, FormField, FormItem, FormMessage } from "@/ui/form";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
-import RuleEditorCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorCard";
+import RuleContentCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleContentCard";
 import JudgePromptToolbar from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptToolbar";
 import JudgePromptInput from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptInput";
 import { PromptVariableEditorHandle } from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
@@ -15,18 +16,14 @@ import {
 } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 import PromptVariableHint from "@/v2/pages-shared/automations/RuleEditorPanel/PromptVariableHint";
 import RuleEditorNotice from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorNotice";
-import TemplateEmptyState from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateEmptyState";
-import { getRuleTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
-import useTemplateStart from "@/v2/pages-shared/automations/RuleEditorPanel/useTemplateStart";
-import { LLMPromptTemplate } from "@/types/llm";
-import {
-  EVALUATORS_RULE_SCOPE,
-  UI_EVALUATORS_RULE_TYPE,
-} from "@/types/automations";
+import useRuleTemplatePicker, {
+  RuleTemplateActions,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleTemplatePicker";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 type JudgePromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
-  onSelectTemplate: (template: LLMPromptTemplate, label: string) => void;
+  templateActions: RuleTemplateActions;
   mergeInfo?: PromptMergeInfo | null;
   datasetColumnNames?: string[];
 };
@@ -51,16 +48,14 @@ const getJudgeErrors = (form: UseFormReturn<EvaluationRuleFormType>) => {
 
 const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
   form,
-  onSelectTemplate,
+  templateActions,
   mergeInfo,
   datasetColumnNames,
 }) => {
   const editorRef = useRef<PromptVariableEditorHandle>(null);
   const scope = form.watch("scope");
-  const { showStartCards, startBlank, startWithTemplate } = useTemplateStart(
-    form,
-    onSelectTemplate,
-    editorRef,
+  const picker = useRuleTemplatePicker(form, templateActions, () =>
+    editorRef.current?.focusAtEnd(),
   );
   const judgeErrors = getJudgeErrors(form);
   const sampleData = useRuleSampleData(
@@ -70,7 +65,25 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
     datasetColumnNames,
   );
 
-  if (showStartCards) {
+  const renderCard = (hasError: boolean, content?: React.ReactNode) => (
+    <RuleContentCard
+      picker={picker}
+      contentLabel="Prompt"
+      contentIcon={Text}
+      contentIconClassName="bg-[var(--rule-icon-llm-judge)]"
+      customDescription="Your own prompt, kept while you try templates."
+      blankDescription="Write your own prompt from scratch."
+      headerEnd={<JudgePromptToolbar form={form} />}
+      hasError={hasError}
+    >
+      {content}
+    </RuleContentCard>
+  );
+  const judgeErrorMessages = judgeErrors.map((message) => (
+    <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
+  ));
+
+  if (picker.showTemplates) {
     const startError = get(form.formState.errors, [
       "llmJudgeDetails",
       "messages",
@@ -80,18 +93,9 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
     ]);
     return (
       <div className="flex flex-1 flex-col gap-1">
-        <TemplateEmptyState
-          label="Prompt"
-          options={getRuleTemplateOptions(
-            UI_EVALUATORS_RULE_TYPE.llm_judge,
-            scope,
-          )}
-          blankLabel="Type your prompt"
-          blankDescription="Write your own judge prompt from scratch."
-          onStartBlank={startBlank}
-          onSelect={startWithTemplate}
-        />
+        {renderCard(judgeErrors.length > 0)}
         {startError && <FormErrorSkeleton>{startError}</FormErrorSkeleton>}
+        {judgeErrorMessages}
       </div>
     );
   }
@@ -111,10 +115,8 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               </span>
             </RuleEditorNotice>
           )}
-          <RuleEditorCard
-            hasError={Boolean(fieldState.error) || judgeErrors.length > 0}
-            header={<JudgePromptToolbar form={form} />}
-          >
+          {renderCard(
+            Boolean(fieldState.error) || judgeErrors.length > 0,
             <JudgePromptInput
               value={field.value}
               onChange={field.onChange}
@@ -122,13 +124,11 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               sampleData={sampleData}
               editorRef={editorRef}
               showMedia={scope !== EVALUATORS_RULE_SCOPE.thread}
-            />
-          </RuleEditorCard>
+            />,
+          )}
           {sampleData && <PromptVariableHint scope={scope} />}
           <FormMessage />
-          {judgeErrors.map((message) => (
-            <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
-          ))}
+          {judgeErrorMessages}
         </FormItem>
       )}
     />

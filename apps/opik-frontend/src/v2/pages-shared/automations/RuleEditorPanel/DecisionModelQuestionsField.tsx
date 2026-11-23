@@ -1,31 +1,25 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
+import { CircleHelp } from "lucide-react";
 import get from "lodash/get";
 
 import { FormErrorSkeleton } from "@/ui/form";
-import { LLMPromptTemplate } from "@/types/llm";
-import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
-import DecisionModelQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsCard";
-import TemplateEmptyState from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateEmptyState";
-import useTemplateStart from "@/v2/pages-shared/automations/RuleEditorPanel/useTemplateStart";
-import { getRuleTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
+import DecisionModelQuestions from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestions";
+import RuleContentCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleContentCard";
+import useRuleTemplatePicker, {
+  RuleTemplateActions,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleTemplatePicker";
 
 type DecisionModelQuestionsFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
-  onSelectTemplate: (template: LLMPromptTemplate, label: string) => void;
+  templateActions: RuleTemplateActions;
 };
 
 const DecisionModelQuestionsField: React.FC<
   DecisionModelQuestionsFieldProps
-> = ({ form, onSelectTemplate }) => {
-  const { showStartCards, startBlank, startWithTemplate } = useTemplateStart(
-    form,
-    onSelectTemplate,
-  );
-
-  if (!showStartCards) return <DecisionModelQuestionsCard form={form} />;
-
+> = ({ form, templateActions }) => {
+  const picker = useRuleTemplatePicker(form, templateActions);
   const startError = get(form.formState.errors, [
     "llmJudgeDetails",
     "messages",
@@ -36,18 +30,20 @@ const DecisionModelQuestionsField: React.FC<
 
   return (
     <div className="flex flex-col gap-1">
-      <TemplateEmptyState
-        label="Questions"
-        options={getRuleTemplateOptions(
-          UI_EVALUATORS_RULE_TYPE.decision_model,
-          form.watch("scope"),
-        )}
-        blankLabel="Write your own"
-        blankDescription="Write your own questions and the text to judge."
-        onStartBlank={startBlank}
-        onSelect={startWithTemplate}
-      />
-      {startError && <FormErrorSkeleton>{startError}</FormErrorSkeleton>}
+      <RuleContentCard
+        picker={picker}
+        contentLabel="Questions"
+        contentIcon={CircleHelp}
+        contentIconClassName="bg-[var(--rule-icon-decision-model)]"
+        customDescription="Your own questions, kept while you try templates."
+        blankDescription="Write your own questions from scratch."
+        className="flex-none"
+      >
+        <DecisionModelQuestions form={form} />
+      </RuleContentCard>
+      {picker.showTemplates && startError && (
+        <FormErrorSkeleton>{startError}</FormErrorSkeleton>
+      )}
     </div>
   );
 };

@@ -210,7 +210,7 @@ export class OnlineEvaluationPage {
     return test.step(`open the create panel for a ${type} evaluator`, async () => {
       await this.openEvaluatorMenuItem(type);
       if (type !== 'Code evaluator') {
-        await this.chooseStartCard(startCard ?? (type === 'Decision model' ? 'Write your own' : 'Type your prompt'));
+        await this.chooseStartCard(startCard ?? 'Start blank');
       }
     });
   }
@@ -259,14 +259,19 @@ export class OnlineEvaluationPage {
     });
   }
 
-  templateTab(label: string): Locator {
-    return this.panel.locator('button[aria-pressed]', { hasText: new RegExp(`^${label}$`) });
+  async openTemplates(): Promise<void> {
+    await this.panel.getByRole('tab', { name: 'Templates' }).click();
+    await expect(this.startCards).toHaveCount(1);
   }
 
-  async chooseTemplateTab(label: string): Promise<void> {
-    return test.step(`choose the "${label}" template tab`, async () => {
-      await this.templateTab(label).click();
-      await expect(this.templateTab(label)).toHaveAttribute('aria-pressed', 'true');
+  templateCard(label: string): Locator {
+    return this.startCards.getByRole('button', { name: new RegExp(`^${label}`) });
+  }
+
+  async chooseTemplate(label: string): Promise<void> {
+    return test.step(`choose the "${label}" template`, async () => {
+      await this.openTemplates();
+      await this.chooseStartCard(label);
     });
   }
 
@@ -880,7 +885,7 @@ export class OnlineEvaluationPage {
 
   /** Replaces the prompt and scores, and (when creating) sets the name to the template label. */
   async applyJudgeTemplate(label: CreateRuleLLMJudgeFields['template']): Promise<void> {
-    return this.chooseTemplateTab(label);
+    return this.chooseTemplate(label);
   }
 
   /** The panel's one CodeMirror editor: the prompt, or the code of a code evaluator. */

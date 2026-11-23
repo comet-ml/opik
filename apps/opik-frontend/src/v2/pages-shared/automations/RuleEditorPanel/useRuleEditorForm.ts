@@ -366,16 +366,28 @@ const useRuleEditorForm = ({
     );
   }, [form]);
 
+  const saveCustomDraft = useCallback(() => {
+    const llmJudgeDetails = form.getValues("llmJudgeDetails");
+    if (!llmJudgeDetails.messages.length || isOnTemplate()) return;
+    customDraftsRef.current[form.getValues("scope")] = cloneDeep({
+      llmJudgeDetails,
+      autoName: autoNameRef.current,
+      ruleName: form.getValues("ruleName").trim(),
+    });
+  }, [form, isOnTemplate]);
+
+  const hasCustomContent = useCallback(
+    () =>
+      Boolean(customDraftsRef.current[form.getValues("scope")]) ||
+      (form.getValues("llmJudgeDetails.messages").length > 0 &&
+        !isOnTemplate()),
+    [form, isOnTemplate],
+  );
+
   const applyTemplate = useCallback(
     (template: LLMPromptTemplate, label: string) => {
+      saveCustomDraft();
       const current = form.getValues("llmJudgeDetails");
-      if (!isOnTemplate()) {
-        customDraftsRef.current[form.getValues("scope")] = cloneDeep({
-          llmJudgeDetails: current,
-          autoName: autoNameRef.current,
-          ruleName: form.getValues("ruleName").trim(),
-        });
-      }
       const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
       const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
       form.setValue(
@@ -394,45 +406,56 @@ const useRuleEditorForm = ({
       form.clearErrors("llmJudgeDetails");
       if (!isEdit && isDefaultName()) setAutoName(label);
     },
-    [form, isEdit, isDefaultName, setAutoName, isOnTemplate],
+    [form, isEdit, isDefaultName, setAutoName, saveCustomDraft],
+  );
+
+  const replaceWithCustom = useCallback(
+    (draft?: CustomDraft) => {
+      const uiType = form.getValues("uiType");
+      const llmJudgeDetails = form.getValues("llmJudgeDetails");
+      const custom =
+        draft?.llmJudgeDetails ??
+        cloneDeep(getDefaultJudgeData(uiType)[form.getValues("scope")]);
+      const [customMainScore, ...customScores] = custom.schema;
+      const draftMainScoreName = customMainScore?.name ?? "";
+      const isOwnMainScoreName =
+        Boolean(draft) && draftMainScoreName !== draft?.ruleName;
+      const mainScoreName = isEdit
+        ? (llmJudgeDetails.schema[0]?.name ?? "")
+        : isOwnMainScoreName
+          ? draftMainScoreName
+          : "";
+      form.setValue(
+        "llmJudgeDetails",
+        {
+          ...custom,
+          schema: customMainScore
+            ? [{ ...customMainScore, name: mainScoreName }, ...customScores]
+            : [],
+          messages: custom.messages.length
+            ? custom.messages
+            : createInitialRulePrompt(uiType),
+          model: llmJudgeDetails.model,
+          config: llmJudgeDetails.config,
+          maxCostUsd: llmJudgeDetails.maxCostUsd,
+        },
+        { shouldDirty: true },
+      );
+      form.clearErrors("llmJudgeDetails");
+      if (!isEdit && isDefaultName()) setAutoName(draft?.autoName ?? "");
+    },
+    [form, isEdit, isDefaultName, setAutoName],
   );
 
   const selectCustom = useCallback(() => {
     if (!isOnTemplate()) return;
-    const uiType = form.getValues("uiType");
-    const scope = form.getValues("scope");
-    const llmJudgeDetails = form.getValues("llmJudgeDetails");
-    const draft = customDraftsRef.current[scope];
-    const custom =
-      draft?.llmJudgeDetails ?? cloneDeep(getDefaultJudgeData(uiType)[scope]);
-    const [customMainScore, ...customScores] = custom.schema;
-    const draftMainScoreName = customMainScore?.name ?? "";
-    const isOwnMainScoreName =
-      Boolean(draft) && draftMainScoreName !== draft?.ruleName;
-    const mainScoreName = isEdit
-      ? (llmJudgeDetails.schema[0]?.name ?? "")
-      : isOwnMainScoreName
-        ? draftMainScoreName
-        : "";
-    form.setValue(
-      "llmJudgeDetails",
-      {
-        ...custom,
-        schema: customMainScore
-          ? [{ ...customMainScore, name: mainScoreName }, ...customScores]
-          : [],
-        messages: custom.messages.length
-          ? custom.messages
-          : createInitialRulePrompt(uiType),
-        model: llmJudgeDetails.model,
-        config: llmJudgeDetails.config,
-        maxCostUsd: llmJudgeDetails.maxCostUsd,
-      },
-      { shouldDirty: true },
-    );
-    form.clearErrors("llmJudgeDetails");
-    if (!isEdit && isDefaultName()) setAutoName(draft?.autoName ?? "");
-  }, [form, isEdit, isDefaultName, setAutoName, isOnTemplate]);
+    replaceWithCustom(customDraftsRef.current[form.getValues("scope")]);
+  }, [form, isOnTemplate, replaceWithCustom]);
+
+  const startBlank = useCallback(() => {
+    saveCustomDraft();
+    replaceWithCustom();
+  }, [saveCustomDraft, replaceWithCustom]);
 
   const prepareForSubmit = useCallback(() => {
     const values = form.getValues();
@@ -568,6 +591,8 @@ const useRuleEditorForm = ({
     changeScope,
     applyTemplate,
     selectCustom,
+    startBlank,
+    hasCustomContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,

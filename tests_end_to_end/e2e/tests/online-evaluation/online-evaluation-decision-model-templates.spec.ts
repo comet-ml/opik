@@ -68,7 +68,7 @@ function displayedNames(template: DecisionModelTemplate): string[] {
 }
 
 test.describe(
-  'Online Evaluation — decision model template tabs',
+  'Online Evaluation — decision model templates',
   { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
@@ -87,7 +87,7 @@ test.describe(
             await rules.openCreateRulePanel('Decision model');
             await expect(rules.nameInput, 'a new rule starts unnamed').toHaveValue('');
 
-            await rules.chooseTemplateTab(template.label);
+            await rules.chooseTemplate(template.label);
 
             await expect(
               rules.nameInput,
@@ -170,13 +170,9 @@ test.describe(
           ).toEqual({ input: 'input', output: 'output' });
         });
 
-        await test.step('Reopening the rule shows the template\'s questions, on its tab', async () => {
+        await test.step('Reopening the rule shows the template\'s questions, and marks its template', async () => {
           await expect(rules.ruleRow(ruleName)).toHaveCount(1);
           await rules.openEditRulePanelByName(ruleName);
-          await expect(
-            rules.templateTab(template.label),
-            'a rule saved unchanged from a template reopens on that template',
-          ).toHaveAttribute('aria-pressed', 'true');
           expect(await rules.readQuestions(), 'the questions hydrate back').toEqual(
             template.questions,
           );
@@ -185,6 +181,11 @@ test.describe(
             'Polite tone',
             'Escalation',
           ]);
+          await rules.openTemplates();
+          await expect(
+            rules.templateCard(template.label),
+            'a rule saved unchanged from a template is marked as that template',
+          ).toHaveAttribute('aria-pressed', 'true');
           await rules.cancelPanel();
         });
       },
@@ -234,40 +235,37 @@ test.describe(
         const supportReply = templateByLabel('Support reply');
         const rules = new OnlineEvaluationPage(page);
 
-        await test.step('Write a question of your own on the Custom tab', async () => {
+        await test.step('Write a question of your own', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
           await rules.openCreateRulePanel('Decision model');
-          await expect(
-            rules.templateTab('Custom'),
-            'a new rule opens on the Custom tab',
-          ).toHaveAttribute('aria-pressed', 'true');
           await rules.mainQuestionInput.fill(OWN_QUESTION);
         });
 
         await test.step('A template replaces it on screen', async () => {
-          await rules.chooseTemplateTab(supportReply.label);
+          await rules.chooseTemplate(supportReply.label);
           expect(await rules.readQuestions(), 'the template\'s questions').toEqual(
             supportReply.questions,
           );
         });
 
         await test.step('Custom gives it back, and drops the name the template set', async () => {
-          await rules.chooseTemplateTab('Custom');
+          await rules.chooseTemplate('Custom');
           expect(await rules.readQuestions(), 'only the author\'s own question').toEqual([
             OWN_QUESTION,
           ]);
           await expect(rules.nameInput, 'the rule is unnamed again').toHaveValue('');
         });
 
-        await test.step('An edit on a template tab moves the content to Custom', async () => {
-          await rules.chooseTemplateTab('Moderation');
+        await test.step('An edited template becomes the Custom content', async () => {
+          await rules.chooseTemplate('Moderation');
           await rules.mainQuestionInput.fill(EDITED_QUESTION);
+          expect(await rules.readQuestions()).toEqual([EDITED_QUESTION]);
+          await rules.openTemplates();
           await expect(
-            rules.templateTab('Custom'),
+            rules.templateCard('Custom'),
             'the edited template is now the Custom content',
           ).toHaveAttribute('aria-pressed', 'true');
-          expect(await rules.readQuestions()).toEqual([EDITED_QUESTION]);
           await rules.cancelPanel();
         });
       },

@@ -97,7 +97,7 @@ test.describe(
         });
 
         await test.step('A prompt with no variable is refused by name', async () => {
-          await rules.chooseStartCard('Type your prompt');
+          await rules.chooseStartCard('Start blank');
           await rules.selectJudgeModel('unreachable-model');
           await rules.replacePromptText('Decide whether the answer is any good.');
 
@@ -182,7 +182,7 @@ test.describe(
         });
 
         await test.step('Choosing a card clears it, and the rule creates', async () => {
-          await rules.chooseStartCard('Write your own');
+          await rules.chooseStartCard('Start blank');
           await rules.replacePromptText('Judge this: {{output}}');
           await rules.mainQuestionInput.fill('Is the output safe to send?');
           await expect

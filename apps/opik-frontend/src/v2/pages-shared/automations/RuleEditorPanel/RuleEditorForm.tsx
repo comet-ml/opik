@@ -24,7 +24,6 @@ import ScoreConfigurationCard from "@/v2/pages-shared/automations/RuleEditorPane
 import CostLimitField from "@/v2/pages-shared/automations/RuleEditorPanel/CostLimitField";
 import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelPromptField";
 import DecisionModelQuestionsField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsField";
-import TemplateTabs from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateTabs";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -62,6 +61,8 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     changeScope,
     applyTemplate,
     selectCustom,
+    startBlank,
+    hasCustomContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -123,6 +124,13 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     onClose,
   ]);
 
+  const templateActions = {
+    applyTemplate,
+    selectCustom,
+    startBlank,
+    hasCustomContent,
+  };
+
   const isLLMJudge = ruleType === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const isDecisionModelRule =
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
@@ -144,17 +152,10 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
               <div className="h-full overflow-y-auto">
                 <div className="flex min-h-full flex-col gap-4 pb-3 pt-5">
                   <RuleNameField form={form} />
-                  {(isLLMJudge || isDecisionModelRule) && (
-                    <TemplateTabs
-                      form={form}
-                      onSelectTemplate={applyTemplate}
-                      onSelectCustom={selectCustom}
-                    />
-                  )}
                   {isLLMJudge && (
                     <JudgePromptField
                       form={form}
-                      onSelectTemplate={applyTemplate}
+                      templateActions={templateActions}
                       mergeInfo={promptMergeInfo}
                       datasetColumnNames={datasetColumnNames}
                     />
@@ -162,7 +163,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   {isDecisionModelRule && (
                     <DecisionModelQuestionsField
                       form={form}
-                      onSelectTemplate={applyTemplate}
+                      templateActions={templateActions}
                     />
                   )}
                   {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
