@@ -80,6 +80,9 @@ export type UseExperimentsTableConfigProps<T> = {
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
   datasetTypeMap?: Record<string, DATASET_TYPE>;
+  // Set when the table lists a single item source type; names it in the UI and
+  // drops the per-row type prefix.
+  itemSourceLabel?: string;
 };
 
 export const useExperimentsTableConfig = <
@@ -100,6 +103,7 @@ export const useExperimentsTableConfig = <
   sortedColumns,
   setSortedColumns,
   datasetTypeMap,
+  itemSourceLabel,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns-v2`,
@@ -226,7 +230,7 @@ export const useExperimentsTableConfig = <
     const groupColumns = groups.map((group) => {
       const label =
         group.field === COLUMN_DATASET_ID
-          ? ITEM_SOURCE_LABEL
+          ? (itemSourceLabel ?? ITEM_SOURCE_LABEL)
           : calculateGroupLabel(group);
       const id = buildGroupFieldName(group);
       const metaKey = buildGroupFieldNameForMeta(group);
@@ -260,9 +264,14 @@ export const useExperimentsTableConfig = <
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
+              hidePrefix: Boolean(itemSourceLabel),
               explainer: {
                 id: "group-experiments",
-                description: `Some experiments reference an item source that has been deleted`,
+                description: `Some experiments reference ${
+                  itemSourceLabel
+                    ? `a ${itemSourceLabel.toLowerCase()}`
+                    : "an item source"
+                } that has been deleted`,
               },
             },
           } as ColumnData<T>;
@@ -327,6 +336,7 @@ export const useExperimentsTableConfig = <
                   getSearch: (data: Experiment) => ({
                     experiments: [data.id],
                   }),
+                  variant: "text",
                 },
                 headerCheckbox: true,
               },
@@ -379,6 +389,7 @@ export const useExperimentsTableConfig = <
     scoresColumnsOrder,
     actionsCell,
     datasetTypeMap,
+    itemSourceLabel,
   ]);
 
   const sortConfig = useMemo(

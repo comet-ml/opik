@@ -74,10 +74,10 @@ jobs:
 
         steps:
         - name: Check out code
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
         - name: Login to GHCR
-          uses: docker/login-action@v4
+          uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
           with:
             registry: ghcr.io
             username: ${{ github.actor }}
@@ -93,12 +93,12 @@ jobs:
             docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
-          uses: actions/setup-python@v7
+          uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
           with:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.3.3
+          uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
         - name: Run latest Opik server
           env:
@@ -123,7 +123,7 @@ jobs:
             ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v6
+          uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
@@ -131,7 +131,7 @@ jobs:
               hf-datasets-
 
         - name: Cache LiteLLM cache
-          uses: actions/cache@v6
+          uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
           with:
             path: ~/.litellm_cache
             key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
@@ -151,7 +151,7 @@ jobs:
 
         - name: Upload test artifacts on failure
           if: failure()
-          uses: actions/upload-artifact@v7
+          uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
           with:
               name: opik-optimizer-e2e-logs-p${{matrix.python_version}}
               path: |
@@ -179,18 +179,18 @@ jobs:
 
         steps:
         - name: Check out code
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
         - name: Setup Python 3.12
-          uses: actions/setup-python@v7
+          uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
           with:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.3.3
+          uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v6
+          uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}

@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
@@ -147,9 +148,9 @@ class DatasetServiceImpl implements DatasetService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotBlank(dataset.projectName()) && dataset.projectId() == null) {
-            var project = projectService.getOrCreate(workspaceId, dataset.projectName(), userName);
-            builder.projectId(project.id());
+        if (dataset.projectId() == null) {
+            var projectName = StringUtils.defaultIfBlank(dataset.projectName(), ProjectService.DEFAULT_PROJECT);
+            builder.projectId(projectService.getOrCreate(workspaceId, projectName, userName).id());
         }
 
         var newDataset = builder.build();
@@ -180,9 +181,9 @@ class DatasetServiceImpl implements DatasetService {
             UUID projectId) {
         var dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var result = dao.findByName(workspaceId, name, projectId);
+            var result = findSingleByName(dao, workspaceId, name, projectId, null);
             if (result.isEmpty() && projectId != null) {
-                result = dao.findByName(workspaceId, name, null);
+                result = findSingleByName(dao, workspaceId, name, null, null);
             }
             return result;
         });
@@ -190,14 +191,18 @@ class DatasetServiceImpl implements DatasetService {
         if (dataset.isEmpty()) {
 
             UUID id = idGenerator.generateId();
-            log.info("Creating dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
+            UUID datasetProjectId = projectId != null
+                    ? projectId
+                    : projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, userName).id();
+            log.info("Creating dataset with id '{}', name '{}', workspaceId '{}', projectId '{}'", id, name,
+                    workspaceId, datasetProjectId);
             template.inTransaction(WRITE, handle -> {
                 handle.attach(DatasetDAO.class)
                         .save(
                                 Dataset.builder()
                                         .id(id)
                                         .name(name)
-                                        .projectId(projectId)
+                                        .projectId(datasetProjectId)
                                         .visibility(Visibility.PRIVATE)
                                         .createdBy(userName)
                                         .lastUpdatedBy(userName)
@@ -327,12 +332,33 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
+    /**
+     * Finds the dataset with this name in the given project, or anywhere in the workspace when {@code projectId} is
+     * null. Dataset names are unique per project, so a workspace-wide lookup can match datasets in several projects:
+     * that case is ambiguous and is rejected with a conflict instead of picking one of them. A public-only workspace
+     * lookup counts only public datasets, so a private dataset can't make it ambiguous. A project lookup is not
+     * filtered, so the caller's visibility check still rejects a private match there.
+     */
+    private Optional<Dataset> findSingleByName(DatasetDAO dao, String workspaceId, String name, UUID projectId,
+            Visibility visibility) {
+        boolean publicOnly = projectId == null && visibility == Visibility.PUBLIC;
+        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId).stream()
+                .filter(dataset -> !publicOnly || dataset.visibility() == Visibility.PUBLIC)
+                .toList();
+        if (datasets.size() > 1) {
+            throw new ConflictException(
+                    "Multiple datasets with this name exist in different projects, specify a project that contains it or use the dataset id. Dataset name: '%s'"
+                            .formatted(name));
+        }
+        return datasets.stream().findFirst();
+    }
+
     private Dataset findByNameNoContext(String workspaceId, String name, UUID projectId, Visibility visibility) {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset d = dao.findByName(workspaceId, name, projectId)
-                    .or(() -> dao.findByName(workspaceId, name, null))
+            Dataset d = findSingleByName(dao, workspaceId, name, projectId, visibility)
+                    .or(() -> findSingleByName(dao, workspaceId, name, null, visibility))
                     .orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
@@ -346,12 +372,12 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            return dao.findByName(workspaceId, name, projectId)
+            return findSingleByName(dao, workspaceId, name, projectId, visibility)
                     .or(() -> {
                         if (projectId == null) {
                             return Optional.empty();
                         }
-                        return dao.findByName(workspaceId, name, null).map(d -> {
+                        return findSingleByName(dao, workspaceId, name, null, visibility).map(d -> {
                             requestContext.get().setWorkspaceFallbackFor("Dataset", name);
                             return d;
                         });
@@ -423,7 +449,7 @@ class DatasetServiceImpl implements DatasetService {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
 
             var datasetDao = handle.attach(DatasetDAO.class);
-            datasetDao.delete(workspaceId, identifier.datasetName());
+            datasetDao.delete(dataset.id(), workspaceId);
             return null;
         });
 

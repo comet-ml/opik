@@ -55,7 +55,6 @@ import {
 } from "@/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useTablePageSize from "@/hooks/useTablePageSize";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
@@ -301,7 +300,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: PassRateCell as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
-          aggregationKey: "pass_rate",
+          aggregationKey: "pass_rate_avg",
         },
       },
       {
@@ -316,7 +315,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           areAggregatedScores: true,
           aggregationKey: "feedback_scores",
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
@@ -492,18 +490,18 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
           <GroupsButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
+          />
+          <FiltersButton
+            columns={FILTER_AND_GROUP_COLUMNS}
+            config={filtersAndGroupsConfig as never}
+            filters={filters}
+            onChange={setFilters}
+            layout="add"
           />
         </div>
         <div className="flex items-center gap-2">

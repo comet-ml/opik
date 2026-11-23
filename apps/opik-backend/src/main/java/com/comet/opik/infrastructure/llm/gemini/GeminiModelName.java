@@ -47,6 +47,7 @@ public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_4_ARGON("gemini-4-argon", false),
     GEMINI_4_CARBON("gemini-4-carbon", false),
     GEMINI_4_HYDROGEN("gemini-4-hydrogen", false),
+    GEMINI_4_NEON("gemini-4-neon", false),
     GEMINI_FLASH_LATEST_HIGH_RES_EXP("gemini-flash-latest-high-res-exp", false),
     GEMINI_NANO_BANANA_2_1("gemini-nano-banana-2.1", false),
     GEMINI_OMNI_1_1_FLASH("gemini-omni-1.1-flash", false),

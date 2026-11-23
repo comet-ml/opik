@@ -394,7 +394,6 @@ export const generateDataRowCellDef = <
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
           className="gap-2"
-          stopClickPropagation
         >
           <Checkbox
             variant="muted"

@@ -233,7 +233,6 @@ class TracesReadPathPartitionPruningTest {
 
     /** Each trigger reaches its site for a trace created at the given {@code id_at}, and returns the id it names. */
     private Stream<Arguments> sites() {
-        // Read at call time: @MethodSource runs before @BeforeAll wires the clients in.
         var getById = onTraceAt(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY));
         var patchStored = onTraceAt(trace -> patch(trace.id(), nameUpdate(trace.projectName())));
         var batchUpdate = onTraceAt(trace -> batchUpdateTags(Set.of(trace.id()), randomTags()));
