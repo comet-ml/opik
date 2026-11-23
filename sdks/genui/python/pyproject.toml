@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opik-genui"
+dynamic = ["version"]
+description = "Opik generative UI authoring guidance and HTML contract version for Python authors"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.hatch.metadata.hooks.custom]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/opik_genui", "hatch_build.py"]
+artifacts = ["src/opik_genui/data/*"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../js/package.json" = "package.json"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opik_genui"]
+artifacts = ["src/opik_genui/data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

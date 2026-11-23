@@ -5,6 +5,7 @@ The `Opik` extension for VSCode will allow you to save your Cursor chat sessions
 ![Screenshot of Opik dashboard](./readme_image.png)
 
 Learn more about:
+
 - [Opik](https://github.com/comet-ml/opik) is an Open-Source LLM evaluation platform that allows you to keep track of all your LLM chat conversations in one place.
 - [Cursor](https://www.cursor.com/) is "the" AI Code Editor.
 
@@ -35,5 +36,6 @@ Delivered request identities are retained for 180 days to prevent duplicate uplo
 This extension is Open-Source and available on [Github](https://github.com/comet-ml/opik).
 
 In order to debug the application, you will need to:
+
 1. Run `npm run compile` - This is to compile the Typescript extension to javascript
 2. Navigate to `./out/extension.js` and press `F5`.
