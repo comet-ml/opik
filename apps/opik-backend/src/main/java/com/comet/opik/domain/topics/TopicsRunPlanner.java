@@ -138,6 +138,8 @@ public class TopicsRunPlanner {
     /**
      * Queues a run started by hand and publishes it. When the publish fails, the run is dropped and the caller gets an
      * error to retry on: a run left queued would block the project's next run by hand until a plan publishes it again.
+     * A run that already left the queue was published after all, for example by a publish that timed out after the
+     * stream took it, so the caller gets its id.
      */
     private Mono<UUID> queueByHand(Planned run) {
         return queueAndPublish(run, (runId, error) -> {
@@ -148,11 +150,19 @@ public class TopicsRunPlanner {
                     .onErrorResume(dropError -> {
                         log.error("Topics run '{}' not published and not dropped, project '{}'; it stays queued "
                                 + "until a plan publishes it", runId, run.projectId(), dropError);
-                        return Mono.just(false);
+                        // Not known to have left the queue, so the caller gets the error to retry on.
+                        return Mono.just(true);
                     })
-                    .then(Mono.error(() -> new ServiceUnavailableException(
-                            "The topics run of project '%s' could not be started, try again"
-                                    .formatted(run.projectId()))));
+                    .flatMap(dropped -> {
+                        if (dropped) {
+                            return Mono.error(new ServiceUnavailableException(
+                                    "The topics run of project '%s' could not be started, try again"
+                                            .formatted(run.projectId())));
+                        }
+                        log.info("Topics run '{}' left the queue after its publish error, project '{}'; it was "
+                                + "published", runId, run.projectId());
+                        return Mono.just(runId);
+                    });
         });
     }
 
