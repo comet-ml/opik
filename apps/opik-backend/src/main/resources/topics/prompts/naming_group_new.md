@@ -9,6 +9,7 @@ CLUSTERS without a topic (id, share, example requests: repeated ones first, then
 {clusters}
 
 For each cluster choose exactly one:
+
 - "new": give a name (2-5 words, Title Case, specific to what the request is for) and a definition (one sentence, at most 25 words). Clusters that are the same kind of request form ONE new topic: list all their ids in its "clusters".
 - "other": not a real kind of request (retries, greetings, empty input, health checks, test pings) or a mix with no dominant kind.
 Rules:
