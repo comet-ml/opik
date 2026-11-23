@@ -2751,6 +2751,35 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 20
+    #  Description: Nightly: the traces no topic took are grouped only when at least this many; a group of at least
+    #  this many traces is a candidate for a new topic
+    nightlyMinCandidate: ${TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE:-20}
+    #  Default: 2
+    #  Description: Fewest k-means groups the nightly grouping makes (never more than its unique texts)
+    nightlyMinGroups: ${TOPICS_ALGORITHM_NIGHTLY_MIN_GROUPS:-2}
+    #  Default: 20
+    #  Description: Most k-means groups the nightly grouping makes. At least nightlyMinGroups
+    nightlyMaxGroups: ${TOPICS_ALGORITHM_NIGHTLY_MAX_GROUPS:-20}
+    #  Default: 40
+    #  Description: Nightly: k = unique texts of the traces no topic took / nightlyTextsPerGroup, within
+    #  nightlyMinGroups and nightlyMaxGroups (the first build's rule, with its own numbers)
+    nightlyTextsPerGroup: ${TOPICS_ALGORITHM_NIGHTLY_TEXTS_PER_GROUP:-40}
+    #  Default: 3
+    #  Description: Most repeated texts a nightly group shows before the ones nearest its centre
+    nightlyFrequent: ${TOPICS_ALGORITHM_NIGHTLY_FREQUENT:-3}
+    #  Default: 5
+    #  Description: Example texts a nightly group shows. At least nightlyFrequent
+    nightlyExamples: ${TOPICS_ALGORITHM_NIGHTLY_EXAMPLES:-5}
+    #  Default: 7
+    #  Description: A group's recent share counts the traces of the last recentDays days (24 hours each) before the night
+    recentDays: ${TOPICS_ALGORITHM_RECENT_DAYS:-7}
+    #  Default: 0.005
+    #  Description: A topic whose share of the window is below this on a night has a low night
+    retireShare: ${TOPICS_ALGORITHM_RETIRE_SHARE:-0.005}
+    #  Default: 3
+    #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
+    retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
