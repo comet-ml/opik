@@ -1,6 +1,5 @@
 package com.comet.opik.domain.cost;
 
-import com.comet.opik.domain.cost.CostService.CostSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
