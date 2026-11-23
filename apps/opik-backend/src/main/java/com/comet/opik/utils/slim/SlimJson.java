@@ -1,9 +1,7 @@
 package com.comet.opik.utils.slim;
 
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializable;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
@@ -63,12 +61,11 @@ public class SlimJson {
             String json = node.toString();
             return JsonWithSlim.builder().json(json).slim(json).build();
         }
-        ObjectMapper mapper = JsonUtils.getMapper();
         var full = new StringWriter();
         var slim = new StringWriter();
-        try (var fullGenerator = mapper.createGenerator(full);
+        try (var fullGenerator = WritableJson.NODE_WRITER.createGenerator(full);
                 var tee = new TeeGenerator(fullGenerator,
-                        new TruncatingGenerator(mapper.createGenerator(slim), MAX_STRING_LENGTH))) {
+                        new TruncatingGenerator(WritableJson.NODE_WRITER.createGenerator(slim), MAX_STRING_LENGTH))) {
             WritableJson.writeNode(node, tee);
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);

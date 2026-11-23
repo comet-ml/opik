@@ -187,7 +187,7 @@ public class SlimJsonTest {
         return Stream.of(parsedPayloads(), builtPayloads(), randomPayloads()).flatMap(Function.identity());
     }
 
-    /** What main writes: the full JSON reparsed, then cut node by node. */
+    /** What the string path writes: the full JSON reparsed, then cut node by node. */
     private static JsonWithSlim expectedFromReparse(JsonNode node) {
         String json = TruncationUtils.toJsonString(node);
         return JsonWithSlim.builder()
@@ -202,7 +202,7 @@ public class SlimJsonTest {
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.utils.slim.SlimJsonTest#allPayloads")
-        @DisplayName("writes the JSON and the slim copy main writes")
+        @DisplayName("writes the JSON and the slim copy the string path writes")
         void matchesReparse(JsonNode node) {
             JsonWithSlim actual = SlimJson.toStrings(node);
 

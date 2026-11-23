@@ -1,6 +1,5 @@
 package com.comet.opik.utils.slim;
 
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.NonNull;
@@ -35,7 +34,7 @@ final class OneWalkPayload {
 
     private void writeFull(JsonGenerator generator) throws IOException {
         var buffer = new CharChunks();
-        try (var slimGenerator = JsonUtils.getMapper().createGenerator(buffer)) {
+        try (var slimGenerator = WritableJson.NODE_WRITER.createGenerator(buffer)) {
             // Written as the row generator would write it in place.
             slimGenerator.overrideStdFeatures(generator.getFeatureMask(), ~0);
             slimGenerator.setCharacterEscapes(generator.getCharacterEscapes());

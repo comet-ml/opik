@@ -60,7 +60,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  *   ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), and the insert holds its pooled connection
  *   while the rows are mapped and serialized. The client leases that connection before it calls the writer, so
  *   {@code clientMaxOpenConnections} bounds how many inserts serialize at once.</li>
- *   <li><b>Buffered</b> (false), as before {@code streamPayloads}: {@link #serialize} renders the batch into a buffer on
+ *   <li><b>Buffered</b> (false): {@link #serialize} renders the batch into a buffer on
  *   {@code boundedElastic}, and the insert takes a connection only to send the finished buffer.</li>
  * </ul>
  *
@@ -104,7 +104,7 @@ public class JsonEachRowBulkInsert {
      * Dropwizard mapper bound here.
      *
      * <p>{@code FLUSH_AFTER_WRITE_VALUE} is left <b>enabled</b>, which is the library default and
-     * load-bearing for the framing in {@link #write}: rows go through the generator's own buffer
+     * load-bearing for the framing in {@link #writeRows}: rows go through the generator's own buffer
      * while the row separator is written straight to the {@link BufferedWriter}, so without a flush per
      * row the separator would overtake the row it is supposed to follow and merge two rows into one
      * malformed document. The generator's {@code FLUSH_PASSED_TO_STREAM} is disabled instead, so that
@@ -227,24 +227,50 @@ public class JsonEachRowBulkInsert {
     }
 
     /**
-     * Writes the batch into the request body as newline-delimited JSON rows, mapping each item as it goes.
+     * Streams the batch into the request body, mapping each item as it goes. The writer is not closed: that would
+     * close the body, which the client owns and closes.
+     */
+    private <T> void write(OutputStream body, Collection<T> items, Function<T, ObjectNode> rowMapper)
+            throws IOException {
+        writeRows(new BufferedWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8)), rowFactory, items,
+                rowMapper);
+    }
+
+    /**
+     * Renders the batch into a buffer: the body {@code streamPayloads=false} sends. Returns the buffer rather than a
+     * {@code byte[]} so the caller can hand it to the client via {@link ByteArrayOutputStream#writeTo}, which writes
+     * the backing array directly instead of copying the whole payload a second time.
+     */
+    private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
+            throws IOException {
+        // Outside the try-with-resources, unlike the other ByteArrayOutputStream uses in this codebase:
+        // they copy out with toByteArray() before the block ends, while this one is handed to the client
+        // as writeTo and read on its thread after this method returns, so it has to outlive the block.
+        var payload = new ByteArrayOutputStream();
+        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8))) {
+            writeRows(writer, objectMapper.getFactory(), items, rowMapper);
+        }
+        return payload;
+    }
+
+    /**
+     * Writes the batch as newline-delimited JSON rows into {@code writer}, which the caller owns, and flushes it.
      *
      * <p>Note {@link BufferedWriter#newLine()} writes {@code System.lineSeparator()}, so the row
      * terminator follows the platform rather than being a fixed {@code '\n'}. ClickHouse accepts the
      * {@code \r\n} that produces on Windows — JSONEachRow treats the {@code \r} as inter-row
      * whitespace — and the backend runs on Linux, where the two are the same byte.
      */
-    private <T> void write(OutputStream body, Collection<T> items, Function<T, ObjectNode> rowMapper)
-            throws IOException {
+    private <T> void writeRows(BufferedWriter writer, JsonFactory factory, Collection<T> items,
+            Function<T, ObjectNode> rowMapper) throws IOException {
 
-        // Not a resource: closing the writer would close the body, which the client owns and closes. A resource
-        // generator still releases its buffer back to Jackson's recycler when a row fails to serialize.
-        var writer = new BufferedWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8));
-        try (var generator = rowFactory.createGenerator(writer)) {
+        // A resource so a row that fails to serialize still releases the generator's buffer back to Jackson's
+        // recycler on the way out.
+        try (var generator = factory.createGenerator(writer)) {
 
             // Both set before anything is written, since they govern what close() and flush() do.
             // The generator writes into, but does not own, the writer; left enabled, closing the generator
-            // would close the writer, and the body, under it.
+            // would close the writer under it.
             generator.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
             // Keep the per-row flush from draining the BufferedWriter as well, which would leave it
             // buffering nothing.
@@ -261,58 +287,8 @@ public class JsonEachRowBulkInsert {
             }
 
             // FLUSH_AFTER_WRITE_VALUE has already drained the generator into the writer after every row, so this
-            // pushes the rest of the batch into the body before the client finishes the request.
+            // pushes the rest of the batch to the writer's target.
             writer.flush();
         }
-    }
-
-    /**
-     * Renders the batch as newline-delimited JSON rows, unchanged from before {@code streamPayloads}: the body
-     * {@code streamPayloads=false} sends. Returns the buffer rather than a {@code byte[]}
-     * so the caller can hand it to the client via {@link ByteArrayOutputStream#writeTo}, which writes
-     * the backing array directly instead of copying the whole payload a second time.
-     *
-     * <p>Note {@link BufferedWriter#newLine()} writes {@code System.lineSeparator()}, so the row
-     * terminator follows the platform rather than being a fixed {@code '\n'}. ClickHouse accepts the
-     * {@code \r\n} that produces on Windows — JSONEachRow treats the {@code \r} as inter-row
-     * whitespace — and the backend runs on Linux, where the two are the same byte.
-     */
-    private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
-            throws IOException {
-
-        // Outside the try-with-resources, unlike the other ByteArrayOutputStream uses in this codebase:
-        // they copy out with toByteArray() before the block ends, while this one is handed to the client
-        // as writeTo and read on its thread after this method returns, so it has to outlive the block.
-        var payload = new ByteArrayOutputStream();
-        // Declared in this order so they close in the reverse one: the generator drains into the
-        // writer, then the writer into payload. Both are resources so a row that fails to serialize
-        // still releases the generator's buffer back to Jackson's recycler on the way out.
-        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
-                var generator = objectMapper.getFactory().createGenerator(writer)) {
-
-            // Both set before anything is written, since they govern what close() and flush() do.
-            // The generator writes into, but does not own, the writer, which the try-with-resources
-            // closes; left enabled, closing the generator would close the writer under it.
-            generator.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
-            // Keep the per-row flush from draining the BufferedWriter as well, which would leave it
-            // buffering nothing.
-            generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);
-            // Jackson's default root separator is a space, which would prepend one to every row
-            // after the first. The separator that matters is written by newLine() below.
-            generator.setRootValueSeparator(EMPTY_ROOT_SEPARATOR);
-
-            for (T item : items) {
-                // writeValue flushes the generator into the writer (FLUSH_AFTER_WRITE_VALUE), so the
-                // row is fully written before its terminator goes in after it.
-                rowWriter.writeValue(generator, rowMapper.apply(item));
-                writer.newLine();
-            }
-
-            // The payload is complete here rather than as a side effect of the closes below.
-            // FLUSH_AFTER_WRITE_VALUE has already drained the generator into the writer after every
-            // row, so this pushes the whole batch into payload; closing would do it too.
-            writer.flush();
-        }
-        return payload;
     }
 }

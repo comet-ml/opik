@@ -49,6 +49,30 @@ public class PayloadCases {
                 nestedArrays(StreamReadConstraints.DEFAULT_MAX_DEPTH - BATCH_ENVELOPE_DEPTH));
     }
 
+    /** A payload with strings past the slim limit, and its slim copy: each such string cut to the limit, then marked. */
+    public record SlimCase(JsonNode payload, JsonNode slim) {
+    }
+
+    public static SlimCase slimCase() {
+        int max = SlimJson.MAX_STRING_LENGTH;
+        String key = randomText(10);
+        String nestedKey = randomText(10);
+        String arrayKey = randomText(10);
+        String longText = randomText(max + RandomUtils.secure().randomInt(1, max));
+        String longItem = randomText(max * 2);
+        String shortItem = randomText(10);
+
+        var payload = JsonNodeFactory.instance.objectNode().put(key, longText);
+        payload.putObject(nestedKey).putArray(arrayKey).add(longItem).add(shortItem);
+        var slim = JsonNodeFactory.instance.objectNode().put(key, cut(longText));
+        slim.putObject(nestedKey).putArray(arrayKey).add(cut(longItem)).add(shortItem);
+        return new SlimCase(payload, slim);
+    }
+
+    private static String cut(String text) {
+        return text.substring(0, SlimJson.MAX_STRING_LENGTH) + SlimJson.TRUNCATION_SUFFIX;
+    }
+
     private static String randomText(int length) {
         return RandomStringUtils.secure().nextAlphanumeric(length);
     }

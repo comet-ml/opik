@@ -54,7 +54,7 @@ class SpanJsonRowMapper {
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive leaves the column
      *                           out so its DDL default applies, matching the binder's {@code bindNull}.
      * @param streamPayloads     {@code databaseAnalytics.streamPayloads}: false writes {@code input} / {@code output}
-     *                           and their slim copies as escaped strings, as main did.
+     *                           and their slim copies as escaped strings (the string path).
      * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
      *                           Resolved AND formatted once per batch by the caller, so a
      *                           batch-invariant value is not reformatted per row.
@@ -83,8 +83,8 @@ class SpanJsonRowMapper {
             node.putNull("end_time");
         }
 
-        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise main's
-        // escaped strings, with their slim copies added after last_updated_by below, where main put them.
+        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise escaped
+        // strings, with their slim copies added after last_updated_by below.
         if (streamPayloads) {
             JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
             JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());

@@ -136,7 +136,7 @@ databaseAnalytics:
   #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
   #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
   #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
-  #   pooled connection while its rows are serialized; see clientMaxOpenConnections). false is the previous path:
+  #   pooled connection while its rows are serialized; see clientMaxOpenConnections). false is the string path:
   #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
   #   connection is taken.
   streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-false}

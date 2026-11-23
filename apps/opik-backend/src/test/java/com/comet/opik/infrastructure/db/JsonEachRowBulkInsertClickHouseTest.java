@@ -11,10 +11,12 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.function.Function;
@@ -61,34 +63,45 @@ class JsonEachRowBulkInsertClickHouseTest {
         return JsonUtils.createObjectNode().put("name", name);
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    @DisplayName("a row mapper failing mid-body fails the insert and writes no row")
-    void mapperFailureMidBodyFailsTheInsertAndWritesNothing(boolean streamPayloads) {
-        var table = newTable();
+    /** Inserts three rows into {@code table} with a row mapper that throws {@code failure} on the second. */
+    private Mono<Long> insertFailingOnSecondRow(String table, boolean streamPayloads, RuntimeException failure) {
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32));
-        var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(32));
         Function<String, ObjectNode> rowMapper = item -> {
             if (item.equals(items.get(1))) {
                 throw failure;
             }
             return row(item);
         };
-
-        var insert = new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamPayloads(streamPayloads))
+        return new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamPayloads(streamPayloads))
                 .insert(table, "log-comment", items, rowMapper);
+    }
 
-        if (streamPayloads) {
-            // The client wraps what the writer throws, and does not retry it, so callers matching on exception types
-            // see ClickHouseException rather than the mapper's own exception.
-            assertThatThrownBy(insert::block).isInstanceOf(ClickHouseException.class).hasRootCause(failure);
-        } else {
-            // The batch is built before the client is called, so the mapper's exception is what fails the insert.
-            assertThatThrownBy(insert::block).isSameAs(failure);
-        }
+    @Test
+    @DisplayName("streamed: a row mapper failing mid-body fails the insert with the client's exception and writes no row")
+    void streamedMapperFailureMidBodyFailsTheInsertAndWritesNothing() {
+        var table = newTable();
+        var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(32));
 
+        var insert = insertFailingOnSecondRow(table, true, failure);
+
+        // The client wraps what the writer throws, and does not retry it, so callers matching on exception types
+        // see ClickHouseException rather than the mapper's own exception.
+        assertThatThrownBy(insert::block).isInstanceOf(ClickHouseException.class).hasRootCause(failure);
+        assertThat(count(table)).isZero();
+    }
+
+    @Test
+    @DisplayName("buffered: a row mapper failing mid-body fails the insert with the mapper's exception and writes no row")
+    void bufferedMapperFailureMidBodyFailsTheInsertAndWritesNothing() {
+        var table = newTable();
+        var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(32));
+
+        var insert = insertFailingOnSecondRow(table, false, failure);
+
+        // The batch is built before the client is called, so the mapper's exception is what fails the insert.
+        assertThatThrownBy(insert::block).isSameAs(failure);
         assertThat(count(table)).isZero();
     }
 

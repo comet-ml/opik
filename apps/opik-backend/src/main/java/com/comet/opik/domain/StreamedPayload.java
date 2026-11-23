@@ -35,7 +35,7 @@ public class StreamedPayload {
      * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its slim copy
      * here, so callers cannot let the two drift. With {@code streamPayloads} ({@code databaseAnalytics.streamPayloads})
      * both come from the node without a reparse, the slim copy reusing the full JSON when nothing needs truncating
-     * (see {@link SlimJson#toStrings}); without it, as main did, the slim copy is reparsed from the full
+     * (see {@link SlimJson#toStrings}); without it (the string path), the slim copy is reparsed from the full
      * JSON string.
      */
     public static void bind(@NonNull Statement statement, boolean streamPayloads, @Nullable JsonNode input,
