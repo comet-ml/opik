@@ -70,7 +70,7 @@ public class TopicsRunPlanner {
                                 return Mono.just(0);
                             }
                             return labelsDue(workspaceIds, start)
-                                    .zipWith(candidates.find(workspaceIds, night, start))
+                                    .zipWith(candidates.find(firstBuildWorkspaces(workspaceIds), night, start))
                                     .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night), free));
                         }))
                 .doOnNext(queued -> log.info("Topics plan done, window until '{}', runs queued '{}'", night, queued));
@@ -173,6 +173,12 @@ public class TopicsRunPlanner {
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
                         .onErrorResume(error -> onPublishError.apply(runId, error)));
+    }
+
+    /** The workspaces that get first builds: {@code topics.firstBuild.workspaces}, or every one when it is empty. */
+    private List<String> firstBuildWorkspaces(List<String> workspaceIds) {
+        var listed = config.getFirstBuild().workspaceIds();
+        return listed.isEmpty() ? workspaceIds : workspaceIds.stream().filter(listed::contains).toList();
     }
 
     private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
