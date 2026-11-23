@@ -578,6 +578,34 @@ def test_js_divergence_requires_non_empty():
         metric.score(output="non empty", reference="   ")
 
 
+@pytest.mark.parametrize("bad_output", [None, 5, 3.5, {"text": "hello"}, ["token"]])
+def test_js_divergence__non_string_output__raises_metric_error(bad_output):
+    metric = JSDivergence(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="non empty")
+
+
+@pytest.mark.parametrize("bad_reference", [None, 5, 3.5, {"text": "hello"}, ["token"]])
+def test_js_divergence__non_string_reference__raises_metric_error(bad_reference):
+    metric = JSDivergence(track=False)
+    with pytest.raises(MetricComputationError, match="string 'reference'"):
+        metric.score(output="non empty", reference=bad_reference)
+
+
+@pytest.mark.parametrize("bad_output", [None, 5, 3.5, {"text": "hello"}, ["token"]])
+def test_kl_divergence__non_string_output__raises_metric_error(bad_output):
+    metric = KLDivergence(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="non empty")
+
+
+@pytest.mark.parametrize("bad_reference", [None, 5, 3.5, {"text": "hello"}, ["token"]])
+def test_kl_divergence__non_string_reference__raises_metric_error(bad_reference):
+    metric = KLDivergence(track=False)
+    with pytest.raises(MetricComputationError, match="string 'reference'"):
+        metric.score(output="non empty", reference=bad_reference)
+
+
 def test_js_distance_matches_metadata():
     metric = JSDistance(track=False)
     result = metric.score(output="token token", reference="token other")
