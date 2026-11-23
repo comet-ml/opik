@@ -37,6 +37,9 @@ import java.util.function.Function;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TopicsLlm {
 
+    /** The {@code outcome} of a call whose answer could not be read. */
+    private static final String BAD_ANSWER = "bad_answer";
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull InferenceClient client;
     private final @NonNull TopicsMetrics metrics;
@@ -87,7 +90,7 @@ class TopicsLlm {
             // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
             var answer = read.apply(output);
             if (answer == null) {
-                metrics.llm(run.workspace(), call.call(), "bad_answer");
+                metrics.llm(run.workspace(), call.call(), BAD_ANSWER);
                 log.warn("Topics run '{}' answer could not be read, call '{}', project '{}'", run.runId(), tag,
                         run.projectId());
                 return null;
@@ -95,7 +98,7 @@ class TopicsLlm {
             metrics.llm(run.workspace(), call.call(), "ok");
             return answer;
         } catch (TopicsRunException exception) {
-            metrics.llm(run.workspace(), call.call(), "bad_answer");
+            metrics.llm(run.workspace(), call.call(), BAD_ANSWER);
             throw exception;
         }
     }
@@ -103,7 +106,7 @@ class TopicsLlm {
     private TopicsRunException failed(TopicRun run, LlmCall call, InferenceException exception) {
         if (exception.isSchemaViolation()) {
             // The service checks the answer against the schema: a cut or off-schema answer comes back so.
-            metrics.llm(run.workspace(), call, "bad_answer");
+            metrics.llm(run.workspace(), call, BAD_ANSWER);
             return new TopicsRunException(RunError.LLM_BAD_ANSWER,
                     "the LLM answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()), exception);
         }

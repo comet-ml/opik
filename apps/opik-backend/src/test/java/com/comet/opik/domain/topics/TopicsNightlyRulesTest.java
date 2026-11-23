@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -1072,13 +1073,8 @@ class TopicsNightlyRulesTest {
     }
 
     private NightState state(NightTopic... topics) {
-        return NightState.builder()
-                .topics(List.of(topics))
-                .otherPrototypes(List.of())
-                .rebuilds(RandomUtils.secure().randomInt(0, 100))
-                .night(night)
-                .ids(TopicsTestAlgorithm.ID_GENERATOR::generateId)
-                .build();
+        return state(RandomUtils.secure().randomInt(0, 100), night, TopicsTestAlgorithm.ID_GENERATOR::generateId,
+                topics);
     }
 
     /** A topic born on the first build, with a random id, name and definition and no prototypes. */
@@ -1093,12 +1089,16 @@ class TopicsNightlyRulesTest {
 
     private static NightState state(int rebuilds, NightTopic... topics) {
         var ids = new AtomicLong(100);
+        return state(rebuilds, NIGHT, () -> new UUID(0, ids.getAndIncrement()), topics);
+    }
+
+    private static NightState state(int rebuilds, LocalDate night, Supplier<UUID> ids, NightTopic... topics) {
         return NightState.builder()
                 .topics(List.of(topics))
                 .otherPrototypes(List.of())
                 .rebuilds(rebuilds)
-                .night(NIGHT)
-                .ids(() -> new UUID(0, ids.getAndIncrement()))
+                .night(night)
+                .ids(ids)
                 .build();
     }
 
