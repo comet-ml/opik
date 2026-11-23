@@ -2940,10 +2940,6 @@ topics:
     #  Description: No project is queued after this much of the night, from its start; the rest run the next night,
     #  first. Nightly updates share topics.runs.maxInFlight with first builds. At most 20h
     budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
-    #  Default: ""
-    #  Description: Comma-separated workspace ids nightly updates run for. Empty means every workspace topics run for;
-    #  a listed workspace runs only while topics run for it too. An id not in topics.enabledWorkspaces is ignored
-    workspaces: ${TOPICS_NIGHTLY_WORKSPACES:-""}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
