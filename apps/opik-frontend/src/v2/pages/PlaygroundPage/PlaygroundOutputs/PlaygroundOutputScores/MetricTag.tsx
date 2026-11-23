@@ -17,6 +17,7 @@ interface MetricTagProps {
   color: string;
   score?: ScoreData;
   ruleId?: string;
+  traceId?: string;
   status?: OnlineScoringStatus;
   waitOver?: boolean;
   notRun?: boolean;
@@ -24,10 +25,11 @@ interface MetricTagProps {
 
 const RuleLogsLink: React.FC<{
   ruleId?: string;
+  traceId?: string;
   tooltip: string;
   label: string;
   children: React.ReactNode;
-}> = ({ ruleId, tooltip, label, children }) => {
+}> = ({ ruleId, traceId, tooltip, label, children }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   if (!ruleId) {
@@ -39,7 +41,7 @@ const RuleLogsLink: React.FC<{
       <Link
         to="/$workspaceName/automation-logs"
         params={{ workspaceName }}
-        search={{ rule_id: ruleId }}
+        search={{ rule_id: ruleId, trace_id: traceId }}
         target="_blank"
         onClick={(event) => event.stopPropagation()}
         aria-label={label}
@@ -73,6 +75,7 @@ const MetricTag: React.FC<MetricTagProps> = ({
   color,
   score,
   ruleId,
+  traceId,
   status,
   waitOver = false,
   notRun = false,
@@ -102,6 +105,7 @@ const MetricTag: React.FC<MetricTagProps> = ({
       return (
         <RuleLogsLink
           ruleId={status.rule_id}
+          traceId={traceId}
           tooltip={scoringStatusMessage(status)}
           label={label}
         >
@@ -113,6 +117,7 @@ const MetricTag: React.FC<MetricTagProps> = ({
       return (
         <RuleLogsLink
           ruleId={ruleId}
+          traceId={traceId}
           tooltip="No score arrived."
           label="Open the rule's execution logs"
         >

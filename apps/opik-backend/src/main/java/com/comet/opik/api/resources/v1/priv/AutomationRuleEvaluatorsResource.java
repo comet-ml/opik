@@ -14,6 +14,7 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.DecisionModelRuleValidator;
 import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -52,6 +53,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -246,12 +248,19 @@ public class AutomationRuleEvaluatorsResource {
             @ApiResponse(responseCode = "200", description = "Automation rule evaluator logs resource", content = @Content(schema = @Schema(implementation = LogPage.class)))
     })
     public Response getLogs(@PathParam("id") UUID evaluatorId,
-            @QueryParam("size") @Min(1) @DefaultValue("1000") int size) {
+            @QueryParam("size") @Min(1) @DefaultValue("1000") int size,
+            @QueryParam("trace_id") @Schema(description = "Only the logs about this trace") UUID traceId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Looking for logs for automated evaluator: id '{}' on workspace_id '{}'",
-                evaluatorId, workspaceId);
-        var criteria = LogCriteria.builder().entityId(evaluatorId).size(size).build();
+        log.info("Looking for logs for automated evaluator: id '{}', trace_id '{}' on workspace_id '{}'",
+                evaluatorId, traceId, workspaceId);
+        var criteria = LogCriteria.builder()
+                .entityId(evaluatorId)
+                .size(size)
+                .markers(Optional.ofNullable(traceId)
+                        .map(id -> Map.of(UserLog.TRACE_ID, id.toString()))
+                        .orElse(null))
+                .build();
         LogPage logs = service.getLogs(criteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();

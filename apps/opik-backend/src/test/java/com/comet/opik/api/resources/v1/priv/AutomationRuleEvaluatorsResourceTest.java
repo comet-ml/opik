@@ -2106,6 +2106,35 @@ class AutomationRuleEvaluatorsResourceTest {
         }
 
         @Test
+        void getLogsOfOneTrace() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
+                    .samplingRate(0f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            var traces = Stream.generate(() -> factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .source(null)
+                    .threadId(null)
+                    .build())
+                    .limit(2)
+                    .toList();
+            traces.forEach(trace -> traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME));
+
+            Awaitility.await().untilAsserted(() -> assertThat(
+                    evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY).content()).hasSize(2));
+
+            var logPage = evaluatorsResourceClient.getLogs(id, traces.getFirst().id(), WORKSPACE_NAME, API_KEY);
+            assertLogResponse(logPage, id, evaluator, traces.getFirst());
+        }
+
+        @Test
         void getLogsTraceThreadSkipped() {
             // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
             // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.

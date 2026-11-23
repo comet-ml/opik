@@ -24,6 +24,7 @@ interface PlaygroundOutputScoresProps {
   metricScores: Record<string, ScoreData>; // Actual scores from trace (keyed by name)
   metricRuleIds?: Record<string, string>;
   metricStatuses?: Record<string, OnlineScoringStatus>;
+  traceId?: string;
   waitOver?: boolean;
   notRun?: boolean;
   className?: string;
@@ -34,6 +35,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   metricScores,
   metricRuleIds = {},
   metricStatuses = {},
+  traceId,
   waitOver = false,
   notRun = false,
   className,
@@ -71,6 +73,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
           score={metricScores[metricName]}
           ruleId={metricRuleIds[metricName]}
           status={metricStatuses[metricName]}
+          traceId={traceId}
           waitOver={waitOver}
           notRun={notRun}
         />
@@ -99,6 +102,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
                   score={metricScores[metricName]}
                   ruleId={metricRuleIds[metricName]}
                   status={metricStatuses[metricName]}
+                  traceId={traceId}
                   waitOver={waitOver}
                   notRun={notRun}
                 />

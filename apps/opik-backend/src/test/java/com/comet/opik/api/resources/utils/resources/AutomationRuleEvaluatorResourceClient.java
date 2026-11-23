@@ -185,16 +185,29 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public LogPage getLogs(UUID evaluatorId, String workspaceName, String apiKey) {
-        try (var actualResponse = getLogs(evaluatorId, workspaceName, apiKey, HttpStatus.SC_OK)) {
+        return getLogs(evaluatorId, null, workspaceName, apiKey);
+    }
+
+    public Response getLogs(UUID evaluatorId, String workspaceName, String apiKey, int expectedStatus) {
+        return getLogs(evaluatorId, null, workspaceName, apiKey, expectedStatus);
+    }
+
+    public LogPage getLogs(UUID evaluatorId, UUID traceId, String workspaceName, String apiKey) {
+        try (var actualResponse = getLogs(evaluatorId, traceId, workspaceName, apiKey, HttpStatus.SC_OK)) {
             assertThat(actualResponse.hasEntity()).isTrue();
             return actualResponse.readEntity(LogPage.class);
         }
     }
 
-    public Response getLogs(UUID evaluatorId, String workspaceName, String apiKey, int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+    private Response getLogs(UUID evaluatorId, UUID traceId, String workspaceName, String apiKey,
+            int expectedStatus) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
-                .path("logs")
+                .path("logs");
+        if (traceId != null) {
+            target = target.queryParam("trace_id", traceId);
+        }
+        var actualResponse = target
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)

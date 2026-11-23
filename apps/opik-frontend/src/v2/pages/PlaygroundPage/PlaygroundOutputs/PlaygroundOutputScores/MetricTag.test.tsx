@@ -15,12 +15,16 @@ vi.mock("@tanstack/react-router", () => ({
     "aria-label": ariaLabel,
   }: {
     children: React.ReactNode;
-    search: { rule_id: string };
+    search: Record<string, string | undefined>;
     "aria-label": string;
   }) => (
     <a
       aria-label={ariaLabel}
-      href={`/automation-logs?rule_id=${search.rule_id}`}
+      href={`/automation-logs?${new URLSearchParams(
+        Object.entries(search).filter(
+          (entry): entry is [string, string] => entry[1] !== undefined,
+        ),
+      )}`}
     >
       {children}
     </a>
@@ -64,13 +68,17 @@ describe("MetricTag", () => {
     expect(isSpinning(container)).toBe(true);
   });
 
-  it("stops spinning once the wait is over and links to the rule's execution logs", () => {
-    const { container } = renderTag({ ruleId: "r1", waitOver: true });
+  it("stops spinning once the wait is over and links to the rule's execution logs for the trace", () => {
+    const { container } = renderTag({
+      ruleId: "r1",
+      traceId: "t1",
+      waitOver: true,
+    });
 
     expect(isSpinning(container)).toBe(false);
     expect(
       screen.getByLabelText("Open the rule's execution logs"),
-    ).toHaveAttribute("href", "/automation-logs?rule_id=r1");
+    ).toHaveAttribute("href", "/automation-logs?rule_id=r1&trace_id=t1");
     expect(screen.getByTitle(/No score arrived/)).toHaveTextContent("—");
   });
 
@@ -115,12 +123,16 @@ describe("MetricTag", () => {
       [ONLINE_SCORING_STATE.FAILED, "Scoring failed"],
       [ONLINE_SCORING_STATE.SKIPPED, "Scoring skipped"],
     ])("stops spinning when it %s and says why", (state, label) => {
-      const { container } = renderTag({ ruleId: "r1", status: status(state) });
+      const { container } = renderTag({
+        ruleId: "r1",
+        traceId: "t1",
+        status: status(state),
+      });
 
       expect(isSpinning(container)).toBe(false);
       expect(screen.getByLabelText(label)).toHaveAttribute(
         "href",
-        "/automation-logs?rule_id=r2",
+        "/automation-logs?rule_id=r2&trace_id=t1",
       );
       expect(
         screen.getByTitle(

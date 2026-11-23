@@ -284,6 +284,7 @@ const PlaygroundOutputScoresContainer: React.FC<
       metricScores={metricScores}
       metricRuleIds={metricRuleIds}
       metricStatuses={metricStatuses}
+      traceId={traceId ?? undefined}
       waitOver={waitOver && !!traceId}
       notRun={notRun}
       className={className}
