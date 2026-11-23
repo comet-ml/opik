@@ -239,8 +239,8 @@ class TopicsNightPass {
                         "Project '%s' has no topic list: its first build makes one".formatted(projectId));
             }
             if (covers(row.get(), windowTo)) {
-                throw new ConflictException("Project '%s' has a list saved with its window until '%s', at or after "
-                        + "the night '%s'".formatted(projectId, row.get().windowUntil(), night));
+                throw new ConflictException(("Project '%s' has a list saved with its window until '%s', at or after "
+                        + "the night '%s'").formatted(projectId, row.get().windowUntil(), night));
             }
             return row.get();
         })
