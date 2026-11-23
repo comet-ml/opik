@@ -1,10 +1,8 @@
 .ov-view {
   display: block;
   box-sizing: border-box;
-  color: var(--ov-fg);
-  font-family: var(--ov-font);
-  font-size: 14px;
-  line-height: 1.4;
+  color: var(--ov-text-primary);
+  font: var(--ov-type-body-small);
 }
 .ov-view .ov-frame {
   display: block;
@@ -18,18 +16,20 @@
 }
 .ov-view .ov-error {
   box-sizing: border-box;
-  color: var(--ov-danger);
-  background: color-mix(in srgb, var(--ov-danger) 10%, transparent);
-  border: 1px solid var(--ov-danger);
-  border-radius: var(--ov-radius);
-  padding: 8px 12px;
-  font-size: 12px;
+  color: var(--ov-status-error-text);
+  background: color-mix(
+    in srgb,
+    var(--ov-status-error-default) 10%,
+    transparent
+  );
+  border: 1px solid var(--ov-status-error-default);
+  border-radius: var(--ov-radius-4);
+  padding: var(--ov-spacing-8) var(--ov-spacing-12);
 }
 .ov-view .ov-placeholder {
   box-sizing: border-box;
-  color: var(--ov-fg-muted);
-  border: 1px dashed var(--ov-border);
-  border-radius: var(--ov-radius);
-  padding: 8px 12px;
-  font-size: 12px;
+  color: var(--ov-text-secondary);
+  border: 1px dashed var(--ov-border-default);
+  border-radius: var(--ov-radius-4);
+  padding: var(--ov-spacing-8) var(--ov-spacing-12);
 }

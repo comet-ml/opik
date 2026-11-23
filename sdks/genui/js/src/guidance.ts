@@ -13,7 +13,7 @@ const AREA_TARGETS: Record<Area, string> = {
 };
 
 const LIBRARY_GUIDANCE: Record<Library, string> = {
-  vega: '- "vega": Vega and Vega-Lite as the globals vega and vegaLite, and vegaEmbed(element, spec, options), which returns a promise and already uses the SVG renderer, no actions menu and an expression interpreter that needs no eval. Give the container an explicit width when the spec uses width: "container". Pass theme colours through the spec config, read from the tokens with getComputedStyle(document.documentElement), and embed the chart again from onViewTheme so it follows a theme switch.',
+  vega: '- "vega": Vega and Vega-Lite as the globals vega and vegaLite, and vegaEmbed(element, spec, options), which returns a promise and already uses the SVG renderer, no actions menu and an expression interpreter that needs no eval. Give the container an explicit width when the spec uses width: "container". Pass theme colours and fonts through the spec config (the chart series as the category range, --ov-chart-grid, --ov-text-secondary for axes and legends), read from the tokens with getComputedStyle(document.documentElement), and embed the chart again from onViewTheme so it follows a theme switch.',
 };
 
 const tokens = TOKEN_NAMES.join(", ");
@@ -47,9 +47,19 @@ export const prompt = (area: Area): string =>
     "## Style",
     `- The document root carries data-theme="light" or "dark" and the tokens ${tokens}. Use them instead of literal colours and fonts; CSS that uses them follows the theme.`,
     "- Colours read in script do not follow the theme by themselves. onViewTheme(function (theme) { ... }) runs once the tokens are set and again on every theme switch: redraw there whatever holds resolved colours, such as a canvas or a library drawing. Read token values with getComputedStyle inside onViewData or onViewTheme, never at the top of the script, where they are still empty.",
-    "- Base styles: zero margins, border-box sizing, the --ov-font font, the --ov-fg colour, a transparent background.",
-    "- Token roles: --ov-fg for body text, --ov-fg-strong for headings, --ov-fg-muted for labels, --ov-fg-subtle for placeholders and tertiary text; --ov-surface for cards, --ov-bg-subtle for subtle fills such as code and tags; --ov-accent for links and highlights with --ov-on-accent for text on it, --ov-accent-soft and --ov-warning-soft for highlighted backgrounds; --ov-success, --ov-warning and --ov-danger for status; --ov-radius-sm for small elements such as tags.",
-    "- Opik views are compact and quiet: 13 to 14 px text, 1px --ov-border lines, --ov-radius corners, 8 to 16 px spacing, no shadows or gradients. When colour tells categories apart, use --ov-chart-1 to --ov-chart-8 in order.",
+    "- Base styles: zero margins, border-box sizing, --ov-type-body-small text in --ov-text-primary, a transparent background.",
+    "- Surfaces: the view sits on --ov-background-primary. --ov-background-subtle for header rows, stat strips and section bars; --ov-background-secondary for tags, segmented controls and hover, --ov-background-secondary-hover when they are hovered.",
+    "- Text: --ov-text-primary for main content, --ov-text-secondary for supporting information, labels and sublabels, --ov-text-placeholder in empty inputs, --ov-text-disabled only for disabled controls, --ov-text-brand for links, --ov-text-on-action on --ov-action-primary.",
+    "- Icons: --ov-icon-primary by default, --ov-icon-secondary for icon-only controls such as chevrons and toggles. Draw them as inline SVG at 12, 14 or 16 px.",
+    "- Borders: --ov-border-default for dividers and containers, always 1px; --ov-border-strong for checkbox and control outlines; --ov-border-focus for focus rings.",
+    "- Status: --ov-status-*-default (error, success, warning) for icons, badges and borders, never for text; --ov-status-*-text for text and for icons that sit next to text or stand alone.",
+    "- Fills: --ov-accent-*-tile and --ov-status-*-tile for a container with something inside it, such as an icon tile, with --ov-icon-on-color for the icon; --ov-accent-*-mark and --ov-status-*-mark for a plain fill with nothing inside, such as a score-chip square, a dot or a bar. Accents are lime, yellow, teal, cyan, violet, fuchsia and pink.",
+    "- Charts: --ov-chart-series-1 to --ov-chart-series-7 in order for categories; --ov-chart-error, --ov-chart-success and --ov-chart-warning when a series carries that meaning; --ov-chart-grid for gridlines; --ov-text-secondary for axis labels. Never use tile, mark, default or text tokens in charts.",
+    '- Type: set font with the --ov-type-* tokens, e.g. font: var(--ov-type-body-small). UI text is --ov-type-body-small, including table text, labels, buttons, tags and dates; the -strong variant only marks the selected item. A title uses --ov-type-body-medium-strong and long reading text, such as prompts and messages, --ov-type-body-medium. --ov-type-caption for status text such as "Showing 1–100 of 4,615"; nothing is smaller except --ov-type-overline, which takes letter-spacing: 0.5px.',
+    "- Numbers are mono: --ov-type-mono-small for table values such as scores, costs, durations and token counts, --ov-type-mono-small-strong for stat values, --ov-type-mono-caption for sublabels and deltas, --ov-type-mono-caption-strong for counters in badges. Dates and IDs stay in sans.",
+    "- Shape: spacing only from the --ov-spacing-* scale; padding 12 px for sections and headers, 8 px vertical and 6 px horizontal for table cells, 2 px and 6 px for tags; table rows 32 px high, buttons 24, inputs 28. --ov-radius-4 for controls, --ov-radius-2 for small inner parts, --ov-radius-full for dots and pills. Every interactive target is at least 24 by 24 px.",
+    "- --ov-opacity-inactive on clickable but unselected items such as inactive tabs, --ov-opacity-disabled on disabled controls only; set it on the element, never bake it into a colour.",
+    "- Opik views are compact and quiet: no shadows, no gradients, no colours or sizes outside the tokens.",
     "",
     "## Layout",
     "- The same view can be shown in different places and sizes, and its width can change while it is shown. Build it fluid with flex or grid, percentages and minmax; no fixed pixel widths.",
@@ -58,7 +68,7 @@ export const prompt = (area: Area): string =>
     `- The frame takes the height of the content up to ${MAX_FRAME_HEIGHT.toLocaleString("en-US")} px: do not use 100vh or fixed page heights, and put the most important information first.`,
     "",
     "## Accessibility",
-    "- Colour is never the only signal: add a label, a value or an icon. Give a graphic an aria-label or a one-line text summary, and use buttons, not clickable divs, for anything the user acts on.",
+    "- Text keeps 4.5:1 contrast and icons and control outlines 3:1; the token pairings above meet that, others need checking. Colour is never the only signal: add a label, a value or an icon. Give a graphic an aria-label or a one-line text summary, and use buttons, not clickable divs, for anything the user acts on.",
     "",
     "## Size",
     `Keep the html small, ideally under ${RECOMMENDED_HTML_KB} KB. A save over ${MAX_HTML_LENGTH.toLocaleString("en-US")} characters is refused.`,

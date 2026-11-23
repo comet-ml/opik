@@ -145,7 +145,8 @@ const checks: [string, boolean][] = [
   ],
   [
     "base styles use the tokens",
-    document.includes("var(--ov-font") && document.includes("var(--ov-fg)"),
+    document.includes("var(--ov-type-body-small") &&
+      document.includes("var(--ov-text-primary)"),
   ],
   [
     "frame is sandboxed to scripts only",
@@ -168,13 +169,21 @@ const checks: [string, boolean][] = [
       JSON.stringify([...TOKEN_NAMES].sort()),
   ],
   [
+    "every token has a value in both themes",
+    Object.values(TOKENS).every((theme) =>
+      Object.values(theme).every((value) => typeof value === "string"),
+    ),
+  ],
+  [
     "every token carries the --ov- prefix",
     TOKEN_NAMES.every((name) => name.startsWith("--ov-")),
   ],
   [
     "host wraps the view with the theme and its tokens",
     host("dark").startsWith('<div class="ov-view" data-theme="dark"') &&
-      host("dark").includes(`--ov-bg:${TOKENS.dark["--ov-bg"]}`),
+      host("dark").includes(
+        `--ov-background-primary:${TOKENS.dark["--ov-background-primary"]}`,
+      ),
   ],
   [
     "host shows loading before the data",

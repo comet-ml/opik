@@ -12,7 +12,7 @@
   - `contract.ts`: the HTML contract per `engine_version` (bootstrap, CSP, base stylesheet) in `CONTRACTS`; `ENGINE_VERSION` is the latest key.
   - `HtmlFrame.tsx`: the iframe host. It speaks the MCP Apps message shapes (initialize, initialized, tool-result for the data, host-context-changed for the theme, size-changed, teardown) and stops a view that navigates away.
   - `ViewHost.tsx`: the host wrapper. It refuses an unsupported type, `engine_version`, input kind or library, resolves the inputs and loads the declared libraries through the host adapter in parallel and mounts `HtmlFrame`. A new `fetchInput` or `fetchLibrary` identity means fetch again, so a host keeps them stable with `useCallback` and changes them only when it wants new data, such as a new date range; a host that creates them on every render refetches forever.
-  - `tokens.ts`: the `--ov-` token values for light and dark, sent to the view on initialize and on every theme change.
+  - `tokens.ts`: the `--ov-` token values for light and dark, sent to the view on initialize and on every theme change. They follow the Opik DS 2.0 Foundations Figma file (https://www.figma.com/design/wpk4dnvfUBxXsc8d4jvopv/Opik-DS-2.0--Foundations): each semantic colour maps to a primitive per mode, as in Figma, and `background/primary` becomes `--ov-background-primary`. Take new values and names from Figma; the font families are not part of it yet.
   - `view.ts`: the view and input types, the areas, the libraries, the size cap and the frame height cap.
   - `guidance.ts`: the authoring prompt per area.
   - `styles.css`: the host-side stylesheet for the frame, the loading and the error state, every rule under `.ov-view`.
@@ -35,7 +35,7 @@ Run from `sdks/genui`.
 ## Coding Style & Naming Conventions
 - TypeScript, 2-space indentation, double quotes, no code comments.
 - Nothing in `js/src/` imports from `apps/` or from outside `js/src/`.
-- CSS classes carry the `ov-` prefix and every host rule sits under `.ov-view`; tokens carry the `--ov-` prefix.
+- CSS classes carry the `ov-` prefix and every host rule sits under `.ov-view`; tokens carry the `--ov-` prefix. Host CSS uses the tokens too, never literal colours or sizes.
 
 ## Testing Guidelines
 - `js/scripts/smoke.ts`: one `[name, boolean]` check per behaviour, run without a browser.

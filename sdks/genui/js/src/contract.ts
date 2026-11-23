@@ -4,7 +4,7 @@ export const VIEW_CSP =
 const INIT_RETRY_MS = 1000;
 
 const BASE_STYLES =
-  ":root{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}html,body{margin:0}*,*::before,*::after{box-sizing:border-box}body{display:flow-root;font:14px/1.4 var(--ov-font,system-ui,sans-serif);color:var(--ov-fg);background:transparent}";
+  ":root{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}html,body{margin:0}*,*::before,*::after{box-sizing:border-box}body{display:flow-root;font:var(--ov-type-body-small,12px/16px system-ui,sans-serif);color:var(--ov-text-primary);background:transparent}";
 
 const bootstrapV1 = `
 ["RTCPeerConnection", "webkitRTCPeerConnection"].forEach(function (name) { Object.defineProperty(window, name, { value: undefined, writable: false, configurable: false }); });

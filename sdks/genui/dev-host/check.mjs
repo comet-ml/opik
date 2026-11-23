@@ -88,11 +88,11 @@ try {
   expect("data reaches the view", rows.join() === "gpt-4o,claude", rows);
   const light = await inView(() => ({
     theme: document.documentElement.getAttribute("data-theme"),
-    fg: document.documentElement.style.getPropertyValue("--ov-fg"),
+    fg: document.documentElement.style.getPropertyValue("--ov-text-primary"),
   }));
   expect(
     "light theme and tokens",
-    light.theme === "light" && light.fg === "hsl(224 17% 26%)",
+    light.theme === "light" && light.fg === "#27272a",
     light,
   );
   const height = await page.evaluate(
@@ -117,11 +117,11 @@ try {
   await settle();
   const dark = await inView(() => ({
     theme: document.documentElement.getAttribute("data-theme"),
-    fg: document.documentElement.style.getPropertyValue("--ov-fg"),
+    fg: document.documentElement.style.getPropertyValue("--ov-text-primary"),
   }));
   expect(
     "theme change reaches the view without a reload",
-    dark.theme === "dark" && dark.fg === "hsl(214 32% 91%)",
+    dark.theme === "dark" && dark.fg === "#f4f4f5",
     dark,
   );
   await page.screenshot({ path: path.join(shots, "dark.png"), fullPage: true });
@@ -336,7 +336,7 @@ try {
   const vegaAfterChart = vegaRequests();
 
   await render(
-    '<p id="themes"></p><script>var seen = []; onViewTheme(function (theme) { seen.push(theme + ":" + getComputedStyle(document.documentElement).getPropertyValue("--ov-fg").trim()); document.getElementById("themes").textContent = seen.join(" | "); });</script>',
+    '<p id="themes"></p><script>var seen = []; onViewTheme(function (theme) { seen.push(theme + ":" + getComputedStyle(document.documentElement).getPropertyValue("--ov-text-primary").trim()); document.getElementById("themes").textContent = seen.join(" | "); });</script>',
   );
   await waitInitialized();
   const themeBefore = await page.evaluate(() =>
@@ -350,9 +350,9 @@ try {
   expect(
     "theme callback runs with the tokens set, on initialize and on a switch",
     themesSeen.length === 2 &&
-      themesSeen[0].startsWith(themeBefore + ":hsl") &&
+      themesSeen[0].startsWith(themeBefore + ":#") &&
       !themesSeen[1].startsWith(themeBefore) &&
-      /:hsl/.test(themesSeen[1]) &&
+      /:#/.test(themesSeen[1]) &&
       themesSeen[0].split(":")[1] !== themesSeen[1].split(":")[1],
     themesSeen,
   );
