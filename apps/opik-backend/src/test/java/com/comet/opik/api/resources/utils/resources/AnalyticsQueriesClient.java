@@ -21,6 +21,7 @@ public class AnalyticsQueriesClient {
 
     private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries/projects/%s";
     private static final String SCOPED_RESOURCE_PATH = "%s/v1/internal/analytics-queries";
+    private static final String PUBLIC_RESOURCE_PATH = "%s/v1/private/analytics-queries";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -50,6 +51,22 @@ public class AnalyticsQueriesClient {
 
     public Response callExecuteScoped(UUID projectId, String query, String apiKey, String workspaceName) {
         return client.target(SCOPED_RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.entity(ScopedAnalyticsQueryRequest.builder().query(query).projectId(projectId).build(),
+                        MediaType.APPLICATION_JSON_TYPE));
+    }
+
+    public AnalyticsQueryResponse run(UUID projectId, String query, String apiKey, String workspaceName) {
+        try (var response = callRun(projectId, query, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(AnalyticsQueryResponse.class);
+        }
+    }
+
+    public Response callRun(UUID projectId, String query, String apiKey, String workspaceName) {
+        return client.target(PUBLIC_RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

@@ -310,6 +310,10 @@ customCharts:
   #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
   #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
   enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
+  #  Default: false (public endpoints off)
+  #  Description: Exposes the public Custom Charts endpoints (POST /v1/private/analytics-queries) to API keys and the
+  #   Opik MCP server. Off, they answer 501. Requires enabled above.
+  publicEndpointsEnabled: ${TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -865,20 +869,21 @@ rateLimit:
       userFacingBucketName: ollie_state_upload
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
-    dashboardWidgetQueries:
-      # Default: 300
-      # Description: how many saved widget queries (dashboards and insights views) are allowed per workspace in the
-      #   specified time bucket. Every viewer runs every Ollie chart on each load and date-range change.
-      limit: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_PER_WORKSPACE_LIMIT:-300}
+    freeFormSql:
+      # Default: 150
+      # Description: how many free-form SQL queries are allowed per workspace in the specified time bucket, shared by
+      #   the public analytics-queries endpoint and the saved widget queries (dashboards and insights views). Every
+      #   viewer runs every Ollie chart on each load and date-range change.
+      limit: ${RATE_LIMIT_FREE_FORM_SQL_PER_WORKSPACE_LIMIT:-150}
       # Default: 60
       # Description: Time bucket size in seconds
-      durationInSeconds: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_DURATION_IN_SEC:-60}
+      durationInSeconds: ${RATE_LIMIT_FREE_FORM_SQL_DURATION_IN_SEC:-60}
       # Description: Header name to use for rate limiting
-      headerName: Dashboard-Widget-Queries
+      headerName: Free-Form-Sql
       # Description: User facing bucket name
-      userFacingBucketName: dashboard_widget_queries
+      userFacingBucketName: free_form_sql
       # Description: Rate limit error message
-      errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
+      errorMessage: "You have exceeded the rate limit for free-form SQL queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
