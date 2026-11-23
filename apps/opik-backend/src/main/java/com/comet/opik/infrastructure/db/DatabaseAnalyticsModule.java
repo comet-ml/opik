@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
+import com.comet.opik.infrastructure.ClickHouseClientPoolMetrics;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
@@ -35,7 +36,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
-        clickHouseClient = databaseAnalyticsFactory.buildClient();
+        clickHouseClient = databaseAnalyticsFactory.buildClient(new ClickHouseClientPoolMetrics());
         environment().lifecycle().manage(new Managed() {
             @Override
             public void stop() {

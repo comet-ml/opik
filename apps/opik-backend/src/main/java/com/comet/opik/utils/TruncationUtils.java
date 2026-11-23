@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.slim.SlimJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -25,12 +26,12 @@ public final class TruncationUtils {
     /**
      * Default maximum length for truncated string values in slim JSON.
      */
-    public static final int DEFAULT_SLIM_STRING_MAX_LENGTH = 1000;
+    public static final int DEFAULT_SLIM_STRING_MAX_LENGTH = SlimJson.MAX_STRING_LENGTH;
 
     /**
      * Suffix appended to truncated strings to indicate truncation.
      */
-    private static final String TRUNCATION_SUFFIX = "...";
+    private static final String TRUNCATION_SUFFIX = SlimJson.TRUNCATION_SUFFIX;
 
     /**
      * Creates a "slim" version of a JSON node by recursively truncating all leaf string values
@@ -135,17 +136,6 @@ public final class TruncationUtils {
      */
     public static String toJsonString(JsonNode node) {
         return node != null ? node.toString() : "";
-    }
-
-    /**
-     * Converts a JsonNode to a slim JSON string using the default max length.
-     * Combines toJsonString and createSlimJsonString for convenience.
-     *
-     * @param node the JSON node to process (may be null)
-     * @return the slim JSON string, or empty string if null
-     */
-    public static String createSlimJsonStringFromNode(JsonNode node) {
-        return createSlimJsonString(toJsonString(node));
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {
