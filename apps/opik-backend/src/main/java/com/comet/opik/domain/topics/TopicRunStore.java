@@ -9,6 +9,7 @@ import com.comet.opik.utils.RetryUtils;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -257,10 +258,11 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(saved -> keepIfProjectExists(run));
+                .flatMap(saved -> deleteTopicsIfProjectGone(run));
     }
 
     /** The list a nightly update read: its state, the run that saved it, and the ids of its stored topics. */
+    @Builder(toBuilder = true)
     record SavedList(@NonNull NightState state, @NonNull UUID listRunId, @NonNull Set<UUID> topicIds) {
     }
 
@@ -268,6 +270,7 @@ class TopicRunStore {
      * What a nightly update writes to MySQL. {@code keep} is false when no topic stayed live: then the list is cleared
      * and every stored topic is in {@code retired}.
      */
+    @Builder(toBuilder = true)
     record NightSave(boolean keep, @NonNull List<Topic> inserted, @NonNull List<Topic> updated,
             @NonNull List<UUID> retired, PrototypeVectors otherVectors) {
     }
@@ -293,8 +296,11 @@ class TopicRunStore {
                     .night(night)
                     .ids(idGenerator::generateId)
                     .build();
-            return new SavedList(state, project.get().listRunId(),
-                    topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()));
+            return SavedList.builder()
+                    .state(state)
+                    .listRunId(project.get().listRunId())
+                    .topicIds(topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()))
+                    .build();
         }));
     }
 
@@ -355,7 +361,7 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(__ -> keepIfProjectExists(run))
+                .flatMap(__ -> deleteTopicsIfProjectGone(run))
                 .map(exists -> exists && save.keep());
     }
 
@@ -368,8 +374,8 @@ class TopicRunStore {
         return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
     }
 
-    /** False, after deleting the run's topics, when the project was deleted during the run. */
-    private Mono<Boolean> keepIfProjectExists(TopicRun run) {
+    /** True when the project still exists; when it was deleted during the run, deletes the run's topics and is false. */
+    private Mono<Boolean> deleteTopicsIfProjectGone(TopicRun run) {
         return jdbi(() -> {
             boolean exists = exists(run.workspaceId(), run.projectId());
             if (!exists) {
