@@ -71,33 +71,15 @@ class CandidateGrouper {
     /**
      * The grouping of the unassigned traces: per unassigned trace its group, the groups' unit centres
      * ({@code k * dimensions}), every group's summary and the candidates among them, in group order. The arrays are
-     * copied in and out.
+     * not copied (callers read them inside per-trace loops): callers must not change them.
      */
     @Builder(toBuilder = true)
     record Grouping(@NonNull int[] unassigned, @NonNull int[] labels, @NonNull float[] centres,
             @NonNull List<NightGroup> groups, @NonNull List<NightGroup> candidates) {
 
         Grouping {
-            unassigned = unassigned.clone();
-            labels = labels.clone();
-            centres = centres.clone();
             groups = List.copyOf(groups);
             candidates = List.copyOf(candidates);
-        }
-
-        @Override
-        public int[] unassigned() {
-            return unassigned.clone();
-        }
-
-        @Override
-        public int[] labels() {
-            return labels.clone();
-        }
-
-        @Override
-        public float[] centres() {
-            return centres.clone();
         }
 
         float[] centre(int group, int dimensions) {
