@@ -129,8 +129,8 @@ public class TopicsRunPlanner {
      */
     Mono<UUID> queueOne(@NonNull Planned run) {
         return queueAndPublish(run, (runId, error) -> {
-            log.warn("Topics run '{}' queued but not published, project '{}'; it is published again later", runId,
-                    run.projectId(), error);
+            log.warn("Topics run queued but not published, a later plan publishes it, run '{}', project '{}'",
+                    runId, run.projectId(), error);
             return Mono.just(runId);
         });
     }
@@ -143,24 +143,24 @@ public class TopicsRunPlanner {
      */
     private Mono<UUID> queueByHand(Planned run) {
         return queueAndPublish(run, (runId, error) -> {
-            log.warn("Topics run '{}' queued by hand but not published, project '{}'; it is dropped", runId,
+            log.warn("Topics run by hand not published, dropping it, run '{}', project '{}'", runId,
                     run.projectId(), error);
             // No reason: nothing cancelled the run, no pod ever had it.
             return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
                     .onErrorResume(dropError -> {
-                        log.error("Topics run '{}' not published and not dropped, project '{}'; it stays queued "
-                                + "until a plan publishes it", runId, run.projectId(), dropError);
+                        log.error("Topics run by hand not published and not dropped, it stays queued until a plan "
+                                + "publishes it, run '{}', project '{}'", runId, run.projectId(), dropError);
                         // Not known to have left the queue, so the caller gets the error to retry on.
                         return Mono.just(true);
                     })
                     .flatMap(dropped -> {
                         if (dropped) {
                             return Mono.error(new ServiceUnavailableException(
-                                    "The topics run of project '%s' could not be started, try again"
+                                    "The topics run could not be started, try again, project '%s'"
                                             .formatted(run.projectId())));
                         }
-                        log.info("Topics run '{}' left the queue after its publish error, project '{}'; it was "
-                                + "published", runId, run.projectId());
+                        log.info("Topics run by hand left the queue after its publish error, so it was published, "
+                                + "run '{}', project '{}'", runId, run.projectId());
                         return Mono.just(runId);
                     });
         });
