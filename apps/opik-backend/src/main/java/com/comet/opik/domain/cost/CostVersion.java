@@ -26,8 +26,8 @@ public class CostVersion {
      * without usage keeps its version when the load fails, and a cost from {@code metadata.cost} keeps plain
      * {@code 1.1}.
      */
-    public static String of(@NonNull CostService.PricedCost priced, @NonNull PriceLayers layers, boolean hasUsage) {
-        if (priced.source() == CostService.CostSource.ORGANIZATION) {
+    public static String of(@NonNull PricedCost priced, @NonNull PriceLayers layers, boolean hasUsage) {
+        if (priced.source() == CostSource.ORGANIZATION) {
             return ESTIMATED + ORGANIZATION_PREFIX + layers.getListVersion();
         }
         if (layers.getOrigin() == PriceLayers.Origin.LOAD_FAILED && hasUsage) {
@@ -36,7 +36,7 @@ public class CostVersion {
         if (priced.cost().signum() <= 0) {
             return "";
         }
-        if (priced.source() == CostService.CostSource.BUILT_IN
+        if (priced.source() == CostSource.BUILT_IN
                 && layers.getOrigin() != PriceLayers.Origin.DISABLED) {
             return ESTIMATED + BUILT_IN_PREFIX + ModelPriceTable.pricesFingerprint();
         }

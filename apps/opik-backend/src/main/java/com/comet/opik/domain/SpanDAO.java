@@ -10,6 +10,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostSource;
 import com.comet.opik.domain.cost.CostVersion;
 import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -3059,7 +3060,7 @@ public class SpanDAO {
         }
         var priced = CostService.price(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
                 spanUpdate.metadata(), priceLayers);
-        if (priced.cost().signum() <= 0 && priced.source() != CostService.CostSource.ORGANIZATION) {
+        if (priced.cost().signum() <= 0 && priced.source() != CostSource.ORGANIZATION) {
             return Optional.empty();
         }
         return Optional.of(new SpanCost(priced.cost(),
