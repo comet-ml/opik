@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -57,6 +58,14 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @DisplayName("Analytics Queries Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class AnalyticsQueriesResourceTest {
+
+    private static final String ACCESS_DENIED = "Query rejected: access denied";
+    private static final String RESULT_SHAPE_ERROR = "Query must return exactly one column named 'result'";
+
+    private enum Endpoint {
+        EXECUTE,
+        EXECUTE_SCOPED
+    }
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -176,33 +185,181 @@ class AnalyticsQueriesResourceTest {
         assertNoRows(analyticsQueriesClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0} via {1}")
     @MethodSource
-    @DisplayName("an invalid or disallowed query is rejected with 400")
-    void executeQuery__whenInvalid__thenBadRequest(String label, String query) {
-        assertBadRequest(query);
+    @DisplayName("invalid or disallowed queries return the exact error through both HTTP endpoints")
+    void executeQuery__whenInvalid__thenBadRequest(String label, Endpoint endpoint, String query,
+            String expectedError) {
+        assertRejected(endpoint, query, expectedError);
     }
 
     private Stream<Arguments> executeQuery__whenInvalid__thenBadRequest() {
-        // SETTINGS clauses (top level, subquery, CTE) are caught by the AST guard; the rest are rejected by the parser,
-        // the read-only profile, the per-table grants, or the single-JSON-column result contract.
+        // The top-level SETTINGS case is rejected by ClickHouse during EXPLAIN AST, before the AST guard can inspect it.
+        // Nested SETTINGS clauses are rejected by the AST guard. The other cases exercise the parser, grants, and
+        // single-JSON-column result contract.
         return Stream.of(
                 arguments("SETTINGS clause at top level",
-                        "SELECT toJSONString(map('id', toString(id))) AS result FROM traces SETTINGS max_threads = 1"),
+                        "SELECT toJSONString(map('id', toString(id))) AS result FROM traces SETTINGS max_threads = 1",
+                        "Query execution failed"),
                 arguments("SETTINGS clause in a subquery",
-                        "SELECT toJSONString(map('id', toString(id))) AS result FROM (SELECT id FROM traces SETTINGS max_threads = 1)"),
+                        "SELECT toJSONString(map('id', toString(id))) AS result FROM (SELECT id FROM traces SETTINGS max_threads = 1)",
+                        "Query rejected: SETTINGS/SET clauses are not allowed"),
                 arguments("SETTINGS clause in a CTE",
-                        "WITH t AS (SELECT id FROM traces SETTINGS max_threads = 1) SELECT toJSONString(map('id', toString(id))) AS result FROM t"),
-                arguments("unparseable query", "SELECT FROM WHERE"),
-                arguments("statement stacking", "SELECT 1 AS result; SELECT 2 AS result"),
+                        "WITH t AS (SELECT id FROM traces SETTINGS max_threads = 1) SELECT toJSONString(map('id', toString(id))) AS result FROM t",
+                        "Query rejected: SETTINGS/SET clauses are not allowed"),
+                arguments("unparseable query", "SELECT FROM WHERE", "Query rejected: could not be parsed"),
+                arguments("statement stacking", "SELECT 1 AS result; SELECT 2 AS result",
+                        "Query rejected: could not be parsed"),
                 arguments("write statement (read-only profile)",
                         "INSERT INTO traces (id, workspace_id, project_id, name) VALUES ('%s', '%s', '%s', 'x')"
-                                .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA)),
+                                .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA),
+                        ACCESS_DENIED),
                 arguments("non-granted table",
-                        "SELECT toJSONString(map('id', toString(id))) AS result FROM experiments"),
-                arguments("non-JSON result value", "SELECT 'not json{' AS result FROM traces"),
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM span_weeks", ACCESS_DENIED),
+                arguments("non-JSON result value", "SELECT 'not json{' AS result FROM traces",
+                        "Query 'result' column must contain valid JSON produced via toJSONString(...)"),
                 arguments("system table (outside row policies)",
-                        "SELECT toJSONString(map('q', query)) AS result FROM system.query_log"));
+                        "SELECT toJSONString(map('q', query)) AS result FROM system.query_log", ACCESS_DENIED))
+                .flatMap(testCase -> Stream.of(Endpoint.values())
+                        .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1], testCase.get()[2])));
+    }
+
+    private Stream<Arguments> forbiddenQueries() {
+        var catalogTables = Stream.of("system.tables", "system.columns", "system.databases", "system.settings",
+                "system.one", "information_schema.tables")
+                .map(table -> arguments("catalog table " + table,
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + table));
+        var metadataExpressions = Stream.of("currentUser()", "database()", "schema()", "current_database()",
+                "current_user()", "current_user", "getMacro('replica')", "getServerPort('tcp_port')",
+                "displayName()", "DISPLAYNAME()", "enabledRoles()", "defaultRoles()", "getOSKernelVersion()",
+                "tcpPort()", "TCPPORT()", "authenticatedUser()", "enabledProfiles()", "defaultProfiles()",
+                "current_database", "database", "schema", "user", "currentDatabase", "currentUser")
+                .map(expression -> arguments("metadata expression " + expression,
+                        "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression)));
+        var nested = Stream.of(
+                arguments("catalog table in CTE", """
+                        WITH hidden AS (SELECT count() AS n FROM system.tables)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM hidden
+                        """),
+                arguments("catalog table in FROM subquery", """
+                        SELECT toJSONString(map('n', toString(n))) AS result
+                        FROM (SELECT count() AS n FROM system.tables)
+                        """),
+                arguments("catalog table in UNION arm", """
+                        SELECT toJSONString(map('n', '1')) AS result
+                        UNION ALL SELECT toJSONString(map('n', toString(count()))) AS result FROM system.tables
+                        """),
+                arguments("catalog table in WHERE subquery", """
+                        SELECT toJSONString(map('n', '1')) AS result FROM traces
+                        WHERE EXISTS (SELECT 1 FROM system.tables)
+                        """),
+                arguments("metadata function in CTE", """
+                        WITH hidden AS (SELECT currentUser() AS n)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM hidden
+                        """),
+                arguments("metadata function in FROM subquery", """
+                        SELECT toJSONString(map('n', toString(n))) AS result
+                        FROM (SELECT currentUser() AS n)
+                        """),
+                arguments("metadata function in UNION arm", """
+                        SELECT toJSONString(map('n', '1')) AS result
+                        UNION ALL SELECT toJSONString(map('n', currentUser())) AS result
+                        """),
+                arguments("metadata function in WHERE", """
+                        SELECT toJSONString(map('n', '1')) AS result FROM traces
+                        WHERE currentUser() != ''
+                        """));
+        return Stream.concat(Stream.concat(catalogTables, metadataExpressions), nested);
+    }
+
+    private Stream<Arguments> forbiddenQueriesByEndpoint() {
+        return forbiddenQueries().flatMap(testCase -> Stream.of(Endpoint.values())
+                .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1])));
+    }
+
+    @ParameterizedTest(name = "{0} via {1}")
+    @MethodSource("forbiddenQueriesByEndpoint")
+    @DisplayName("catalog and metadata reads are denied through both HTTP endpoints")
+    void forbiddenQuery__thenAccessDenied(String label, Endpoint endpoint, String query) {
+        assertRejected(endpoint, query, ACCESS_DENIED);
+    }
+
+    private Stream<Arguments> catalogMergeQueriesByEndpoint() {
+        return Stream.of("tables", "^tables$", "^columns$")
+                .flatMap(tablePattern -> Stream.of(Endpoint.values())
+                        .map(endpoint -> arguments(tablePattern, endpoint,
+                                "SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', '%s')"
+                                        .formatted(tablePattern))));
+    }
+
+    @ParameterizedTest(name = "merge('system', '{0}') via {1}")
+    @MethodSource("catalogMergeQueriesByEndpoint")
+    @DisplayName("the read-only account cannot resolve catalog tables through merge")
+    void catalogMergeQuery__thenExecutionFailed(String tablePattern, Endpoint endpoint, String query) {
+        // ClickHouse cannot find a matching table to derive the merge() schema; this is a database rejection,
+        // not evidence that the application's catalog-table AST guard recognized the table function.
+        assertRejected(endpoint, query, "Query execution failed");
+    }
+
+    private Stream<Arguments> allowedQueries() {
+        return Stream.of(
+                arguments("plain FROM-less query", "SELECT toJSONString(map('n', '1')) AS result"),
+                arguments("metadata-named column currentUser", """
+                        SELECT toJSONString(map('n', toString(currentUser))) AS result
+                        FROM (SELECT 1 AS currentUser)
+                        """),
+                arguments("metadata-named column currentDatabase", """
+                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
+                        FROM (SELECT 1 AS currentDatabase)
+                        """),
+                arguments("metadata-named alias currentUser", """
+                        WITH 1 AS currentUser
+                        SELECT toJSONString(map('n', toString(currentUser))) AS result
+                        """),
+                arguments("metadata-named alias currentDatabase", """
+                        WITH 1 AS currentDatabase
+                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
+                        """),
+                arguments("metadata-named CTE currentUser", """
+                        WITH currentUser AS (SELECT 1 AS n)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentUser
+                        """),
+                arguments("metadata-named CTE currentDatabase", """
+                        WITH currentDatabase AS (SELECT 1 AS n)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentDatabase
+                        """));
+    }
+
+    private Stream<Arguments> allowedQueriesByEndpoint() {
+        return allowedQueries().flatMap(testCase -> Stream.of(Endpoint.values())
+                .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1])));
+    }
+
+    @ParameterizedTest(name = "{0} via {1}")
+    @MethodSource("allowedQueriesByEndpoint")
+    @DisplayName("metadata-like identifiers and FROM-less queries remain valid through both HTTP endpoints")
+    void allowedQuery__thenReturnsResult(String label, Endpoint endpoint, String query) {
+        try (Response response = call(endpoint, query)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+            assertThat(response.readEntity(AnalyticsQueryResponse.class).results())
+                    .extracting(node -> node.get("n").asText())
+                    .containsExactly("1");
+        }
+    }
+
+    private Stream<Arguments> invalidResultShapesByEndpoint() {
+        return Stream.of(
+                arguments("extra column beside result", "SELECT toJSONString(map('n', '1')) AS result, 1 AS extra"),
+                arguments("single column not named result", "SELECT toJSONString(map('n', '1')) AS wrong"))
+                .flatMap(testCase -> Stream.of(Endpoint.values())
+                        .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1])));
+    }
+
+    @ParameterizedTest(name = "{0} via {1}")
+    @MethodSource("invalidResultShapesByEndpoint")
+    @DisplayName("invalid result shapes return the exact contract error through both HTTP endpoints")
+    void invalidResultShape__thenBadRequest(String label, Endpoint endpoint, String query) {
+        assertRejected(endpoint, query, RESULT_SHAPE_ERROR);
     }
 
     @Test
@@ -254,10 +411,20 @@ class AnalyticsQueriesResourceTest {
                 .doesNotContain(experimentIdB.toString());
     }
 
-    private void assertBadRequest(String query) {
-        try (Response response = analyticsQueriesClient.callExecute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A)) {
+    private void assertRejected(Endpoint endpoint, String query, String expectedError) {
+        try (Response response = call(endpoint, query)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+            assertThat(response.readEntity(ErrorMessage.class))
+                    .isEqualTo(new ErrorMessage(List.of(expectedError)));
         }
+    }
+
+    private Response call(Endpoint endpoint, String query) {
+        return switch (endpoint) {
+            case EXECUTE -> analyticsQueriesClient.callExecute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A);
+            case EXECUTE_SCOPED -> analyticsQueriesClient.callExecuteScoped(projectIdA, query, API_KEY_A,
+                    WORKSPACE_NAME_A);
+        };
     }
 
     private void assertScopedRows(AnalyticsQueryResponse response, String expectedWorkspaceId, UUID expectedProjectId,
