@@ -1,6 +1,8 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -11,85 +13,119 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelPriceMergerTest {
 
-    private static final ModelPrice GPT_5_MINI = ModelPrice.defaultBuilder()
-            .inputPrice(new BigDecimal("2.5E-7"))
-            .outputPrice(new BigDecimal("0.000002"))
-            .cacheReadInputTokenPrice(new BigDecimal("2.5E-8"))
-            .calculator(SpanCostCalculator::textGenerationCost)
-            .build();
+    private static BigDecimal randomPerMillion() {
+        return BigDecimal.valueOf(RandomUtils.secure().randomLong(1, 100_000), 2);
+    }
+
+    private static BigDecimal perToken(BigDecimal perMillion) {
+        return perMillion.movePointLeft(6);
+    }
+
+    private static BigDecimal randomRate() {
+        return perToken(randomPerMillion());
+    }
+
+    private static BigDecimal randomRatio() {
+        return BigDecimal.valueOf(RandomUtils.secure().randomLong(1, 1_000), 2);
+    }
+
+    private static ModelPrice randomTextPrice() {
+        return ModelPrice.defaultBuilder()
+                .inputPrice(randomRate())
+                .outputPrice(randomRate())
+                .cacheReadInputTokenPrice(randomRate())
+                .calculator(SpanCostCalculator::textGenerationCost)
+                .build();
+    }
 
     private static CustomModelPrice.CustomModelPriceBuilder fixedRow() {
         return CustomModelPrice.builder()
-                .modelName("gpt-5-mini")
-                .provider("openai")
+                .modelName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .provider(RandomStringUtils.secure().nextAlphanumeric(10))
                 .kind(CustomModelPrice.Kind.FIXED);
     }
 
     @Test
     void mergeReplacesEachRateTheRowSetsAndKeepsTheOthers() {
-        var row = fixedRow().inputPerMillion(new BigDecimal("1.00")).outputPerMillion(new BigDecimal("10.00")).build();
+        var base = randomTextPrice();
+        var inputPerMillion = randomPerMillion();
+        var outputPerMillion = randomPerMillion();
+        var row = fixedRow().inputPerMillion(inputPerMillion).outputPerMillion(outputPerMillion).build();
 
-        ModelPrice merged = ModelPriceMerger.merge(GPT_5_MINI, row);
+        ModelPrice merged = ModelPriceMerger.merge(base, row);
 
-        assertThat(merged.inputPrice()).isEqualByComparingTo("0.000001");
-        assertThat(merged.outputPrice()).isEqualByComparingTo("0.00001");
-        assertThat(merged.cacheReadInputTokenPrice()).isEqualByComparingTo("2.5E-8");
-        assertThat(merged.calculator()).isSameAs(GPT_5_MINI.calculator());
+        assertThat(merged.inputPrice()).isEqualByComparingTo(perToken(inputPerMillion));
+        assertThat(merged.outputPrice()).isEqualByComparingTo(perToken(outputPerMillion));
+        assertThat(merged.cacheReadInputTokenPrice()).isEqualByComparingTo(base.cacheReadInputTokenPrice());
+        assertThat(merged.calculator()).isSameAs(base.calculator());
     }
 
     @Test
     void mergeZeroesTheRateTheRowSetsInEveryTier() {
-        var gpt54 = ModelPrice.defaultBuilder()
-                .inputPrice(new BigDecimal("0.0000025"))
-                .outputPrice(new BigDecimal("0.000015"))
-                .cacheReadInputTokenPrice(new BigDecimal("2.5E-7"))
-                .promptTiers(List.of(ModelPrice.PromptTier.builder()
-                        .threshold(272_000)
-                        .inputPrice(new BigDecimal("0.000005"))
-                        .outputPrice(new BigDecimal("0.0000225"))
-                        .cacheCreationInputTokenPrice(BigDecimal.ZERO)
-                        .cacheReadInputTokenPrice(new BigDecimal("5E-7"))
-                        .build()))
+        var tier = ModelPrice.PromptTier.builder()
+                .threshold(RandomUtils.secure().randomInt(32_000, 512_000))
+                .inputPrice(randomRate())
+                .outputPrice(randomRate())
+                .cacheCreationInputTokenPrice(BigDecimal.ZERO)
+                .cacheReadInputTokenPrice(randomRate())
                 .build();
-        var row = fixedRow().modelName("gpt-5.4").inputPerMillion(new BigDecimal("2.00")).build();
+        var base = randomTextPrice().toBuilder().promptTiers(List.of(tier)).build();
+        var inputPerMillion = randomPerMillion();
+        var row = fixedRow().inputPerMillion(inputPerMillion).build();
+        int promptAboveTier = tier.threshold() + 1;
 
-        ModelPrice merged = ModelPriceMerger.merge(gpt54, row);
+        ModelPrice merged = ModelPriceMerger.merge(base, row);
 
-        assertThat(merged.effectiveInputPrice(300_000)).isEqualByComparingTo("0.000002");
-        assertThat(merged.effectiveOutputPrice(300_000)).isEqualByComparingTo("0.0000225");
-        assertThat(merged.effectiveCacheReadInputTokenPrice(300_000)).isEqualByComparingTo("5E-7");
+        assertThat(merged.effectiveInputPrice(promptAboveTier)).isEqualByComparingTo(perToken(inputPerMillion));
+        assertThat(merged.effectiveOutputPrice(promptAboveTier)).isEqualByComparingTo(tier.outputPrice());
+        assertThat(merged.effectiveCacheReadInputTokenPrice(promptAboveTier))
+                .isEqualByComparingTo(tier.cacheReadInputTokenPrice());
     }
 
     @Test
     void mergeKeepsTheBaseRatioOfRatesTheRowHasNoFieldFor() {
+        var baseInput = randomRate();
+        var baseOutput = randomRate();
+        var baseCacheWrite = randomRate();
+        var inputAudioRatio = randomRatio();
+        var outputReasoningRatio = randomRatio();
+        var outputAudioRatio = randomRatio();
+        var oneHourWriteRatio = randomRatio();
         var base = ModelPrice.defaultBuilder()
-                .inputPrice(new BigDecimal("0.000001"))
-                .inputAudioTokenPrice(new BigDecimal("0.000004"))
-                .outputPrice(new BigDecimal("0.000002"))
-                .outputReasoningTokenPrice(new BigDecimal("0.000002"))
-                .outputAudioTokenPrice(new BigDecimal("0.000008"))
-                .cacheCreationInputTokenPrice(new BigDecimal("0.00000375"))
-                .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.000006"))
+                .inputPrice(baseInput)
+                .inputAudioTokenPrice(baseInput.multiply(inputAudioRatio))
+                .outputPrice(baseOutput)
+                .outputReasoningTokenPrice(baseOutput.multiply(outputReasoningRatio))
+                .outputAudioTokenPrice(baseOutput.multiply(outputAudioRatio))
+                .cacheCreationInputTokenPrice(baseCacheWrite)
+                .cacheCreationInputTokenPriceAbove1hr(baseCacheWrite.multiply(oneHourWriteRatio))
                 .calculator(SpanCostCalculator::textGenerationCost)
                 .build();
+        var inputPerMillion = randomPerMillion();
+        var outputPerMillion = randomPerMillion();
+        var cacheWritePerMillion = randomPerMillion();
         var row = fixedRow()
-                .inputPerMillion(new BigDecimal("2.00"))
-                .outputPerMillion(new BigDecimal("10.00"))
-                .cacheWritePerMillion(new BigDecimal("3.00"))
+                .inputPerMillion(inputPerMillion)
+                .outputPerMillion(outputPerMillion)
+                .cacheWritePerMillion(cacheWritePerMillion)
                 .build();
+        var input = perToken(inputPerMillion);
+        var output = perToken(outputPerMillion);
+        var cacheWrite = perToken(cacheWritePerMillion);
 
         ModelPrice merged = ModelPriceMerger.merge(base, row);
 
-        assertThat(merged.inputAudioTokenPrice()).isEqualByComparingTo("0.000008");
-        assertThat(merged.outputReasoningTokenPrice()).isEqualByComparingTo("0.00001");
-        assertThat(merged.outputAudioTokenPrice()).isEqualByComparingTo("0.00004");
-        assertThat(merged.cacheCreationInputTokenPrice()).isEqualByComparingTo("0.000003");
-        assertThat(merged.cacheCreationInputTokenPriceAbove1hr()).isEqualByComparingTo("0.0000048");
+        assertThat(merged.inputAudioTokenPrice()).isEqualByComparingTo(input.multiply(inputAudioRatio));
+        assertThat(merged.outputReasoningTokenPrice()).isEqualByComparingTo(output.multiply(outputReasoningRatio));
+        assertThat(merged.outputAudioTokenPrice()).isEqualByComparingTo(output.multiply(outputAudioRatio));
+        assertThat(merged.cacheCreationInputTokenPrice()).isEqualByComparingTo(cacheWrite);
+        assertThat(merged.cacheCreationInputTokenPriceAbove1hr())
+                .isEqualByComparingTo(cacheWrite.multiply(oneHourWriteRatio));
     }
 
     @Test
     void mergeWithAFreeOutputRateMakesReasoningFree() {
-        var base = GPT_5_MINI.toBuilder().outputReasoningTokenPrice(new BigDecimal("0.000002")).build();
+        var base = randomTextPrice().toBuilder().outputReasoningTokenPrice(randomRate()).build();
         var row = fixedRow().outputPerMillion(BigDecimal.ZERO).build();
 
         ModelPrice merged = ModelPriceMerger.merge(base, row);
@@ -99,28 +135,37 @@ class ModelPriceMergerTest {
 
     @Test
     void mergeOverAnEmptyBasePricesTheTokens() {
-        var row = fixedRow().modelName("aide-gpt-5-mini").provider(CustomModelPrice.ANY_PROVIDER)
-                .inputPerMillion(new BigDecimal("1.10")).outputPerMillion(new BigDecimal("4.40")).build();
-        var usage = SpanUsageFactory.create(null, Map.of("prompt_tokens", 1000, "completion_tokens", 500));
+        var inputPerMillion = randomPerMillion();
+        var outputPerMillion = randomPerMillion();
+        var row = fixedRow().provider(CustomModelPrice.ANY_PROVIDER)
+                .inputPerMillion(inputPerMillion).outputPerMillion(outputPerMillion).build();
+        int promptTokens = RandomUtils.secure().randomInt(1, 100_000);
+        int completionTokens = RandomUtils.secure().randomInt(1, 100_000);
+        var usage = SpanUsageFactory.create(null,
+                Map.of("prompt_tokens", promptTokens, "completion_tokens", completionTokens));
+        var expected = perToken(inputPerMillion).multiply(BigDecimal.valueOf(promptTokens))
+                .add(perToken(outputPerMillion).multiply(BigDecimal.valueOf(completionTokens)));
 
         ModelPrice merged = ModelPriceMerger.merge(ModelPrice.empty(), row);
 
-        assertThat(merged.calculator().apply(merged, usage)).isEqualByComparingTo("0.0033");
+        assertThat(merged.calculator().apply(merged, usage)).isEqualByComparingTo(expected);
     }
 
     @Test
     void mergeKeepsAPerUnitCalculator() {
         var speech = ModelPrice.defaultBuilder()
-                .audioInputCharacterPrice(new BigDecimal("0.000015"))
+                .audioInputCharacterPrice(randomRate())
                 .calculator(SpanCostCalculator::audioSpeechCost)
                 .build();
-        var row = fixedRow().modelName("tts-1").inputPerMillion(new BigDecimal("1.00")).build();
+        var row = fixedRow().inputPerMillion(randomPerMillion()).build();
 
         assertThat(ModelPriceMerger.merge(speech, row).calculator()).isSameAs(speech.calculator());
     }
 
     @Test
     void mergeWithNoRateSetReturnsTheBasePrice() {
-        assertThat(ModelPriceMerger.merge(GPT_5_MINI, fixedRow().build())).isEqualTo(GPT_5_MINI);
+        var base = randomTextPrice();
+
+        assertThat(ModelPriceMerger.merge(base, fixedRow().build())).isEqualTo(base);
     }
 }
