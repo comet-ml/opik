@@ -103,6 +103,11 @@ class TopicsNightPass {
     record Night(@NonNull LocalDate date, @NonNull Instant start) {
 
         Instant windowTo() {
+            return windowTo(date);
+        }
+
+        /** The window end of the night on {@code date}: that UTC day's start. */
+        static Instant windowTo(@NonNull LocalDate date) {
             return date.atStartOfDay(ZoneOffset.UTC).toInstant();
         }
     }
@@ -220,7 +225,7 @@ class TopicsNightPass {
      */
     Mono<UUID> byHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
-        var windowTo = night.atStartOfDay(ZoneOffset.UTC).toInstant();
+        var windowTo = Night.windowTo(night);
         return jdbi(() -> {
             if (!config.getNightly().isEnabled()) {
                 throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
