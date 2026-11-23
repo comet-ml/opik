@@ -128,6 +128,7 @@ mcp__Jira__home___jira_create_issue(
 ```
 
 ### Field Reference
+
 - **Story Points**: use `customfield_10028` directly (the `story_points` alias does NOT work at creation time)
 - **Sprint**: use `customfield_10020` with the sprint ID (a plain number). Look up sprints via `mcp__Jira__home___jira_get_sprints_from_board` (board ID `524`), filter by "Opik Sprint" prefix, and pick the active or next future sprint based on user choice.
 - **Due Date**: use `duedate` with format `YYYY-MM-DD`. Calculate relative to today's date.
@@ -136,6 +137,7 @@ mcp__Jira__home___jira_create_issue(
 ## Post-Creation: Status Transition
 
 After creating the ticket:
+
 1. Wait briefly, then use `mcp__Jira__home___jira_get_issue` to check the ticket's status. A Jira automation will move it to **BACKLOG** status automatically.
 2. Once the status is confirmed as **BACKLOG**, **you MUST use the `AskUserQuestion` tool** (not inline text) to prompt: "The ticket is now in Backlog. Would you like me to move it to **TO DO**?"
 3. If the user confirms, use `mcp__Jira__home___jira_transition_issue` to move it to "TO DO".
@@ -201,6 +203,7 @@ The author check matters: `jira_edit_comment` does not enforce ownership at the 
 ## Title Prefixes
 
 Use these prefixes in the summary based on the work area:
+
 - `[FE]` - Frontend changes
 - `[BE]` - Backend changes
 - `[SDK]` - SDK changes (Python or TypeScript)
@@ -216,6 +219,7 @@ After successfully creating a ticket, always display the ticket key as a **click
 ```
 
 For example, if the created ticket key is `OPIK-5316`, display:
+
 ```
 [OPIK-5316](https://comet-ml.atlassian.net/browse/OPIK-5316)
 ```

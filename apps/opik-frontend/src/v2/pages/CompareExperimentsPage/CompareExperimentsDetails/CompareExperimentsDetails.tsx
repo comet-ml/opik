@@ -13,7 +13,10 @@ import DateTag from "@/shared/DateTag/DateTag";
 import NavigationTag from "@/shared/NavigationTag";
 import ExperimentTag from "@/shared/ExperimentTag/ExperimentTag";
 import FeedbackScoresList from "@/v2/pages-shared/FeedbackScoresList/FeedbackScoresList";
-import { formatPassRate } from "@/shared/DataTableCells/PassRateCell";
+import {
+  formatPassRate,
+  formatPassRatePercent,
+} from "@/shared/DataTableCells/PassRateCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import {
   FeedbackScoreDisplay,
@@ -191,7 +194,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
                   }`}
                 />
                 <div className="comet-body-s-accented truncate text-muted-slate">
-                  {Math.round(experiment.pass_rate * 100)}% pass rate
+                  {formatPassRatePercent(experiment.pass_rate)} pass rate
                 </div>
               </Tag>
             </TooltipWrapper>

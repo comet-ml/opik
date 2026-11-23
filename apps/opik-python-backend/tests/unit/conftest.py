@@ -1,6 +1,13 @@
 import pytest
 
 from opik_backend import create_app
+from opik_backend.executor_process import PROCESS_NETWORK_ISOLATION_ENV_VAR
+
+
+@pytest.fixture(autouse=True)
+def process_workers_unisolated(monkeypatch):
+    """Isolation is on by default but needs root, which CI runners lack; tests of isolation set it themselves."""
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false")
 
 
 @pytest.fixture()
