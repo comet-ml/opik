@@ -74,7 +74,7 @@ class ModelPriceResolver {
         if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
         }
-        Optional<PriceMatch> match = resolve(modelName, resolvedProvider, layers, true);
+        Optional<PriceMatch> match = findPrice(modelName, resolvedProvider, layers, true);
         if (log.isDebugEnabled()) {
             match.ifPresentOrElse(
                     found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
@@ -85,7 +85,7 @@ class ModelPriceResolver {
         return match;
     }
 
-    private Optional<PriceMatch> resolve(String modelName, Optional<String> resolvedProvider, PriceLayers layers,
+    private Optional<PriceMatch> findPrice(String modelName, Optional<String> resolvedProvider, PriceLayers layers,
             boolean followAliases) {
         List<String> lookupOrder = resolvedProvider.map(ProviderRegistry::priceLookupOrder).orElse(List.of());
         // The price keys are stored without a provider prefix (LiteLLM sends "openai/gpt-4o"), so every spelling is
@@ -159,7 +159,7 @@ class ModelPriceResolver {
         Optional<String> targetProvider = StringUtils.isBlank(alias.aliasProvider())
                 ? spanProvider
                 : ProviderRegistry.resolve(alias.aliasProvider(), targetModel);
-        return resolve(targetModel, targetProvider, layers, false);
+        return findPrice(targetModel, targetProvider, layers, false);
     }
 
     private Optional<CustomMatch> findCustom(PriceLayers layers, List<String> lookupOrder,
