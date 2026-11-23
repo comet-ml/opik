@@ -8,9 +8,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.Environment;
 import com.comet.opik.api.ErrorInfo;
-import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -51,6 +49,7 @@ import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.SlimPayloadStorageCheck;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -58,7 +57,6 @@ import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
-import com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
@@ -2452,59 +2450,16 @@ class TracesResourceTest {
         @Test
         @DisplayName("a batch create and a single create store the same slim input and output")
         void batchAndSingleCreateStoreTheSameSlimPayload() {
-            var slimCase = PayloadCases.slimCase();
-            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var batchTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .input(slimCase.payload())
-                    .output(slimCase.payload())
-                    .build();
-            var singleTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .input(slimCase.payload())
-                    .output(slimCase.payload())
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, TEST_WORKSPACE);
-            traceResourceClient.createTrace(singleTrace, API_KEY, TEST_WORKSPACE);
-
-            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-            var experiment = experimentResourceClient.createPartialExperiment().build();
-            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
-            var items = Stream.of(batchTrace, singleTrace)
-                    .map(trace -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                            .experimentId(experiment.id())
-                            .traceId(trace.id())
-                            .projectId(projectId)
-                            .projectName(projectName)
-                            .totalEstimatedCost(null)
-                            .usage(null)
-                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                    trace.startTime(), trace.endTime()))
-                            .executionPolicy(ExecutionPolicy.DEFAULT)
-                            .build())
-                    .toList();
-            experimentResourceClient.createExperimentItem(Set.copyOf(items), API_KEY, TEST_WORKSPACE);
-
-            var actualItems = experimentResourceClient.streamExperimentItems(
-                    ExperimentItemStreamRequest.builder().experimentName(experiment.name()).truncate(true).build(),
-                    API_KEY, TEST_WORKSPACE);
-
-            var expectedItems = items.stream()
-                    .map(item -> item.toBuilder()
-                            .input(slimCase.slim())
-                            .output(slimCase.slim())
-                            .feedbackScores(null)
-                            .comments(null)
-                            .createdBy(USER)
-                            .lastUpdatedBy(USER)
-                            .build())
-                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
-                    .toList();
-            ExperimentTestAssertions.assertExperimentResults(actualItems, expectedItems, USER);
+            SlimPayloadStorageCheck.builder()
+                    .traceResourceClient(traceResourceClient)
+                    .projectResourceClient(projectResourceClient)
+                    .experimentResourceClient(experimentResourceClient)
+                    .factory(factory)
+                    .apiKey(API_KEY)
+                    .workspaceName(TEST_WORKSPACE)
+                    .user(USER)
+                    .build()
+                    .assertBatchAndSingleCreateStoreTheSameSlimPayload();
         }
     }
 
