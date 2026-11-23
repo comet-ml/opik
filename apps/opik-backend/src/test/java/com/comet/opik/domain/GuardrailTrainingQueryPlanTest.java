@@ -208,7 +208,7 @@ class GuardrailTrainingQueryPlanTest {
                 // The model row itself is read by primary key, so only its runs show in the plan.
                 models("a model with its serving and latest run ids", dao -> dao.findById(modelId, workspaceId),
                         modelRuns),
-                models("delete guard", dao -> dao.isReferencedByRule(modelId, workspaceId),
+                models("delete guard", dao -> dao.isUsedByCustomClassifierRule(modelId, workspaceId),
                         Map.of(POLICIES, POLICIES_BY_WORKSPACE, RULES, Set.of(RULES_BY_POLICY))),
                 runs("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId), Map.of(RUNS, Set.of(PRIMARY))),
                 runs("serving run", dao -> dao.findServingRun(modelId, workspaceId), modelRuns),

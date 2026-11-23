@@ -254,7 +254,7 @@ class GuardrailModelDAOTest {
 
     @Test
     @DisplayName("A model is referenced only by a CUSTOM_CLASSIFIER rule of a policy in its own workspace")
-    void isReferencedByRule() {
+    void isUsedByCustomClassifierRule() {
         var workspaceId = UUID.randomUUID().toString();
         var referenced = createModel(workspaceId, "referenced").modelId();
         var namedByAnotherRuleType = createModel(workspaceId, "named by another rule type").modelId();
@@ -264,10 +264,10 @@ class GuardrailModelDAOTest {
         createPolicy(workspaceId, GuardrailType.TOPIC, namedByAnotherRuleType);
         createPolicy(UUID.randomUUID().toString(), GuardrailType.CUSTOM_CLASSIFIER, referencedFromAnotherWorkspace);
 
-        assertThat(models.isReferencedByRule(referenced, workspaceId)).isTrue();
-        assertThat(models.isReferencedByRule(namedByAnotherRuleType, workspaceId)).isFalse();
-        assertThat(models.isReferencedByRule(referencedFromAnotherWorkspace, workspaceId)).isFalse();
-        assertThat(models.isReferencedByRule(unreferenced, workspaceId)).isFalse();
+        assertThat(models.isUsedByCustomClassifierRule(referenced, workspaceId)).isTrue();
+        assertThat(models.isUsedByCustomClassifierRule(namedByAnotherRuleType, workspaceId)).isFalse();
+        assertThat(models.isUsedByCustomClassifierRule(referencedFromAnotherWorkspace, workspaceId)).isFalse();
+        assertThat(models.isUsedByCustomClassifierRule(unreferenced, workspaceId)).isFalse();
     }
 
     @Test

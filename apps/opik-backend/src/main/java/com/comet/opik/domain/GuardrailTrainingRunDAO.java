@@ -27,23 +27,24 @@ import java.util.UUID;
 @RegisterConstructorMapper(GuardrailTrainingRun.class)
 public interface GuardrailTrainingRunDAO {
 
-    String SELECT_RUNS = """
-            SELECT id, model_id, workspace_id, status, status_message, attempt, metadata, created_at, created_by,
-                last_updated_at, last_updated_by
-            FROM guardrail_training_runs
-            """;
-
-    @SqlQuery(SELECT_RUNS + "WHERE id = :id AND workspace_id = :workspaceId")
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
+            WHERE id = :id AND workspace_id = :workspaceId
+            """)
     Optional<GuardrailTrainingRun> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     // The serving and latest runs of a page of models, by the run ids read with each model.
-    @SqlQuery(SELECT_RUNS + "WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
+            WHERE workspace_id = :workspaceId AND id IN (<ids>)
+            """)
     @UseStringTemplateEngine
     List<GuardrailTrainingRun> findByIds(@BindList("ids") Collection<UUID> ids,
             @Bind("workspaceId") String workspaceId);
 
     // The run a check with the model is served by.
-    @SqlQuery(SELECT_RUNS + """
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
             WHERE model_id = :modelId AND workspace_id = :workspaceId AND status = 'COMPLETED'
             ORDER BY created_at DESC
             LIMIT 1
@@ -51,7 +52,8 @@ public interface GuardrailTrainingRunDAO {
     Optional<GuardrailTrainingRun> findServingRun(@Bind("modelId") UUID modelId,
             @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery(SELECT_RUNS + """
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
             WHERE model_id = :modelId AND workspace_id = :workspaceId AND status IN ('QUEUED', 'RUNNING')
             LIMIT 1
             """)
@@ -61,7 +63,8 @@ public interface GuardrailTrainingRunDAO {
     // The attempt a retry retries, whose dataset it copies. No column links them: a model has at most one run in
     // flight, and a retry is inserted in the transaction that fails the attempt before it, so that attempt is the
     // model's most recent FAILED run before the retry. Empty for a first attempt.
-    @SqlQuery(SELECT_RUNS + """
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
             WHERE model_id = :run.modelId AND workspace_id = :run.workspaceId AND status = 'FAILED'
                 AND created_at < :run.createdAt AND attempt = :run.attempt - 1
             ORDER BY created_at DESC
@@ -70,7 +73,8 @@ public interface GuardrailTrainingRunDAO {
     Optional<GuardrailTrainingRun> findPreviousAttempt(@BindMethods("run") GuardrailTrainingRun run);
 
     // The index finds the model's runs, tens at most; their order across statuses is a sort in memory.
-    @SqlQuery(SELECT_RUNS + """
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
             WHERE model_id = :modelId AND workspace_id = :workspaceId
             ORDER BY created_at DESC, id DESC
             LIMIT :limit OFFSET :offset
@@ -82,7 +86,8 @@ public interface GuardrailTrainingRunDAO {
     long countByModel(@Bind("modelId") UUID modelId, @Bind("workspaceId") String workspaceId);
 
     // The run worker's scan, the one query across workspaces: the runs in flight, the longest unchanged first.
-    @SqlQuery(SELECT_RUNS + """
+    @SqlQuery("""
+            SELECT * FROM guardrail_training_runs
             WHERE status IN ('QUEUED', 'RUNNING')
             ORDER BY last_updated_at
             LIMIT :limit

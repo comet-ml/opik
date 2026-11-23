@@ -6,7 +6,6 @@ import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -86,12 +85,17 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // The S3 key layout the run's dataset and adapter are written with, so a later layout leaves this run readable.
+        var metadata = JsonUtils.createObjectNode();
+        metadata.putObject("files").put("layout", FILES_LAYOUT);
+
         var run = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(GuardrailTrainingRunDAO.class);
-            dao.insert(runId, modelId, workspaceId, 1, createdMetadata(), userName);
+            dao.insert(runId, modelId, workspaceId, 1, metadata, userName);
             return dao.findById(runId, workspaceId).orElseThrow();
         });
-        log.info("Created guardrail training run '{}' of model '{}' in workspace '{}'", runId, modelId, workspaceId);
+        log.info("Created guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, modelId,
+                workspaceId);
         return run;
     }
 
@@ -164,7 +168,7 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
                     .entity(new ErrorMessage(List.of("Guardrail training run has already ended")))
                     .build());
         }
-        log.info("Cancelled guardrail training run '{}' of model '{}' in workspace '{}'", runId, modelId,
+        log.info("Cancelled guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, modelId,
                 run.workspaceId());
     }
 
@@ -178,8 +182,8 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
             dao.deleteByModel(modelId, workspaceId);
             return ids;
         });
-        log.info("Deleted '{}' guardrail training runs of model '{}' in workspace '{}'", runIds.size(), modelId,
-                workspaceId);
+        log.info("Deleted guardrail training runs, modelId '{}', workspaceId '{}', count '{}'", modelId, workspaceId,
+                runIds.size());
         return runIds;
     }
 
@@ -191,12 +195,5 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
     @Override
     public void reconcile(@NonNull GuardrailTrainingRun run) {
         throw new UnsupportedOperationException(JOBS_NOT_IMPLEMENTED);
-    }
-
-    /** A run's metadata at creation: the S3 key layout its dataset and adapter are written with. */
-    private static ObjectNode createdMetadata() {
-        var metadata = JsonUtils.createObjectNode();
-        metadata.putObject("files").put("layout", FILES_LAYOUT);
-        return metadata;
     }
 }

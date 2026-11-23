@@ -60,8 +60,8 @@ class GuardrailTrainingRunDAOTest {
         return JsonUtils.getJsonNodeFromString(value);
     }
 
-    /** A new model's first attempt. The runs table needs no model row: it holds no foreign key. */
-    private GuardrailTrainingRun createModel(String workspaceId) {
+    /** A first attempt of a new model. The runs table needs no model row: it holds no foreign key. */
+    private GuardrailTrainingRun createFirstRun(String workspaceId) {
         var runId = ID_GENERATOR.generate();
         runs.insert(runId, ID_GENERATOR.generate(), workspaceId, 1, CREATED_METADATA, USER);
         return find(runId, workspaceId);
@@ -94,7 +94,7 @@ class GuardrailTrainingRunDAOTest {
     void insert() {
         var workspaceId = UUID.randomUUID().toString();
 
-        var run = createModel(workspaceId);
+        var run = createFirstRun(workspaceId);
 
         assertThat(run)
                 .usingRecursiveComparison()
@@ -113,7 +113,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A status write moves the run and merges each metadata patch into what is there")
     void updateStatusMergesMetadata() {
-        var run = createModel(UUID.randomUUID().toString());
+        var run = createFirstRun(UUID.randomUUID().toString());
 
         assertThat(runs.updateStatus(run.id(), run.workspaceId(), QUEUED, RUNNING, null,
                 json("{\"job\": {\"id\": \"job-1\"}}"), WORKER)).isOne();
@@ -134,7 +134,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A status write from a status the run has already left writes nothing")
     void updateStatusWhenRunMovedByAnotherWriterWritesNothing() {
-        var queued = createModel(UUID.randomUUID().toString());
+        var queued = createFirstRun(UUID.randomUUID().toString());
         var running = move(queued, RUNNING);
 
         assertThat(runs.updateStatus(queued.id(), queued.workspaceId(), QUEUED, CANCELLED, "cancelled",
@@ -146,7 +146,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A status write to a run in another workspace writes nothing")
     void updateStatusWhenAnotherWorkspaceWritesNothing() {
-        var run = createModel(UUID.randomUUID().toString());
+        var run = createFirstRun(UUID.randomUUID().toString());
 
         assertThat(runs.updateStatus(run.id(), UUID.randomUUID().toString(), QUEUED, CANCELLED, null, null, USER))
                 .isZero();
@@ -157,7 +157,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A failure with a retry ends the run FAILED and queues the next attempt, which finds it as previous")
     void failAndQueueRetry() {
-        var running = move(createModel(UUID.randomUUID().toString()), RUNNING);
+        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
         var failure = json("{\"failure\": {\"reason\": \"capacity\", \"retryable\": true}}");
         var nextId = ID_GENERATOR.generate();
 
@@ -191,7 +191,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A repeated failure of the same run queues no second attempt")
     void failAndQueueRetryWhenRepeatedQueuesNoSecondAttempt() {
-        var running = move(createModel(UUID.randomUUID().toString()), RUNNING);
+        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
         var next = failAndRetry(running);
 
         assertThat(runs.failAndQueueRetry(running, "capacity", null, ID_GENERATOR.generate(), CREATED_METADATA,
@@ -205,7 +205,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("When the next attempt cannot be inserted, the run's FAILED is rolled back with it")
     void failAndQueueRetryWhenInsertFailsRollsBack() {
-        var running = move(createModel(UUID.randomUUID().toString()), RUNNING);
+        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
 
         // The run's own id as the next attempt's: the insert hits the primary key after the update went through, in the
         // one WRITE transaction a caller runs the method in.
@@ -222,9 +222,9 @@ class GuardrailTrainingRunDAOTest {
     @DisplayName("Runs are found by id in their workspace only")
     void findByIds() {
         var workspaceId = UUID.randomUUID().toString();
-        var first = createModel(workspaceId);
-        var second = move(createModel(workspaceId), COMPLETED);
-        var otherWorkspace = createModel(UUID.randomUUID().toString());
+        var first = createFirstRun(workspaceId);
+        var second = move(createFirstRun(workspaceId), COMPLETED);
+        var otherWorkspace = createFirstRun(UUID.randomUUID().toString());
 
         assertThat(runs.findByIds(List.of(first.id(), second.id(), otherWorkspace.id()), workspaceId))
                 .containsExactlyInAnyOrder(first, second);
@@ -233,7 +233,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("The serving run is the most recent completed one; a newer failed run does not displace it")
     void findServingRun() {
-        var first = createModel(UUID.randomUUID().toString());
+        var first = createFirstRun(UUID.randomUUID().toString());
         assertThat(runs.findServingRun(first.modelId(), first.workspaceId())).isEmpty();
 
         move(first, COMPLETED);
@@ -247,7 +247,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("The run in flight is found while QUEUED or RUNNING, and not once it ends")
     void findInFlight() {
-        var queued = createModel(UUID.randomUUID().toString());
+        var queued = createFirstRun(UUID.randomUUID().toString());
         assertThat(runs.findInFlight(queued.modelId(), queued.workspaceId())).contains(queued);
 
         var running = move(queued, RUNNING);
@@ -260,7 +260,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A first attempt has no previous attempt, even after an earlier training of the model failed")
     void findPreviousAttemptWhenFirstAttemptReturnsEmpty() {
-        var earlierTraining = move(createModel(UUID.randomUUID().toString()), FAILED);
+        var earlierTraining = move(createFirstRun(UUID.randomUUID().toString()), FAILED);
 
         var retrained = retrain(earlierTraining);
 
@@ -270,7 +270,7 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A model's runs page newest first, in its workspace only")
     void findByModel() {
-        var first = move(createModel(UUID.randomUUID().toString()), COMPLETED);
+        var first = move(createFirstRun(UUID.randomUUID().toString()), COMPLETED);
         var second = move(retrain(first), FAILED);
         var third = retrain(first);
 
@@ -285,9 +285,9 @@ class GuardrailTrainingRunDAOTest {
     @DisplayName("The worker's scan finds the runs in flight of every workspace, the longest unchanged first")
     void findAllInFlight() {
         var workspaceId = UUID.randomUUID().toString();
-        var queued = createModel(workspaceId);
-        var running = move(createModel(UUID.randomUUID().toString()), RUNNING);
-        var completed = move(createModel(workspaceId), COMPLETED);
+        var queued = createFirstRun(workspaceId);
+        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
+        var completed = move(createFirstRun(workspaceId), COMPLETED);
         var ours = Set.of(queued.id(), running.id(), completed.id());
 
         // The container is shared with other test classes, whose runs in flight the scan also returns.
@@ -300,9 +300,9 @@ class GuardrailTrainingRunDAOTest {
     @Test
     @DisplayName("A model's runs are listed and deleted in its workspace only")
     void deleteByModel() {
-        var first = move(createModel(UUID.randomUUID().toString()), FAILED);
+        var first = move(createFirstRun(UUID.randomUUID().toString()), FAILED);
         var second = retrain(first);
-        var otherModel = createModel(first.workspaceId());
+        var otherModel = createFirstRun(first.workspaceId());
 
         assertThat(runs.findIdsByModel(first.modelId(), first.workspaceId()))
                 .containsExactlyInAnyOrder(first.id(), second.id());
