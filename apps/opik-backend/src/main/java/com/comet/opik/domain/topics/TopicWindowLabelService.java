@@ -350,7 +350,7 @@ public class TopicWindowLabelService {
                 .thenReturn(PassOutcome.COMPLETE)
                 .onErrorResume(exception -> {
                     log.warn("Topics labelling pass could not mark its run complete, a later pass marks it, run '{}', "
-                            + "project '{}', errors '{}'", runId, projectId, TopicsErrors.formatError(exception));
+                            + "project '{}'", runId, projectId, exception);
                     return Mono.just(PassOutcome.FAILED);
                 });
     }
