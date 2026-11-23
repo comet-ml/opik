@@ -1673,6 +1673,102 @@ def test_rouge_score_using_custom_tokenizer(
     )
 
 
+@pytest.mark.parametrize("rouge_type", ["rouge1", "rouge2", "rougeL", "rougeLsum"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ذهب الولد إلى المدرسة صباحا مع أخيه",  # Arabic
+        "مُحَمَّدٌ رَسُولُ اللَّهِ",  # Arabic with diacritics (harakat)
+        "Кошка сидит на ковре у окна",  # Russian
+        "Η γάτα κάθεται στο χαλί",  # Greek
+        "बिल्ली चटाई पर बैठी है",  # Hindi, with vowel signs
+        "我 喜欢 学习 中文",  # Chinese, pre-segmented
+    ],
+)
+def test_rouge_score_non_latin_identical_texts_score_one(text, rouge_type):
+    metric = rouge.ROUGE(rouge_type=rouge_type, track=False)
+    result = metric.score(output=text, reference=text)
+    assert result.value == pytest.approx(1.0)
+
+
+def test_rouge_score_non_latin_partial_overlap():
+    # Arabic: 2 of 3 candidate words appear in the 4-word reference.
+    # Precision = 2/3, Recall = 2/4, F1 = 2 * (2/3 * 1/2) / (2/3 + 1/2) = 0.5714
+    metric = rouge.ROUGE(rouge_type="rouge1", track=False)
+    result = metric.score(output="ذهب الولد مسرعا", reference="ذهب الولد إلى المدرسة")
+    assert result.value == pytest.approx(4 / 7)
+
+
+def test_rouge_score_diacritics_stay_inside_words():
+    # Combining marks must not split a word into separate letters, otherwise
+    # unrelated words that share letters would look like partial matches.
+    metric = rouge.ROUGE(rouge_type="rouge1", track=False)
+    result = metric.score(output="مُحَمَّدٌ", reference="مَحْمُودٌ")
+    assert result.value == 0.0
+
+
+def test_rouge_score_accented_latin_words_are_kept_whole():
+    metric = rouge.ROUGE(rouge_type="rouge1", track=False)
+    assert metric.score(output="Le café", reference="Le caf").value == pytest.approx(
+        0.5
+    )
+
+
+@pytest.mark.parametrize("use_stemmer", [False, True])
+def test_rouge_default_tokenizer_matches_rouge_score_for_ascii_text(use_stemmer):
+    from rouge_score import tokenizers
+
+    texts = [
+        "The quick brown fox jumps over the lazy dog.",
+        "John is an accomplished artist.\n He is part of a music band",
+        "It's 3:45pm -- the user_id=42 (v2.0) e-mail's [OK]!",
+        "The brown dogs jumps on the log quickly",
+        "running runs ran runner's RUNNING",
+        "  \t\n ",
+    ]
+    expected = tokenizers.DefaultTokenizer(use_stemmer=use_stemmer)
+    actual = rouge._UnicodeTokenizer(use_stemmer=use_stemmer)
+    for text in texts:
+        assert actual.tokenize(text) == expected.tokenize(text), text
+
+
+@pytest.mark.parametrize("rouge_type", ["rouge1", "rouge2", "rougeL", "rougeLsum"])
+def test_rouge_score_nfc_and_nfd_spellings_match(rouge_type):
+    # The same word spelled with a precomposed character (NFC) and with a base
+    # letter plus a combining mark (NFD) must tokenize identically, otherwise
+    # canonically equivalent text scores below 1.0.
+    import unicodedata
+
+    text = "Le café est très bon"
+    nfc = unicodedata.normalize("NFC", text)
+    nfd = unicodedata.normalize("NFD", text)
+    assert nfc != nfd  # guard: the two forms really do differ byte-for-byte
+
+    metric = rouge.ROUGE(rouge_type=rouge_type, track=False)
+    assert metric.score(output=nfd, reference=nfc).value == pytest.approx(1.0)
+
+
+def test_rouge_tokenizer_drops_leading_combining_mark():
+    # A combining mark with no preceding base character must not create a token
+    # that can never match a correctly ordered word.
+    tokenizer = rouge._UnicodeTokenizer()
+    assert tokenizer.tokenize("\u0301abc") == ["abc"]
+
+
+def test_rouge2_is_zero_for_identical_unsegmented_cjk():
+    # Documented limitation: without word segmentation an unsegmented CJK run is a
+    # single token, so there are no bigrams and rouge2 is 0.0 even for identical
+    # text, while rouge1 is still 1.0. Users should pass a word-segmenting
+    # tokenizer for such languages.
+    text = "我喜欢学习中文"
+    assert rouge.ROUGE(rouge_type="rouge1", track=False).score(
+        output=text, reference=text
+    ).value == pytest.approx(1.0)
+    assert rouge.ROUGE(rouge_type="rouge2", track=False).score(
+        output=text, reference=text
+    ).value == pytest.approx(0.0)
+
+
 def test_tone_empty_lexicons_disable_the_defaults():
     text = "This is terrible and useless."
 
