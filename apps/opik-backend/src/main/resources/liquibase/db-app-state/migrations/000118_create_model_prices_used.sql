@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000114_create_model_prices_used
+--changeset aadereiko:000118_create_model_prices_used
 --comment: Create model_prices_used — the models an organization's spans used, per workspace and day (OPIK-9134)
 
 -- One row per organization, day, workspace, model and provider, written at most once a day per combination while
