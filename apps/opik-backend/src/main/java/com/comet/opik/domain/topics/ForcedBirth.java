@@ -106,7 +106,7 @@ public class ForcedBirth {
                     .schema(allowAssign ? TopicPrompts.NAMING_GROUP_SCHEMA : TopicPrompts.NAMING_GROUP_NEW_SCHEMA)
                     .maxTokens(NAMING_TOKENS)
                     .build();
-            return new NightStep.Ask<>(request, answer -> {
+            return NightStep.ask(request, answer -> {
                 var done = new HashSet<Integer>();
                 var rejected = new ArrayList<NightGroup>();
                 var assigned = allowAssign

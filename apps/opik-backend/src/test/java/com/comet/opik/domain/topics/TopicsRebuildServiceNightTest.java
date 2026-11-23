@@ -89,7 +89,7 @@ class TopicsRebuildServiceNightTest {
         assertThat(calls).extracting(call -> call.getKey().requestId())
                 .containsExactly(runId + ":naming", runId + ":verify_naming", runId + ":naming_new");
         assertThat(calls).extracting(call -> call.getKey().maxTokens()).containsExactly(11, 12, 13);
-        deadline(calls.get(0).getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
+        deadline(calls.getFirst().getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
         deadline(calls.get(1).getValue(), started, ended, config.getBuild().getVerifyDeadline().toJavaDuration());
         deadline(calls.get(2).getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
         assertThat(answers).containsExactly(Optional.of(object("{\"step\": 1}")), Optional.empty(),
@@ -184,7 +184,7 @@ class TopicsRebuildServiceNightTest {
         private NightStep<Boolean> ask(LlmCall call, String tag, int maxTokens) {
             var request = LlmRequest.builder().call(call).tag(tag).prompt("prompt " + tag)
                     .schema(InferenceJson.MAPPER.createObjectNode()).maxTokens(maxTokens).build();
-            return new NightStep.Ask<>(request, answer -> {
+            return NightStep.ask(request, answer -> {
                 answers.add(Optional.ofNullable(answer));
                 return NightStep.done(true);
             });

@@ -35,14 +35,14 @@ class TopicsRunReconcilerTest {
         var run = new InFlightRun("workspace", UUID.randomUUID(), UUID.randomUUID(),
                 TopicProject.RunMode.NIGHTLY_UPDATE, TopicProject.RunStatus.QUEUED, now.minus(1, ChronoUnit.DAYS), null,
                 null, false);
-        when(store.dropQueued(any(), any())).thenReturn(Mono.just(true));
+        when(store.dropQueued(any(), any(), any(), any())).thenReturn(Mono.just(true));
 
         var inFlight = new TopicsRunReconciler(config, store, publisher, candidates)
                 .reconcile(List.of(run), List.of("workspace"), LocalDate.parse("2026-11-18"), now)
                 .block();
 
         assertThat(inFlight).isEmpty();
-        verify(store).dropQueued(run, CancelReason.DEADLINE);
+        verify(store).dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE);
         verifyNoInteractions(publisher, candidates);
     }
 }

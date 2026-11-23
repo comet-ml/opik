@@ -97,10 +97,7 @@ public record TopicProject(
         private final String value;
 
         public static RunMode fromString(String value) {
-            return Arrays.stream(values())
-                    .filter(candidate -> candidate.value.equals(value))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run mode '%s'".formatted(value)));
+            return fromValue(values(), value, "run mode");
         }
     }
 
@@ -126,10 +123,7 @@ public record TopicProject(
         }
 
         public static RunStatus fromString(String value) {
-            return Arrays.stream(values())
-                    .filter(candidate -> candidate.value.equals(value))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run status '%s'".formatted(value)));
+            return fromValue(values(), value, "run status");
         }
     }
 
@@ -144,11 +138,7 @@ public record TopicProject(
         private final String value;
 
         public static CancelReason fromString(String value) {
-            return Arrays.stream(values())
-                    .filter(candidate -> candidate.value.equals(value))
-                    .findFirst()
-                    .orElseThrow(
-                            () -> new IllegalArgumentException("Unknown topic cancel reason '%s'".formatted(value)));
+            return fromValue(values(), value, "cancel reason");
         }
     }
 
@@ -183,10 +173,14 @@ public record TopicProject(
         private final String value;
 
         public static RunError fromString(String value) {
-            return Arrays.stream(values())
-                    .filter(candidate -> candidate.value.equals(value))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run error '%s'".formatted(value)));
+            return fromValue(values(), value, "run error");
         }
+    }
+
+    private static <E extends Enum<E> & HasValue> E fromValue(E[] values, String value, String what) {
+        return Arrays.stream(values)
+                .filter(candidate -> candidate.getValue().equals(value))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown topic %s '%s'".formatted(what, value)));
     }
 }

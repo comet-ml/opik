@@ -57,7 +57,8 @@ class TopicsRunReconciler {
         var stale = now.minus(runs.getAbandonGrace().toJavaDuration());
         return switch (run.runStatus()) {
             case QUEUED -> reason.isPresent()
-                    ? store.dropQueued(run, reason.get()).map(dropped -> !dropped)
+                    ? store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason.get())
+                            .map(dropped -> !dropped)
                     : republishIfStale(run, night, now);
             case RUNNING -> {
                 if (run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)) {
@@ -105,7 +106,8 @@ class TopicsRunReconciler {
                 .projectId(run.projectId()).mode(run.runMode());
         var current = TopicsNightPass.current(config.getNightly().getSchedule(), now).map(TopicsNightPass.Night::date);
         if (run.runMode() == TopicProject.RunMode.NIGHTLY_UPDATE && current.isEmpty()) {
-            return store.dropQueued(run, CancelReason.DEADLINE).map(dropped -> !dropped);
+            return store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE)
+                    .map(dropped -> !dropped);
         }
         var counted = switch (run.runMode()) {
             case FIRST_BUILD -> night;

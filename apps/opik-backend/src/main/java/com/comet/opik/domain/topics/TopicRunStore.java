@@ -6,8 +6,10 @@ import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -167,12 +169,16 @@ class TopicRunStore {
         })).doOnNext(code -> code.ifPresent(value -> countFailed(workspaceId, value)));
     }
 
-    /** {@code queued -> failed} with {@code cancelled}, for a queued run whose project or workspace left. */
-    Mono<Boolean> dropQueued(@NonNull InFlightRun run, @NonNull TopicProject.CancelReason reason) {
-        return write(dao -> dao.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason, Instant.now()))
+    /**
+     * {@code queued -> failed} with {@code cancelled}: its project or workspace left (the reason), or a run by hand was
+     * not published (no reason).
+     */
+    Mono<Boolean> dropQueued(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @Nullable TopicProject.CancelReason reason) {
+        return write(dao -> dao.dropQueued(workspaceId, projectId, runId, reason, Instant.now()))
                 .doOnNext(dropped -> {
                     if (dropped) {
-                        countFailed(run.workspaceId(), RunError.CANCELLED);
+                        countFailed(workspaceId, RunError.CANCELLED);
                     }
                 });
     }
@@ -297,10 +303,11 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(saved -> keepIfProjectExists(run));
+                .flatMap(saved -> deleteTopicsIfProjectGone(run));
     }
 
     /** The list a nightly update read: its state, the run that saved it, and the ids of its stored topics. */
+    @Builder(toBuilder = true)
     record SavedList(@NonNull NightState state, @NonNull UUID listRunId, @NonNull Set<UUID> topicIds) {
     }
 
@@ -308,6 +315,7 @@ class TopicRunStore {
      * What a nightly update writes to MySQL. {@code keep} is false when no topic stayed live: then the list is cleared
      * and every stored topic is in {@code retired}.
      */
+    @Builder(toBuilder = true)
     record NightSave(boolean keep, @NonNull List<Topic> inserted, @NonNull List<Topic> updated,
             @NonNull List<UUID> retired, PrototypeVectors otherVectors) {
     }
@@ -333,8 +341,11 @@ class TopicRunStore {
                     .night(night)
                     .ids(idGenerator::generateId)
                     .build();
-            return new SavedList(state, project.get().listRunId(),
-                    topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()));
+            return SavedList.builder()
+                    .state(state)
+                    .listRunId(project.get().listRunId())
+                    .topicIds(topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()))
+                    .build();
         }));
     }
 
@@ -395,14 +406,23 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(__ -> keepIfProjectExists(run))
+                .flatMap(__ -> deleteTopicsIfProjectGone(run))
                 .map(exists -> exists && save.keep());
     }
 
-    /** False, after deleting the run's topics, when the project was deleted during the run. */
-    private Mono<Boolean> keepIfProjectExists(TopicRun run) {
+    /** Whether the project is still in {@code projects}. */
+    Mono<Boolean> projectExists(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return jdbi(() -> exists(workspaceId, projectId));
+    }
+
+    private boolean exists(String workspaceId, UUID projectId) {
+        return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
+    }
+
+    /** True when the project still exists; when it was deleted during the run, deletes the run's topics and is false. */
+    private Mono<Boolean> deleteTopicsIfProjectGone(TopicRun run) {
         return jdbi(() -> {
-            boolean exists = !projectService.findByIds(run.workspaceId(), Set.of(run.projectId())).isEmpty();
+            boolean exists = exists(run.workspaceId(), run.projectId());
             if (!exists) {
                 int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                         .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
