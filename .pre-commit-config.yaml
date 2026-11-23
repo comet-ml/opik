@@ -337,6 +337,37 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Generative UI engine (sdks/genui) — oxlint --fix + oxfmt on changed files;
+  # whole-workspace typecheck. language: system → uses sdks/genui/node_modules.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: genui-lint
+        name: 🧩 oxlint + oxfmt — genui
+        entry: scripts/precommit-genui-lint.sh
+        language: system
+        files: ^sdks/genui/.*\.(ts|tsx|js|jsx|mjs|cjs|css)$
+        exclude: ^sdks/genui/(.*/)?(dist|node_modules)/
+      - id: genui-typecheck
+        name: 🧩 typecheck — genui
+        entry: npm --prefix sdks/genui run typecheck
+        language: system
+        files: ^sdks/genui/.*\.(ts|tsx)$
+        exclude: ^sdks/genui/(.*/)?(dist|node_modules)/
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: 🧩 ruff — genui python
+        args: [ --fix, --show-fixes]
+        files: ^sdks/genui/python/
+      - id: ruff-format
+        name: 🧩 ruff-format — genui python
+        files: ^sdks/genui/python/
+
+  # ---------------------------------------------------------------------------
   # TypeScript SDK (sdks/typescript) — eslint + whole-project typecheck.
   # ---------------------------------------------------------------------------
   - repo: local
