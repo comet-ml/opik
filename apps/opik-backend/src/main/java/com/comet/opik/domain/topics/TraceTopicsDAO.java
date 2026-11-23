@@ -186,7 +186,7 @@ public class TraceTopicsDAO {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     record TopicCount(@NonNull UUID topicId, long traces) {
     }
 }

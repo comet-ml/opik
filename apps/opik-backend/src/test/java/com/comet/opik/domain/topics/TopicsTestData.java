@@ -155,11 +155,11 @@ final class TopicsTestData {
         var savedAt = night.plus(Duration.ofHours(2));
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
+            var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
+            projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(newId())
@@ -171,7 +171,7 @@ final class TopicsTestData {
                     .size(size)
                     .vectors(vectors)
                     .build()));
-            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+            projectDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
     }
@@ -180,11 +180,11 @@ final class TopicsTestData {
      * Puts {@code runId} on the project's row, running since {@code at} with a deadline an hour later, as the
      * planner's queue and a pod's claim do. The project must have no run in flight.
      */
-    static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId,
+    static void startRun(TopicProjectDAO projectDAO, String workspaceId, UUID projectId, UUID runId,
             TopicProject.RunMode mode, Instant at) {
-        runDAO.ensureRow(workspaceId, projectId);
-        if (runDAO.queue(workspaceId, projectId, runId, mode, at) != 1
-                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+        projectDAO.ensureRow(workspaceId, projectId);
+        if (projectDAO.queue(workspaceId, projectId, runId, mode, at) != 1
+                || projectDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
             throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
         }
     }

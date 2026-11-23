@@ -274,7 +274,7 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY, when ai-labels is on) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY, when Topics is on) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
+    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY, when ai-labels is on) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY) + inference.maxConcurrentGenerates (OPIK_INFERENCE_MAX_CONCURRENT_GENERATES), the last two when Topics is on, must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
     public boolean isInferenceCallsWithinConnectionPool() {
         if (!serviceToggles.isGuardrailsValidationsEnabled() || inference == null || jerseyClient == null) {
             return true;
@@ -285,14 +285,24 @@ public class OpikConfiguration extends JobConfiguration {
         long embedConcurrency = topics.isEnabled() && topics.getVectors() != null
                 ? topics.getVectors().getEmbedConcurrency()
                 : 0;
-        return inference.getMaxConcurrentDecides() + loadConcurrency + embedConcurrency < jerseyClient
-                .getMaxConnectionsPerRoute();
+        long generateConcurrency = topics.isEnabled() ? inference.getMaxConcurrentGenerates() : 0;
+        return inference.getMaxConcurrentDecides() + loadConcurrency + embedConcurrency
+                + generateConcurrency < jerseyClient.getMaxConnectionsPerRoute();
     }
 
     @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedBatchSize must not be above inference.limits.maxEmbedInputs") public boolean isTopicsEmbedBatchWithinLimits() {
         return topics.getVectors() == null || inference.getLimits() == null
                 || topics.getVectors().getEmbedBatchSize() <= inference.getLimits().getMaxEmbedInputs();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.build.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
+        var build = topics.getBuild();
+        var limits = inference.getLimits();
+        return build == null || build.getLlmDeadline() == null || limits == null
+                || limits.getMaxGenerateBatchDeadline() == null
+                || build.getLlmDeadline().toMilliseconds() <= limits.getMaxGenerateBatchDeadline().toMilliseconds();
     }
 
     @JsonIgnore
