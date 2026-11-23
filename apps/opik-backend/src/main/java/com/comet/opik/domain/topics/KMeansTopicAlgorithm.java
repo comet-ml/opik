@@ -159,17 +159,17 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 otherVectors == null ? List.of() : otherVectors.vectors());
         var ids = topics.stream().map(Topic::id).toList();
         return vectors -> {
-            var usable = IntStream.range(0, vectors.size()).filter(i -> TopicEmbedding.usable(vectors.get(i)))
+            var usableIndexes = IntStream.range(0, vectors.size()).filter(i -> TopicEmbedding.usable(vectors.get(i)))
                     .toArray();
             int d = TopicEmbedding.DIMENSIONS;
-            var flat = new float[usable.length * d];
-            for (int i = 0; i < usable.length; i++) {
-                System.arraycopy(vectors.get(usable[i]), 0, flat, i * d, d);
+            var flat = new float[usableIndexes.length * d];
+            for (int i = 0; i < usableIndexes.length; i++) {
+                System.arraycopy(vectors.get(usableIndexes[i]), 0, flat, i * d, d);
             }
             var labels = assigner.assign(flat);
             var out = new UUID[vectors.size()];
-            for (int i = 0; i < usable.length; i++) {
-                out[usable[i]] = labels[i] == OTHER ? TraceTopic.OTHER : ids.get(labels[i]);
+            for (int i = 0; i < usableIndexes.length; i++) {
+                out[usableIndexes[i]] = labels[i] == OTHER ? TraceTopic.OTHER : ids.get(labels[i]);
             }
             return out;
         };

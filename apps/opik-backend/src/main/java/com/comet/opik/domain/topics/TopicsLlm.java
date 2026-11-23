@@ -9,7 +9,9 @@ import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.hash.Hashing;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -37,17 +39,24 @@ import java.util.function.Function;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TopicsLlm {
 
+    /** The {@code outcome} of a call whose answer could not be read. */
+    private static final String BAD_ANSWER = "bad_answer";
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull InferenceClient client;
     private final @NonNull TopicsMetrics metrics;
 
+    /** What the call returned, read, with the call's stats. */
+    record Answer<T>(T value, ObjectNode stats) {
+    }
+
     /**
      * The answer, turned by {@code read} into what the algorithm needs; when it cannot, {@code read} throws an
      * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A {@code read} that
-     * returns null instead counts the call as {@code bad_answer} too, and the run goes on: the Mono completes empty. A
-     * failed call errors with its code.
+     * returns null instead counts the call as {@code bad_answer} too, and the run goes on with a null value. A failed
+     * call errors with its code.
      */
-    <T> Mono<T> generate(@NonNull TopicRun run, @NonNull LlmRequest call, @NonNull Function<JsonNode, T> read) {
+    <T> Mono<Answer<T>> generate(@NonNull TopicRun run, @NonNull LlmRequest call, @NonNull Function<JsonNode, T> read) {
         return Mono.defer(() -> {
             var tag = call.tag();
             log.info("Topics run '{}' prompt, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
@@ -63,14 +72,13 @@ class TopicsLlm {
                     .maxTokens(call.maxTokens())
                     .temperature(0)
                     .build();
-            run.add("llm_calls", 1);
             return client.generate(request, Instant.now().plus(deadline(call.call())))
                     .onErrorMap(InferenceException.class, exception -> failed(run, call.call(), exception))
-                    .mapNotNull(response -> answer(run, call, response, read));
+                    .map(response -> answer(run, call, response, read));
         });
     }
 
-    private <T> T answer(TopicRun run, LlmRequest call, GenerateResponse response, Function<JsonNode, T> read) {
+    private <T> Answer<T> answer(TopicRun run, LlmRequest call, GenerateResponse response, Function<JsonNode, T> read) {
         var tag = call.tag();
         var output = response.result().output();
         log.info(
@@ -80,22 +88,24 @@ class TopicsLlm {
         var canonical = output == null ? "null" : InferenceJson.canonical(output);
         log.info("Topics run '{}' answer body, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
                 run.projectId(), canonical.length(), sha256(canonical));
-        run.add("llm_input_tokens", response.usage().inputTokens());
-        run.add("llm_output_tokens", response.usage().outputTokens());
-        run.stats().put("llm_cache_hit", response.cacheHit());
+        var stats = JsonUtils.createObjectNode();
+        stats.put("llm_calls", 1);
+        stats.put("llm_input_tokens", response.usage().inputTokens());
+        stats.put("llm_output_tokens", response.usage().outputTokens());
+        stats.put("llm_cache_hit", response.cacheHit());
         try {
             // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
             var answer = read.apply(output);
             if (answer == null) {
-                metrics.llm(run.workspace(), call.call(), "bad_answer");
+                metrics.llm(run.workspace(), call.call(), BAD_ANSWER);
                 log.warn("Topics run '{}' answer could not be read, call '{}', project '{}'", run.runId(), tag,
                         run.projectId());
-                return null;
+                return new Answer<>(null, stats);
             }
             metrics.llm(run.workspace(), call.call(), "ok");
-            return answer;
+            return new Answer<>(answer, stats);
         } catch (TopicsRunException exception) {
-            metrics.llm(run.workspace(), call.call(), "bad_answer");
+            metrics.llm(run.workspace(), call.call(), BAD_ANSWER);
             throw exception;
         }
     }
@@ -103,7 +113,7 @@ class TopicsLlm {
     private TopicsRunException failed(TopicRun run, LlmCall call, InferenceException exception) {
         if (exception.isSchemaViolation()) {
             // The service checks the answer against the schema: a cut or off-schema answer comes back so.
-            metrics.llm(run.workspace(), call, "bad_answer");
+            metrics.llm(run.workspace(), call, BAD_ANSWER);
             return new TopicsRunException(RunError.LLM_BAD_ANSWER,
                     "the LLM answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()), exception);
         }
