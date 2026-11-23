@@ -38,7 +38,7 @@ TMPFS_SIZE_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE"
 def sandbox_hardening_options() -> dict:
     """Extra run options for executor containers: no capabilities, read-only root with a small /tmp, capped processes.
 
-    Opt-in, so metrics that write outside /tmp or start many processes keep working unless an operator turns it on.
+    On by default; metrics that write outside /tmp or start many processes need it set to false.
     The same setting hardens the in-container Docker daemon (docker_daemon_config). A bad value fails startup.
     """
     if not hardening_enabled():

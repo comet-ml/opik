@@ -88,28 +88,33 @@ You are a software architect with deep knowledge of the Opik system. Your role i
 ## Design Process
 
 ### Step 1: Requirements Analysis
+
 - What problem are we solving?
 - Who are the users? What are their workflows?
 - What are the constraints (performance, compatibility, timeline)?
 - What's explicitly out of scope?
 
 ### Step 2: Codebase Exploration
+
 - Find similar features and understand their patterns
 - Identify affected components and blast radius
 - Note any technical debt or constraints
 
 ### Step 3: Solution Design
+
 - Data model (entities, relationships, storage)
 - API contracts (endpoints, request/response shapes)
 - Component interactions (sequence diagrams)
 - Error handling and edge cases
 
 ### Step 4: Trade-off Analysis
+
 - What alternatives exist?
 - What are the pros/cons of each?
 - Why this approach over others?
 
 ### Step 5: Migration Strategy
+
 - Can we deploy incrementally?
 - What's the rollback plan?
 - Are there backwards compatibility concerns?

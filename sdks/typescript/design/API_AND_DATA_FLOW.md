@@ -55,6 +55,7 @@ const client = new Opik({
 #### Configuration Priority
 
 Configuration is resolved in this order (highest to lowest):
+
 1. **Constructor parameters** passed to `new Opik()`
 2. **Environment variables** (`OPIK_API_KEY`, `OPIK_URL_OVERRIDE`, etc.)
 3. **Configuration file** (`~/.opik.config`)
@@ -233,6 +234,7 @@ const formatted = prompt.format({ name: "Alice", place: "Wonderland" });
 #### OpikClient (`src/opik/client/Client.ts`)
 
 The main client class that:
+
 - Manages configuration
 - Creates Trace and Span instances
 - Owns batch queues for each entity type
@@ -557,6 +559,7 @@ workspace = my-workspace
 ### Debounced Batching
 
 The default 300ms debounce delay balances:
+
 - **Latency**: Data reaches backend within ~300ms of last operation
 - **Efficiency**: Multiple operations in quick succession are batched
 - **Throughput**: Batch size of 100 prevents oversized requests

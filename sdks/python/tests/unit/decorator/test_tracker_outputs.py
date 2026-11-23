@@ -2737,6 +2737,224 @@ async def test_track__async_generator_closed__underlying_generator_cleanup_runs(
     assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
 
 
+def test_track__generator_closed_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    # Closing runs the generator's `finally`, which must see the generator's span as
+    # current, as each `next()` does, not the span of the function closing it.
+    @tracker.track
+    def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    def consumer():
+        generator = stream()
+        next(generator)
+        generator.close()
+
+    consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    stream_span = consumer_span.spans[0]
+    assert stream_span.name == "stream"
+    assert stream_span.metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_closed_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    @tracker.track
+    async def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    async def consumer():
+        generator = stream()
+        await generator.__anext__()
+        await generator.aclose()
+
+    await consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    stream_span = consumer_span.spans[0]
+    assert stream_span.name == "stream"
+    assert stream_span.metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
+def test_track__generator_exhausted_then_dropped_inside_tracked_consumer__consumer_span_kept_on_context(
+    fake_backend,
+):
+    # The span of an exhausted generator is already ended, so closing it must not
+    # push it back onto the context: popping an ended span would take the
+    # consumer's span with it, and later calls would lose their parent.
+    @tracker.track
+    def stream():
+        yield "token"
+
+    @tracker.track
+    def after_stream():
+        return "after-output"
+
+    @tracker.track
+    def consumer():
+        for _ in stream():
+            pass
+        after_stream()
+
+    consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert [span.name for span in trace_tree.spans] == ["consumer"]
+    assert [span.name for span in trace_tree.spans[0].spans] == [
+        "stream",
+        "after_stream",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_exhausted_then_closed_inside_tracked_consumer__consumer_span_kept_on_context(
+    fake_backend,
+):
+    @tracker.track
+    async def stream():
+        yield "token"
+
+    @tracker.track
+    async def after_stream():
+        return "after-output"
+
+    @tracker.track
+    async def consumer():
+        generator = stream()
+        async for _ in generator:
+            pass
+        await generator.aclose()
+        await after_stream()
+
+    await consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert [span.name for span in trace_tree.spans] == ["consumer"]
+    assert [span.name for span in trace_tree.spans[0].spans] == [
+        "stream",
+        "after_stream",
+    ]
+
+
+def test_track__generator_dropped_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    # Dropping the wrapper closes it from `__del__`, so the generator's cleanup must
+    # run in its own span here too, without disturbing the consumer's span.
+    @tracker.track
+    def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    def after_stream():
+        return "after-output"
+
+    @tracker.track
+    def consumer():
+        generator = stream()
+        next(generator)
+        del generator
+        gc.collect()
+        after_stream()
+
+    consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    assert [span.name for span in consumer_span.spans] == ["stream", "after_stream"]
+    assert consumer_span.spans[0].metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_dropped_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    @tracker.track
+    async def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    async def after_stream():
+        return "after-output"
+
+    @tracker.track
+    async def consumer():
+        generator = stream()
+        await generator.__anext__()
+        del generator
+        gc.collect()
+        # The dropped wrapper schedules `aclose()` on the loop; let it run.
+        for _ in range(10):
+            await asyncio.sleep(0)
+        await after_stream()
+
+    await consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    assert [span.name for span in consumer_span.spans] == ["stream", "after_stream"]
+    assert consumer_span.spans[0].metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
+def test_track__generator_closed_after_tracked_consumer_returned__cleanup_updates_generator_span(
+    fake_backend,
+):
+    @tracker.track
+    def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    def consumer():
+        generator = stream()
+        next(generator)
+        return generator
+
+    generator = consumer()
+    generator.close()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    assert [span.name for span in consumer_span.spans] == ["stream"]
+    assert consumer_span.spans[0].metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
 def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_backend):
     # A generator whose `finally` fails during close must not be reported as a span
     # that succeeded. Ending on close would otherwise record the partial output with

@@ -33,9 +33,11 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check `gh` CLI**: Verify `gh` is installed and authenticated (required for both reading and posting)
+
   ```bash
   gh auth status
   ```
+
   > If not authenticated, respond with: "Please run `gh auth login` first."
   > Stop here.
 - **Check GitHub MCP (optional)**: If GitHub MCP is available, use it for richer PR data. If not, fall back to `gh` CLI for everything — no setup instructions needed.
@@ -50,15 +52,19 @@ This workflow will:
 - **If no argument provided**:
   - Check current Git branch
   - Search for an open PR for this branch in `comet-ml/opik`:
+
     ```bash
     gh pr list --repo comet-ml/opik --head <branch-name> --state open --json number,title,url
     ```
+
   - If GitHub MCP is available, use it as an alternative to `gh pr list`
   - If no PR found, prompt: "No open PR found for this branch. Enter a PR number or URL:"
 - **Fetch PR metadata**: Get PR title, description, author, base branch, and state
+
   ```bash
   gh pr view {pr_number} --repo comet-ml/opik --json title,body,author,baseRefName,state,headRefOid
   ```
+
 - **If PR is merged or closed**: Print warning and ask if user wants to continue reviewing anyway
 
 ---
@@ -66,21 +72,27 @@ This workflow will:
 ### 3. Fetch PR Diff, Changed Files, and Existing Reviews
 
 - **Fetch existing review comments**: Before analyzing, collect any comments already posted by this command on this PR
+
   ```bash
   gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
   ```
+
   - Filter for comments containing the `🤖 *Review posted via /review-github-pr*` marker
   - Index them by `path` + `start_line` + `line` for deduplication in step 6 (for single-line comments, `start_line` equals `line`)
   - This prevents posting duplicate comments when the command is run multiple times on the same PR
 
 - **Get changed files**: List all files changed in the PR
+
   ```bash
   gh pr diff {pr_number} --repo comet-ml/opik --name-only
   ```
+
 - **Get full diff**:
+
   ```bash
   gh pr diff {pr_number} --repo comet-ml/opik
   ```
+
 - **If GitHub MCP is available**: Use `get_pull_request_files` for structured file data (additions, deletions, patch)
 - **Categorize files by domain**:
   - **Backend**: `apps/opik-backend/**` → Java, API, services, DAOs, migrations
@@ -100,6 +112,7 @@ This workflow will:
 Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/rules/`. For each domain touched by the PR, apply the relevant review criteria:
 
 #### General (all files)
+
 - Security: SQL injection, XSS, hardcoded secrets, input validation at boundaries
 - Error handling: Appropriate error propagation, no swallowed exceptions
 - Naming: Clear, consistent variable/function/class naming
@@ -107,6 +120,7 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - Tests: Are new code paths covered by tests?
 
 #### Backend (`apps/opik-backend/**`)
+
 - Architecture: Resources → Services → DAOs → Models pattern
 - SQL: Parameterized queries, proper transaction handling
 - API: RESTful conventions, proper HTTP status codes, input validation
@@ -114,6 +128,7 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - Logging: Appropriate log levels, no sensitive data in logs
 
 #### Frontend (`apps/opik-frontend/**`)
+
 - Components: Proper React patterns, hook dependencies, memoization where needed
 - State: Appropriate state management, no prop drilling
 - Types: TypeScript type safety, no unnecessary `any`
@@ -121,6 +136,7 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - Accessibility: Proper ARIA attributes, keyboard navigation
 
 #### SDKs (`sdks/**`)
+
 - API compatibility: Breaking changes flagged
 - Error handling: Clear error messages, proper exception hierarchies
 - Documentation: Public API methods have proper docs
@@ -132,13 +148,16 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 Organize findings into categories with severity levels:
 
 #### Severity Levels
+
 - 🚫 **blocker**: Must fix before merge — bugs, security issues, data loss risks
 - 💡 **suggestion**: Recommended improvement — better patterns, performance, readability
 - 🧹 **nit**: Minor style/preference — naming, formatting, minor simplifications
 - ❓ **question**: Needs clarification — unclear intent, missing context, design decisions
 
 #### Finding Format
+
 For each finding, prepare:
+
 - **File and line range**: Where in the diff the issue is
 - **Category**: Security, Logic, Performance, Style, Architecture, Testing, etc.
 - **Severity**: blocker / suggestion / nit / question
@@ -344,6 +363,7 @@ gh api repos/comet-ml/opik/issues/{pr_number}/comments \
 ### 9. Local Summary
 
 After all posting is complete, display to the user (not on GitHub):
+
 - Total inline comments posted (by severity)
 - Total inline comments skipped
 - Whether the summary comment was posted, edited, or skipped
