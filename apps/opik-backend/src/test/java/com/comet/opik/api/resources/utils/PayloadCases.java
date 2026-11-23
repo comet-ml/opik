@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.slim.SlimJson;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -34,7 +34,7 @@ public class PayloadCases {
     private static final int NESTED_ARRAYS_DEPTH = 100;
 
     public static Stream<JsonNode> payloads() {
-        int max = SlimJson.MAX_STRING_LENGTH;
+        int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
         return Stream.of(
                 JsonUtils.getJsonNodeFromString("{}"),
                 JsonUtils.getJsonNodeFromString("[]"),
@@ -60,7 +60,7 @@ public class PayloadCases {
     }
 
     public static SlimCase slimCase() {
-        int max = SlimJson.MAX_STRING_LENGTH;
+        int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
         String key = randomText(10);
         String nestedKey = randomText(10);
         String arrayKey = randomText(10);
@@ -98,7 +98,7 @@ public class PayloadCases {
     }
 
     private static String cut(String text) {
-        return text.substring(0, SlimJson.MAX_STRING_LENGTH) + SlimJson.TRUNCATION_SUFFIX;
+        return text.substring(0, TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH) + TruncationUtils.TRUNCATION_SUFFIX;
     }
 
     private static String randomText(int length) {

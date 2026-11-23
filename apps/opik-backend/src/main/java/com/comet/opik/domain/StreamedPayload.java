@@ -1,8 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.TruncationUtils;
-import com.comet.opik.utils.slim.SlimJson;
-import com.comet.opik.utils.slim.SlimJson.JsonWithSlim;
+import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
@@ -35,7 +34,7 @@ public class StreamedPayload {
      * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its slim copy
      * here, so callers cannot let the two drift. With {@code streamPayloads} ({@code databaseAnalytics.streamPayloads})
      * both come from the node without a reparse, the slim copy reusing the full JSON when nothing needs truncating
-     * (see {@link SlimJson#toStrings}); without it (the string path), the slim copy is reparsed from the full
+     * (see {@link TruncationUtils#toJsonWithSlim}); without it (the string path), the slim copy is reparsed from the full
      * JSON string.
      */
     public static void bind(@NonNull Statement statement, boolean streamPayloads, @Nullable JsonNode input,
@@ -51,7 +50,7 @@ public class StreamedPayload {
 
     private static JsonWithSlim columns(boolean streamPayloads, JsonNode node) {
         if (streamPayloads) {
-            return SlimJson.toStrings(node);
+            return TruncationUtils.toJsonWithSlim(node);
         }
         var json = TruncationUtils.toJsonString(node);
         return JsonWithSlim.builder().json(json).slim(TruncationUtils.createSlimJsonString(json)).build();

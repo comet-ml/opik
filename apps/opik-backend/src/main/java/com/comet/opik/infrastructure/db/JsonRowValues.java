@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
-import com.comet.opik.utils.slim.SlimJson;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.util.RawValue;
@@ -121,9 +121,8 @@ public class JsonRowValues {
     /**
      * Writes a payload ({@code input}, {@code output}) and its slim copy into their {@code String} columns.
      *
-     * <p>An object or array is embedded in the row as raw JSON, written from the node when the row is serialized
-     * (see {@link SlimJson#toRaw}). The cells hold the same text as {@link SlimJson#toStrings} only under this
-     * contract:
+     * <p>An object or array is embedded in the row as raw JSON, written from the node when the row is serialized.
+     * The cells hold the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)} only under this contract:
      * <ul>
      *   <li>the target columns are {@code String}, and</li>
      *   <li>the insert sets {@code input_format_json_read_objects_as_strings} and
@@ -139,12 +138,11 @@ public class JsonRowValues {
         checkField(field);
         checkField(slimField);
         if (value != null && value.isContainerNode()) {
-            var payload = SlimJson.toRaw(value);
-            node.putRawValue(field, new RawValue(payload.json()));
-            node.putRawValue(slimField, new RawValue(payload.slim()));
+            node.putRawValue(field, new RawValue(TruncationUtils.toFullJson(value)));
+            node.putRawValue(slimField, new RawValue(TruncationUtils.toSlimJson(value)));
             return;
         }
-        var columns = SlimJson.toStrings(value);
+        var columns = TruncationUtils.toJsonWithSlim(value);
         node.put(field, columns.json());
         node.put(slimField, columns.slim());
     }
