@@ -8,13 +8,13 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.jupiter.api.AfterAll;
@@ -78,7 +78,7 @@ class TopicsStorageTest {
     /** The pass's page and slice in config-test.yml. */
     private static final int PAGE = 7;
     private static final int SLICE = 20;
-    private static final TimeBasedEpochGenerator IDS = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final int WINDOW_DAYS = 30;
     private static final Instant NIGHT = Instant.parse("2026-10-15T00:00:00Z");
     private static final TopicsTestData.Traces TRACES = TopicsTestData.Traces.synthetic(BUILT, NIGHT, 7);
@@ -338,11 +338,12 @@ class TopicsStorageTest {
         doAnswer(invocation -> windowDAO.readUnlabelled(workspaceId, projectId, runId, invocation.getArgument(3),
                 invocation.getArgument(4), "", invocation.getArgument(6), invocation.getArgument(7)))
                 .when(stuck).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
-        // The traces live in their run's rows from here on, so the stuck read keeps returning them.
-        var labelled = spy(traceTopicsDAO);
-        doReturn(Mono.just(0L)).when(labelled).insert(any());
+        // Inserts write nothing, so the stuck read returns the same traces on every page.
+        var noopInserts = spy(traceTopicsDAO);
+        doReturn(Mono.just(0L)).when(noopInserts).insert(any());
 
-        assertThat(label(service(stuck, labelled), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+        assertThat(
+                label(service(stuck, noopInserts), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
                 .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
 
         // Every page is full of traces the slice never had.
@@ -354,13 +355,14 @@ class TopicsStorageTest {
                         TopicsTestData.unit(0))))
                 .when(endless).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
 
-        assertThat(label(service(endless, labelled), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+        assertThat(
+                label(service(endless, noopInserts), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
                 .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
         // A bound at every 20th trace: the last slice holds the window's last trace alone.
         int slices = BUILT / SLICE + 1;
         int maxPages = (SLICE + PAGE - 1) / PAGE + 2;
         // The stuck pass inserted each slice's first page; the endless one every page of every slice.
-        verify(labelled, times(slices + slices * maxPages)).insert(any());
+        verify(noopInserts, times(slices + slices * maxPages)).insert(any());
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
     }
 
@@ -376,11 +378,11 @@ class TopicsStorageTest {
         }
         var savedAt = NIGHT.plus(Duration.ofHours(2));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
+            var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            TopicsTestData.startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
+            projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(topicId)
@@ -391,7 +393,7 @@ class TopicsStorageTest {
                     .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
                     .vectors(new PrototypeVectors(List.of(vectors.get(0), vectors.get(2))))
                     .build()));
-            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+            projectDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
         return vectors;
@@ -454,7 +456,7 @@ class TopicsStorageTest {
     }
 
     private static UUID id() {
-        return IDS.generate();
+        return ID_GENERATOR.generateId();
     }
 
     private static Instant createdAt(UUID traceId) {
@@ -470,6 +472,7 @@ class TopicsStorageTest {
                     embed_dimensions, text, vector
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :source
+                SETTINGS log_comment = 'topics_test:copy_vector'
                 """)
                 .bind("workspace_id", workspaceId)
                 .bind("project_id", projectId.toString())
