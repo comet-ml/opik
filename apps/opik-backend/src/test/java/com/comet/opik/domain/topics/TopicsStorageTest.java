@@ -243,9 +243,10 @@ class TopicsStorageTest {
         assertThat(window.traces()).isEqualTo(BUILT + 40);
         assertThat(window.bounds()).isEqualTo(IntStream.rangeClosed(1, created.size())
                 .filter(i -> i % sliceTraces == 0).mapToObj(i -> created.get(i - 1)).toList());
-        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
+        var read = opikConfig.getTopics().getBuild().getRead();
         assertThat(data.queryGuards("topics:count_and_bounds", workspaceId))
-                .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
+                .containsExactly(List.of(String.valueOf(read.getMaxThreads()), String.valueOf(read.getMaxRowsToRead()),
+                        String.valueOf(read.getPriority()), "60"));
     }
 
     @Test
