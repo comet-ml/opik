@@ -192,13 +192,14 @@ public class TopicsConfig {
                     || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
         }
 
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
-        @JsonIgnore
         // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
         // shorter budget would read nothing.
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
                     || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
