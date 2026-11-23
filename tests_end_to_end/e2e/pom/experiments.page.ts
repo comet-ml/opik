@@ -3,6 +3,35 @@ import { loadEnvConfig } from '../config/env.config';
 import { ExperimentDetailPage } from './experiment-detail.page';
 import { ExperimentGroupRows } from './experiment-group-rows';
 
+/**
+ * The two tabs the Experiments page splits into (opik#9611), each named by the
+ * `?tab=` value the page keeps in the URL and the label it shows.
+ *
+ * Both halves are here because the spec needs both: the URL value is what a
+ * deep link carries and what `setTab` writes, while the label is the only
+ * handle on the rendered tab.
+ */
+export const EXPERIMENTS_TABS = {
+  testSuites: { param: 'test_suites', label: 'Test suites' },
+  datasets: { param: 'datasets', label: 'Datasets' },
+} as const;
+
+export type ExperimentsTabKey = keyof typeof EXPERIMENTS_TABS;
+
+/**
+ * Every tab-strip state the browser COMMITTED, oldest first, as
+ * `armTabStripRecorder` collected it.
+ *
+ * `null` for a sample taken while no tab strip was in the DOM at all (the
+ * pre-mount document, and the skeleton the page shows until the starting tab is
+ * resolved). Consecutive identical samples are collapsed, so attribute churn
+ * that does not change the strip leaves no trace.
+ */
+export type TabStripSample = { label: string; active: boolean }[] | null;
+
+/** The window the recorder writes its samples onto. */
+type TabStripWindow = Window & { __opikTabStrip?: string[] };
+
 export class ExperimentsPage {
   private projectId: string | null = null;
 
@@ -260,6 +289,34 @@ export class ExperimentsPage {
     });
   }
 
+  // --- The Test suites / Datasets tab split (opik#9611) ---
+
+  /**
+   * Open a project's Experiments page on a named tab, through the `?tab=` the
+   * page keeps in the URL.
+   *
+   * `groups=[]` for the same reason `goto` above pins it: the tab's row
+   * locators are id-based, and the page's default Item-source grouping gives
+   * each experiment row a composite `data-row-id`. Pass `grouped: true` to see
+   * the tab as a user lands on it instead.
+   */
+  async gotoTab(
+    projectId: string,
+    tab: ExperimentsTabKey,
+    opts: { size?: number; grouped?: boolean } = {},
+  ): Promise<void> {
+    return test.step(`open project ${projectId} Experiments on the ${EXPERIMENTS_TABS[tab].label} tab`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: EXPERIMENTS_TABS[tab].param });
+      if (!opts.grouped) query.set('groups', '[]');
+      if (opts.size !== undefined) query.set('size', String(opts.size));
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments?${query}`,
+      );
+    });
+  }
+
   /**
    * The grouping control, whose label carries the number of active groups —
    * "Group (1)" by default, "Group (0)" once cleared.
@@ -373,6 +430,75 @@ export class ExperimentsPage {
   }
 
   /**
+   * Open a project's Experiments page with NO `?tab=` at all — the shape every
+   * link into the page from the sidebar, the breadcrumbs and "Back to
+   * experiments" carries, and therefore the one that exercises the tab the page
+   * resolves for itself.
+   *
+   * `groups=[]` is still sent, and does not weaken the subject:
+   * `useExperimentsTab` reads only `tab`, `search`, `filters`, `page`, `size`,
+   * `groups` and `limits`, and decides on `tab` alone. What it buys is a flat
+   * table, so the row assertion beside the tab assertion addresses experiments
+   * by their own ids.
+   */
+  async gotoDefaultTab(projectId: string): Promise<void> {
+    return test.step(`open project ${projectId} Experiments with no ?tab=`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ groups: '[]' });
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments?${query}`,
+      );
+    });
+  }
+
+  /** One tab in the strip, by the label it shows. */
+  tabTrigger(tab: ExperimentsTabKey): Locator {
+    return this.page.getByRole('tab', { name: EXPERIMENTS_TABS[tab].label, exact: true });
+  }
+
+  /**
+   * Wait for the tab strip to be rendered at all, on its own budget.
+   *
+   * It needs one because the page deliberately does not render the strip
+   * straight away: `isTabPending` holds a skeleton in its place until the
+   * starting tab is resolved, and resolving it takes a count query against the
+   * project. Under a parallel suite that query has been seen to outlast the
+   * suite's 10s assertion default, which surfaces as "there is no tab strip" —
+   * a different failure from any a caller is asserting, and a misleading one.
+   *
+   * Both triggers, so a strip that rendered half of itself fails here.
+   */
+  async waitForTabStrip(): Promise<void> {
+    await expect(
+      this.page.getByRole('tab'),
+      'the Experiments tab strip (skeletoned until the starting tab resolves)',
+    ).toHaveCount(Object.keys(EXPERIMENTS_TABS).length, { timeout: 30_000 });
+  }
+
+  /**
+   * Assert which tab the strip has selected — both halves, so that a strip with
+   * two selected tabs or none fails here.
+   *
+   * `aria-selected` rather than the `data-state` the component also sets: it is
+   * the attribute a screen reader and a user both go by, and Radix writes the
+   * two together, so reading the accessible one costs nothing.
+   */
+  async expectActiveTab(tab: ExperimentsTabKey): Promise<void> {
+    return test.step(`the ${EXPERIMENTS_TABS[tab].label} tab is selected`, async () => {
+      await this.waitForTabStrip();
+      for (const key of Object.keys(EXPERIMENTS_TABS) as ExperimentsTabKey[]) {
+        const trigger = this.tabTrigger(key);
+        await expect(trigger, `the ${EXPERIMENTS_TABS[key].label} tab`).toHaveCount(1);
+        await expect(
+          trigger,
+          `the ${EXPERIMENTS_TABS[key].label} tab's aria-selected`,
+        ).toHaveAttribute('aria-selected', String(key === tab));
+      }
+    });
+  }
+
+  /**
    * Expand a group row if it is not already expanded, and leave it expanded.
    *
    * Needed because the page auto-expands the FIRST group on load
@@ -430,6 +556,238 @@ export class ExperimentsPage {
       await this.groupRows
         .first()
         .waitFor({ state: 'visible', timeout: opts.timeout ?? 30_000 });
+    });
+  }
+
+  /**
+   * Switch tabs by clicking, and resolve once the URL says the switch happened.
+   *
+   * The URL, not a row count: `setTab` writes `?tab=` and clears the table
+   * params in one go, and the new tab then loads its own saved view — so a
+   * caller that read rows the instant the click returned would be as likely to
+   * read the previous tab's.
+   */
+  async clickTab(tab: ExperimentsTabKey): Promise<void> {
+    return test.step(`click the ${EXPERIMENTS_TABS[tab].label} tab`, async () => {
+      // The strip may still be skeletoned; clicking into the skeleton would
+      // fail on the action timeout rather than on anything under test.
+      await this.waitForTabStrip();
+      await this.tabTrigger(tab).click();
+      await this.page.waitForURL((url) => url.searchParams.get('tab') === EXPERIMENTS_TABS[tab].param);
+    });
+  }
+
+  /**
+   * Record every tab-strip state the browser COMMITS, from the next navigation
+   * on. Call before `goto*`.
+   *
+   * This is what makes "the strip never flashes the wrong tab" assertable at
+   * all. The page holds the strip behind a skeleton until the starting tab is
+   * known (`isTabPending`), and the regression it guards against — rendering
+   * the fallback tab first and correcting it when the experiments query
+   * answers — is over in one network round trip, so nothing an `expect` could
+   * wait for is still on screen by the time the test looks.
+   *
+   * A MutationObserver rather than a poll: its callback runs after every batch
+   * of DOM mutations, so a strip mounted with the wrong tab and corrected on a
+   * later render is two separate samples however fast the correction lands.
+   * Consecutive identical samples are collapsed, so attribute churn elsewhere
+   * on the page adds nothing.
+   *
+   * `addInitScript` runs again on each navigation, which resets the log — so the
+   * samples a later `tabStripSamples()` reads belong to the LAST navigation
+   * only, never to several of them pooled together.
+   */
+  async armTabStripRecorder(): Promise<void> {
+    return test.step('record every committed tab-strip state', async () => {
+      await this.page.addInitScript(() => {
+        const win = window as Window & { __opikTabStrip?: string[] };
+        win.__opikTabStrip = [];
+        const sample = () => {
+          const line = Array.from(document.querySelectorAll('[role="tab"]'))
+            .map((tab) => `${(tab.textContent ?? '').trim()}=${tab.getAttribute('data-state')}`)
+            .join('|');
+          const log = win.__opikTabStrip!;
+          if (log[log.length - 1] !== line) log.push(line);
+        };
+        new MutationObserver(sample).observe(document, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+        });
+        sample();
+      });
+    });
+  }
+
+  /**
+   * The samples {@link armTabStripRecorder} collected during the current
+   * navigation, oldest first.
+   *
+   * Throws when the recorder was never armed, rather than answering `[]`: an
+   * empty log and a missing log would otherwise both read as "the strip was
+   * never committed with the wrong tab", and only one of them is evidence.
+   */
+  async tabStripSamples(): Promise<TabStripSample[]> {
+    const raw = await this.page.evaluate(
+      () => (window as TabStripWindow).__opikTabStrip,
+    );
+    if (!Array.isArray(raw)) {
+      throw new Error(
+        'ExperimentsPage.tabStripSamples: no recorder log on the page — ' +
+          'armTabStripRecorder() must be awaited BEFORE the navigation being observed',
+      );
+    }
+    return raw.map((line) =>
+      line === ''
+        ? null
+        : line.split('|').map((entry) => {
+            const [label, state] = entry.split('=');
+            return { label, active: state === 'active' };
+          }),
+    );
+  }
+
+  /**
+   * One experiment's row, whether the list is flat or grouped.
+   *
+   * Under grouping `getExperimentRowId` composes the row id as
+   * `<experimentId>|<grouping field>:<value>|…`, so an exact match holds only on
+   * the flat list and a prefix match only on the grouped one. Switching tabs
+   * clears the URL's `groups` and lets the new tab apply its own saved
+   * grouping, which means one spec sees both forms — hence both selectors here
+   * rather than a caller having to know which view it is on.
+   */
+  experimentRowAnywhere(experimentId: string): Locator {
+    return this.page.locator(
+      `tbody tr[data-row-id="${experimentId}"], tbody tr[data-row-id^="${experimentId}|"]`,
+    );
+  }
+
+  /**
+   * One cell of an experiment's row, by the table's own `data-cell-id`
+   * (`<rowId>_<columnId>`), matched on the column id and scoped to the row.
+   *
+   * On the column id suffix rather than the whole attribute so the row id never
+   * has to be reconstructed — it is composite under grouping. By identity and
+   * never by position, because column order here is user-configurable and
+   * persisted, so an `nth-child` would address whatever column the profile
+   * happened to have put there.
+   */
+  experimentCell(experimentId: string, columnId: string): Locator {
+    return this.experimentRowAnywhere(experimentId).locator(`td[data-cell-id$="_${columnId}"]`);
+  }
+
+  /** The rendered text of one cell, trimmed, asserted to resolve to exactly one element. */
+  async experimentCellText(experimentId: string, columnId: string): Promise<string> {
+    return test.step(`read the ${columnId} cell of experiment ${experimentId}`, async () => {
+      const cell = this.experimentCell(experimentId, columnId);
+      await expect(cell, `the ${columnId} cell of experiment ${experimentId}`).toHaveCount(1);
+      return (await cell.innerText()).trim();
+    });
+  }
+
+  /** One column header, by its visible label. */
+  columnHeader(label: string): Locator {
+    return this.page.getByRole('columnheader', { name: label, exact: true });
+  }
+
+  /**
+   * The labelled column headers, left to right.
+   *
+   * The select, pin and row-actions headers render no text and are dropped, so
+   * what comes back is the user-visible column order — which is what an
+   * assertion about a column's POSITION (the version column sits immediately
+   * after Name) has to compare against. Order here is the table's own and is
+   * asserted as a sequence, never as a set.
+   */
+  async columnHeaderLabels(): Promise<string[]> {
+    return test.step('read the column headers left to right', async () => {
+      const texts = await this.page.locator('thead th').allInnerTexts();
+      return texts.map((text) => text.trim()).filter((text) => text.length > 0);
+    });
+  }
+
+  /** The Columns dropdown trigger in the list toolbar. */
+  get columnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /**
+   * Every column the Columns picker offers, by label, including the per-score
+   * section's dynamic entries.
+   *
+   * The picker is worth reading separately from the table because the table
+   * alone cannot tell "not selected by default" from "not available at all" —
+   * and the tab split's exclusions are the second: a column a tab does not show
+   * is filtered out of the column set before it reaches the picker, so a user
+   * cannot re-enable it.
+   *
+   * Each row is a Radix `CheckboxItem` over which `SortableMenuItem` spreads
+   * dnd-kit's sortable attributes, and those set `role="button"` — so the rows
+   * are addressed as buttons, exactly as `datasets.page.ts` does. Neither the
+   * rows nor the menu carry a data-testid.
+   */
+  async columnPickerLabels(): Promise<string[]> {
+    return test.step('read the Columns picker entries', async () => {
+      await this.columnsButton.click();
+      const menu = this.page.getByRole('menu');
+      const entries = menu.getByRole('button');
+      await expect(entries.first(), 'the Columns picker entries').toBeVisible();
+      const labels = (await entries.allInnerTexts()).map((label) => label.trim());
+      // The menu keeps itself open on select; close it rather than leaving an
+      // overlay across the table the next assertion has to read through.
+      await this.page.keyboard.press('Escape');
+      await expect(menu, 'the Columns picker after Escape').toBeHidden();
+      return labels;
+    });
+  }
+
+  /**
+   * The experiment ids the table lists, in document order, with group rows
+   * dropped and any grouping suffix stripped.
+   *
+   * Duplicates are deliberately NOT removed: under grouping the same experiment
+   * can be rendered under more than one group, and a set comparison would hide
+   * exactly that.
+   */
+  async listedExperimentIds(): Promise<string[]> {
+    const rowIds = await this.rows.evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute('data-row-id') ?? ''),
+    );
+    return (
+      rowIds
+        // `$__grouping__` prefixes a group row and `$__grouping_row__` the
+        // synthetic load-more/pending rows; an experiment row starts with the
+        // experiment's own uuid.
+        .filter((rowId) => !rowId.startsWith('$__grouping_'))
+        .map((rowId) => rowId.split('|')[0])
+    );
+  }
+
+  /**
+   * Poll until the table lists EXACTLY these experiments, then assert it listed
+   * each of them once.
+   *
+   * Exhaustive rather than "my rows are in there": a tab that also listed a row
+   * it should have excluded is the bug the partition assertion exists to catch,
+   * and finding the expected ids inside the answer would pass either way.
+   */
+  async expectListedExperiments(expectedIds: string[], what: string): Promise<void> {
+    return test.step(`${what} lists exactly ${expectedIds.length} experiment(s)`, async () => {
+      const expected = [...expectedIds].sort();
+      await expect
+        .poll(async () => [...new Set(await this.listedExperimentIds())].sort(), {
+          message: `${what}: the set of experiment ids the table lists`,
+          timeout: 30_000,
+        })
+        .toEqual(expected);
+      // Only once the set has settled, and as its own assertion: a row rendered
+      // twice is invisible to the comparison above.
+      expect(
+        (await this.listedExperimentIds()).sort(),
+        `${what}: one row per experiment, no duplicates`,
+      ).toEqual(expected);
     });
   }
 }

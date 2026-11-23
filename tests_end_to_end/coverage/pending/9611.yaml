@@ -1,0 +1,91 @@
+# pending capabilities from opik#9611 (OPIK-9127) — applied by the release job
+#
+# All three are the Experiments page's split into Test suites and Datasets tabs.
+# None of them fits experiments.list-experiments, the key the exploration
+# proposed and the only one the area has for the list page:
+#
+#   list-experiments is already `covered: true` by experiments-smoke.spec.ts,
+#   which seeds ONE experiment and counts ONE row. It would pass unchanged with
+#   the Test suites tab listing nothing at all — which is exactly the regression
+#   these three specs exist to catch. Tagging them onto it would record the tab
+#   split as covered by a spec that never opened a tab, and a capability counted
+#   as covered is never re-derived.
+#
+# Three keys rather than one, because the three are separately wired and fail
+# separately: which ROWS a tab lists is a server-side evaluation_method filter,
+# which TAB opens is a precedence chain over the URL, localStorage and a count
+# query, and which COLUMNS a tab shows is a per-tab column set and storage
+# prefix. A single key would report all three as covered the moment any one spec
+# passed.
+#
+- area: experiments
+  capability: tab-split-partition
+  note: >-
+    The Test suites and Datasets tabs as an exact PARTITION of a project's
+    experiments (experiments-tab-split-partition.spec.ts). Both failure modes
+    are silent and neither raises an error: an experiment that falls out of both
+    tabs leaves two healthy-looking tables between them, and one listed by both
+    inflates every count a reader takes off the page. Asserted at the API and in
+    the UI over a project holding one evaluation_suite experiment, one dataset
+    one, and one created with NO evaluation_method at all — the only legacy shape
+    reachable on a fresh install, since ExperimentDAO defaults a missing method
+    to 'dataset' on insert and 'unknown' is written only by the aggregates DAO,
+    which the list query never reads. The two tabs are not asserted as mirror
+    images because the product's are not: Test suites sends
+    `= evaluation_suite` and Datasets sends `!= evaluation_suite`, and that the
+    second is a real negation is what keeps an unclassified experiment listed
+    somewhere rather than nowhere. Exhaustive on both sides — each tab's whole
+    rendered row set, the server's own `total`, the two sets' disjointness and
+    their union — rather than "my rows are in there", which would pass over a
+    tab that also listed a row it should have excluded. Covered by deep link AND
+    by clicking between the tabs, which is a different code path: a click clears
+    the table params and lets the arriving tab apply its own saved grouping, so
+    the rows come back under group rows with composite row ids. NOT covered: a
+    genuinely stored `unknown` method (unreachable on a fresh install; the
+    mechanism is covered instead, as the `!=` filter at the API).
+- area: experiments
+  capability: tab-default-and-memory
+  note: >-
+    Which tab the Experiments page opens on when the URL names none
+    (experiments-tab-default-and-memory.spec.ts), which is the tab most users
+    ever see — the sidebar, the breadcrumbs and the project pages all link to a
+    bare /experiments. Precedence asserted end to end over a suite-only and a
+    dataset-only project: each opens on the tab its OWN experiments call for, a
+    tab chosen by clicking survives a reload with no ?tab=, the memory is keyed
+    per project, and ?tab= beats the remembered tab and then becomes it. Every
+    leg is discriminating by construction — the project switched onto Test
+    suites is the one whose data would resolve to Datasets, so only a remembered
+    tab can explain the answer, and the final re-read would answer Datasets
+    under either a shared key or a data-only resolution. Also covers what the
+    PR's last push (ba716ec) changed, and what the vitest suite cannot see: the
+    strip is held behind a skeleton until the starting tab is known, so it is
+    never COMMITTED with the fallback tab selected. That is asserted with a
+    MutationObserver armed before the navigation rather than by polling, because
+    the wrong state would last one network round trip and be gone before any
+    expect could look; the recorder's own log is asserted non-empty and to have
+    seen a strip-less sample, so a recorder that never ran fails rather than
+    passing vacuously. NOT covered: the isError arm of the default (a failing
+    count query falling back to Test suites).
+- area: experiments
+  capability: tab-columns
+  note: >-
+    Each tab's own column set (experiments-tab-columns.spec.ts): the item
+    source's version column under the tab's own label ("Test suite version" /
+    "Dataset version") immediately after Name, Pass rate on Test suites only,
+    and Feedback Scores plus the project's per-score columns on Datasets only.
+    The version cell is written through the API and read back through the page,
+    which is the shape that catches a cell rendering the item source's NAME or a
+    dash — asserted against `dataset_version_summary.version_name` off the wire
+    for that same experiment, with the name as an explicit negative, and with
+    the wire value asserted present first so an unlinked version cannot make the
+    comparison vacuous. The exclusions are asserted in the COLUMNS PICKER as
+    well as the table, because the table cannot tell "not selected by default"
+    from "not available": the product means the second, and a user must not be
+    able to re-enable a column the tab does not have. The per-score entry is the
+    load-bearing half of the score exclusion — the project really does have a
+    feedback score (the fixture asserts the experiments score-names endpoint
+    reports exactly it), so its absence from the Test suites picker is the tab's
+    exclusion rather than an empty project. NOT covered, and not claimed: Pass
+    rate VALUES, which need a real test-suite run judged by an LLM, so every
+    seeded cell reads "-"; the per-tab charts and their legend position; and the
+    item-source filter/group pickers being narrowed to the tab's dataset type.

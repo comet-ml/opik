@@ -173,8 +173,59 @@ export class DatasetsPage {
 
   /** SDK-mode create: footer "Create dataset" submits, then the sidebar closes (no success step). */
   async submitCreateDialog(): Promise<void> {
-    await this.createDialog.getByRole('button', { name: 'Create dataset' }).click();
+    await this.clickCreateDialogSubmit();
     await this.waitForCreateDialogTransform('translateX(100%)');
+  }
+
+  /**
+   * Click the sidebar's footer submit WITHOUT waiting for an outcome — the
+   * sibling of {@link submitCreateDialog}, which waits for the panel to slide
+   * away.
+   *
+   * Separate because a refused create never closes the panel: `useDatasetForm`
+   * maps a 409 to an inline error under the Name field and leaves the sidebar
+   * exactly as it was. A caller asserting the refusal therefore cannot use the
+   * waiting variant, and a POM that waited here would be deciding the answer
+   * (the same reason {@link submitUpload} does not wait either).
+   */
+  async clickCreateDialogSubmit(): Promise<void> {
+    return test.step('Submit the create-dataset sidebar', async () => {
+      await this.createDialog.getByRole('button', { name: 'Create dataset' }).click();
+    });
+  }
+
+  /**
+   * The validation message the sidebar renders under the Name field.
+   *
+   * Addressed by its text: `CreateDatasetSidebar` renders it as a bare
+   * `<span>` with no `data-testid` and — as the exploration of opik#9659 found
+   * — no `role="alert"` either, so there is no handle on it other than what it
+   * says. The two messages it can carry are hardcoded English constants in
+   * `useDatasetForm.ts` (there is no i18n layer in this app), which is the one
+   * case the conventions' selector order admits `getByText` for.
+   *
+   * Scoped to the sidebar so it cannot match a toast or a page-level error, and
+   * `exact` so "This name already exists" cannot be satisfied by a longer
+   * sentence that merely contains it.
+   */
+  createDialogNameError(message: string): Locator {
+    return this.createDialog.getByText(message, { exact: true });
+  }
+
+  /**
+   * Assert the create sidebar is still open — still slid in, not merely still
+   * mounted.
+   *
+   * Needed because the panel is never unmounted: open and closed are a CSS
+   * transform, so every locator inside a closed sidebar still reports itself
+   * visible and `toBeVisible()` cannot tell the two apart. A refused create that
+   * showed its error and then closed the panel anyway would pass an
+   * error-is-visible check while losing the user's typed name.
+   */
+  async expectCreateDialogOpen(): Promise<void> {
+    return test.step('The create-dataset sidebar is still open', async () => {
+      await this.waitForCreateDialogTransform('translateX(0');
+    });
   }
 
   // --- "Upload a file" mode of the create sidebar ---

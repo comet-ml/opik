@@ -19,6 +19,13 @@ import {
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
+/**
+ * The response header the backend sets when it resolved an entity by name
+ * through a workspace-wide search rather than inside the project the request
+ * named — `RequestContext.WORKSPACE_FALLBACK_HEADER`, a deprecation notice.
+ */
+const WORKSPACE_FALLBACK_HEADER = 'X-Opik-Deprecation';
+
 export interface ProjectRef {
   id: string;
   name: string;
@@ -124,6 +131,36 @@ export interface DatasetRef {
   id: string;
   name: string;
   description: string | null;
+}
+
+/**
+ * The answer to addressing a dataset by NAME (`POST /datasets/retrieve`), kept
+ * as the status, the message and the resolved identity rather than as a
+ * `DatasetRef | null`.
+ *
+ * Since opik#9659 a name is unique only within a project, so this lookup has
+ * three distinct answers a caller has to be able to tell apart: it resolved
+ * (200, with `id`), there is no such name (404), or the name exists in more than
+ * one project and the server refuses to choose (409, with the message naming the
+ * dataset). A helper that collapsed the last two into `null` — as
+ * `findDatasetByName` does, by design, for its callers — cannot express the
+ * refusal at all, and a spec using it would read "ambiguous" as "absent".
+ *
+ * `projectId` comes back because WHICH project's dataset was resolved is the
+ * whole claim of a project-scoped lookup, and `workspaceFallback` because a
+ * resolution that came from outside the named project announces itself only in
+ * that header.
+ */
+export interface RetrievedDatasetRef {
+  status: number;
+  /** The backend's own `message`, or the raw body when it isn't JSON. */
+  message: string;
+  /** The resolved dataset's id — null on any non-200, never a placeholder. */
+  id: string | null;
+  /** The resolved dataset's `project_id` — null on any non-200. */
+  projectId: string | null;
+  /** The `X-Opik-Deprecation` notice, or null when the lookup did not fall back. */
+  workspaceFallback: string | null;
 }
 
 export interface DatasetItemRef {
@@ -235,6 +272,18 @@ export interface RawApiResult {
    * status code build this shape themselves and have no header to report.
    */
   location?: string | null;
+  /**
+   * The `X-Opik-Deprecation` header, which a name lookup sets when it resolved
+   * the entity by a WORKSPACE-wide search after the project it was addressed in
+   * turned out not to hold it (`RequestContext.setWorkspaceFallbackFor`).
+   *
+   * Carried for the same reason as `location`: it is part of the contract and
+   * appears nowhere in the body. A fallback that silently stopped announcing
+   * itself is how a deprecation gets removed without anyone having migrated —
+   * so a spec about the fallback has to be able to read it, and to assert its
+   * ABSENCE on a lookup that resolved inside the project it named.
+   */
+  workspaceFallback?: string | null;
 }
 
 /**
@@ -503,6 +552,40 @@ export interface ExperimentRefDetail {
    * the right number of experiments.
    */
   projectId: string | null;
+}
+
+/**
+ * One row of the project-scoped experiments list, carrying the two fields the
+ * Experiments page's Test suites / Datasets tabs are built out of.
+ *
+ * `evaluationMethod` is the field the tabs filter on server-side, and
+ * `datasetVersionName` is `dataset_version_summary.version_name` — what the
+ * tab's version column renders. Neither is on `ExperimentRefDetail`, and
+ * neither is reachable through the pinned SDK's `findExperiments` projection.
+ *
+ * Both are `| null` rather than defaulted, because "the server sent no
+ * evaluation method" and "the server sent no linked version" are exactly the
+ * states a caller here is distinguishing — a `?? 'dataset'` would make an
+ * experiment the backend had stopped classifying read as a correctly-classified
+ * one, which is the regression a tab-partition assertion exists to catch.
+ */
+export interface ProjectExperimentRef {
+  id: string;
+  name: string;
+  evaluationMethod: string | null;
+  datasetId: string | null;
+  datasetVersionName: string | null;
+}
+
+/** A page of {@link ProjectExperimentRef} plus the server's own total. */
+export interface ProjectExperimentPage {
+  /**
+   * The server's `total`, which is NOT `experiments.length` — it counts every
+   * match, not the page. A closed-set assertion wants both: the page to hold
+   * the expected rows AND the total to say there are no others beyond it.
+   */
+  total: number;
+  experiments: ProjectExperimentRef[];
 }
 
 /**
@@ -2445,7 +2528,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json, location: res.headers.get('location') };
+    return {
+      status: res.status,
+      message,
+      json,
+      location: res.headers.get('location'),
+      workspaceFallback: res.headers.get(WORKSPACE_FALLBACK_HEADER),
+    };
   };
 
   /**
@@ -2514,7 +2603,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     } catch {
       // Not JSON (the OTLP endpoint's empty 200 body, or an HTML error page).
     }
-    return { status: res.status, message, json, location: res.headers.get('location') };
+    return {
+      status: res.status,
+      message,
+      json,
+      location: res.headers.get('location'),
+      workspaceFallback: res.headers.get(WORKSPACE_FALLBACK_HEADER),
+    };
   };
 
   /**
@@ -3461,6 +3556,145 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * `POST /v1/private/datasets` — the create the Create-dataset sidebar makes,
+     * with the status returned rather than thrown on.
+     *
+     * Through `rawFetch` and not the pinned SDK for the usual two reasons at
+     * once. The refusal half is the subject: since opik#9659 a dataset name is
+     * unique per PROJECT, so the same name in a second project must be accepted
+     * (201) while a repeat inside one project must still be refused (409) — and
+     * a helper that threw on the 409 could not asserted it. And `project_id` is
+     * what decides which of the two happens, so it has to be sendable.
+     *
+     * The new dataset's id appears only in `Location`; the endpoint answers 201
+     * with no body.
+     */
+    async createDatasetRaw(args: {
+      name: string;
+      description?: string;
+      /** Omitted entirely when absent — the backend then files it under Default Project. */
+      projectId?: string;
+    }): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/datasets', {
+        body: {
+          name: args.name,
+          ...(args.description === undefined ? {} : { description: args.description }),
+          ...(args.projectId === undefined ? {} : { project_id: args.projectId }),
+        },
+      });
+      return { status, message, location };
+    },
+
+    /**
+     * `POST /v1/private/datasets/retrieve` — address a dataset by NAME, with the
+     * status, the resolved identity and the deprecation header all reported.
+     *
+     * See {@link RetrievedDatasetRef} for why this exists alongside
+     * `findDatasetByName`: that one answers "the dataset, or nothing", which
+     * cannot express the 409 a name living in two projects now produces.
+     *
+     * `projectName` is omitted from the body entirely when absent rather than
+     * sent as null, because the two are different requests: a name-only address
+     * goes straight to the workspace-wide lookup, while naming a project scopes
+     * the lookup and only falls back when that project holds no such name.
+     */
+    async retrieveDatasetByName(args: {
+      datasetName: string;
+      projectName?: string;
+    }): Promise<RetrievedDatasetRef> {
+      const { status, message, json, workspaceFallback } = await rawFetch(
+        'POST',
+        '/v1/private/datasets/retrieve',
+        {
+          body: {
+            dataset_name: args.datasetName,
+            ...(args.projectName === undefined ? {} : { project_name: args.projectName }),
+          },
+        },
+      );
+      const body = status === 200 ? (json as { id?: unknown; project_id?: unknown }) : null;
+      return {
+        status,
+        message,
+        id: typeof body?.id === 'string' ? body.id : null,
+        projectId: typeof body?.project_id === 'string' ? body.project_id : null,
+        workspaceFallback: workspaceFallback ?? null,
+      };
+    },
+
+    /**
+     * `POST /v1/private/datasets/delete` — delete a dataset by NAME, optionally
+     * scoped to a project.
+     *
+     * The destructive half of the same lookup `retrieveDatasetByName` reads
+     * through, and the highest-consequence line of opik#9659: the DAO's
+     * `DELETE … WHERE workspace_id AND name` was replaced with a delete by the
+     * resolved dataset's id, so a name held in two projects is refused (409)
+     * instead of taking both. Returned rather than thrown on so one helper
+     * serves the 204 and the 409.
+     */
+    async deleteDatasetByName(args: {
+      datasetName: string;
+      projectName?: string;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('POST', '/v1/private/datasets/delete', {
+        body: {
+          dataset_name: args.datasetName,
+          ...(args.projectName === undefined ? {} : { project_name: args.projectName }),
+        },
+      });
+      return { status, message, location: null };
+    },
+
+    /**
+     * `GET /v1/private/datasets/{id}` reduced to its status — "does this dataset
+     * still exist".
+     *
+     * `getDatasetSummary` throws on anything but 200, which is right for a
+     * caller reading the summary and wrong for one asserting a delete landed:
+     * 404 is the expected answer there, not an error. Mirrors
+     * `automationRuleEvaluatorStatus`.
+     */
+    async datasetStatus(id: string): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('GET', `/v1/private/datasets/${id}`);
+      return { status, message, location: null };
+    },
+
+    /**
+     * `PUT /v1/private/datasets/items` addressed by dataset NAME rather than id —
+     * the third endpoint that resolves a name, and the only one that CREATES the
+     * dataset when the name resolves nowhere (`DatasetService.getOrCreate`).
+     *
+     * That combination is why it is worth driving: addressed with a project that
+     * holds no such name, it falls back to the workspace-wide lookup, so the
+     * same name living in two projects makes it ambiguous — and the answer to
+     * "ambiguous" must be a refusal with nothing written, not a new dataset in
+     * the project that was named.
+     *
+     * `writeDatasetItemsBatch` cannot express this: it addresses the dataset by
+     * id, which is exactly the lookup being avoided. Item ids must be UUIDv7
+     * (`uuid7()`), as there too.
+     */
+    async writeDatasetItemsByName(args: {
+      datasetName: string;
+      projectName?: string;
+      items: Array<{ id: string; data: Record<string, unknown> }>;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('PUT', '/v1/private/datasets/items', {
+        body: {
+          dataset_name: args.datasetName,
+          ...(args.projectName === undefined ? {} : { project_name: args.projectName }),
+          items: args.items.map((item) => ({
+            id: item.id,
+            source: 'manual',
+            data: item.data,
+          })),
+        },
+      });
+      return { status, message, location: null };
     },
 
     /**
@@ -5374,6 +5608,83 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments?project_id=…` — the read behind the project
+     * Experiments page, optionally narrowed by the `evaluation_method` filter
+     * its Test suites / Datasets tabs send.
+     *
+     * Raw rather than through the pinned SDK's `findExperiments`, for two
+     * reasons that both matter to a tab assertion. The projection drops
+     * `evaluation_method` and `dataset_version_summary` entirely, which are the
+     * two fields the tabs are made of; and `filters` is a JSON-encoded query
+     * param the generated client has no binding for, so the tab's own
+     * server-side narrowing could not be reproduced at all.
+     *
+     * `evaluationMethod` takes an operator as well as a value because the two
+     * tabs do not mirror each other: Test suites sends `= evaluation_suite`
+     * while Datasets sends `!= evaluation_suite`, so that a legacy experiment
+     * stored under any other method still shows somewhere. Hard-coding `=` here
+     * would make the Datasets half of a partition assertion test a query the
+     * page never sends.
+     */
+    async listExperimentsForProject(args: {
+      projectId: string;
+      evaluationMethod?: { operator: '=' | '!='; value: string };
+      /** Deliberately explicit: a membership assertion must not inherit a page size. */
+      size?: number;
+    }): Promise<ProjectExperimentPage> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        size: String(args.size ?? 100),
+      });
+      if (args.evaluationMethod) {
+        query.set(
+          'filters',
+          JSON.stringify([
+            {
+              id: 'evaluation_method',
+              field: 'evaluation_method',
+              type: 'string',
+              operator: args.evaluationMethod.operator,
+              value: args.evaluationMethod.value,
+            },
+          ]),
+        );
+      }
+      const { status, message, json } = await rawFetch('GET', '/v1/private/experiments', { query });
+      if (status !== 200) {
+        throw new Error(
+          `listExperimentsForProject(${args.projectId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listExperimentsForProject(${args.projectId}): the answer carried no numeric 'total' — ` +
+            'cannot assert a closed set against a page of unknown completeness',
+        );
+      }
+      const content = Array.isArray(body.content) ? body.content : [];
+      return {
+        total: body.total,
+        experiments: content.map((row) => {
+          const summary = row.dataset_version_summary as { version_name?: unknown } | null;
+          return {
+            id: String(row.id),
+            name: String(row.name),
+            evaluationMethod:
+              typeof row.evaluation_method === 'string' ? row.evaluation_method : null,
+            datasetId: typeof row.dataset_id === 'string' ? row.dataset_id : null,
+            datasetVersionName:
+              typeof summary?.version_name === 'string' ? summary.version_name : null,
+          };
+        }),
+      };
+    },
+
+    /**
      * The `evaluation_method` one experiment reads back as.
      *
      * Read, never assumed, by any spec about the filter opik#9456 added: an
@@ -5392,6 +5703,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const method = (json as { evaluation_method?: unknown } | null)?.evaluation_method;
       if (method === undefined || method === null) return null;
       return String(method);
+    },
+
+    /**
+     * The EXPERIMENT feedback score names a project has, sorted.
+     *
+     * A third endpoint over a third table, beside the trace and thread readers
+     * below: it is the one behind the per-score columns the Experiments table
+     * offers (`useExperimentsFeedbackScoresNames`). Reading it is what makes an
+     * assertion about those columns a claim about the tab rather than about the
+     * project's data — a score that this endpoint never reported could not have
+     * produced a column either way, so a picker missing it would pass.
+     */
+    async listExperimentFeedbackScoreNames(projectId: string): Promise<string[]> {
+      return feedbackScoreNames('/v1/private/experiments/feedback-scores/names', projectId);
     },
 
     async deleteExperiment(id: string): Promise<void> {
