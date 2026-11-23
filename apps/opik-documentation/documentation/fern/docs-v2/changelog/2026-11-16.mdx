@@ -1,0 +1,46 @@
+## Test Suites and Datasets Tabs on the Experiments Page
+
+The Experiments page now has separate **Test suites** and **Datasets** tabs. Each tab lists only its own experiments and only the columns that apply to them: test suite experiments show their version and pass rate, and dataset experiments show their version and feedback scores. Experiments are grouped by test suite or dataset by default, and group rows show the average pass rate of their experiments. The page opens on the last tab you used in each project, so you land straight on the results you care about.
+
+<Frame>
+  <img src="/img/changelog/2026-11-16/experiments_tabs.png" alt="The Experiments page with the Test suites tab selected and experiments grouped by test suite" />
+</Frame>
+
+## Add and Edit Dataset Records in One Panel
+
+Every **Add record** button now opens the same side panel, where you can add, rename and remove fields before you save. An empty dataset suggests **Input**, **Expected output** and **Metadata** fields to start from. Editing a record uses the same field rows, keeps the type of every value you leave alone, and removing a field removes it from that record only. When you add traces or spans to a dataset, its existing columns are listed up front, so you can map each one or leave it empty.
+
+<Frame>
+  <img src="/img/changelog/2026-11-16/dataset_record_panel.png" alt="The Add record panel with input, expected_output and category fields" />
+</Frame>
+
+[Learn more in the datasets docs](/evaluation/advanced/manage_datasets).
+
+## Bug Fixes & Improvements
+
+- **Experiments toolbar** - The Group button is labeled, an **Add filter** chip shows when no filter is active, and pass rates below 100% show as at most 99% in the table and on the Compare page.
+- **Dataset names per project** - Dataset names are unique within a project instead of across the workspace, and datasets and prompts created without a project go to the Default Project.
+- **Test suites** - Adding traces or spans to a test suite keeps the suite's pass criteria unless you change them.
+- **Experiment items stream** - `POST /v1/private/datasets/items/experiments/items/stream` streams a dataset's experiment items across all its experiments, up to 2,000 per request.
+- **Dashboards** - Dashboards can be created and renamed with any name, including one another dashboard already uses. Ollie table widgets have sortable and resizable columns, and the sort and widths are saved with the widget.
+- **Online evaluation** - LLM-as-a-Judge spans record, and are priced by, the model that answered. Changing a rule's evaluator type returns a 409 that asks you to create a new rule.
+- **OpenTelemetry** - `gen_ai.usage.cost.currency` is accepted on ingest, an OTLP body that can't be parsed gets a 400, and errors on protobuf requests come back as a protobuf `google.rpc.Status`, so exporters do not retry them.
+- **Experiment comparison** - Filtering the comparison by output, a dataset item field or a feedback score returns its stats on installs that use distributed ClickHouse tables.
+- **TypeScript SDK** - `searchTraces`, `searchSpans` and `searchThreads` accept `maxResults` above 2000, `getExperimentsByName` and `searchPrompts` return every match, Jinja2 prompt values are no longer HTML-escaped, the LangChain handler logs token usage from `usage_metadata`, and streamed Gemini traces keep their function calls and all their text.
+- **Python SDK tracing** - Streamed tool calls are kept in Groq, Together and Cerebras traces, LlamaIndex chunking payloads stay intact, DSPy LM spans log usage on dspy 3.5, a tracked generator's cleanup runs inside its own span, numpy scalars are logged as numbers and booleans, and dict keys that are tuples or frozensets are logged as strings.
+- **Python SDK evaluation** - ROUGE scores non-Latin text, ChrF scores identical short strings 1.0, non-finite metric scores are marked as failed, distribution metrics raise `MetricComputationError` on non-string inputs, `evaluate_on_dict_items` keeps each item's own id, and a warning shows when a thread has more traces than `max_traces_per_thread`.
+- **Python SDK datasets** - Deleting a dataset item keeps content hashes that other items still share, and by-name lookups are scoped to the project.
+- **SageMaker** - Attachment uploads and downloads work in SageMaker partner app mode.
+- **Self-hosting** - The Python code executor sandboxes code metrics by default. See the [self-host changelog](/self-host/changelog) for the settings that turn it off. The Helm chart moves to ZooKeeper 3.9.7, uses a read-only ClickHouse monitoring user, and sets the bundled Redis `REDIS_URL` only when `redis.enabled` is on.
+- **Documentation** - New [Claude Managed Agents integration](/integrations/claude-managed-agents) page and [Move to Opik Cloud](/self-host/migrate-to-cloud) guide, and the self-host sidebar is grouped into Deploy, Configure, Operate and Upgrade and migrate.
+
+## Performance Improvements
+
+- **Faster experiment item lookups** - Lookups of an experiment item by id read 1 to 2 granules instead of the whole workspace.
+- **Fewer cold-storage reads** - The Logs empty-state check and cost alerts read only the weeks that can hold their spans.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.143...2.2.155)
+
+_Releases_: `2.2.144`, `2.2.145`, `2.2.146`, `2.2.147`, `2.2.148`, `2.2.149`, `2.2.150`, `2.2.151`, `2.2.152`, `2.2.153`, `2.2.154`, `2.2.155`
