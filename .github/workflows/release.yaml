@@ -189,6 +189,8 @@ jobs:
       is_release: true
       skip_commit_push: true
 
+  # Not a dependency of create-github-release: a failed engine publish must not
+  # hold back the Opik release. Re-publish the version with genui_publish.yml.
   release-genui:
     needs:
       - set-version
@@ -223,7 +225,6 @@ jobs:
       - release-sdk
       - release-typescript-sdk
       - release-typescript-sdk-integrations
-      - release-genui
       - publish-helm-chart
     runs-on: ubuntu-latest
     steps:
