@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000117_create_topic_vector_watermarks
+--changeset yaroslavb:000120_create_topic_vector_watermarks
 --comment: Create topic_vector_watermarks: where the vectors tick reads each workspace from (OPIK-8981)
 
 -- watermark: where the vectors tick's next window read of the workspace starts, less topics.vectors.watermarkOverlap.
