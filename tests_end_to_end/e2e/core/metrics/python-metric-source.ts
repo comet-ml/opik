@@ -450,6 +450,229 @@ ${reported}
 }
 
 /**
+ * One network-reach attempt the probe metric makes, as
+ * {@link buildNetworkReachProbeMetric} renders it.
+ *
+ * `name` is what the score's reason reports the verdict under, so it is part of
+ * the spec's assertion surface; `call` is the Python expression that does the
+ * reaching.
+ */
+interface ReachAttempt {
+  name: string;
+  /** Python source for the attempt — must raise when it cannot reach. */
+  call: string;
+  /** Why this target is the right one to be refused. */
+  rationale: string;
+}
+
+/**
+ * The port an isolated worker's own python-backend serves on.
+ *
+ * `PYTHON_BACKEND_PORT` in `entrypoint.sh`, which defaults to 8000 and is left
+ * unset by compose and the chart alike. Only the DEFAULT matters here: the
+ * attempt below has to be refused whatever is on the port, and it is only the
+ * extra, internet-independent proof of the sandbox where the default holds.
+ */
+const PYTHON_BACKEND_DEFAULT_PORT = 8000;
+
+/**
+ * How long one attempt may wait, in seconds.
+ *
+ * Deliberately far below `PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS` (3s by
+ * default, and the whole `score()` call happens inside it): three attempts at
+ * this timeout fit with room to spare, so a deployment where a refusal arrives
+ * by timeout rather than immediately still reports its verdicts instead of
+ * being killed mid-probe — which would present as no score at all, i.e. the
+ * failure of a dead evaluator rather than of a reachable network.
+ */
+const REACH_TIMEOUT_SECONDS = 0.5;
+
+/**
+ * The attempts the probe makes, each required to be refused.
+ *
+ * Every target is given NUMERICALLY, and no attempt resolves a name. That is
+ * load-bearing twice over: `getaddrinfo` is the one call here with no timeout
+ * parameter, so a deployment whose resolver is merely unreachable rather than
+ * refused could spend the whole exec budget inside it; and a name that happened
+ * to be in `/etc/hosts` would resolve without any network at all, which reads
+ * as a reach that is not one.
+ */
+const REACH_ATTEMPTS: readonly ReachAttempt[] = [
+  {
+    name: 'loopback-executor-host',
+    call: `socket.create_connection(("127.0.0.1", ${PYTHON_BACKEND_DEFAULT_PORT}), timeout=TIMEOUT)`,
+    rationale:
+      'On the process strategy an unisolated worker is a fork of the python-backend ' +
+      'itself, so this is its own gunicorn: it is reachable with certainty and ' +
+      'without any network beyond loopback. It is therefore the attempt whose ' +
+      'refusal cannot be explained by a deployment that simply has no egress.',
+  },
+  {
+    name: 'public-ip-tcp',
+    call: 'socket.create_connection(("1.1.1.1", 80), timeout=TIMEOUT)',
+    rationale:
+      'A TCP connection straight out of the deployment. On the docker strategy ' +
+      'the executor container is created with `network_disabled`, so there is no ' +
+      'interface to route it and the refusal is local and immediate.',
+  },
+  {
+    name: 'public-url-http',
+    call: 'urllib.request.urlopen("http://1.1.1.1/", timeout=TIMEOUT)',
+    rationale:
+      'The same target through the stdlib HTTP stack rather than a bare socket, ' +
+      'because that is how a real metric would reach for a web API — and it wraps ' +
+      'the refusal in `URLError`, which is a different exception path to report.',
+  },
+];
+
+/**
+ * A metric that tries to REACH things over the network and scores whether any
+ * attempt got through.
+ *
+ * Returns `1.0` when every attempt was refused and `0.0` when any of them
+ * reached, with a per-attempt verdict in `ScoreResult.reason` so a spec can
+ * tell "every attempt was refused" from "the metric quietly made fewer attempts
+ * than it was built with" — two states a bare `value == 1.0` collapses into one.
+ *
+ * **It asserts reachability, not socket creation, and that is what makes it
+ * deployment-agnostic.** The two executor strategies refuse at different
+ * layers: on `process`, `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` installs
+ * a seccomp filter that fails the `socket` syscall itself with `EPERM`, so even
+ * `socketpair` is refused; on `docker`, `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK=false`
+ * creates the container with `network_disabled`, where socket creation succeeds
+ * and loopback works and only the connection has nowhere to go. A probe that
+ * required socket creation to fail would therefore be a process-strategy spec
+ * wearing a general claim; "nothing was reached" is the property both must have.
+ *
+ * **Never assert the exception type or the errno from the reason.** They are
+ * exactly what differs between the two strategies (`PermissionError`/`EPERM`
+ * against `OSError`/`ENETUNREACH`), so pinning either would make a spec about
+ * the sandbox fail on the deployment that has a different one. Attach the reason
+ * as a diagnostic instead — it is the only thing that tells a human reading a
+ * future failure which layer answered.
+ *
+ * The attempts are a closed list rather than a parameter: every one of them is
+ * chosen for a reason that belongs with the source rather than with a caller
+ * (see {@link REACH_ATTEMPTS}), and the exec timeout they share is a budget a
+ * caller cannot see.
+ */
+export function buildNetworkReachProbeMetric(scoreName: string): string {
+  const helpers = REACH_ATTEMPTS.map(
+    (attempt, index) => `def _attempt_${index}() -> None:
+    """${attempt.name}: ${attempt.rationale.replace(/`/g, '')}"""
+    with ${attempt.call}:
+        pass`,
+  ).join('\n\n\n');
+  const registry = REACH_ATTEMPTS.map(
+    (attempt, index) => `    (${JSON.stringify(attempt.name)}, _attempt_${index}),`,
+  ).join('\n');
+
+  // The opik stub import comes first, as everywhere in this file: anything that
+  // reaches the real `opik` package evicts the lightweight stubs
+  // `scoring_runner.py` holds a `BaseMetric` reference into, after which the
+  // user class is no longer a subclass of the one the runner is still holding.
+  // `socket` and `urllib.request` are stdlib and touch no opik module, so they
+  // are safe below it.
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+import socket
+import urllib.request
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+TIMEOUT = ${JSON.stringify(REACH_TIMEOUT_SECONDS)}
+
+
+${helpers}
+
+
+ATTEMPTS = (
+${registry}
+)
+
+
+class NetworkReachProbe(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+        output: Any = None,
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        verdicts = []
+        refused = 0
+        for name, attempt in ATTEMPTS:
+            try:
+                attempt()
+            # Exception, not BaseException: a refusal is an OSError subclass on
+            # every strategy, while swallowing BaseException would also swallow
+            # the interpreter being torn down by the exec timeout and report it
+            # as a refusal.
+            except Exception as error:
+                refused += 1
+                detail = type(error).__name__ + ": " + str(error)[:60]
+                verdicts.append(name + "=refused(" + detail + ")")
+            else:
+                verdicts.append(name + "=reached")
+        header = [
+            "attempted=" + ",".join(name for name, _ in ATTEMPTS),
+            "refused=" + str(refused) + "/" + str(len(ATTEMPTS)),
+        ]
+        return score_result.ScoreResult(
+            value=1.0 if refused == len(ATTEMPTS) else 0.0,
+            name=self.name,
+            reason=" ".join(header + verdicts),
+        )`;
+}
+
+/** The attempt names {@link buildNetworkReachProbeMetric}'s reason reports, in order. */
+export const NETWORK_REACH_ATTEMPT_NAMES: readonly string[] = REACH_ATTEMPTS.map((a) => a.name);
+
+/**
+ * A metric that opens a connection WITHOUT catching anything.
+ *
+ * The other half of the sandbox's observable behaviour. The probe above answers
+ * "was the network reachable"; this answers "and when user code does not expect
+ * the refusal, is the user told" — because the alternative, which this is the
+ * regression alarm for, is a rule that silently stores nothing and is
+ * indistinguishable from one that was never invoked.
+ *
+ * The refusal surfaces from `score()`, so the traceback has a real user frame
+ * (`File "<string>", line N, in score`) however the deployment refuses: on the
+ * process strategy `PermissionError` from the blocked `socket` syscall, on the
+ * docker strategy an `OSError` from the connect with no route. A spec must
+ * assert the frame and a non-empty cause, never the exception type.
+ *
+ * The same public target as the probe's `public-ip-tcp` attempt, and timeboxed
+ * the same way: a connect that waited out the exec timeout would be reported as
+ * a timeout rather than as a refusal, which is a different ERROR row.
+ */
+export function buildUnguardedNetworkMetric(scoreName: string): string {
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+import socket
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+
+class UnguardedNetworkMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+        output: Any = None,
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        # Uncaught on purpose: the refusal has to leave score() as a failure
+        # rather than be turned into a score.
+        with socket.create_connection(("1.1.1.1", 80), timeout=${JSON.stringify(REACH_TIMEOUT_SECONDS)}):
+            return score_result.ScoreResult(value=1.0, name=self.name)`;
+}
+
+/**
  * A metric that raises inside `score()`.
  *
  * The straightforward half of what an ERROR row has to say: a real user frame
