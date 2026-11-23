@@ -227,11 +227,10 @@ test.describe(
     );
 
     test(
-      'Custom keeps the author\'s own question while they try a template, and takes an edited template',
+      'Ctrl+Z after a template brings back the author\'s own question',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
       async ({ project, page }) => {
         const OWN_QUESTION = 'Does the output offer the user a refund?';
-        const EDITED_QUESTION = 'Does the output contain profanity?';
         const supportReply = templateByLabel('Support reply');
         const rules = new OnlineEvaluationPage(page);
 
@@ -249,23 +248,12 @@ test.describe(
           );
         });
 
-        await test.step('Custom gives it back, and drops the name the template set', async () => {
-          await rules.chooseTemplate('Custom');
-          expect(await rules.readQuestions(), 'only the author\'s own question').toEqual([
-            OWN_QUESTION,
-          ]);
+        await test.step('Undo gives it back, and drops the name the template set', async () => {
+          await page.keyboard.press('ControlOrMeta+z');
+          await expect
+            .poll(() => rules.readQuestions(), { message: 'only the author\'s own question' })
+            .toEqual([OWN_QUESTION]);
           await expect(rules.nameInput, 'the rule is unnamed again').toHaveValue('');
-        });
-
-        await test.step('An edited template becomes the Custom content', async () => {
-          await rules.chooseTemplate('Moderation');
-          await rules.mainQuestionInput.fill(EDITED_QUESTION);
-          expect(await rules.readQuestions()).toEqual([EDITED_QUESTION]);
-          await rules.openTemplates();
-          await expect(
-            rules.templateCard('Custom'),
-            'the edited template is now the Custom content',
-          ).toHaveAttribute('aria-pressed', 'true');
           await rules.cancelPanel();
         });
       },

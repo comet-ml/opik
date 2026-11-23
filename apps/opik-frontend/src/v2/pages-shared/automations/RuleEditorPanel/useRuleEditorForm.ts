@@ -61,11 +61,6 @@ import {
   DEFAULT_PYTHON_CODE_DATA,
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
-import {
-  findSelectedTemplate,
-  getRuleTemplateOptions,
-  isBlankContent,
-} from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
 
 const DERIVED_FIELDS = [
   "llmJudgeDetails.variables",
@@ -221,11 +216,24 @@ type ScopeDraft = {
   [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
 } & { autoName: string };
 
-type CustomDraft = {
+type ContentSnapshot = {
   llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
-  autoName: string;
   ruleName: string;
+  autoName: string;
 };
+
+type ContentChange = { before: ContentSnapshot; after: ContentSnapshot };
+
+const isSameContent = (a: ContentSnapshot, b: ContentSnapshot) =>
+  a.ruleName === b.ruleName &&
+  isEqual(a.llmJudgeDetails.messages, b.llmJudgeDetails.messages) &&
+  isEqual(a.llmJudgeDetails.schema, b.llmJudgeDetails.schema);
+
+const isUndoShortcut = (event: KeyboardEvent) =>
+  event.key.toLowerCase() === "z" &&
+  (event.metaKey || event.ctrlKey) &&
+  !event.shiftKey &&
+  !event.altKey;
 
 type UseRuleEditorFormParams = {
   ruleType: UI_EVALUATORS_RULE_TYPE;
@@ -297,9 +305,7 @@ const useRuleEditorForm = ({
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
   const autoNameRef = useRef("");
-  const customDraftsRef = useRef<
-    Partial<Record<EVALUATORS_RULE_SCOPE, CustomDraft>>
-  >({});
+  const contentChangesRef = useRef<ContentChange[]>([]);
 
   const isDefaultName = useCallback(() => {
     const name = form.getValues("ruleName").trim();
@@ -326,6 +332,7 @@ const useRuleEditorForm = ({
         autoName: autoNameRef.current,
       });
       const draft = scopeDraftsRef.current[scope];
+      contentChangesRef.current = [];
 
       if (isDefaultName()) setAutoName(draft?.autoName ?? "");
 
@@ -350,119 +357,118 @@ const useRuleEditorForm = ({
     [form, isDefaultName, setAutoName],
   );
 
-  const isOnTemplate = useCallback(() => {
-    const uiType = form.getValues("uiType");
-    return Boolean(
-      findSelectedTemplate(
-        form.getValues("llmJudgeDetails"),
-        getRuleTemplateOptions(uiType, form.getValues("scope")),
-        uiType,
-      ),
-    );
-  }, [form]);
-
-  const isCustomContent = useCallback(() => {
-    const llmJudgeDetails = form.getValues("llmJudgeDetails");
-    return (
-      llmJudgeDetails.messages.length > 0 &&
-      !isOnTemplate() &&
-      !isBlankContent(
-        llmJudgeDetails,
-        form.getValues("uiType"),
-        form.getValues("scope"),
-      )
-    );
-  }, [form, isOnTemplate]);
-
-  const saveCustomDraft = useCallback(() => {
-    if (!isCustomContent()) return;
-    const llmJudgeDetails = form.getValues("llmJudgeDetails");
-    customDraftsRef.current[form.getValues("scope")] = cloneDeep({
-      llmJudgeDetails,
-      autoName: autoNameRef.current,
-      ruleName: form.getValues("ruleName").trim(),
-    });
-  }, [form, isCustomContent]);
-
-  const hasCustomContent = useCallback(
-    () =>
-      Boolean(customDraftsRef.current[form.getValues("scope")]) ||
-      isCustomContent(),
-    [form, isCustomContent],
+  const takeSnapshot = useCallback(
+    (): ContentSnapshot =>
+      cloneDeep({
+        llmJudgeDetails: form.getValues("llmJudgeDetails"),
+        ruleName: form.getValues("ruleName"),
+        autoName: autoNameRef.current,
+      }),
+    [form],
   );
+
+  const recordContentChange = useCallback(
+    (change: () => void) => {
+      const before = takeSnapshot();
+      change();
+      contentChangesRef.current.push({ before, after: takeSnapshot() });
+    },
+    [takeSnapshot],
+  );
+
+  const undoContentChange = useCallback(() => {
+    const lastChange = contentChangesRef.current.at(-1);
+    if (!lastChange || !isSameContent(takeSnapshot(), lastChange.after)) {
+      return false;
+    }
+    contentChangesRef.current.pop();
+    const { llmJudgeDetails, ruleName, autoName } = lastChange.before;
+    const current = form.getValues("llmJudgeDetails");
+    autoNameRef.current = autoName;
+    form.setValue("ruleName", ruleName, { shouldDirty: true });
+    form.setValue(
+      "llmJudgeDetails",
+      {
+        ...llmJudgeDetails,
+        model: current.model,
+        config: current.config,
+        maxCostUsd: current.maxCostUsd,
+      },
+      { shouldDirty: true },
+    );
+    form.clearErrors("llmJudgeDetails");
+    return true;
+  }, [form, takeSnapshot]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isUndoShortcut(event) || !undoContentChange()) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [undoContentChange]);
 
   const applyTemplate = useCallback(
-    (template: LLMPromptTemplate, label: string) => {
-      saveCustomDraft();
-      const current = form.getValues("llmJudgeDetails");
-      const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
-      const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
-      form.setValue(
-        "llmJudgeDetails",
-        {
-          ...current,
-          template: template.value,
-          messages: cloneDeep(template.messages),
-          variables: cloneDeep(template.variables),
-          schema: templateMainScore
-            ? [{ ...templateMainScore, name: mainScoreName }, ...templateScores]
-            : [],
-        },
-        { shouldDirty: true },
-      );
-      form.clearErrors("llmJudgeDetails");
-      if (!isEdit && isDefaultName()) setAutoName(label);
-    },
-    [form, isEdit, isDefaultName, setAutoName, saveCustomDraft],
+    (template: LLMPromptTemplate, label: string) =>
+      recordContentChange(() => {
+        const current = form.getValues("llmJudgeDetails");
+        const [templateMainScore, ...templateScores] = cloneDeep(
+          template.schema,
+        );
+        const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
+        form.setValue(
+          "llmJudgeDetails",
+          {
+            ...current,
+            template: template.value,
+            messages: cloneDeep(template.messages),
+            variables: cloneDeep(template.variables),
+            schema: templateMainScore
+              ? [
+                  { ...templateMainScore, name: mainScoreName },
+                  ...templateScores,
+                ]
+              : [],
+          },
+          { shouldDirty: true },
+        );
+        form.clearErrors("llmJudgeDetails");
+        if (!isEdit && isDefaultName()) setAutoName(label);
+      }),
+    [form, isEdit, isDefaultName, setAutoName, recordContentChange],
   );
 
-  const replaceWithCustom = useCallback(
-    (draft?: CustomDraft) => {
-      const uiType = form.getValues("uiType");
-      const llmJudgeDetails = form.getValues("llmJudgeDetails");
-      const custom =
-        draft?.llmJudgeDetails ??
-        cloneDeep(getDefaultJudgeData(uiType)[form.getValues("scope")]);
-      const [customMainScore, ...customScores] = custom.schema;
-      const draftMainScoreName = customMainScore?.name ?? "";
-      const isOwnMainScoreName =
-        Boolean(draft) && draftMainScoreName !== draft?.ruleName;
-      const mainScoreName = isEdit
-        ? (llmJudgeDetails.schema[0]?.name ?? "")
-        : isOwnMainScoreName
-          ? draftMainScoreName
-          : "";
-      form.setValue(
-        "llmJudgeDetails",
-        {
-          ...custom,
-          schema: customMainScore
-            ? [{ ...customMainScore, name: mainScoreName }, ...customScores]
-            : [],
-          messages: custom.messages.length
-            ? custom.messages
-            : createInitialRulePrompt(uiType),
-          model: llmJudgeDetails.model,
-          config: llmJudgeDetails.config,
-          maxCostUsd: llmJudgeDetails.maxCostUsd,
-        },
-        { shouldDirty: true },
-      );
-      form.clearErrors("llmJudgeDetails");
-      if (!isEdit && isDefaultName()) setAutoName(draft?.autoName ?? "");
-    },
-    [form, isEdit, isDefaultName, setAutoName],
+  const startBlank = useCallback(
+    () =>
+      recordContentChange(() => {
+        const uiType = form.getValues("uiType");
+        const current = form.getValues("llmJudgeDetails");
+        const blank = cloneDeep(
+          getDefaultJudgeData(uiType)[form.getValues("scope")],
+        );
+        const [blankMainScore, ...blankScores] = blank.schema;
+        const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
+        form.setValue(
+          "llmJudgeDetails",
+          {
+            ...blank,
+            schema: blankMainScore
+              ? [{ ...blankMainScore, name: mainScoreName }, ...blankScores]
+              : [],
+            messages: createInitialRulePrompt(uiType),
+            model: current.model,
+            config: current.config,
+            maxCostUsd: current.maxCostUsd,
+          },
+          { shouldDirty: true },
+        );
+        form.clearErrors("llmJudgeDetails");
+        if (!isEdit && isDefaultName()) setAutoName("");
+      }),
+    [form, isEdit, isDefaultName, setAutoName, recordContentChange],
   );
-
-  const selectCustom = useCallback(() => {
-    if (!isOnTemplate()) return;
-    replaceWithCustom(customDraftsRef.current[form.getValues("scope")]);
-  }, [form, isOnTemplate, replaceWithCustom]);
-
-  const startBlank = useCallback(() => {
-    saveCustomDraft();
-    replaceWithCustom();
-  }, [saveCustomDraft, replaceWithCustom]);
 
   const prepareForSubmit = useCallback(() => {
     const values = form.getValues();
@@ -597,9 +603,7 @@ const useRuleEditorForm = ({
     form,
     changeScope,
     applyTemplate,
-    selectCustom,
     startBlank,
-    hasCustomContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,

@@ -12,7 +12,7 @@ import type useRuleEditorForm from "@/v2/pages-shared/automations/RuleEditorPane
 
 export type RuleTemplateActions = Pick<
   ReturnType<typeof useRuleEditorForm>,
-  "applyTemplate" | "selectCustom" | "startBlank" | "hasCustomContent"
+  "applyTemplate" | "startBlank"
 >;
 
 const useRuleTemplatePicker = (
@@ -47,12 +47,9 @@ const useRuleTemplatePicker = (
     gridProps: {
       options,
       selectedOption,
-      showCustom: actions.hasCustomContent(),
-      isCustomSelected: hasContent && !selectedOption && !isBlank,
       isBlankSelected: isBlank,
       onSelect: (option: JudgeTemplateOption) =>
         pick(() => actions.applyTemplate(option.template, option.label)),
-      onSelectCustom: () => pick(actions.selectCustom),
       onStartBlank: () => pick(actions.startBlank),
     },
   };

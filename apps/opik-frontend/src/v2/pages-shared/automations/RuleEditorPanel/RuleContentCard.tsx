@@ -46,7 +46,6 @@ type RuleContentCardProps = {
   contentLabel: string;
   contentIcon: React.ComponentType<{ className?: string }>;
   contentIconClassName: string;
-  customDescription: string;
   blankDescription: string;
   headerEnd?: React.ReactNode;
   hasError?: boolean;
@@ -59,7 +58,6 @@ const RuleContentCard: React.FC<RuleContentCardProps> = ({
   contentLabel,
   contentIcon,
   contentIconClassName,
-  customDescription,
   blankDescription,
   headerEnd,
   hasError,
@@ -93,11 +91,7 @@ const RuleContentCard: React.FC<RuleContentCardProps> = ({
     }
   >
     {picker.showTemplates ? (
-      <TemplateGrid
-        {...picker.gridProps}
-        customDescription={customDescription}
-        blankDescription={blankDescription}
-      />
+      <TemplateGrid {...picker.gridProps} blankDescription={blankDescription} />
     ) : (
       children
     )}

@@ -1,5 +1,5 @@
 import React from "react";
-import { PenLine, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import IconTag from "@/shared/IconTag/IconTag";
@@ -47,26 +47,18 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
 type TemplateGridProps = {
   options: JudgeTemplateOption[];
   selectedOption?: JudgeTemplateOption;
-  showCustom: boolean;
-  isCustomSelected: boolean;
   isBlankSelected: boolean;
-  customDescription: string;
   blankDescription: string;
   onSelect: (option: JudgeTemplateOption) => void;
-  onSelectCustom: () => void;
   onStartBlank: () => void;
 };
 
 const TemplateGrid: React.FC<TemplateGridProps> = ({
   options,
   selectedOption,
-  showCustom,
-  isCustomSelected,
   isBlankSelected,
-  customDescription,
   blankDescription,
   onSelect,
-  onSelectCustom,
   onStartBlank,
 }) => (
   <div
@@ -77,16 +69,6 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
       Choose a template
     </span>
     <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
-      {showCustom && (
-        <TemplateCard
-          label="Custom"
-          description={customDescription}
-          icon={PenLine}
-          iconClassName="bg-slate-300"
-          isSelected={isCustomSelected}
-          onClick={onSelectCustom}
-        />
-      )}
       {options.map((option) => (
         <TemplateCard
           key={option.label}

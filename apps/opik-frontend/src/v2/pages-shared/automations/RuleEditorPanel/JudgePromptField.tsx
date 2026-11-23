@@ -71,7 +71,6 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
       contentLabel="Prompt"
       contentIcon={Text}
       contentIconClassName="bg-[var(--rule-icon-llm-judge)]"
-      customDescription="Your own prompt, kept while you try templates."
       blankDescription="Write your own prompt from scratch."
       headerEnd={<JudgePromptToolbar form={form} />}
       hasError={hasError}

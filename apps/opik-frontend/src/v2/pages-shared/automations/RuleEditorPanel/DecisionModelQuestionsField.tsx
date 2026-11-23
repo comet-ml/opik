@@ -35,7 +35,6 @@ const DecisionModelQuestionsField: React.FC<
         contentLabel="Questions"
         contentIcon={CircleHelp}
         contentIconClassName="bg-[var(--rule-icon-decision-model)]"
-        customDescription="Your own questions, kept while you try templates."
         blankDescription="Write your own questions from scratch."
         className="flex-none"
       >
