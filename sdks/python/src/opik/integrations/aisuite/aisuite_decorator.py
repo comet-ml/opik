@@ -14,6 +14,7 @@ from typing_extensions import override
 
 import aisuite.framework as aisuite_chat_completion
 from openai.types.chat import chat_completion as openai_chat_completion
+import pydantic
 
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
@@ -137,10 +138,28 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
             choices = []
 
             for choice in output.choices:
+                message = choice.message
                 choices.append(
                     {
-                        "message": {"content": choice.message.content},
+                        # aisuite < 0.2 uses a plain Message class without model_dump
+                        "message": message.model_dump(mode="json")
+                        if isinstance(message, pydantic.BaseModel)
+                        else {"content": message.content},
+                        "finish_reason": getattr(choice, "finish_reason", None),
                     }
+                )
+
+            # aisuite normalizes usage to the OpenAI format, as a CompletionUsage
+            # or (Cohere) a plain dict; older aisuite versions have no usage
+            response_usage = getattr(output, "usage", None)
+            if isinstance(response_usage, pydantic.BaseModel):
+                response_usage = response_usage.model_dump(mode="json")
+            if response_usage is not None:
+                usage = llm_usage.try_build_opik_usage_or_log_error(
+                    provider=LLMProvider.OPENAI,
+                    usage=response_usage,
+                    logger=LOGGER,
+                    error_message="Failed to log token usage from aisuite completion response",
                 )
 
             output = {"choices": choices}

@@ -155,7 +155,13 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 output={"choices": ANY_BUT_NONE},
                 tags=["aisuite"],
                 metadata=ANY_DICT,
-                usage=None,
+                usage=ANY_DICT.containing(
+                    {
+                        "prompt_tokens": ANY_BUT_NONE,
+                        "completion_tokens": ANY_BUT_NONE,
+                        "total_tokens": ANY_BUT_NONE,
+                    }
+                ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
