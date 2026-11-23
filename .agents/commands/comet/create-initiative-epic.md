@@ -21,6 +21,7 @@ Ask the user for the following:
 ### Step 2: Fetch Content from Sources
 
 #### Notion Pages
+
 For each Notion URL provided, use the Notion MCP to fetch the content:
 
 ```
@@ -30,6 +31,7 @@ project-0-opik-Notion-notion-fetch(
 ```
 
 Parse the returned Markdown content to extract:
+
 - Page title
 - Problem statement
 - User journey (step-by-step flow of how users will interact with the feature)
@@ -40,11 +42,13 @@ Parse the returned Markdown content to extract:
 - Risks
 
 #### Figma Links
+
 For each Figma URL, extract the file/frame name from the URL structure and note it for the Design section.
 
 ### Step 3: Synthesize Information
 
 Combine all extracted information into the Epic template below. When synthesizing:
+
 - Consolidate overlapping information from multiple sources
 - Identify and flag any gaps or inconsistencies
 - Summarize verbose content into actionable items
@@ -53,6 +57,7 @@ Combine all extracted information into the Epic template below. When synthesizin
 ### Step 4: Review with User
 
 Present the synthesized Epic description to the user for review. Allow them to:
+
 - Edit any section
 - Add missing information
 - Approve the final content
@@ -78,7 +83,8 @@ user-Jira__home_-jira_create_issue(
 
 After creating the Epic, add remote links for all source documents:
 
-#### For Notion Links:
+#### For Notion Links
+
 ```
 user-Jira__home_-jira_create_remote_issue_link(
   issue_key="<created_epic_key>",
@@ -89,7 +95,8 @@ user-Jira__home_-jira_create_remote_issue_link(
 )
 ```
 
-#### For Figma Links:
+#### For Figma Links
+
 ```
 user-Jira__home_-jira_create_remote_issue_link(
   issue_key="<created_epic_key>",
@@ -253,11 +260,13 @@ _To be completed by engineering team_
 ## Labels
 
 Always include these labels for initiative Epics:
+
 - `initiative` - Marks this as a strategic initiative
 - `quarterly-pillar` - Indicates quarterly planning scope
 - Quarter label (e.g., `Q1-2026`, `Q2-2026`)
 
 Add component labels based on the initiative scope:
+
 - `frontend` - Frontend changes
 - `backend` - Backend changes
 - `sdk` - SDK changes
@@ -269,11 +278,13 @@ Add component labels based on the initiative scope:
 ## Title Format
 
 Epic titles should follow this format:
+
 ```
 [<QUARTER>] <Initiative Name>
 ```
 
 Examples:
+
 - `[Q1 2026] Prompt Playground V2`
 - `[Q2 2026] Advanced Trace Analytics`
 - `[Q1 2026] SDK Performance Optimization`

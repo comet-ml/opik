@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.152](https://img.shields.io/badge/Version-2.2.152-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.152](https://img.shields.io/badge/AppVersion-2.2.152-informational?style=flat-square)
+![Version: 2.2.155](https://img.shields.io/badge/Version-2.2.155-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.155](https://img.shields.io/badge/AppVersion-2.2.155-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -566,6 +566,8 @@ Call opik api on http://localhost:5173/api
 | partitionMetrics.enabled | bool | `false` |  |
 | partitionMetrics.interval | string | `"5m"` |  |
 | partitionMetrics.lwdTables | string | `"traces,spans"` |  |
+| partitionMetrics.tieredStorageEnabled | bool | `false` |  |
+| partitionMetrics.tieredStorageLogFlushLag | string | `"15s"` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
@@ -600,7 +602,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.6"` |  |
+| zookeeper.image.tag | string | `"3.9.7"` |  |
 | zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |
