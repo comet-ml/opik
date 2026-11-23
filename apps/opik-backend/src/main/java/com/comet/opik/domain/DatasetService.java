@@ -466,14 +466,12 @@ class DatasetServiceImpl implements DatasetService {
      * project scoping. Unlike {@link #findByName(DatasetIdentifier, Visibility)}, it never falls back to a same-named
      * dataset in another project, so a delete can't remove another project's dataset. It doesn't reuse that lookup
      * because a missing project there means a name-only search across all projects. SDKs always send a project name,
-     * hence the project-less fallback.
+     * hence the project-less fallback. The project lookup joins the read transaction, so both lookups share a snapshot.
      */
     private Dataset findInProjectOrProjectlessByName(String workspaceId, DatasetIdentifier identifier) {
-        Optional<UUID> projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName());
-
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            return projectId
+            return projectService.findProjectIdByName(workspaceId, identifier.projectName())
                     .flatMap(id -> findSingleByName(dao, workspaceId, identifier.datasetName(), id,
                             Visibility.PRIVATE))
                     .or(() -> findProjectlessByName(dao, workspaceId, identifier.datasetName()));
