@@ -764,6 +764,29 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("a run counts as claimed once a pod claimed it, and no longer once it is requeued")
+    void isClaimedFollowsTheClaim() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        var runId = newId();
+        var claimedAt = NIGHT.plusSeconds(10);
+
+        var claimed = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.ensureRow(workspaceId, projectId);
+            dao.queue(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            var queued = dao.isClaimed(workspaceId, projectId, runId);
+            dao.claim(workspaceId, projectId, runId, claimedAt, claimedAt.plus(Duration.ofMinutes(30)));
+            var running = dao.isClaimed(workspaceId, projectId, runId);
+            var otherRun = dao.isClaimed(workspaceId, projectId, newId());
+            dao.requeue(workspaceId, projectId, runId, claimedAt.plusSeconds(10));
+            return List.of(queued, running, otherRun, dao.isClaimed(workspaceId, projectId, runId));
+        });
+
+        assertThat(claimed).containsExactly(false, true, false, false);
+    }
+
+    @Test
     @DisplayName("each move of a run is a compare-and-set on its id and the status it expects: a second queue, a "
             + "second claim, a stale run id and a save after a cancel change nothing")
     void runMovesAreCompareAndSet() {

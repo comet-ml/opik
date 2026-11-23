@@ -228,6 +228,12 @@ public class TopicRunStore {
                 .cancelProjects(workspaceId, projectIds, reason, Instant.now())));
     }
 
+    /** True when the project's attempt is still {@code runId} and a pod claimed it. */
+    Mono<Boolean> isClaimed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .isClaimed(workspaceId, projectId, runId)));
+    }
+
     /** Every run in flight, of any workspace. */
     Mono<List<InFlightRun>> findInFlight() {
         return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)

@@ -32,9 +32,11 @@ This workflow will:
 - **Check development environment**: Verify project dependencies, build tools, and project structure are ready.
 - **Check local git branch** in the Opik repository:
   - If on `main`, propose a new branch following Opik naming convention:
+
     ```
     {USERNAME}/issue-{ISSUE-NUMBER}-{ISSUE-SUMMARY}
     ```
+
     Example:
     - Issue: `https://github.com/comet-ml/opik/issues/1234`
     - Title: "Add cursor git workflow rule"
@@ -98,6 +100,7 @@ This workflow will:
     - **Option 2**: Ask user what to do with uncommitted changes
   - **NEVER commit directly to main** (following Opik git workflow)
 - If on `main`, create branch following Opik conventions:
+
   ```bash
   # Ensure you're on main and pull latest
   git checkout main
@@ -106,6 +109,7 @@ This workflow will:
   # Create task-specific branch
   git checkout -b {USERNAME}/issue-{ISSUE-NUMBER}-{ISSUE-SUMMARY}
   ```
+
 - **After branch creation**: Apply stashed changes if any: `git stash pop`
 - **Verify branch creation**: Confirm new branch is active and clean.
 
@@ -131,18 +135,23 @@ This workflow will:
 - **Commit Message Format**: Follow shared conventions from `.agents/rules/git-workflow.mdc`.
 
   **First Commit (PR-title source, required):**
+
   ```
   [<TICKET-KEY>] [BE/FE/SDK/DOCS] <type>: <description>
   ```
+
   where `<TICKET-KEY>` is `OPIK-####`, `issue-####`, or `NA`.
 
   **Follow-up Commits (preferred):**
+
   ```
   <type>(<scope>): <description>
   ```
+
   where `<type>` is one of: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 
   **Last-resort fallback (discouraged):**
+
   ```
   Revision N: <description>
   ```
@@ -154,6 +163,7 @@ This workflow will:
   - `[DOCS]` - Documentation updates, README changes, comments, swagger/OpenAPI documentation
 
   **Examples:**
+
   ```
   [OPIK-1234] [BE] feat: add create trace endpoint
   [issue-1234] [FE] fix: guard project custom metrics empty state

@@ -96,6 +96,14 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
 
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A first build over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
+
         @JsonProperty
         @Min(1) @Max(100_000) private int nightlyMinCandidate;
 
@@ -132,13 +140,6 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
             return nightlyFrequent <= nightlyExamples;
         }
-        /** Most topics in a project's list. */
-        @JsonProperty
-        @Min(1) @Max(100) private int maxTopics;
-
-        /** A first build over fewer traces is marked provisional in its stats. */
-        @JsonProperty
-        @Min(0) @Max(100_000) private int provisionalBelow;
 
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
@@ -595,13 +596,14 @@ public class TopicsConfig {
                     || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
         }
 
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
-        @JsonIgnore
         // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
         // shorter budget would read nothing.
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
                     || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
