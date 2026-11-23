@@ -456,7 +456,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT | string | `"64"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE | string | `"16m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
@@ -466,7 +466,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
