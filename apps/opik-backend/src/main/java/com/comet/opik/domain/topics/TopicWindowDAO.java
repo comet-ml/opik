@@ -201,9 +201,10 @@ public class TopicWindowDAO {
                         .bind("window_from", from.toString())
                         .bind("window_to", to.toString())
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> new ProjectCount(
-                        UUID.fromString(row.get("project_id", String.class)),
-                        ((Number) row.get("traces", Object.class)).longValue())));
+                .flatMap(result -> result.map((row, metadata) -> ProjectCount.builder()
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .traces(((Number) row.get("traces", Object.class)).longValue())
+                        .build()));
     }
 
     /**
@@ -247,10 +248,11 @@ public class TopicWindowDAO {
                         .bind("after", after)
                         .bind("limit", limit)
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> new WindowVector(
-                        UUID.fromString(row.get("trace_id", String.class)),
-                        row.get("trace_created_at", Instant.class),
-                        toVector(row))));
+                .flatMap(result -> result.map((row, metadata) -> WindowVector.builder()
+                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                        .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                        .vector(toVector(row))
+                        .build()));
     }
 
     /** The build's read guards ({@code topics.build.read}): validated config numbers, never input. */
@@ -296,16 +298,18 @@ public class TopicWindowDAO {
         return vector;
     }
 
+    @Builder(toBuilder = true)
     record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */
-    @Builder
+    @Builder(toBuilder = true)
     record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
             @NonNull String text, float @NonNull [] vector) {
     }
 
     /** One trace of a labelling page: its id, creation time and the vector of its highest live task version. */
+    @Builder(toBuilder = true)
     record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
     }
 }
