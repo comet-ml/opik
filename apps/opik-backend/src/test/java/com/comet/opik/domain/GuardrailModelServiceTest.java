@@ -102,6 +102,7 @@ class GuardrailModelServiceTest {
                         .name("Toxicity")
                         .description("Flags toxic replies")
                         .latestRunId(firstRun.id())
+                        .latestRun(firstRun)
                         .createdBy(USER)
                         .lastUpdatedBy(USER)
                         .build());
