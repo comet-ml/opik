@@ -374,9 +374,9 @@ repos:
   # Standalone shell scripts — ShellCheck. Inline `run:` shell in workflows is
   # already covered by actionlint above; this hook covers the `.sh` files. Runs at
   # ShellCheck's default `style` severity via the official docker-image hook (only
-  # Docker needed, same pinned binary locally and in CI). Rule tuning lives in the
-  # root `.shellcheckrc`; deliberate exceptions are inline `# shellcheck disable=`
-  # directives with a reason, never repo-wide disables.
+  # Docker needed, same pinned binary locally and in CI). No repo-wide rule
+  # disables: deliberate exceptions are inline `# shellcheck disable=` directives
+  # with a reason.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.11.0
@@ -387,6 +387,10 @@ repos:
         # matrix builder in scripts/precommit-detect-hooks.py can route changed
         # scripts to this leg.
         files: \.sh$
+        # Follow `source`/`.` into helper scripts (e.g. scripts/worktree-utils.sh),
+        # resolved relative to each script's own directory. `SCRIPTDIR` is a
+        # ShellCheck keyword, not a shell variable — pre-commit does no expansion.
+        args: [--external-sources, --source-path=SCRIPTDIR]
 
   # ---------------------------------------------------------------------------
   # Whole repo — markdownlint on every .md file (.mdx docs are out of scope).
