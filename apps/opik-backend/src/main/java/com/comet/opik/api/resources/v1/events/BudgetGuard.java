@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostSource;
 import com.comet.opik.domain.cost.ModelPriceService;
 import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
@@ -113,7 +114,7 @@ public final class BudgetGuard {
             }
             var priced = CostService.price(model, provider, usage, null, priceLayers);
             var cost = priced.cost();
-            if (cost.signum() == 0 && priced.source() != CostService.CostSource.ORGANIZATION && !unpricedWarned) {
+            if (cost.signum() == 0 && priced.source() != CostSource.ORGANIZATION && !unpricedWarned) {
                 // The model resolved but (model, provider) has no entry in the price table, so every
                 // call prices at zero and the budget can never trip. Unlike the resolution/pricing
                 // exception paths, this is a successful-but-unpriced lookup with no other operator

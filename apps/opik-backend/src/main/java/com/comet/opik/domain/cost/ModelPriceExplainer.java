@@ -24,7 +24,7 @@ class ModelPriceExplainer {
 
     CustomModelPriceResolution explain(@NonNull CustomModelPriceResolveRequest request, @NonNull PriceLayers layers) {
         Map<String, Integer> usage = Optional.ofNullable(request.usage()).orElse(Map.of());
-        CostService.PricedCost priced = CostService.price(request.model(), request.provider(), usage, null, layers);
+        PricedCost priced = CostService.price(request.model(), request.provider(), usage, null, layers);
         Optional<ModelPriceResolver.PriceMatch> match = ModelPriceResolver.resolve(request.model(),
                 request.provider(), layers);
         return CustomModelPriceResolution.builder()
