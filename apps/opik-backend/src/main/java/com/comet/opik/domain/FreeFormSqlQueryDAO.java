@@ -210,7 +210,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         }
     }
 
-    static FreeFormSqlResult readResult(Records records) {
+    private static FreeFormSqlResult readResult(Records records) {
         try (records) {
             var columns = records.getSchema().getColumns();
             if (columns.size() != 1 || !RESULT_COLUMN.equals(columns.getFirst().getColumnName())) {

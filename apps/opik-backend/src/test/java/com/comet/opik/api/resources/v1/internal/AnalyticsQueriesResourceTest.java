@@ -220,6 +220,10 @@ class AnalyticsQueriesResourceTest {
                 arguments("non-granted table",
                         "SELECT toJSONString(map('n', toString(count()))) AS result FROM span_weeks",
                         ACCESS_DENIED_MESSAGE),
+                arguments("extra column beside result",
+                        "SELECT toJSONString(map('n', '1')) AS result, 1 AS extra", RESULT_SHAPE_MESSAGE),
+                arguments("single column not named result",
+                        "SELECT toJSONString(map('n', '1')) AS wrong", RESULT_SHAPE_MESSAGE),
                 arguments("non-JSON result value", "SELECT 'not json{' AS result FROM traces",
                         INVALID_JSON_RESULT_MESSAGE),
                 arguments("system table (outside row policies)",
@@ -370,21 +374,6 @@ class AnalyticsQueriesResourceTest {
             assertThat(response.readEntity(AnalyticsQueryResponse.class).results())
                     .singleElement().satisfies(node -> assertThat(node.get("n").asText()).isNotBlank());
         }
-    }
-
-    private Stream<Arguments> invalidResultShapesByEndpoint() {
-        return Stream.of(
-                arguments("extra column beside result", "SELECT toJSONString(map('n', '1')) AS result, 1 AS extra"),
-                arguments("single column not named result", "SELECT toJSONString(map('n', '1')) AS wrong"))
-                .flatMap(testCase -> Stream.of(Endpoint.values())
-                        .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1])));
-    }
-
-    @ParameterizedTest(name = "{0} via {1}")
-    @MethodSource("invalidResultShapesByEndpoint")
-    @DisplayName("invalid result shapes return the exact contract error through both HTTP endpoints")
-    void invalidResultShape__thenBadRequest(String label, Endpoint endpoint, String query) {
-        assertRejected(endpoint, query, RESULT_SHAPE_MESSAGE);
     }
 
     @Test
