@@ -1,18 +1,26 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.utils.slim.SlimJson;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.SerializableString;
+import com.fasterxml.jackson.core.util.JsonGeneratorDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializable;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 
 /**
@@ -26,12 +34,12 @@ public final class TruncationUtils {
     /**
      * Default maximum length for truncated string values in slim JSON.
      */
-    public static final int DEFAULT_SLIM_STRING_MAX_LENGTH = SlimJson.MAX_STRING_LENGTH;
+    public static final int DEFAULT_SLIM_STRING_MAX_LENGTH = 1000;
 
     /**
      * Suffix appended to truncated strings to indicate truncation.
      */
-    private static final String TRUNCATION_SUFFIX = SlimJson.TRUNCATION_SUFFIX;
+    private static final String TRUNCATION_SUFFIX = "...";
 
     /**
      * Creates a "slim" version of a JSON node by recursively truncating all leaf string values
@@ -136,6 +144,162 @@ public final class TruncationUtils {
      */
     public static String toJsonString(JsonNode node) {
         return node != null ? node.toString() : "";
+    }
+
+    /**
+     * Serializes a payload node into the strings stored in its full column ({@code input}, {@code output}) and
+     * its slim column ({@code input_slim}, {@code output_slim}), with the default max length.
+     *
+     * <p>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
+     * {@code String} instance. Otherwise it is {@link #toSlimJson(JsonNode)}, written in one walk of the node.
+     * For a node parsed from JSON, both match {@code toJsonString(node)} and
+     * {@code createSlimJsonString(toJsonString(node))}.
+     *
+     * @param node the payload node (may be null)
+     * @return the full and slim JSON strings, both empty if the node is null
+     */
+    public static JsonWithSlim toJsonWithSlim(JsonNode node) {
+        if (node == null) {
+            return JsonWithSlim.EMPTY;
+        }
+
+        String json = node.toString();
+        if (json.isEmpty() || !hasLongString(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
+            return JsonWithSlim.builder().json(json).slim(json).build();
+        }
+
+        return JsonWithSlim.builder().json(json).slim(JsonUtils.writeValueAsString(toSlimJson(node))).build();
+    }
+
+    /**
+     * The full and slim JSON strings of a payload node.
+     *
+     * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
+     * @param slim the slim JSON, as {@link #toSlimJson(JsonNode)} writes it
+     */
+    @Builder(toBuilder = true)
+    public record JsonWithSlim(@NonNull String json, @NonNull String slim) {
+
+        public static final JsonWithSlim EMPTY = JsonWithSlim.builder().json("").slim("").build();
+    }
+
+    /**
+     * The full JSON of a payload node, as a value that writes itself into the caller's generator: the same text as
+     * {@link #toJsonString(JsonNode)}, without materializing it.
+     *
+     * <p>Written with the serializer provider {@code node.toString()} uses, not the caller's, so the text does not
+     * depend on the configuration of the mapper that writes the enclosing value.
+     *
+     * @param node the payload node
+     * @return the full JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable toFullJson(@NonNull JsonNode node) {
+        return PayloadJson.builder().node(node).slim(false).build();
+    }
+
+    /**
+     * The slim JSON of a payload node, as a value that writes itself into the caller's generator: every string
+     * value longer than the default max length is cut to it and followed by {@code "..."}, keys and structure are
+     * kept. Like {@link #toFullJson(JsonNode)}, it does not depend on the caller's mapper configuration.
+     *
+     * @param node the payload node
+     * @return the slim JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable toSlimJson(@NonNull JsonNode node) {
+        return PayloadJson.builder().node(node).slim(true).build();
+    }
+
+    @Builder(toBuilder = true)
+    private record PayloadJson(@NonNull JsonNode node, boolean slim) implements JsonSerializable {
+
+        /** The provider {@code JsonNode.toString()} serializes with: a default mapper's. */
+        private static final SerializerProvider NODE_PROVIDER = new ObjectMapper().getSerializerProviderInstance();
+
+        @Override
+        public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
+            if (slim) {
+                node.serialize(new TruncatingGenerator(generator, DEFAULT_SLIM_STRING_MAX_LENGTH), NODE_PROVIDER);
+                return;
+            }
+            node.serialize(generator, NODE_PROVIDER);
+        }
+
+        @Override
+        public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
+                TypeSerializer typeSerializer) throws IOException {
+            serialize(generator, provider);
+        }
+    }
+
+    /**
+     * Truncates string values as Jackson writes them, to the same chars {@link #truncateString} returns. Field
+     * names are written through {@code writeFieldName}, so they are kept whole.
+     */
+    private static class TruncatingGenerator extends JsonGeneratorDelegate {
+
+        private final int maxLength;
+
+        /**
+         * One buffer per walk for every truncated string, rather than a substring and a concatenation each. Allocated
+         * on the first one, as most payloads have none.
+         */
+        private char[] truncated;
+
+        private TruncatingGenerator(JsonGenerator delegate, int maxLength) {
+            super(delegate, false);
+            this.maxLength = maxLength;
+        }
+
+        private char[] truncated() {
+            if (truncated == null) {
+                truncated = new char[maxLength + TRUNCATION_SUFFIX.length()];
+                TRUNCATION_SUFFIX.getChars(0, TRUNCATION_SUFFIX.length(), truncated, maxLength);
+            }
+            return truncated;
+        }
+
+        @Override
+        public void writeString(String text) throws IOException {
+            if (text == null || text.length() <= maxLength) {
+                delegate.writeString(text);
+                return;
+            }
+            char[] buffer = truncated();
+            text.getChars(0, maxLength, buffer, 0);
+            delegate.writeString(buffer, 0, buffer.length);
+        }
+
+        @Override
+        public void writeString(char[] text, int offset, int length) throws IOException {
+            if (length <= maxLength) {
+                delegate.writeString(text, offset, length);
+                return;
+            }
+            char[] buffer = truncated();
+            System.arraycopy(text, offset, buffer, 0, maxLength);
+            delegate.writeString(buffer, 0, buffer.length);
+        }
+
+        @Override
+        public void writeString(SerializableString text) throws IOException {
+            writeString(text.getValue());
+        }
+    }
+
+    /** Whether any string value is longer than the max length; stops at the first one. */
+    private static boolean hasLongString(JsonNode node, int maxStringLength) {
+        return switch (node.getNodeType()) {
+            case OBJECT, ARRAY -> {
+                for (JsonNode child : node) {
+                    if (hasLongString(child, maxStringLength)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            case STRING -> node.textValue().length() > maxStringLength;
+            case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> false;
+        };
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {
