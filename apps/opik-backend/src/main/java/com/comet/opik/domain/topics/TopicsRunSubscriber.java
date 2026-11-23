@@ -141,8 +141,13 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     /** The saved list's labelling pass is a run of its own: one place keeps it apart from a build. */
     private Mono<Void> labelsAfter(TopicsRunMessage message, Mono<TopicsRebuildService.Outcome> build) {
         return build.filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
-                .flatMap(outcome -> planner.queueOne(new TopicsRunPlanner.Planned(message.workspaceId(),
-                        message.projectId(), RunMode.LABELS, null, 0)))
+                // A list saved after its project was deleted is discarded: nothing is left to label. When the check
+                // fails, the labelling run is queued, and the planner cancels it if the project is gone.
+                .filterWhen(outcome -> store.projectExists(message.workspaceId(), message.projectId())
+                        .onErrorReturn(true))
+                .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                        .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
+                        .build()))
                 .then();
     }
 

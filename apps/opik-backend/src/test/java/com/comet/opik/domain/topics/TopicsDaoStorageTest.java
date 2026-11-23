@@ -911,10 +911,13 @@ class TopicsDaoStorageTest {
                 .findListless(List.of(workspaceId), TRACES.night().minus(Duration.ofDays(30))));
 
         assertThat(runs).containsExactlyInAnyOrder(
-                new InFlightRun(workspaceId, inFlight, inFlightRun, TopicProject.RunMode.FIRST_BUILD,
-                        TopicProject.RunStatus.QUEUED, NIGHT, null, null, false),
-                new InFlightRun(workspaceId, deleted, deletedRun, TopicProject.RunMode.FIRST_BUILD,
-                        TopicProject.RunStatus.RUNNING, NIGHT, NIGHT.plus(Duration.ofHours(1)), NIGHT, true));
+                InFlightRun.builder().workspaceId(workspaceId).projectId(inFlight).runId(inFlightRun)
+                        .runMode(TopicProject.RunMode.FIRST_BUILD).runStatus(TopicProject.RunStatus.QUEUED)
+                        .runQueuedAt(NIGHT).build(),
+                InFlightRun.builder().workspaceId(workspaceId).projectId(deleted).runId(deletedRun)
+                        .runMode(TopicProject.RunMode.FIRST_BUILD).runStatus(TopicProject.RunStatus.RUNNING)
+                        .runQueuedAt(NIGHT).deadlineAt(NIGHT.plus(Duration.ofHours(1))).heartbeatAt(NIGHT)
+                        .projectDeleted(true).build());
         assertThat(found).containsExactly(ListlessProject.builder().workspaceId(workspaceId)
                 .projectId(listless).build());
     }

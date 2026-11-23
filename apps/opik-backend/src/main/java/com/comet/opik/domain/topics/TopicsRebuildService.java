@@ -133,15 +133,19 @@ public class TopicsRebuildService {
     }
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
-        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-        return build(run, windowTraces)
+        return withProjectTimeout(build(run, windowTraces)
                 .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
-                        .map(kept -> kept ? built : built.discarded()))
-                .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
-                        "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
+                        .map(kept -> kept ? built : built.discarded())))
                 .flatMap(built -> saved(run, built))
                 .onErrorResume(error -> failed(run, error))
                 .doOnCancel(() -> cancelled(run));
+    }
+
+    /** A run's work up to its save, failed with {@code timeout} once it outlasts topics.build.projectTimeout. */
+    private <T> Mono<T> withProjectTimeout(Mono<T> work) {
+        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
+        return work.timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
+                "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))));
     }
 
     private Mono<Built> build(TopicRun run, long windowTraces) {
@@ -177,15 +181,12 @@ public class TopicsRebuildService {
     }
 
     private Mono<Outcome> nightly(TopicRun run, LocalDate night, long windowTraces) {
-        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
         run.stats().put("mode", TopicProject.RunMode.NIGHTLY_UPDATE.getValue());
-        return timed(run, "window", reader.read(run, windowTraces))
+        return withProjectTimeout(timed(run, "window", reader.read(run, windowTraces))
                 .flatMap(window -> timed(run, "state", store.readList(run, night))
                         .flatMap(saved -> updated(run, window, saved)))
                 .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.saved(), updated.save()))
-                        .map(kept -> kept ? updated : updated.discarded()))
-                .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
-                        "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
+                        .map(kept -> kept ? updated : updated.discarded())))
                 .flatMap(updated -> savedNight(run, updated))
                 .onErrorResume(error -> failed(run, error))
                 .doOnCancel(() -> cancelled(run));
@@ -282,8 +283,13 @@ public class TopicsRebuildService {
         var otherVectors = !keep || state.getOtherPrototypes().isEmpty()
                 ? null
                 : new PrototypeVectors(state.getOtherPrototypes());
-        var save = new TopicRunStore.NightSave(keep, inserted, updated,
-                retired.stream().map(NightTopic::getId).toList(), otherVectors);
+        var save = TopicRunStore.NightSave.builder()
+                .keep(keep)
+                .inserted(inserted)
+                .updated(updated)
+                .retired(retired.stream().map(NightTopic::getId).toList())
+                .otherVectors(otherVectors)
+                .build();
         return new Night(saved, save, retired, traceTopics, born, state.liveCount(), churn);
     }
 

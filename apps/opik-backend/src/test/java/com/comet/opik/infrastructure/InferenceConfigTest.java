@@ -136,4 +136,23 @@ class InferenceConfigTest {
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("topicsLlmDeadlines")
+    @DisplayName("Topics LLM deadlines stay within inference.limits.maxGenerateBatchDeadline")
+    void topicsLlmDeadlinesStayWithinTheLimit(String description, Duration naming, boolean valid) {
+        var config = TestConfigUtils.loadConfigTest();
+        var max = config.getInference().getLimits().getMaxGenerateBatchDeadline();
+        config.getTopics().getBuild().setLlmDeadline(max);
+        config.getTopics().getBuild().setVerifyDeadline(max);
+        config.getTopics().getBuild().setNamingDeadline(naming);
+
+        assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlinesWithinLimits")).hasSize(valid ? 0 : 1);
+    }
+
+    static Stream<Arguments> topicsLlmDeadlines() {
+        return Stream.of(
+                arguments("every deadline at the limit", Duration.seconds(300), true),
+                arguments("a naming deadline over the limit", Duration.milliseconds(300_001), false));
+    }
 }
