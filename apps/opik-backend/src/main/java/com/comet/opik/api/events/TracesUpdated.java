@@ -3,6 +3,7 @@ package com.comet.opik.api.events;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.infrastructure.events.BaseEvent;
 import jakarta.annotation.Nullable;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
@@ -41,7 +42,8 @@ public class TracesUpdated extends BaseEvent {
         this(projectIds, traceIds, workspaceId, userName, traceUpdate, workspaceName, traceIdToProjectId, null);
     }
 
-    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
+    @Builder
+    private TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate, @Nullable String workspaceName,
             @Nullable Map<UUID, UUID> traceIdToProjectId, @Nullable String organizationId) {
         super(workspaceId, userName);

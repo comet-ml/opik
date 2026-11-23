@@ -698,26 +698,37 @@ class OnlineScoringSamplerTest {
     @Nested
     class OrganizationTests {
 
+        private final String organizationId = UUID.randomUUID().toString();
+
         @Test
         void judgeMessageCarriesTheOrganizationOfTheCreatedTraces() {
             var trace = createTrace(Source.EXPERIMENT);
             var evaluator = createLlmEvaluator(true, 1.0f, List.of());
             whenFindAllLlmEvaluators(evaluator);
 
-            onlineScoringSampler.onTracesCreated(
-                    new TracesCreated(List.of(trace), workspaceId, userName, null, null, "organization-1"));
+            onlineScoringSampler.onTracesCreated(TracesCreated.builder()
+                    .traces(List.of(trace))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .organizationId(organizationId)
+                    .build());
 
             verify(onlineScorePublisher).enqueueMessage(
-                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId("organization-1").build()),
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
 
         @Test
         void judgeMessageCarriesTheOrganizationOfTheUpdatedTraces() {
             var trace = createTrace(Source.SDK);
-            var traceUpdate = TraceUpdate.builder().endTime(Instant.now()).build();
-            var event = new TracesUpdated(Set.of(projectId), Set.of(trace.id()), workspaceId, userName,
-                    traceUpdate, null, null, "organization-1");
+            var event = TracesUpdated.builder()
+                    .projectIds(Set.of(projectId))
+                    .traceIds(Set.of(trace.id()))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .traceUpdate(TraceUpdate.builder().endTime(Instant.now()).build())
+                    .organizationId(organizationId)
+                    .build();
             var evaluator = createLlmEvaluator(true, 1.0f, List.of());
             when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
             whenFindAllLlmEvaluators(evaluator);
@@ -725,7 +736,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verify(onlineScorePublisher).enqueueMessage(
-                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId("organization-1").build()),
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
     }
