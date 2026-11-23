@@ -135,7 +135,6 @@ public class TopicRunStore {
         });
     }
 
-    /** False when the run is no longer running: cancelled, abandoned or requeued, so it stops. */
     /**
      * True while the run should go on: its row is still running, or the run saved it itself. A saved run still has
      * its {@code trace_topics} insert and its labels run to queue, so a heartbeat between the save and the end of the
