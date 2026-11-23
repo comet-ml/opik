@@ -56,7 +56,12 @@ public enum WorkspaceUserPermission {
 
     OPTIMIZATION_RUN_VIEW("optimization_run_view"),
     OPTIMIZATION_RUN_DELETE("optimization_run_delete"),
-    OPTIMIZATION_STUDIO_USE("optimization_studio_use");
+    OPTIMIZATION_STUDIO_USE("optimization_studio_use"),
+
+    GENERATIVE_UI_VIEW("generative_ui_view"),
+    GENERATIVE_UI_CREATE("generative_ui_create"),
+    GENERATIVE_UI_EDIT("generative_ui_edit"),
+    GENERATIVE_UI_DELETE("generative_ui_delete");
 
     @JsonValue
     private final String value;
