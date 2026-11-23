@@ -4,6 +4,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -56,16 +58,41 @@ class GuardrailTrainingDatasetTest {
     }
 
     @Test
-    @DisplayName("Many bad rows are listed up to twenty, then counted")
+    @DisplayName("Lines with problems are listed up to twenty, then only counted")
     void validateWhenManyProblemsListsTheFirstTwenty() {
         var badRows = IntStream.range(0, 25).mapToObj(index -> "not json").toArray(String[]::new);
 
-        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(badRows)))
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), rows(15, "no"),
+                String.join("\n", badRows))))
                 .isInstanceOfSatisfying(BadRequestException.class, exception -> {
                     var errors = ((ErrorMessage) exception.getResponse().getEntity()).errors();
                     assertThat(errors).hasSize(21);
-                    assertThat(errors.getFirst()).isEqualTo("not a JSON object, line '1'");
-                    assertThat(errors.getLast()).isEqualTo("more problems not listed, count '8'");
+                    assertThat(errors.getFirst()).isEqualTo("not a JSON object, line '21'");
+                    assertThat(errors.getLast()).isEqualTo("more lines with problems not listed, count '5'");
                 });
+    }
+
+    @Test
+    @DisplayName("The file's own problems come before its lines'")
+    void validateWhenFileAndLineProblemsListsTheFileFirst() {
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), "not json")))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly(
+                                        "the file needs 20 to 50,000 valid rows, rows '5'",
+                                        "the file needs at least 5 rows per label, label 'no', rows '0'",
+                                        "not a JSON object, line '6'"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"text\": \"a\", \"label\": \"yes\"} {\"text\": \"b\", \"label\": \"no\"}",
+            "{\"text\": \"a\", \"label\": \"yes\"} and more"})
+    @DisplayName("A line with anything after its row is not a row")
+    void validateWhenTrailingContentReportsTheLine(String line) {
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), rows(15, "no"), line)))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("not a JSON object, line '21'"));
     }
 }

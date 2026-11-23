@@ -2,7 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectReader;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -38,11 +40,15 @@ public class GuardrailTrainingDataset {
     private static final int MAX_PROBLEMS_LISTED = 20;
 
     /**
-     * @throws BadRequestException listing the file's problems, each line's with its number, the first
-     *                             {@value MAX_PROBLEMS_LISTED} of them
+     * @throws BadRequestException listing the file's problems: the file's own first, then the first
+     *                             {@value MAX_PROBLEMS_LISTED} of its lines', each with its number
      */
     public static void validate(@NonNull InputStream file) {
-        var problems = new ArrayList<String>();
+        // Trailing tokens fail the row: without it, a line holding a row and then more text reads as just the row.
+        var rowReader = JsonUtils.getMapper().readerFor(JsonNode.class)
+                .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        var lineProblems = new ArrayList<String>();
+        int unlistedLineProblems = 0;
         Map<String, Integer> rowsPerLabel = new TreeMap<>();
         LABELS.forEach(label -> rowsPerLabel.put(label, 0));
         int rows = 0;
@@ -57,10 +63,16 @@ public class GuardrailTrainingDataset {
                 if (line.isBlank()) {
                     continue;
                 }
-                var label = labelOf(line, lineNumber, problems);
-                if (label != null) {
+                var row = parse(rowReader, line);
+                var problem = problemOf(row);
+                if (problem == null) {
                     rows++;
-                    rowsPerLabel.merge(label, 1, Integer::sum);
+                    rowsPerLabel.merge(row.get("label").asText(), 1, Integer::sum);
+                } else if (lineProblems.size() < MAX_PROBLEMS_LISTED) {
+                    lineProblems.add("%s, line '%d'".formatted(problem, lineNumber));
+                } else {
+                    // Only counted past the listed ones, so a file of millions of bad lines costs no memory.
+                    unlistedLineProblems++;
                 }
             }
             tooLarge = bounded.getCount() > MAX_BYTES;
@@ -68,9 +80,9 @@ public class GuardrailTrainingDataset {
             throw new UncheckedIOException(exception);
         }
 
+        var problems = new ArrayList<String>();
         if (tooLarge) {
             // Reading stopped at the limit, so the last row read may be cut short: the size is the only problem.
-            problems.clear();
             problems.add("the file is larger than 50 MB");
         } else {
             if (rows < MIN_ROWS || rows > MAX_ROWS) {
@@ -82,48 +94,42 @@ public class GuardrailTrainingDataset {
                             count));
                 }
             });
+            problems.addAll(lineProblems);
+            if (unlistedLineProblems > 0) {
+                problems.add("more lines with problems not listed, count '%d'".formatted(unlistedLineProblems));
+            }
         }
         if (problems.isEmpty()) {
             return;
-        }
-        if (problems.size() > MAX_PROBLEMS_LISTED) {
-            int unlisted = problems.size() - MAX_PROBLEMS_LISTED;
-            problems.subList(MAX_PROBLEMS_LISTED, problems.size()).clear();
-            problems.add("more problems not listed, count '%d'".formatted(unlisted));
         }
         throw new BadRequestException(Response.status(Response.Status.BAD_REQUEST)
                 .entity(new ErrorMessage(problems))
                 .build());
     }
 
-    /** The row's label, or null with the row's problem added when it is not a valid row. */
-    private static String labelOf(String line, int lineNumber, List<String> problems) {
-        var row = parse(line);
+    /** What is wrong with the row, or null when it is a valid row. */
+    private static String problemOf(JsonNode row) {
         if (row == null || !row.isObject()) {
-            problems.add("not a JSON object, line '%d'".formatted(lineNumber));
-            return null;
+            return "not a JSON object";
         }
         var text = row.path("text");
         var label = row.path("label");
-        String problem = null;
         if (!text.isTextual() || text.asText().isBlank()) {
-            problem = "\"text\" must be a non-empty string, line '%d'".formatted(lineNumber);
-        } else if (text.asText().length() > MAX_TEXT_LENGTH) {
-            problem = "\"text\" is longer than 12,000 characters, line '%d'".formatted(lineNumber);
-        } else if (!label.isTextual() || !LABELS.contains(label.asText())) {
-            problem = "\"label\" must be \"yes\" or \"no\", line '%d'".formatted(lineNumber);
+            return "\"text\" must be a non-empty string";
         }
-        if (problem != null) {
-            problems.add(problem);
-            return null;
+        if (text.asText().length() > MAX_TEXT_LENGTH) {
+            return "\"text\" is longer than 12,000 characters";
         }
-        return label.asText();
+        if (!label.isTextual() || !LABELS.contains(label.asText())) {
+            return "\"label\" must be \"yes\" or \"no\"";
+        }
+        return null;
     }
 
-    private static JsonNode parse(String line) {
+    private static JsonNode parse(ObjectReader rowReader, String line) {
         try {
-            return JsonUtils.getJsonNodeFromString(line);
-        } catch (UncheckedIOException exception) {
+            return rowReader.readValue(line);
+        } catch (IOException exception) {
             return null;
         }
     }
