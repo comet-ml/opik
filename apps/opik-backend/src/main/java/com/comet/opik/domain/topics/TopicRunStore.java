@@ -19,7 +19,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -106,7 +105,7 @@ class TopicRunStore {
      * counted in {@code failed_runs}) and is counted as that skip in {@code topics.nightly.decisions}.
      */
     Mono<NightClaim> claimNightly(@NonNull TopicsRunMessage message, @NonNull Instant deadline) {
-        var windowTo = message.night().atStartOfDay(ZoneOffset.UTC).toInstant();
+        var windowTo = TopicsNightPass.Night.windowTo(message.night());
         return jdbi(() -> template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             var now = Instant.now();
