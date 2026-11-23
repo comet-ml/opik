@@ -21,7 +21,7 @@ import java.util.List;
  * <p>
  * The {@code schema} goes on the wire with its keys in the caller's order, not sorted like the rest of the body: the
  * service decodes the keys in schema order, so an author schema sorted to {@code other} before {@code topics} made
- * Qwen fill {@code other} first and leave {@code topics} empty.
+ * the model fill {@code other} first and leave {@code topics} empty.
  */
 @Builder(toBuilder = true)
 public record GenerateRequest(@NonNull String orgId, String workspaceId, String requestId, boolean cache,

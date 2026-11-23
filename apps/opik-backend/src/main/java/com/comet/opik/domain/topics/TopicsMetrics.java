@@ -31,6 +31,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
     private static final AttributeKey<String> PHASE = stringKey("phase");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
+    private static final AttributeKey<String> RESULT = stringKey("result");
     private static final AttributeKey<String> CALL = stringKey("call");
     private static final AttributeKey<String> TABLE = stringKey("table");
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
@@ -62,7 +63,7 @@ public class TopicsMetrics {
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
         this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
-                .setDescription("trace_topics inserts of a saved run, by outcome: ok, failed (after its retries). "
+                .setDescription("trace_topics inserts of a saved run, by result: success, error (after its retries). "
                         + "The run inserts once after its commit, the labelling pass once per page")
                 .build();
         this.labelPasses = meter.counterBuilder("topics.label.passes")
@@ -97,8 +98,8 @@ public class TopicsMetrics {
         saveRows.add(rows, attributes(workspace).put(TABLE, table).build());
     }
 
-    void traceTopicsInsert(@NonNull Workspace workspace, @NonNull String outcome) {
-        traceTopicsInserts.add(1, attributes(workspace).put(OUTCOME, outcome).build());
+    void traceTopicsInsert(@NonNull Workspace workspace, boolean success) {
+        traceTopicsInserts.add(1, attributes(workspace).put(RESULT, success ? "success" : "error").build());
     }
 
     void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger,
