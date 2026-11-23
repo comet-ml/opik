@@ -207,7 +207,6 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 | `TOPICS_FIRST_BUILD_SWEEP_INTERVAL` | `24h` | How often the leader deletes the topics of deleted projects. From `1h` to `7d`. |
 | `TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT` | `72h` | How long a first build waits for the project's vectors backfill (see "First builds and the vectors backfill"). |
 | `TOPICS_FIRST_BUILD_TIMED_OUT_SHARE` | `0.99` | Past the max wait, the share of the backfill's traces with a vector that lets the build start. |
-| `TOPICS_FIRST_BUILD_WORKSPACES` | empty | Comma-separated workspace ids that get first builds. Empty means every workspace that runs topics. A listed id outside `TOPICS_ENABLED_WORKSPACES` is ignored, with a warning at startup. |
 | `TOPICS_RUNS_MAX_IN_FLIGHT` | `2` | Runs `queued`, `running` or `cancelling` across the cluster. Runs by hand do not wait for a slot. |
 | `TOPICS_RUNS_CONSUMER_BATCH_SIZE` | `1` | Runs one pod runs at a time. Each holds a window in memory. |
 | `TOPICS_RUNS_HEARTBEAT_INTERVAL` | `20s` | How often a running run writes `heartbeat_at`. |
