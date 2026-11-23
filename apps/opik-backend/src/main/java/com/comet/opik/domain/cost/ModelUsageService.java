@@ -104,9 +104,12 @@ class ModelUsageServiceImpl implements ModelUsageService {
                         }))
                 .collectList()
                 .filter(toSave -> !toSave.isEmpty())
+                // An organization's first write of the day always saves, since today's keys are new, so checking the
+                // clean-up claim only after a save still runs it daily and spares the other writes a Redis call.
                 .flatMap(toSave -> write(handle -> ModelUsageStore.save(handle, organizationId, today, workspaceId,
-                        name, toSave)).doOnSuccess(__ -> saved.set(true)))
-                .then(Mono.defer(() -> deleteOldDaysOncePerDay(organizationId, today)))
+                        name, toSave))
+                        .doOnSuccess(__ -> saved.set(true))
+                        .then(Mono.defer(() -> deleteOldDaysOncePerDay(organizationId, today))))
                 .timeout(SAVE_TIMEOUT)
                 .onErrorResume(error -> {
                     logFailure(organizationId, error);
