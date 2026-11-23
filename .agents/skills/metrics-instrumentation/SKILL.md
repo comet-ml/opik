@@ -8,6 +8,7 @@ description: Specification for instrumenting an opik-backend workflow with opera
 Normative spec for the backend half of operational observability: per-stage OpenTelemetry metrics in `apps/opik-backend`. The metrics are designed so a flow-ordered Grafana dashboard can read top-to-bottom — the failing stage is the one whose numbers break — with a per-workspace drill. Building that dashboard (layout, query contracts, per-customer name resolution, dependency panels, validation) is a separate concern, specified by the dashboard-authoring skill in comet monitoring tooling; this skill covers only what to emit.
 
 Patterns applied in this implementation (online scoring is the worked example):
+
 - **Producer metrics** — every stage that emits work is counted at the source: sampler decisions (`sampler_decisions_total{decision}`) and enqueue-to-Redis (`enqueue_total{result}`). A producer that emits nothing makes downstream starvation explainable rather than mysterious.
 - **Consumer metrics** — throughput and per-stage timing on the side that drains the queue (`processing_time`, plus per-Redis-op `read/claim/ack_and_remove/list_pending_time`).
 - **Entrypoint RED** — the workflow's front door (the HTTP ingest route) is measured Rate / Errors / Duration from `http_server_request_duration_seconds`, with 5xx broken down by endpoint × `error_type` × workspace, so an ingestion problem is never mistaken for a scoring problem.
@@ -40,6 +41,7 @@ Apply alongside the `opik-backend` skill (general conventions, logging rule).
 Rule of thumb: "how many happened" → counter; "how long / how big" → histogram; "how much is there right now" → gauge (or UpDownCounter). Cover each stage with **RED** (Rate, Errors, Duration) for the work flowing through it and **USE** (Utilization, Saturation, Errors) for the resource it runs on.
 
 1.3 Define identity dimensions, each bounded in cardinality:
+
 - `workspace_id` **and** `workspace_name` — the customer drill. Always paired; `workspace_name` falls back to `workspace_id` when the name is absent (§2.3).
 - a **stage/type** label — what kind of work this is (`evaluator_type`, `decision`, the Redis op, content/mime type). Lets the dashboard `sum by(...)` per stage (§2.2).
 - `result` ∈ {`success`, `error`} on outcome counters.
@@ -52,6 +54,7 @@ Cardinality MUST stay bounded by `#workspaces × #types × #error_types`; an unb
 ## 2. Backend metrics (OpenTelemetry)
 
 2.1 Meters MUST be created via the OTel API (`GlobalOpenTelemetry.getMeter(namespace)`), one namespace per workflow:
+
 ```java
 private static final String METRIC_NAMESPACE = "<workflow>";
 var meter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE);
@@ -60,21 +63,25 @@ meter.histogramBuilder("%s_<stage>_time".formatted(METRIC_NAMESPACE)).setUnit("m
 meter.gaugeBuilder("%s_<stage>_size".formatted(METRIC_NAMESPACE)).build();
 meter.upDownCounterBuilder("%s_<stage>_in_flight".formatted(METRIC_NAMESPACE)).build(); // signed level (inc/dec)
 ```
+
 Counters surface in Prometheus with a `_total` suffix. Native histograms MUST NOT define explicit buckets (no `_bucket`/`_sum`/`_count`/`le`).
 
 2.2 The stage/type dimension MUST be a **label**, not part of the metric name (e.g. `online_scoring_enqueue_total{evaluator_type, result}`), so the dashboard can `sum by(evaluator_type)(rate(...))`. Name-encoding the dimension is permitted ONLY to extend an existing metric family; it complicates dashboard aggregation (a name-encoded dimension cannot be `rate()`d across names in one selector), so prefer a label.
 
 2.3 `workspace_id` and `workspace_name` MUST be read from the reactive request context (the workspace-id / workspace-name context keys), reusing the shared workspace attribute-key constants rather than redeclaring them per call site:
+
 ```java
 var workspaceId   = ctx.getOrDefault(WORKSPACE_ID, "");
 var workspaceName = StringUtils.defaultIfBlank(ctx.getOrDefault(WORKSPACE_NAME, workspaceId), workspaceId);
 counter.add(1, Attributes.of(TYPE_KEY, type, WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success"));
 ```
+
 - `workspace_name` MUST fall back to `workspace_id` when the name is absent.
 - A name-service lookup MUST NOT be used to resolve the name on a path where the reactive context already carries it.
 - If an event does not yet carry the name, add a nullable `workspaceName` field and populate it from the workspace-name context key at the publish site (as the entity-created events feeding this workflow already do).
 
 2.4 The instrumented operation MUST be reactive and read the context with `deferContextual`:
+
 ```java
 public Mono<Void> enqueue(List<?> messages, Type type) {
     return Flux.deferContextual(ctx -> { /* resolve workspace per 2.3 */
@@ -84,6 +91,7 @@ public Mono<Void> enqueue(List<?> messages, Type type) {
     }).then().subscribeOn(Schedulers.boundedElastic());
 }
 ```
+
 - The method MUST return `Mono<Void>` and MUST NOT self-subscribe. Callers MUST subscribe or compose it.
 - Request-scoped reactive callers MUST compose it (`.then(...)` / `flatMap`) so it inherits the workspace context.
 - Event-driven / synchronous callers MUST fire-and-forget via a single shared helper that subscribes with an explicit `.contextWrite(ctx -> ctx.put(WORKSPACE_ID, id).put(WORKSPACE_NAME, defaultIfBlank(name, id)))` and an error-logging consumer (one helper, not duplicated per caller).

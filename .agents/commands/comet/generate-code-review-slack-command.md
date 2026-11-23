@@ -25,11 +25,13 @@ This workflow will:
 ## Inputs
 
 ### Required Information (auto-extracted from PR, prompted if missing)
+
 - **Jira ticket**: Extracted from PR title (format: `[OPIK-1234]`) or prompted if not found
 - **PR link**: Automatically determined from current branch's PR or prompted if no PR found
 - **Test env link**: Extracted from PR description (Testing or Details section) or prompted if not found
 
 ### Optional Information (auto-extracted from PR, prompted if missing)
+
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
@@ -37,6 +39,7 @@ This workflow will:
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
+
 - **No Slack MCP required**: This command does not send messages, so Slack MCP configuration is not needed
 - **GitHub MCP**: Required for extracting PR information
 
@@ -57,10 +60,10 @@ This workflow will:
 ### 2. Find GitHub PR for Current Branch
 
 - **Search for PR**: Use GitHub MCP to find an open PR for the current branch in `comet-ml/opik`
-- **If PR found**: 
+- **If PR found**:
   - Extract PR number, URL, title, and description
   - Store PR information for extraction steps
-- **If no PR found**: 
+- **If no PR found**:
   > "No open PR found for this branch. Please provide the PR link manually:"
   - Prompt for PR link and validate URL format
   - If provided, fetch PR details using GitHub MCP
@@ -90,6 +93,7 @@ This workflow will:
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
   - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
+
     ```bash
     # Issue comments (general PR comments, including deployment bot messages)
     gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
@@ -97,22 +101,23 @@ This workflow will:
     # Review comments (inline code comments)
     gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
     ```
+
     > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the deployment bot comment with the test environment link may end up on page 2 and get silently missed.
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
   - If multiple URLs found, prefer the first one that looks like a test environment
   - If not found, search in "## Details" section for URLs
-  - If still not found, prompt: "Test environment link not found in PR. Enter test environment link (e.g., https://pr-4743.dev.comet.com):"
+  - If still not found, prompt: "Test environment link not found in PR. Enter test environment link (e.g., <https://pr-4743.dev.comet.com>):"
   - Validate URL format and store
 
 - **Extract component summaries from PR description**:
-  - **FE summary**: 
+  - **FE summary**:
     - Look for mentions of "frontend", "FE", "React", "UI", or `[FE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip):"
   
-  - **BE summary**: 
+  - **BE summary**:
     - Look for mentions of "backend", "BE", "Java", "API", or `[BE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
@@ -146,6 +151,7 @@ This workflow will:
 - **Use PR link**: Use the PR URL extracted from Step 2 (or provided manually)
 
 - **Build message text** according to the template:
+
   ```
   Hi team,
 
@@ -175,6 +181,7 @@ This workflow will:
   - **Component summaries**: Only include optional fields that were provided (skip empty ones)
 
 - **Format example**:
+
   ```
   Hi team,
 
@@ -199,6 +206,7 @@ This workflow will:
   > "📋 **Copiable Slack Command Generated**\n\nCopy the command below and paste it into the #code-review channel in Slack.\n\nYou can edit it before sending to:\n- Add @ mentions for specific reviewers\n- Add media links or video links\n- Make final proof edits\n- Add any additional context\n\n```\n[FORMATTED_MESSAGE]\n```\n\n**To send in Slack:**\n1. Open Slack and navigate to #code-review channel\n2. Paste the command above\n3. Edit as needed (add @ mentions, media links, etc.)\n4. Send the message"
 
 - **Alternative format (if using Slack CLI)**: If the user prefers, also provide a Slack CLI command format:
+
   ```
   slack chat send --channel "#code-review" --text "[FORMATTED_MESSAGE]"
   ```
@@ -280,7 +288,6 @@ The command is successful when:
 
 # 2. Run command (on a branch with an open PR)
 cursor generate-code-review-slack-command
-```
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
@@ -326,6 +333,7 @@ cursor generate-code-review-slack-command
 # 2. Paste the command above
 # 3. Edit as needed (add @ mentions, media links, etc.)
 # 4. Send the message
+```
 
 ### Example with Missing Information
 
