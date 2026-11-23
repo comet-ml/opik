@@ -78,7 +78,7 @@ const MoreFields: React.FC<{ entry: CatalogEntry }> = ({ entry }) => {
 const WIDE_ONLY = "hidden min-[1400px]:table-cell";
 const PRICE_HEAD_CLASS = cn(
   HEAD_CLASS,
-  "w-[112px] text-right min-[1400px]:w-[156px]",
+  "w-[120px] text-right min-[1400px]:w-[156px]",
 );
 
 const PriceHead: React.FC<{ label: string }> = ({ label }) => (
