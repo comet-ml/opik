@@ -10,6 +10,10 @@ import {
   JudgeTemplateOption,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
 import { DECISION_MODEL_TEMPLATE_OPTIONS } from "@/v2/pages-shared/automations/RuleEditorPanel/decisionModelTemplates";
+import {
+  createInitialRulePrompt,
+  getDefaultJudgeData,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 type TemplateContent = {
   messages: LLMMessage[];
@@ -60,3 +64,19 @@ export const findSelectedTemplate = (
     isEqual(toComparable(option.template, uiType), current),
   );
 };
+
+export const isBlankContent = (
+  content: TemplateContent,
+  uiType: UI_EVALUATORS_RULE_TYPE,
+  scope: EVALUATORS_RULE_SCOPE,
+) =>
+  isEqual(
+    toComparable(content, uiType),
+    toComparable(
+      {
+        messages: createInitialRulePrompt(uiType),
+        schema: getDefaultJudgeData(uiType)[scope].schema,
+      },
+      uiType,
+    ),
+  );

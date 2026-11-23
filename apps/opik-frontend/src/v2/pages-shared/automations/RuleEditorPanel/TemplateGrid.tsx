@@ -49,6 +49,7 @@ type TemplateGridProps = {
   selectedOption?: JudgeTemplateOption;
   showCustom: boolean;
   isCustomSelected: boolean;
+  isBlankSelected: boolean;
   customDescription: string;
   blankDescription: string;
   onSelect: (option: JudgeTemplateOption) => void;
@@ -61,6 +62,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
   selectedOption,
   showCustom,
   isCustomSelected,
+  isBlankSelected,
   customDescription,
   blankDescription,
   onSelect,
@@ -101,6 +103,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
         description={blankDescription}
         icon={Plus}
         iconClassName="bg-slate-200"
+        isSelected={isBlankSelected}
         isDashed
         onClick={onStartBlank}
       />

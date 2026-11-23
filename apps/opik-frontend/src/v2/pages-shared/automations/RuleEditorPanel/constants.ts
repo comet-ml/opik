@@ -164,6 +164,11 @@ export const DEFAULT_DECISION_MODEL_DATA = {
   [EVALUATORS_RULE_SCOPE.span]: DECISION_MODEL_DEFAULT_DATA,
 };
 
+export const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+  uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+    ? DEFAULT_DECISION_MODEL_DATA
+    : DEFAULT_LLM_AS_JUDGE_DATA;
+
 export const DEFAULT_PYTHON_CODE_DATA: Record<
   EVALUATORS_RULE_SCOPE,
   PythonCodeObject

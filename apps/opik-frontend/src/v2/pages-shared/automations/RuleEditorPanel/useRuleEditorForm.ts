@@ -56,15 +56,15 @@ import {
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
   createInitialRulePrompt,
-  DEFAULT_DECISION_MODEL_DATA,
-  DEFAULT_LLM_AS_JUDGE_DATA,
   FILTER_COLUMNS_BY_SCOPE,
+  getDefaultJudgeData,
   DEFAULT_PYTHON_CODE_DATA,
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 import {
   findSelectedTemplate,
   getRuleTemplateOptions,
+  isBlankContent,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
 
 const DERIVED_FIELDS = [
@@ -162,11 +162,6 @@ const withDefaultModel = <
           { model, provider },
         ),
       };
-
-const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
-  uiType === UI_EVALUATORS_RULE_TYPE.decision_model
-    ? DEFAULT_DECISION_MODEL_DATA
-    : DEFAULT_LLM_AS_JUDGE_DATA;
 
 const getDefaultValues = (
   ruleType: UI_EVALUATORS_RULE_TYPE,
@@ -366,22 +361,34 @@ const useRuleEditorForm = ({
     );
   }, [form]);
 
-  const saveCustomDraft = useCallback(() => {
+  const isCustomContent = useCallback(() => {
     const llmJudgeDetails = form.getValues("llmJudgeDetails");
-    if (!llmJudgeDetails.messages.length || isOnTemplate()) return;
+    return (
+      llmJudgeDetails.messages.length > 0 &&
+      !isOnTemplate() &&
+      !isBlankContent(
+        llmJudgeDetails,
+        form.getValues("uiType"),
+        form.getValues("scope"),
+      )
+    );
+  }, [form, isOnTemplate]);
+
+  const saveCustomDraft = useCallback(() => {
+    if (!isCustomContent()) return;
+    const llmJudgeDetails = form.getValues("llmJudgeDetails");
     customDraftsRef.current[form.getValues("scope")] = cloneDeep({
       llmJudgeDetails,
       autoName: autoNameRef.current,
       ruleName: form.getValues("ruleName").trim(),
     });
-  }, [form, isOnTemplate]);
+  }, [form, isCustomContent]);
 
   const hasCustomContent = useCallback(
     () =>
       Boolean(customDraftsRef.current[form.getValues("scope")]) ||
-      (form.getValues("llmJudgeDetails.messages").length > 0 &&
-        !isOnTemplate()),
-    [form, isOnTemplate],
+      isCustomContent(),
+    [form, isCustomContent],
   );
 
   const applyTemplate = useCallback(

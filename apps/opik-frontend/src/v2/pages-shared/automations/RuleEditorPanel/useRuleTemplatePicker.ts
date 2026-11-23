@@ -6,6 +6,7 @@ import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPan
 import {
   findSelectedTemplate,
   getRuleTemplateOptions,
+  isBlankContent,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
 import type useRuleEditorForm from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorForm";
 
@@ -22,8 +23,11 @@ const useRuleTemplatePicker = (
   const messages = form.watch("llmJudgeDetails.messages");
   const schema = form.watch("llmJudgeDetails.schema");
   const uiType = form.watch("uiType");
-  const options = getRuleTemplateOptions(uiType, form.watch("scope"));
+  const scope = form.watch("scope");
+  const options = getRuleTemplateOptions(uiType, scope);
   const hasContent = messages.length > 0;
+  const isBlank =
+    hasContent && isBlankContent({ messages, schema }, uiType, scope);
   const [isPicking, setIsPicking] = useState(!hasContent);
   const selectedOption = hasContent
     ? findSelectedTemplate({ messages, schema }, options, uiType)
@@ -44,7 +48,8 @@ const useRuleTemplatePicker = (
       options,
       selectedOption,
       showCustom: actions.hasCustomContent(),
-      isCustomSelected: hasContent && !selectedOption,
+      isCustomSelected: hasContent && !selectedOption && !isBlank,
+      isBlankSelected: isBlank,
       onSelect: (option: JudgeTemplateOption) =>
         pick(() => actions.applyTemplate(option.template, option.label)),
       onSelectCustom: () => pick(actions.selectCustom),
