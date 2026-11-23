@@ -9,27 +9,32 @@ This document provides essential guidelines for reviewing Opik Python SDK code. 
 ## 🔧 Core Architecture Principles
 
 ### Three-Layer Architecture
+
 The SDK uses a strict 3-layer architecture. Always ensure code belongs to the correct layer:
 
 **Layer 1: Public API** (`opik.Opik`, `@opik.track`)
+
 - User-facing interface, input validation, context management
 
 **Layer 2: Message Processing** (observability operations only)
+
 - Background workers for trace/span/feedback operations
 
 **Layer 3: REST API Client**
-- HTTP communication with Opik backend
 
+- HTTP communication with Opik backend
 
 ### Execution Paths
 
 **Asynchronous Path** (traces, spans, feedback):
+
 ```python
 client.trace(name="test")           # Non-blocking, batched
 client.log_traces_feedback_scores() # Background processing
 ```
 
 **Synchronous Path** (datasets, experiments, search):
+
 ```python
 dataset = client.create_dataset(name="test")  # Blocking, returns immediately
 traces = client.search_traces(...)           # Direct REST call
@@ -38,6 +43,7 @@ traces = client.search_traces(...)           # Direct REST call
 ## 📋 API Design Standards
 
 ### Opik.Opik is the Main Entry Point
+
 ```python
 # ✅ Good: Always use Opik as factory
 client = opik.Opik()
@@ -50,6 +56,7 @@ experiment = Experiment(name="test")  # Bypasses main API
 ```
 
 ### Consistent Parameter Patterns
+
 ```python
 # ✅ Good: Follow established patterns
 def create_experiment(self, name: str, description: Optional[str] = None)
@@ -61,6 +68,7 @@ def create_dataset(self, name: str, desc: str)           # Different param name
 ```
 
 ### Method Naming Conventions
+
 - **CRUD**: `create_*`, `get_*`, `update_*`, `delete_*`
 - **Search**: `search_*` for complex queries
 - **Batch**: `batch_*` for bulk operations
@@ -68,11 +76,13 @@ def create_dataset(self, name: str, desc: str)           # Different param name
 ## 🧪 Testing Standards
 
 ### Test Category Selection
+
 - **Unit Tests** (`tests/unit/`): Fake backend, no external calls
 - **Library Integration** (`tests/library_integration/`): Real libraries, fake Opik backend
 - **E2E Tests** (`tests/e2e/`): Real backend, full integration
 
 ### Key Testing Rules
+
 ```python
 # ✅ Good: Unit test with fake backend
 def test_decorator_behavior(fake_backend):
@@ -92,7 +102,9 @@ def test_dataset_crud(opik_client, dataset_name):
 
 ### Test Naming Convention
 ```
+
 test_WHAT__CASE_DESCRIPTION__EXPECTED_RESULT
+
 ```
 ```python
 # ✅ Good
@@ -105,6 +117,7 @@ def test_dataset()
 ```
 
 ### Fake Backend Usage
+
 ```python
 def test_my_feature(fake_backend):
     # Execute code
@@ -126,6 +139,7 @@ def test_my_feature(fake_backend):
 ## 🛡️ Error Handling Standards
 
 ### Exception Hierarchy
+
 ```python
 # ✅ Good: Use specific exceptions
 class MetricComputationError(OpikException):
@@ -138,6 +152,7 @@ raise ValueError("Invalid input")
 ```
 
 ### Metric Error Handling
+
 ```python
 # ✅ Good: Metrics raise MetricComputationError on failure
 class Hallucination(BaseMetric):
@@ -187,6 +202,7 @@ def calculate_hash(...): ...
 ```
 
 ### Import Organization
+
 Always import modules, not names. General exceptions are standard library type hints and type aliases generally considered widely known types across the library (they are usually stored in `types.py` root module).
 
 ```python
@@ -211,6 +227,7 @@ from httpx import Client
 ```
 
 ### Access Control
+
 ```python
 # ✅ Good: Private methods for internal use
 class Opik:
@@ -233,27 +250,30 @@ class DataProcessor:
 ## 🔍 Key Review Checkpoints
 
 ### Architecture Review
+
 - [ ] Code belongs to correct layer (Public API vs Message Processing vs REST)
 - [ ] No complex business logic in Public API layer
 - [ ] Module logic segregation (one responsibility per module)
 
 ### Code Quality Review
+
 - [ ] Consistent parameter ordering and naming
 - [ ] Proper access control (private methods when appropriate)
 - [ ] Clean import organization
 - [ ] Type hints where possible
 
 ### Error Handling Review
+
 - [ ] Specific OpikException subclasses used
 - [ ] Metrics raise MetricComputationError (never hide errors)
 
 ### Testing Review
+
 - [ ] Appropriate test type used (unit vs integration vs e2e)
 - [ ] Fake backend used for unit/library integration tests
 - [ ] Test naming follows convention
 - [ ] Verifiers used for E2E assertions
 - [ ] Always flush tracker in tests that create spans/traces
-
 
 ## 🚫 Critical Anti-Patterns
 
@@ -476,7 +496,6 @@ import openai
 import heavy_ml_library  # Always loads even if not needed
 from heavy_ml_library import complex_function  # Wastes memory
 ```
-
 
 ## Design Principles Guidelines
 
@@ -765,7 +784,6 @@ def process(self, message: messages.BaseMessage) -> None:
             extra={"error_tracking_extra": error_tracking_extra},
         )
 ```
-
 
 ## Documentation and Style Guidelines
 
