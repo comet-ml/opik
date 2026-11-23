@@ -1,0 +1,88 @@
+:root {
+  --host-bg: #f7f7f9;
+  --host-fg: #111827;
+  --host-fg-muted: #6b7280;
+  --host-border: #e5e7eb;
+  --host-accent: #4f46e5;
+  --host-danger: #b91c1c;
+  --host-danger-bg: #fef2f2;
+  --host-radius: 8px;
+  --host-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --host-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--host-bg);
+  color: var(--host-fg);
+  font-family: var(--host-font);
+  font-size: 14px;
+}
+
+.host {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 24px;
+  padding: 24px;
+  min-height: 100vh;
+}
+.host[data-theme="dark"] {
+  background: hsl(0 0% 4%);
+}
+.host-main {
+  min-width: 0;
+}
+.host-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.host-side h1 {
+  font-size: 16px;
+  margin: 0;
+}
+.host-side textarea {
+  width: 100%;
+  min-height: 420px;
+  font-family: var(--host-mono);
+  font-size: 12px;
+  border: 1px solid var(--host-border);
+  border-radius: var(--host-radius);
+  padding: 8px;
+  resize: vertical;
+}
+.host-actions {
+  display: flex;
+  gap: 8px;
+}
+.host-side button {
+  background: var(--host-accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--host-radius);
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.host-side .muted {
+  color: var(--host-fg-muted);
+  font-size: 12px;
+}
+.host[data-theme="dark"] .host-side {
+  color: #f3f4f6;
+}
+.errors:not(:empty) {
+  border: 1px solid var(--host-danger);
+  background: var(--host-danger-bg);
+  color: var(--host-danger);
+  border-radius: var(--host-radius);
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.errors li {
+  margin: 4px 0;
+}

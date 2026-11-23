@@ -350,10 +350,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cohere/command-r7b-12-2024",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COHERE_NORTH_MINI_CODE_FREE,
-      label: "cohere/north-mini-code:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
       label: "deepseek/deepseek-chat",
     },
@@ -408,10 +404,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_1_FLASH_1017,
       label: "deepseek/deepseek-v4.1-flash-1017",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
-      label: "dots-studio/dots-3-note-preview:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.ELORIAN_GLIMPSE,
@@ -618,10 +610,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mancer/weaver",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_2_0,
-      label: "meituan/longcat-2.0",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
       label: "meta-llama/llama-3.1-70b-instruct",
     },
@@ -772,6 +760,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X22B_INSTRUCT,
       label: "mistralai/mixtral-8x22b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_PIXTRAL_LARGE_2502,
+      label: "mistralai/pixtral-large-2502",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_VOXTRAL_SMALL_24B_2507,
@@ -1343,6 +1335,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen4-max",
     },
     {
+      value: PROVIDER_MODEL_TYPE.RADIXARK_DAISYROSE_27B,
+      label: "radixark/daisyrose-27b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.RECURSIVE_FLINT_V1_0_FREE,
       label: "recursive/flint-v1.0:free",
     },
@@ -1423,10 +1419,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hy3",
     },
     {
-      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
-      label: "tencent/hy3-preview",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4,
       label: "tencent/hy4",
     },
@@ -1453,6 +1445,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING,
       label: "thinkingmachines/inkling",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_2_MINI,
+      label: "thinkingmachines/inkling-2-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_2_SMALL,

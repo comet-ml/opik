@@ -20,6 +20,7 @@
     "apps/opik-python-backend/**",
     "apps/opik-sandbox-executor-python/**",
     "deployment/helm_chart/opik/**",
+    "sdks/genui/**",
     "sdks/python/setup.py",
     "tests_end_to_end/e2e/**"
   ],

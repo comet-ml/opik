@@ -86,6 +86,43 @@ public class TopicsConfig {
         @JsonProperty
         @Min(0) @Max(100_000) private int provisionalBelow;
 
+        @JsonProperty
+        @Min(1) @Max(100_000) private int nightlyMinCandidate;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMinGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMaxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyTextsPerGroup;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int nightlyFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyExamples;
+
+        @JsonProperty
+        @Min(1) @Max(365) private int recentDays;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double retireShare;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int retireNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
+            return nightlyMinGroups <= nightlyMaxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
+            return nightlyFrequent <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;

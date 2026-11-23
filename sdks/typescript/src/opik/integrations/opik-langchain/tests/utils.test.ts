@@ -6,8 +6,10 @@ import {
   outputFromChainValues,
   inputFromChainValues,
   extractCallArgs,
+  usageFromLLMResult,
 } from "../src/utils";
 import { Serialized } from "@langchain/core/load/serializable";
+import { AIMessage } from "@langchain/core/messages";
 
 describe("Utils", () => {
   describe("cleanObject", () => {
@@ -224,6 +226,72 @@ describe("Utils", () => {
       const result = extractCallArgs(llm, invocationParams);
 
       expect(result).toEqual(invocationParams);
+    });
+  });
+
+  describe("usageFromLLMResult", () => {
+    const usageMetadata = {
+      input_tokens: 10,
+      output_tokens: 4,
+      total_tokens: 14,
+    };
+    const expected = {
+      prompt_tokens: 10,
+      completion_tokens: 4,
+      total_tokens: 14,
+    };
+
+    it("should read usage_metadata from the message", () => {
+      const generations = [
+        [
+          {
+            text: "Hi",
+            message: new AIMessage({
+              content: "Hi",
+              usage_metadata: usageMetadata,
+            }),
+          },
+        ],
+      ];
+
+      expect(usageFromLLMResult(generations, {})).toEqual(expected);
+    });
+
+    it("should count usage once when there are several choices", () => {
+      const message = () =>
+        new AIMessage({ content: "Hi", usage_metadata: usageMetadata });
+      const generations = [
+        [
+          { text: "Hi", message: message() },
+          { text: "Hi", message: message() },
+        ],
+      ];
+
+      expect(usageFromLLMResult(generations)).toEqual(expected);
+    });
+
+    it("should read tokenUsage from llmOutput", () => {
+      expect(
+        usageFromLLMResult([[{ text: "Hi" }]], {
+          tokenUsage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 },
+        })
+      ).toEqual(expected);
+    });
+
+    it("should read estimatedTokenUsage from llmOutput", () => {
+      expect(
+        usageFromLLMResult([[{ text: "Hi" }]], {
+          estimatedTokenUsage: {
+            promptTokens: 10,
+            completionTokens: 4,
+            totalTokens: 14,
+          },
+        })
+      ).toEqual(expected);
+    });
+
+    it("should return no usage when there is none", () => {
+      expect(usageFromLLMResult([[{ text: "Hi" }]], {})).toEqual({});
     });
   });
 });

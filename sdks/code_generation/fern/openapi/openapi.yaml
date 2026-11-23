@@ -2503,6 +2503,12 @@ paths:
       responses:
         "204":
           description: No content
+        "409":
+          description: "Conflict: the evaluator type can't be changed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/automations/evaluators/{id}/logs:
     get:
       tags:
@@ -13118,9 +13124,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -13594,9 +13600,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -14080,9 +14086,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -15322,7 +15328,7 @@ components:
           description: "For project scope, specify either project_id or project_name.\
             \ If project_name is provided and the project does not exist, it will\
             \ be created. Ignored when project_id is provided. If neither is provided,\
-            \ the dataset is created at workspace level."
+            \ the dataset is created in the Default Project."
         type:
           type: string
           enum:
@@ -15444,7 +15450,7 @@ components:
           description: "For project scope, specify either project_id or project_name.\
             \ If project_name is provided and the project does not exist, it will\
             \ be created. Ignored when project_id is provided. If neither is provided,\
-            \ the dataset is created at workspace level."
+            \ the dataset is created in the Default Project."
         type:
           type: string
           enum:
@@ -22221,7 +22227,7 @@ components:
           description: "For project scope, specify either project_id or project_name.\
             \ If project_name is provided and the project does not exist, it will\
             \ be created. Ignored when project_id is provided. If neither is provided,\
-            \ the prompt is created at workspace level."
+            \ the prompt is created in the Default Project."
         description:
           maxLength: 255
           minLength: 0
@@ -22384,7 +22390,7 @@ components:
           description: "For project scope, specify either project_id or project_name.\
             \ If project_name is provided and the project does not exist, it will\
             \ be created. Ignored when project_id is provided. If neither is provided,\
-            \ the prompt is created at workspace level."
+            \ the prompt is created in the Default Project."
         description:
           maxLength: 255
           minLength: 0
