@@ -70,6 +70,11 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             WHERE workspace_id = :workspace_id
             <if(level)> AND level = :level <endif>
             <if(ruleId)> AND rule_id = :rule_id <endif>
+            <if(items)>
+                <items:{item |
+                    AND markers[:marker_keys<item.index>] = :marker_values<item.index>
+                }>
+            <endif>
             ORDER BY timestamp DESC
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
             """;
@@ -132,6 +137,9 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         if (criteria.page() != null && criteria.size() != null) {
             template.add("offset", (criteria.page() - 1) * criteria.size());
         }
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> template.add("items", getQueryItemPlaceHolder(markers.size())));
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
@@ -142,6 +150,16 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         if (criteria.page() != null && criteria.size() != null) {
             statement.bind("offset", (criteria.page() - 1) * criteria.size());
         }
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> {
+                    int index = 0;
+                    for (var entry : markers.entrySet()) {
+                        statement.bind("marker_keys" + index, entry.getKey());
+                        statement.bind("marker_values" + index, entry.getValue());
+                        index++;
+                    }
+                });
     }
 
     @Override

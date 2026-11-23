@@ -2,10 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.OnlineScoringStatus.Reason;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -14,6 +16,8 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServerErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +49,9 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMe
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -53,6 +60,7 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +91,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     private SpanService spanService;
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
+    @Mock
+    private OnlineScoringStatusService scoringStatusService;
 
     private OnlineScoringUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -124,7 +134,17 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 feedbackScoreService,
                 traceService,
                 spanService,
-                pythonEvaluatorService);
+                pythonEvaluatorService,
+                scoringStatusService);
+        lenient()
+                .when(scoringStatusService.recordRetrying(any(), any(), any(), anyBoolean(), any(), anyLong(),
+                        anyInt()))
+                .thenReturn(Mono.empty());
+        lenient().when(scoringStatusService.recordFailed(any(), any(), any(), anyBoolean(), any()))
+                .thenReturn(Mono.empty());
+        lenient().when(scoringStatusService.recordSkipped(any(), any(), any(), anyBoolean(), any()))
+                .thenReturn(Mono.empty());
+        lenient().when(scoringStatusService.clear(any(), any(), any())).thenReturn(Mono.empty());
 
         projectId = UUID.randomUUID();
         traceId = UUID.randomUUID();
@@ -187,6 +207,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     traceScore("test_score", BigDecimal.valueOf(0.95), "test reason", message.trace())));
+            verify(scoringStatusService).clear(message.trace(), message.workspaceId(), message.ruleId());
         }
 
         @Test
@@ -280,6 +301,9 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
             assertThat(captor.getValue()).isEmpty();
+            verify(scoringStatusService).recordSkipped(message.trace(), message.workspaceId(), message.ruleId(), false,
+                    Reason.NO_SCORE);
+            verify(scoringStatusService, never()).clear(any(), any(), any());
         }
 
         @Test
@@ -358,6 +382,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq(ruleName),
                     eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verify(scoringStatusService).recordSkipped(message.trace(), message.workspaceId(), message.ruleId(), false,
+                    Reason.UNRESOLVED_ARGUMENTS);
         }
 
         @Test
@@ -448,6 +474,35 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     eq(ruleName),
                     eq("Python BE timeout"));
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verifyNoInteractions(scoringStatusService);
+        }
+    }
+
+    @Nested
+    class FailedDeliveryTests {
+
+        @Test
+        void aFailedDeliveryTheStreamWillRetryIsRecordedAsRetrying() {
+            var message = sampleMessage();
+            var failure = new ServerErrorException("Python BE unavailable", 503);
+
+            scorer.onRetrying(message, failure, 2, 3).block();
+
+            verify(scoringStatusService).recordRetrying(message.trace(), message.workspaceId(), message.ruleId(), false,
+                    Reason.OTHER, 2, 3);
+        }
+
+        @Test
+        void aMetricThatFailsIsRecordedAsFailedWithoutAProviderReason() {
+            var message = sampleMessage();
+            // A 400 from the Python backend would read as "the provider rejected the request" for a judge
+            var failure = new BadRequestException("The metric raised an error");
+
+            scorer.onRetired(message, failure).block();
+
+            verify(scoringStatusService).recordFailed(message.trace(), message.workspaceId(), message.ruleId(), false,
+                    Reason.OTHER);
+            verifyNoInteractions(feedbackScoreService);
         }
     }
 

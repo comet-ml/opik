@@ -13,6 +13,8 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.DecisionModelRuleValidator;
+import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -52,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -59,6 +62,7 @@ import java.util.UUID;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.View;
+import static com.comet.opik.api.evaluators.OnlineScoringStatus.OnlineScoringStatusList;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/automations/evaluators/")
@@ -76,6 +80,7 @@ public class AutomationRuleEvaluatorsResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull OnlineScoringStatusService scoringStatusService;
 
     @GET
     @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
@@ -245,12 +250,19 @@ public class AutomationRuleEvaluatorsResource {
             @ApiResponse(responseCode = "200", description = "Automation rule evaluator logs resource", content = @Content(schema = @Schema(implementation = LogPage.class)))
     })
     public Response getLogs(@PathParam("id") UUID evaluatorId,
-            @QueryParam("size") @Min(1) @DefaultValue("1000") int size) {
+            @QueryParam("size") @Min(1) @DefaultValue("1000") int size,
+            @QueryParam("trace_id") @Schema(description = "Only the logs about this trace") UUID traceId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Looking for logs for automated evaluator: id '{}' on workspace_id '{}'",
-                evaluatorId, workspaceId);
-        var criteria = LogCriteria.builder().entityId(evaluatorId).size(size).build();
+        log.info("Looking for logs for automated evaluator: id '{}', trace_id '{}' on workspace_id '{}'",
+                evaluatorId, traceId, workspaceId);
+        var criteria = LogCriteria.builder()
+                .entityId(evaluatorId)
+                .size(size)
+                .markers(Optional.ofNullable(traceId)
+                        .map(id -> Map.of(UserLog.TRACE_ID, id.toString()))
+                        .orElse(null))
+                .build();
         LogPage logs = service.getLogs(criteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
@@ -260,4 +272,14 @@ public class AutomationRuleEvaluatorsResource {
         return Response.ok(logs).build();
     }
 
+    @GET
+    @Path("/scoring-statuses")
+    @Operation(operationId = "getOnlineScoringStatuses", summary = "Get why rules have not scored a trace", description = "Get, per rule, why an experiment trace has no score from it yet: retrying, failed or skipped. A rule with no entry has scored the trace or not reported on it", responses = {
+            @ApiResponse(responseCode = "200", description = "Online scoring statuses", content = @Content(schema = @Schema(implementation = OnlineScoringStatusList.class)))
+    })
+    public Response getScoringStatuses(@QueryParam("trace_id") @NotNull UUID traceId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        var statuses = scoringStatusService.find(workspaceId, traceId).block();
+        return Response.ok(new OnlineScoringStatusList(statuses)).build();
+    }
 }

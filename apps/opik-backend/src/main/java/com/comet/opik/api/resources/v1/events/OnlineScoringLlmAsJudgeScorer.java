@@ -6,6 +6,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
+import com.comet.opik.api.evaluators.OnlineScoringStatus.Reason;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.CompressionTier;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
@@ -21,6 +22,7 @@ import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
+import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -93,6 +95,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
     private final DecisionScoringService decisionScoringService;
+    private final OnlineScoringStatusService scoringStatusService;
     private final LongCounter routingDecisions;
 
     @Inject
@@ -111,7 +114,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
             @NonNull AttachmentService attachmentService,
-            @NonNull DecisionScoringService decisionScoringService) {
+            @NonNull DecisionScoringService decisionScoringService,
+            @NonNull OnlineScoringStatusService scoringStatusService) {
         super(config, redisson, feedbackScoreService, traceService, spanService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -126,6 +130,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
         this.decisionScoringService = decisionScoringService;
+        this.scoringStatusService = scoringStatusService;
         this.routingDecisions = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE)
                 .counterBuilder("online_scoring_agentic_routing_total")
                 .setDescription("Agentic vs inline routing decisions per evaluation, by trigger and workspace")
@@ -215,12 +220,21 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .put(RequestContext.USER_NAME, message.userName())));
     }
 
+    @Override
+    protected Mono<Void> onRetrying(TraceToScoreLlmAsJudge message, Throwable error, long deliveryCount,
+            int maxDeliveries) {
+        return scoringStatusService.recordRetrying(message.trace(), message.workspaceId(), message.ruleId(),
+                isSuiteAssertion(message), OnlineScoringStatusService.reasonOf(error), deliveryCount, maxDeliveries);
+    }
+
     // Without this, a suite assertion the judge never scored leaves its item with no result and the
     // assertion counter above zero, so the experiment stays "running" forever.
     @Override
     protected Mono<Void> onRetired(TraceToScoreLlmAsJudge message, Throwable error) {
-        if (!TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY.equals(message.categoryName())) {
-            return Mono.empty();
+        var recordFailed = scoringStatusService.recordFailed(message.trace(), message.workspaceId(),
+                message.ruleId(), isSuiteAssertion(message), OnlineScoringStatusService.reasonOf(error));
+        if (!isSuiteAssertion(message)) {
+            return recordFailed;
         }
         var trace = message.trace();
         var reason = unevaluatedReason(message, error);
@@ -239,7 +253,23 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         Mono<Void> storeUnevaluated = unevaluated.isEmpty()
                 ? Mono.empty()
                 : storeScores(unevaluated, trace, message.userName(), message.workspaceId()).then();
-        return storeUnevaluated.then(finishAssertion(message));
+        return recordFailed.then(storeUnevaluated).then(finishAssertion(message));
+    }
+
+    // Whatever the judge left unscored, a retry would leave unscored too, so the rule is done with the trace.
+    private Mono<Void> recordScoredOrSkipped(TraceToScoreLlmAsJudge message, List<FeedbackScoreBatchItem> scores) {
+        var stored = scores.stream().map(FeedbackScoreBatchItem::name).collect(Collectors.toSet());
+        boolean allScored = Optional.ofNullable(message.llmAsJudgeCode().schema()).orElse(List.of()).stream()
+                .map(score -> message.scoreNameMapping().getOrDefault(score.name(), score.name()))
+                .allMatch(stored::contains);
+        return allScored
+                ? scoringStatusService.clear(message.trace(), message.workspaceId(), message.ruleId())
+                : scoringStatusService.recordSkipped(message.trace(), message.workspaceId(), message.ruleId(),
+                        isSuiteAssertion(message), Reason.NO_SCORE);
+    }
+
+    private static boolean isSuiteAssertion(TraceToScoreLlmAsJudge message) {
+        return TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY.equals(message.categoryName());
     }
 
     private static String unevaluatedReason(TraceToScoreLlmAsJudge message, Throwable error) {
@@ -284,12 +314,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .flatMap(fetched -> fetched.hasError()
                         ? recorder.<FeedbackScoreBatchItem>monitor(Mono.error(fetched.getThrowable()))
                         : judgeFallingBackToNextModel(message, fetched.get(), mdc, recorder))
+                .defaultIfEmpty(List.of())
                 // Nothing to store when the evaluation was skipped or yielded no readable score; the skip or the
                 // response issues were already logged, so don't follow them with a success line.
-                .filter(scores -> !scores.isEmpty())
-                .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
-                .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
-                        .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
+                .flatMap(scores -> (scores.isEmpty()
+                        ? Mono.<Void>empty()
+                        : storeScores(scores, trace, message.userName(), message.workspaceId())
+                                .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger.info(
+                                        "Scores for traceId '{}' stored successfully:\n\n{}", trace.id(),
+                                        loggedScores)))
+                                .then())
+                        .then(recordScoredOrSkipped(message, scores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
                         .error("Unexpected error while scoring traceId '{}' with rule '{}', error type '{}'",
                                 trace.id(), message.ruleName(),

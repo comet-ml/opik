@@ -50,8 +50,13 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.UnknownHostException;
+import java.net.http.HttpTimeoutException;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -108,8 +113,13 @@ public class ChatCompletionService {
             failIfProviderReportedHttpStatus(runtimeException);
 
             logProviderFailure(runtimeException);
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException),
-                    ProviderFailures.redacted(runtimeException));
+            var detail = buildDetailedErrorMessage(runtimeException);
+            var cause = ProviderFailures.redacted(runtimeException);
+            var unanswered = unansweredStatusOf(runtimeException);
+            if (unanswered.isPresent()) {
+                throw new ServerErrorException(detail, unanswered.get(), cause);
+            }
+            throw new InternalServerErrorException(detail, cause);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -181,8 +191,10 @@ public class ChatCompletionService {
             // (CustomLlm 400, OpenAi 500) and nothing downstream can tell that from a real 400, so consulting
             // them would retire every unparseable CustomLlm failure on its first delivery. An absent status
             // falls through to 500 and stays retryable: burning maxRetries on a doomed request costs attempts,
-            // losing an unknown failure costs the evaluation.
+            // losing an unknown failure costs the evaluation. A provider that couldn't be reached or didn't answer in
+            // time is reported the way a gateway would, as create() and the streaming handler do; both stay retryable.
             var status = findProviderHttpStatus(runtimeException)
+                    .or(() -> unansweredStatusOf(runtimeException))
                     .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
             logProviderFailure(runtimeException, status);
@@ -259,6 +271,29 @@ public class ChatCompletionService {
     private static boolean isTransportFailure(Throwable throwable) {
         return !DestinationGuardDns.isRefused(throwable) && ExceptionUtils.getThrowableList(throwable).stream()
                 .anyMatch(cause -> cause instanceof IOException && !(cause instanceof JacksonException));
+    }
+
+    /**
+     * For a provider that sent no status, the one a gateway reports: 502 when it couldn't be reached, 504 when it
+     * didn't answer in time. Empty for any other failure, which stays a 500.
+     */
+    private static Optional<Integer> unansweredStatusOf(Throwable throwable) {
+        if (DestinationGuardDns.isRefused(throwable)) {
+            return Optional.empty();
+        }
+        var chain = ExceptionUtils.getThrowableList(throwable);
+        if (chain.stream().anyMatch(cause -> cause instanceof InterruptedIOException
+                || cause instanceof HttpTimeoutException)) {
+            return Optional.of(Response.Status.GATEWAY_TIMEOUT.getStatusCode());
+        }
+        if (chain.stream().anyMatch(cause -> cause instanceof ConnectException
+                || cause instanceof NoRouteToHostException
+                || cause instanceof UnknownHostException
+                || cause instanceof UnresolvedAddressException
+                || cause instanceof ClosedChannelException)) {
+            return Optional.of(Response.Status.BAD_GATEWAY.getStatusCode());
+        }
+        return Optional.empty();
     }
 
     /** A failure the provider's client itself marks as worth another attempt. */
@@ -559,7 +594,9 @@ public class ChatCompletionService {
 
                 logUnexpectedProviderFailure(throwable);
 
-                handlers.handleError(new ErrorMessage(buildDetailedErrorMessage(throwable)));
+                handlers.handleError(new ErrorMessage(
+                        unansweredStatusOf(throwable).orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode()),
+                        buildDetailedErrorMessage(throwable)));
             }
         };
     }

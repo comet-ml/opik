@@ -30,6 +30,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
@@ -397,6 +398,7 @@ class BaseRedisSubscriberTest {
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
             assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
+            assertThat(subscriber.getRetryingDeliveries()).isEmpty();
         }
 
         @Test
@@ -681,6 +683,36 @@ class BaseRedisSubscriberTest {
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
             assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
+            // Every delivery but the last is reported as one the stream will retry
+            assertThat(subscriber.getRetryingDeliveries()).containsExactlyInAnyOrderElementsOf(messages.stream()
+                    .map(message -> new TestRedisSubscriber.RetryingDelivery(message, 1, fastConfig.getMaxRetries()))
+                    .toList());
+        }
+
+        @Test
+        void aFailedDeliveryOfAnAlreadyRetiredMessageIsNotReportedAsRetrying() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            // Each delivery removes its own entry before failing, as an overlapping delivery that retired it would
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient,
+                    message -> stream.listPending(config.getConsumerGroupName(), StreamMessageId.MIN,
+                            StreamMessageId.MAX, 100)
+                            .flatMap(pending -> {
+                                var ids = pending.stream().map(PendingEntry::getId).toArray(StreamMessageId[]::new);
+                                return ids.length == 0
+                                        ? Mono.empty()
+                                        : stream.ack(config.getConsumerGroupName(), ids).then(stream.remove(ids));
+                            })
+                            .then(Mono.error(new RuntimeException("Test retryable failure")))));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getFailedMessageCount().get())
+                            .isEqualTo(messages.size()));
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getRetryingDeliveries()).isEmpty();
+            assertThat(subscriber.getRetiredMessages()).isEmpty();
         }
 
         @Test
