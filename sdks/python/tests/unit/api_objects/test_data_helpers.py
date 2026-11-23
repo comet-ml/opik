@@ -1,3 +1,5 @@
+import pydantic
+
 from opik.api_objects import data_helpers
 
 
@@ -73,3 +75,31 @@ def test_merge_metadata_empty_dicts():
     """Test merge_metadata with empty dictionaries."""
     result = data_helpers.merge_metadata({}, {})
     assert result is None
+
+
+def test_merge_metadata_with_prompts_does_not_mutate_the_caller_dict():
+    """The prompts key goes into the merged copy, not into the caller's metadata."""
+    new_metadata = {"key2": "value2"}
+    prompts = [{"name": "prompt"}]
+
+    result = data_helpers.merge_metadata(
+        {"key1": "value1"}, new_metadata, prompts=prompts
+    )
+
+    assert result == {
+        "key1": "value1",
+        "key2": "value2",
+        "opik_prompts": prompts,
+    }
+    assert new_metadata == {"key2": "value2"}
+
+
+def test_merge_metadata_with_prompts_accepts_a_pydantic_model():
+    """A pydantic model is merged like a dict instead of being subscripted."""
+
+    class Metadata(pydantic.BaseModel):
+        key2: str = "value2"
+
+    result = data_helpers.merge_metadata({"key1": "value1"}, Metadata(), prompts=[])
+
+    assert result == {"key1": "value1", "key2": "value2", "opik_prompts": []}

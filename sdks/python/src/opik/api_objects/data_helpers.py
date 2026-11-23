@@ -33,7 +33,14 @@ def merge_metadata(
     If both existing_metadata and new_metadata are None or empty, return None.
     """
     if prompts is not None:
-        new_metadata = new_metadata or {}
+        # Copy before adding the prompts key: new_metadata is the caller's dict (or
+        # model), and writing into it would hand back a metadata dict that the
+        # caller never built - `opik_prompts` would then travel with every later
+        # write that reuses it.
+        if isinstance(new_metadata, pydantic.BaseModel):
+            new_metadata = new_metadata.model_dump()
+        else:
+            new_metadata = dict(new_metadata or {})
         new_metadata["opik_prompts"] = prompts
 
     return _merge_dictionary_with_data(existing_metadata, new_data=new_metadata)
