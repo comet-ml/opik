@@ -2827,10 +2827,6 @@ topics:
     #  Description: The wait after a project's first, second, ... failed first build; the last applies to every later
     #  one. The first is also the wait after a failed labelling pass. 1 to 10 entries
     retryDelays: [1h, 6h, 1d]
-    #  Default: empty (every workspace that runs Topics)
-    #  Description: Comma-separated workspace ids the planner queues first builds for. A listed workspace that does
-    #  not run Topics (see enabledWorkspaces) is ignored
-    workspaces: ${TOPICS_FIRST_BUILD_WORKSPACES:-""}
   #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
   #  below. Any pod claims a run with a compare-and-set on its row and runs it
   runs:
