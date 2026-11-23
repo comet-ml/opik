@@ -185,7 +185,9 @@ SETTINGS use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 400
 --
 -- WHY IT EXISTS. `spans` is unpartitioned and created_at is not in its sorting key, so a week's predicate narrows the
 -- read only through the created_at minmax skip index, granule by granule; a granule whose rows span many weeks is read
--- again by every week it touches. Grouping by week in one statement reads each granule once.
+-- again by every week it touches. Under FINAL, use_skip_indexes_if_final_exact_mode (on by default where the server
+-- has it) also re-reads the key neighbours of every selected granule, which can widen a single week to most of both
+-- tables. Grouping by week in one statement reads each granule once.
 --
 -- IT IS `compare` WITH THE WEEK ADDED TO THE GROUP BY, nothing else. Same fingerprint, same normalization, same double
 -- reduction of the old side — argMax per destination key, now per (destination key, week), which is exactly what one
@@ -199,10 +201,10 @@ SETTINGS use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 400
 -- here to the true winner and report ok=1; a live row that differs still differs. A week that reports ok=0 is resolved
 -- exactly as before — the driver runs `confirm-keys`, `version-ties` and `drill-down` on that week's own window.
 --
--- MEMORY. The old side groups every key in the range. optimize_aggregation_in_order streams that GROUP BY in sorting-key
--- order — its keys lead with the source's (workspace_id, project_id, trace_id) prefix, which FINAL already reads in
--- order — so it holds one prefix at a time rather than every key; max_bytes_before_external_group_by remains the spill
--- bound if the server declines the in-order plan.
+-- MEMORY. The old side groups every key in the range, so max_bytes_before_external_group_by bounds it by spilling.
+-- optimize_aggregation_in_order is deliberately not used: the GROUP BY shares only the (workspace_id, project_id,
+-- trace_id) prefix with the source's sorting key, so the in-order aggregator closes a group every few rows, and under
+-- FINAL it runs on one thread — several times slower than the walk.
 WITH
     src AS (
         SELECT
@@ -305,8 +307,7 @@ ORDER BY week
 -- A week present on one side only reads as 0 rows and checksum 0 on the other, the values `compare` reports for an
 -- empty side: join_use_nulls = 0 defaults the count to 0, and ifNull does the same for the old side's Nullable checksum,
 -- whose join default is NULL.
-SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 1,
-         max_bytes_before_external_group_by = 4000000000;
+SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 4000000000;
 -- >>> END compare-weeks
 
 -- >>> BEGIN drill-down

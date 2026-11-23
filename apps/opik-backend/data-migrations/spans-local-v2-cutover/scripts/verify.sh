@@ -25,9 +25,11 @@
 #
 # Cost at this scale. `spans` is unpartitioned and created_at is not in its sorting key, so a week's predicate prunes
 # only through the created_at minmax skip index, granule by granule, and a granule spanning many weeks is re-read by
-# every week it touches: the default one-query-per-week walk reads the source several times over. --single-pass reads
+# every week it touches; under FINAL, use_skip_indexes_if_final_exact_mode also re-reads every selected granule's key
+# neighbours, which can widen one week to most of both tables. The default one-query-per-week walk, and each
+# confirm-keys re-check of a differing week, can therefore cost up to a full read of both tables. --single-pass reads
 # the range once and emits the same per-week verdicts (000005's compare-weeks block); it is exact, not a sample.
-# --coverage compares a time slice of every hour, which does shrink the read. Before the first window the driver prints
+# --coverage compares a time slice of every hour; it shrinks the read only as far as the tables' granules are narrow. Before the first window the driver prints
 # the estimated bytes and an ETA, and at the end the elapsed time and the rate it implies, for --throughput-mbps.
 # The PRE-EXCHANGE gate must still be a full compare — every week, full coverage — because a sample can miss a single-row
 # deletion leak and still report ok=1; it may be split across runs when they share a pinned --anchor (see --anchor).
@@ -62,11 +64,13 @@
 #                       using the offset rollback.sh prints (see README "Verifying after a rollback").
 #   --coverage PCT      compare PCT% of the rows (integer 1-100). Default 100. The sample is the first 36*PCT seconds of
 #                       every UTC hour by created_at: the same rows on both sides, every week and every hour represented,
-#                       and — unlike a hash of the id — a range the created_at minmax skip index can skip granules on, so
-#                       the read shrinks with it. Its bias: each project counts in proportion to its activity inside the
-#                       slices, so traffic periodic on the hour is over- or under-represented. Its limit: a granule whose
-#                       created_at spans more than an hour (a quiet project, non-time-ordered trace ids) is read whatever
-#                       the coverage, so runtime has a floor; the estimate printed before the run shows it. Server
+#                       and — unlike a hash of the id — a range the created_at minmax skip index can skip granules on.
+#                       Its bias: each project counts in proportion to its activity inside the slices, so traffic
+#                       periodic on the hour is over- or under-represented. Its limit: a granule whose created_at spans
+#                       more than an hour (a quiet project, non-time-ordered trace ids) is read whatever the coverage,
+#                       and spans_local_v2's larger granules (index_granularity_bytes 40 MiB) span hours even for busy
+#                       projects, so the read does not fall in proportion; the estimate printed before the run shows how
+#                       far it falls. Server
 #                       versions with use_skip_indexes_if_final_exact_mode get it disabled for the run, because that mode
 #                       re-reads each selected granule's key neighbours under FINAL and would undo the skip. Not valid
 #                       for the pre-EXCHANGE gate below 100.
@@ -78,8 +82,8 @@
 #                       key's versions in one wide read, so a superseded-version artifact the weekly walk reports as
 #                       "OK — superseded-version artifact" may simply read OK here.
 #   --batch-weeks N     with --single-pass: N selected weeks per query rather than the whole range, so an interrupted
-#                       run keeps the verdicts of the batches it finished. Each batch re-reads what the weeks before it
-#                       share with it, so fewer, larger batches read less.
+#                       run keeps the verdicts of the batches it finished. Each batch can cost up to a full read of both
+#                       tables (see "Cost at this scale"), so use as few batches as resuming allows.
 #   --anchor DATE       pin the week grid to DATE (YYYY-MM-DD, a Monday) instead of reading toMonday(min(created_at))
 #                       from the old table at startup. Every weekly run logs the anchor it used; pass it back with
 #                       --from-week to resume, and the resumed run's offsets name exactly the windows the first run's
@@ -532,7 +536,7 @@ if [[ -n "$IO_BUDGET_PCT" ]]; then
         FROM system.parts WHERE active AND database = currentDatabase() AND table IN ('$OLD_STORAGE', '$NEW_STORAGE')")"
     BUDGET_MBPS=$(( VOLUME_MBPS * IO_BUDGET_PCT / 100 ))
     (( BUDGET_MBPS > 0 )) || BUDGET_MBPS=1
-    MAX_SPEED_BYTES="$(awk -v m="$BUDGET_MBPS" -v r="$COMPRESSION_RATIO" 'BEGIN { printf "%d", m * 1000000 * r }')"
+    MAX_SPEED_BYTES="$(awk -v m="$BUDGET_MBPS" -v r="$COMPRESSION_RATIO" 'BEGIN { printf "%.0f", m * 1000000 * r }')"
     CH_ARGS+=(--max_execution_speed_bytes="$MAX_SPEED_BYTES" --timeout_before_checking_execution_speed=0)
     if (( BUDGET_MBPS < EFFECTIVE_MBPS )); then
         EFFECTIVE_MBPS="$BUDGET_MBPS"
@@ -544,8 +548,8 @@ fi
 (( WINDOW_MODE == 1 )) || resolve_week_grid
 
 # Under FINAL, servers that have use_skip_indexes_if_final_exact_mode re-read the key neighbours of every granule a skip
-# index selects. That keeps FINAL exact for a contiguous created_at window at modest cost, but the coverage slices select
-# granules scattered across the whole table and the neighbours cover nearly all of it, undoing the skip. Without it a
+# index selects. That keeps FINAL exact for a created_at window, but the coverage slices select granules scattered
+# across the whole table and the neighbours cover nearly all of it, undoing the skip. Without it a
 # slice can surface a superseded version on one side, which is the artifact confirm-keys already resolves.
 if (( COVERAGE < 100 )) \
     && [[ "$(ch "SELECT count() FROM system.settings WHERE name = 'use_skip_indexes_if_final_exact_mode'")" == 1 ]]; then
@@ -567,10 +571,10 @@ estimate_window_bytes() {
     old_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$old_plan")"
     new_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$new_plan")"
     awk -v o="$old_rows" -v ob="$OLD_BYTES_PER_ROW" -v n="$new_rows" -v nb="$NEW_BYTES_PER_ROW" \
-        'BEGIN { printf "%d %d\n", o * ob, n * nb }'
+        'BEGIN { printf "%.0f %.0f\n", o * ob, n * nb }'
 }
 
-eta_seconds() { awk -v b="$1" -v r="$EFFECTIVE_MBPS" 'BEGIN { printf "%d", b / (r * 1000000) }'; }
+eta_seconds() { awk -v b="$1" -v r="$EFFECTIVE_MBPS" 'BEGIN { printf "%.0f", b / (r * 1000000) }'; }
 
 # The queries this run issues, as half-open created_at bounds: one window, one per selected week, or one per
 # --single-pass batch. Week starts come from one query rather than two per week.
@@ -627,8 +631,9 @@ fi
 if (( COVERAGE < 100 )); then
     log "Coverage: $COVERAGE% — spans created in the first $SLICE_SECONDS s of every UTC hour. Same rows on both sides;"
     log "  every week and every hour is represented, each project in proportion to its activity inside the slices, so"
-    log "  traffic periodic on the hour is over- or under-represented. Granules spanning more than an hour are read"
-    log "  in full whatever the coverage. NOT valid as the pre-EXCHANGE gate."
+    log "  traffic periodic on the hour is over- or under-represented. Granules spanning more than an hour, on either"
+    log "  table, are read in full whatever the coverage, so the read does not fall in proportion. NOT valid as the"
+    log "  pre-EXCHANGE gate."
 fi
 if [[ -n "$IO_BUDGET_PCT" ]]; then
     log "I/O budget: $IO_BUDGET_PCT% of $VOLUME_MBPS MB/s = $BUDGET_MBPS MB/s of disk reads, enforced on every query as" \
@@ -715,7 +720,7 @@ compare_one_window() {
     window_certified=0   # set only by the artifact verdict, which differs but passes; gates the drill-down nudge
     # The re-checks below are the expensive part of a differing window and the gate is slowest exactly when it finds
     # something, so say what they cost before issuing them: confirm-keys and version-ties each re-read the window.
-    recheck_bytes="$(estimate_window_bytes "$LO" "$HI" | awk '{ printf "%d", 2 * ($1 + $2) }')" || recheck_bytes=""
+    recheck_bytes="$(estimate_window_bytes "$LO" "$HI" | awk '{ printf "%.0f", 2 * ($1 + $2) }')" || recheck_bytes=""
     if [[ "$recheck_bytes" =~ ^[0-9]+$ ]]; then
         DONE_EST_BYTES=$(( DONE_EST_BYTES + recheck_bytes ))
         log "  resolving $label: the re-checks read ~$(human_bytes "$recheck_bytes"), ETA" \
