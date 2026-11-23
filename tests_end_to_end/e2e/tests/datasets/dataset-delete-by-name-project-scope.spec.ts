@@ -151,5 +151,159 @@ test.describe(
         });
       },
     );
+
+    /**
+     * opik#9704 (OPIK-9319), and the reason this is a second test rather than
+     * more steps on the one above: it is about what the delete does when the
+     * scoped lookup finds NOTHING, which the test above never reaches.
+     *
+     * Before the fix, `deleteDatasetByName` fell back to a workspace-wide
+     * unique-name lookup whenever the named project held no such dataset. Both
+     * steps below reach that fallback, and under it both DESTROYED ANOTHER
+     * PROJECT'S DATASET — silently, answering 204:
+     *
+     *   1. Deleting a name in project A twice. After the first call project A
+     *      holds nothing by that name, so the second fell through to the
+     *      workspace, where project B's copy was now the only remaining match.
+     *   2. Deleting the name scoped to a project that never held it at all.
+     *
+     * The fix scopes the lookup and keeps only a PROJECT-LESS fallback
+     * (`project_id IS NULL`), which neither copy here is. So both calls must now
+     * answer 404 with nothing deleted. The second is not a restatement of the
+     * first: one arrives at the fallback by emptying the named project, the
+     * other by naming a project that was always empty, and a fix that only
+     * re-scoped the delete's own `WHERE` clause without re-scoping the lookup
+     * would pass the first and fail the second.
+     *
+     * Project B's copy is the bystander for both, asserted by id and in the UI,
+     * together with its differently-named neighbour — so "nothing else was
+     * deleted" cannot be satisfied by a delete that took project B wholesale.
+     */
+    test(
+      'A repeated delete, and one scoped to a project that never held the name, both 404 without touching another project',
+      { tag: ['@cap:datasets.delete-by-name-project-scope'] },
+      async ({ sameNameDatasets, backendClient, page }) => {
+        const { datasetName, a, b, bystanderInB, emptyProject } = sameNameDatasets;
+        const datasets = new DatasetsPage(page);
+
+        const bInputsBefore = await test.step(
+          "Project B's copy of the name holds its own items before anything is deleted",
+          async () => {
+            const items = await backendClient.getDatasetItems(b.datasetId);
+            expect(
+              items.map((item) => String(item.data.input)).sort(),
+              "project B's items before the delete",
+            ).toEqual([...b.inputs].sort());
+            return items;
+          },
+        );
+
+        await test.step(`The first delete of "${datasetName}" in ${a.project.name} is accepted`, async () => {
+          const deleted = await backendClient.deleteDatasetByName({
+            datasetName,
+            projectName: a.project.name,
+          });
+          expect(deleted.status, `the scoped delete was accepted: ${deleted.message}`).toBe(204);
+          expect(
+            (await backendClient.datasetStatus(a.datasetId)).status,
+            "project A's copy is gone, so project A now holds the name nowhere",
+          ).toBe(404);
+        });
+
+        await test.step('The identical delete, repeated, is refused rather than falling back to the workspace', async () => {
+          const repeated = await backendClient.deleteDatasetByName({
+            datasetName,
+            projectName: a.project.name,
+          });
+          // The whole fix. A 204 here is the regression: it would mean the
+          // lookup left project A and found project B's copy instead.
+          expect(
+            repeated.status,
+            `the repeated delete names a project that no longer holds "${datasetName}", ` +
+              `so it must 404 rather than resolve elsewhere: ${repeated.message}`,
+          ).toBe(404);
+          expect(
+            (await backendClient.datasetStatus(b.datasetId)).status,
+            "project B's identically-named copy survives the repeated delete",
+          ).toBe(200);
+        });
+
+        await test.step(`A delete scoped to ${emptyProject.name}, which never held the name, is also refused`, async () => {
+          const wrongProject = await backendClient.deleteDatasetByName({
+            datasetName,
+            projectName: emptyProject.name,
+          });
+          expect(
+            wrongProject.status,
+            `"${datasetName}" has never existed in ${emptyProject.name}: ${wrongProject.message}`,
+          ).toBe(404);
+          expect(
+            (await backendClient.datasetStatus(b.datasetId)).status,
+            "and project B's copy survives that one too",
+          ).toBe(200);
+          const emptyList = await backendClient.listDatasetSummaries({
+            projectId: emptyProject.id,
+          });
+          expect(
+            emptyList.total,
+            'the refused delete created nothing in the project it named either',
+          ).toBe(0);
+        });
+
+        await test.step("Project B's copy still holds exactly the items it was seeded with", async () => {
+          const items = await backendClient.getDatasetItems(b.datasetId);
+          expect(
+            items.map((item) => item.id).sort(),
+            "project B's item ids are the ones it held before either refused delete",
+          ).toEqual(bInputsBefore.map((item) => item.id).sort());
+          expect(
+            items.map((item) => String(item.data.input)).sort(),
+            'and their content is unchanged',
+          ).toEqual([...b.inputs].sort());
+        });
+
+        await test.step('Each project lists exactly what the two refusals should have left', async () => {
+          const listA = await backendClient.listDatasetSummaries({ projectId: a.project.id });
+          expect(listA.total, 'project A holds nothing: its own copy was deleted').toBe(0);
+
+          const listB = await backendClient.listDatasetSummaries({ projectId: b.project.id });
+          expect(listB.total, 'project B holds both of its datasets').toBe(2);
+          expect(listB.rows.map((row) => row.id).sort()).toEqual(
+            [b.datasetId, bystanderInB.datasetId].sort(),
+          );
+        });
+
+        await test.step(`Project ${b.project.name}'s Datasets page still lists the row`, async () => {
+          await datasets.goto(b.project.id);
+          await datasets.waitForReady();
+          const row = datasets.datasetRow(datasetName);
+          await expect(row, 'the row is still listed, exactly once').toHaveCount(1);
+          await expect(row, "and it is still project B's own dataset").toHaveAttribute(
+            'data-row-id',
+            b.datasetId,
+          );
+          await expect(
+            datasets.datasetRow(bystanderInB.name),
+            'as is the bystander beside it, so the delete took nothing in project B',
+          ).toHaveCount(1);
+        });
+
+        await test.step(`Project ${a.project.name}'s Datasets page lists nothing under that name`, async () => {
+          await datasets.goto(a.project.id);
+          await datasets.waitForReady();
+          // The empty state first, so the absence below is a rendered absence
+          // rather than a table that had not finished loading — project A holds
+          // no datasets at all once its own copy is gone.
+          await expect(
+            page.getByText('No datasets yet'),
+            "project A's Datasets page has rendered, and rendered empty",
+          ).toBeVisible();
+          await expect(
+            datasets.datasetRow(datasetName),
+            'project A really did lose its own copy to the first, accepted delete',
+          ).toHaveCount(0);
+        });
+      },
+    );
   },
 );
