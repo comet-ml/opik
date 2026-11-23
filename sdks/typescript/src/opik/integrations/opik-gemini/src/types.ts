@@ -75,6 +75,7 @@ export interface GeminiGenerateContentParams {
 
 export interface GeminiPart {
   text?: string;
+  thought?: boolean;
   functionCall?: Record<string, unknown>;
   function_call?: Record<string, unknown>;
 }

@@ -138,13 +138,15 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     OPIK-7483 is deployed across the **whole** backend fleet before the window (a straggler pre-7483 backend could emit an
     empty-`project_id` event the replay would miss), then assert the bridge holds none. `deletion_events_local` is a
     per-shard local table, so query it cluster-wide:
+
     ```sql
     SELECT count() FROM clusterAllReplicas('{cluster}', <database>.deletion_events_local)
     WHERE source_table = 'traces' AND project_id = '';
     ```
+
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
 13. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
-    driver takes a literal timestamp carrying the ` UTC` marker, so read the clock first and pass what it printed:
+    driver takes a literal timestamp carrying the `UTC` marker, so read the clock first and pass what it printed:
     `SELECT toString(now64(6, 'UTC'))`, then `--backfill-start '<that value> UTC'`. Both statements execute but match
     nothing (no row has `created_at`/`last_updated_at` in the future, and the bridge holds no events after that instant),
     so it is a functional no-op against the data — while still proving the migration user can actually perform every kind
@@ -178,10 +180,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    window is skipped), and prints the `backfill_start` anchor for step 2 — captured once and persisted to `--state-file`,
    so a resumed run keeps the original anchor rather than minting a later one that would miss early-window deletes.
    `--pause-seconds` throttles between windows; `--dry-run` prints the window plan. Preview then run:
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/backfill.sh --database opik --dry-run
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/backfill.sh --database opik --pause-seconds 60
    ```
+
    It executes the reference statement in
    [`000001_backfill_traces_local_v2.sql`](scripts/db-app-analytics/000001_backfill_traces_local_v2.sql) — the script
    reads that file and substitutes the window bounds, so the two never drift.
@@ -194,11 +198,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    deletion replay second) — **record the second value**: it is the *first half* of the final-delta→`EXCHANGE` gap,
    which is the window step 5 sweeps back. The second half is `exchange_and_wrap.sh`'s own run through the swap, which
    that driver reports (step 4). Without `--time` a bare `--query` prints no timing at all.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
+
    It prints two things step 5 needs. **`RECORD delta_start=`** is the instant the pass began reading, and it is the
-   gap anchor `reconcile.sh` sweeps from — record it with the ` UTC` marker, exactly like `backfill_start`. **The
+   gap anchor `reconcile.sh` sweeps from — record it with the `UTC` marker, exactly like `backfill_start`. **The
    pending-delta size** is how many rows the source took *while the pass ran*, i.e. what an `EXCHANGE` issued now would
    strand in the parked backup. Re-run the driver to watch it shrink; it will **not reach 0** while the source is live,
    which is precisely why reconciliation happens after the swap and not before it. Losing `delta_start` is not an
@@ -224,10 +230,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    the **connected node only**, so a host that missed the swap is invisible to every later step, and both the deferred
    wrap and `finalize.sh` assume the cluster is uniform. If any host reports non-zero, stop and reconcile it before
    running anything else.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
        --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused
    ```
+
    Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay) and `--confirm-retention-paused`
    (retention deletes bypass the bridge, so a retention sweep in the window would leak across the swap). Add
    `--with-wrap --confirm-maintenance --confirm-daos-retargeted` only once
@@ -251,6 +259,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): enable `tracesDistributedWrapEnabled` so trace mutations target `traces_local` first (OPIK-7455).** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
+>
 > - `DELETE FROM <distributed>` → `Code 36 BAD_ARGUMENTS: DELETE query is not supported`
 > - `ALTER TABLE <distributed> DELETE` → `Code 48 NOT_IMPLEMENTED: Distributed doesn't support mutations`
 >
@@ -280,6 +289,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > **"In lockstep" cannot mean simultaneous — plan for a short mismatch window.** The toggle is a
 > config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
 > one of two windows is unavoidable:
+>
 > - **toggle first** (recommended): from the moment the last backend comes up with `true` until the wrap
 >   completes, every trace delete targets a `traces_local` that does not exist yet →
 >   `Code: 60 UNKNOWN_TABLE`. Reads and writes are unaffected.
@@ -349,11 +359,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    **This step is not optional and it is not a check** — it is the second half of the data cutover. Everything written
    to the old table between step 2's last delta pass and the `EXCHANGE` is sitting in `traces_pre_cutover_backup`,
    absent from live `traces`.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/reconcile.sh --database opik \
        --gap-start '<delta_start from step 2> UTC' --swap-done '<exchange_done from step 4> UTC' \
        --confirm-retention-paused
    ```
+
    It derives the direction from the live topology (no `--direction` flag to get wrong), gates on the cluster-wide
    settle (the same gate as step 4, with a post-swap scope — see
    ["The replication-settle gate"](#the-replication-settle-gate)), then **sweeps → replays deletes → asserts a
@@ -378,10 +390,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    > still in the bridge, so they can be re-applied by hand; the reconciliation itself is complete either way.
 6. **QA over the reconciled range — `verify.sh --window-from/--window-to`** for the payload-level picture over exactly
    what step 5 swept, alongside the usual bounded weekly compare (see "Verifying the migration"):
+
    ```bash
    ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces \
        --window-from '<delta_start>' --window-to '<now, UTC>'
    ```
+
    This compares the traces **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
    partitioning and its superseded-version logic require — so a trace created earlier and merely *updated* in the gap is
    not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
@@ -748,9 +762,11 @@ the live row/byte counts of `traces`, estimates copy throughput with an **on-the
 Null` — it creates no table), derates it by `--write-cost-factor` to account for the copy's unmeasured write/compression
 cost, and reports the projected window count, copy time, throttle idle, and total. Run it with the same
 `--max-rows-per-insert` / `--pause-seconds` you plan to use:
+
 ```bash
 CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/estimate.sh --database opik --max-rows-per-insert 2000000 --pause-seconds 60
 ```
+
 For an exact figure, time one real window with `backfill.sh` and feed its rows/sec back via `--rows-per-sec`.
 It is a planning ballpark — real throughput varies with concurrent load, merges and cold-tier reads.
 
@@ -1084,7 +1100,7 @@ by the server's offset — and a *later* anchor silently drops the rows written 
 deletion replay both miss because they share that bound.
 
 Because that failure is silent, the persisted anchor carries the claim rather than relying on it: `backfill.sh` writes
-`--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
+`--state-file` with an explicit `UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
 attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
 rejected, with the three ways out the driver prints: delete the file if the destination is still empty, since nothing was
 copied against the lost anchor and a fresh one is owed; re-record it with the marker if it is known to have been taken on
@@ -1333,6 +1349,7 @@ Pick the stage by how far the cutover got:
   restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. **The
   window is mandatory** (see below). Which invocation depends on whether a promote parked the successor, because that is
   the only topological proof a cutover ran on this estate:
+
   ```bash
   W=(--sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>')
   # after a stage B/C promote — traces_post_rollback_backup is the proof
@@ -1340,6 +1357,7 @@ Pick the stage by how far the cutover got:
   # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live "${W[@]}"
   ```
+
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
@@ -1541,10 +1559,12 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    original's `duration` expression epoch-guards `start_time` but checks `end_time` for NULL alone — a large **negative**
    `duration`. The promote made them live again and `finalize.sh` discards the successor's healed copy, so repair them
    here, **after** step 1 has landed on every instance or in-flight writes keep minting more:
+
    ```
    ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
      --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'
    ```
+
    **Both window bounds are required, and there is no safe default.** An epoch `end_time` is not evidence the flag
    produced it: clients send them, and rows predating the flag hold them. Unbounded, the repair would set those to
    `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
@@ -1638,9 +1658,11 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
 
 1. **`finalize.sh` must not have run.** It truncates the parked backup — that is the point of no return for this path.
 2. Restore the shadow name:
+
    ```sql
    RENAME TABLE <database>.traces_post_rollback_backup TO <database>.traces_local_v2 ON CLUSTER '{cluster}';
    ```
+
    It fails if `traces_local_v2` already exists — which is itself the signal that a retry cutover began before this
    rollback was finalized. Resolve that by hand rather than forcing it.
 3. **The post-cutover writes the rollback discarded come back as live rows** once the retry's `EXCHANGE` lands. That is
@@ -1843,6 +1865,7 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
+>
 > - the sentinel **count** is a full-table scan, so a read-only account carrying a `max_rows_to_read`
 >   ceiling cannot run it;
 > - the sentinel **repair** needs `ALTER UPDATE(end_time)` / `(ttft)`, which the rollback set deliberately
@@ -1944,6 +1967,7 @@ and escalate rather than passing it — arbitrary is not the same as benign.
 
 **Feasibility at scale.** A full pass reads every week in the range (heavy but bounded per week — run off-peak). When
 that is infeasible, sample and still get high confidence:
+
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
 - `--weeks-stride S` compares every S-th week, so it reads a fraction of the windows and is genuinely cheaper. Note
   that a window is narrowed by the `created_at` minmax skip index, not by partition pruning: the source is
@@ -1953,7 +1977,7 @@ that is infeasible, sample and still get high confidence:
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 - `--window-from` / `--window-to` compare **one arbitrary `created_at` window** instead of walking the week grid —
-  half-open `[from, to)`, `'YYYY-MM-DD HH:MM:SS[.ffffff]'`, interpreted as UTC (an optional ` UTC` marker is accepted, so
+  half-open `[from, to)`, `'YYYY-MM-DD HH:MM:SS[.ffffff]'`, interpreted as UTC (an optional `UTC` marker is accepted, so
   a value pasted from a driver's `RECORD` line works as-is). This is the shape post-swap reconciliation needs: the range
   of interest is *the gap*, which is not a calendar week and sits inside the one a weekly bound excludes.
   **Mutually exclusive with `--from-week` / `--to-week` / `--weeks-stride`** — those are offsets into a grid this mode
@@ -1962,6 +1986,7 @@ that is infeasible, sample and still get high confidence:
   boundaries; `--sample-mod`, `--drill-down`, `--receive-timeout` and the confirm-keys / version-ties resolution all
   behave identically. The anchor scan is skipped (nothing needs a week grid), so unlike the weekly form the run does not
   depend on `min`/`max(created_at)` holding still, and the `PASSED` line states the window it covered.
+
   ```bash
   ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces \
       --window-from '<delta_start>' --window-to '<now, UTC>'

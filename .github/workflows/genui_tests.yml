@@ -1,0 +1,59 @@
+name: Generative UI Engine Tests
+
+on:
+  pull_request:
+    paths:
+      - "sdks/genui/**"
+      - ".github/workflows/genui_tests.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "sdks/genui/**"
+      - ".github/workflows/genui_tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sdks/genui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: sdks/genui/package-lock.json
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: npm ci
+      - run: npm run ci
+      - run: npm run build:python
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sdks/genui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: sdks/genui/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check -w dev-host
+        env:
+          CHROME: /usr/bin/google-chrome

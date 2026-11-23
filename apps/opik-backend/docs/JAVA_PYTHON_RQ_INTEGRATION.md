@@ -30,11 +30,13 @@
 ## 🚀 Quick Run Guide
 
 ### Prerequisites (Already Running)
+
 - ✅ Redis: localhost:6379 (password: `opik`)
 - ✅ MySQL: localhost:3306
 - ✅ ClickHouse: localhost:8123
 
 ### Start Python Worker (Terminal 1)
+
 ```bash
 cd apps/opik-python-backend
 source venv/bin/activate
@@ -43,12 +45,14 @@ python src/opik_backend/rq_worker.py
 ```
 
 ### Start Java Backend (Terminal 2)
+
 ```bash
 cd apps/opik-backend
 java -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
 ```
 
 ### Test Integration (Terminal 3)
+
 ```bash
 # Send message
 curl -X POST "http://localhost:8080/v1/internal/hello-world?message=Test"
@@ -131,6 +135,7 @@ Java directly creates RQ-compatible job structures in Redis for processing by Py
 ### Current Implementation Status
 
 **What Works**:
+
 - ✅ Java creates RQ-compatible Redis HASH structures
 - ✅ Plain JSON `data` array `[func, null, args, kwargs]`
 - ✅ Redis structure identical to Python-created jobs
@@ -248,6 +253,7 @@ python src/opik_backend/rq_worker.py
 ```
 
 Expected output:
+
 ```
 2025-10-14 10:00:00 INFO [opik_backend.rq_worker] - Starting RQ worker...
 2025-10-14 10:00:00 INFO [opik_backend.rq_worker] - Connecting to Redis at localhost:6379 (db=0)
@@ -290,6 +296,7 @@ curl http://localhost:8080/v1/internal/hello-world/queue-size
 ### 7. Verify Python Worker Processing
 
 Check Python worker logs:
+
 ```
 2025-10-14 10:01:00 INFO [opik_backend.rq_worker] - Processing optimizer job: Hello from Java
 2025-10-14 10:01:00 INFO [opik_backend.rq_worker] - Optimizer job processed successfully: {...}
@@ -323,6 +330,7 @@ public interface QueueProducer {
 ```
 
 **Benefits**:
+
 - Abstraction over queue implementation
 - Easy to mock for testing
 - Can be swapped with other implementations (Kafka, RabbitMQ)
@@ -341,11 +349,13 @@ public enum Queue {
 ```
 
 **Usage**:
+
 ```java
 queueProducer.enqueue(Queue.OPTIMIZER_CLOUD, myData);
 ```
 
 **Benefits**:
+
 - Type-safe queue references
 - Compile-time validation
 - IDE autocomplete
@@ -372,6 +382,7 @@ public record RqMessage(
 ```
 
 **Benefits**:
+
 - Immutable by design
 - Thread-safe
 - Clear time semantics with `Instant`
@@ -395,6 +406,7 @@ public enum JobStatus {
 **Location**: `com.comet.opik.infrastructure.redis.RqPublisher`
 
 Key methods:
+
 ```java
 class RqPublisher implements QueueProducer {
     // Enqueue with type-safe Queue enum
@@ -526,6 +538,7 @@ class MetricsWorker(Worker):
 ### Example Metrics Output
 
 **Successful Job Processing**:
+
 ```
 rq_worker.jobs.processed{queue="opik:hello_world_queue", function="process_hello_world"} = 10
 rq_worker.jobs.succeeded{queue="opik:hello_world_queue", function="process_hello_world"} = 10
@@ -534,6 +547,7 @@ rq_worker.job.queue_wait_time{queue="opik:hello_world_queue", function="process_
 ```
 
 **Failed Job Processing**:
+
 ```
 rq_worker.jobs.processed{queue="opik:optimizer-cloud", function="process_optimizer_job"} = 5
 rq_worker.jobs.failed{queue="opik:optimizer-cloud", function="process_optimizer_job", error_type="ValueError"} = 1
@@ -542,6 +556,7 @@ rq_worker.jobs.failed{queue="opik:optimizer-cloud", function="process_optimizer_
 ### Viewing Metrics
 
 #### Python Script
+
 ```python
 from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
@@ -801,6 +816,7 @@ queueProducer.enqueue(Queue.MY_NEW_QUEUE, myData)
 ### Manual Testing
 
 #### Quick Single Message Test
+
 ```bash
 # Clear Redis
 redis-cli -a opik FLUSHDB
@@ -816,6 +832,7 @@ redis-cli -a opik HGET rq:job:<job-id> status
 #### Load Test with 10 Messages
 
 **Test Results (2025-10-15)**:
+
 ```
 ✅ 10/10 messages sent (HTTP 200)
 ✅ 10/10 jobs finished successfully  
@@ -827,6 +844,7 @@ Average: ~600ms per job (includes 500ms simulated processing)
 ```
 
 **Test Command**:
+
 ```bash
 # Clear and send 10 messages
 redis-cli -a opik FLUSHDB
@@ -840,6 +858,7 @@ redis-cli -a opik KEYS 'rq:job:*' | wc -l
 ```
 
 **Verified Features**:
+
 - ✅ Java creates RQ-compatible Redis HASH structures
 - ✅ Plain JSON `data` (UTF-8) with `[func, null, args, kwargs]`
 - ✅ RQ-native Redis keys (`rq:job:<id>`, `rq:queue:<queue>`)
@@ -927,21 +946,25 @@ None at the moment.
 #### Historical issue (resolved): UTF-8 decode error with Java-created jobs
 
 **Symptom**:
+
 ```
 'utf-8' codec can't decode byte 0x9c in position 1: invalid start byte
 ```
 
 **Root cause**:
+
 - `data` was zlib-compressed; RQ restores jobs by `HGETALL` and attempts UTF-8 decoding of hash values before serializer runs.
 - The zlib header (`0x78 0x9c`) triggered decode errors in that pre-serializer path.
 
 **Solution implemented**:
+
 - Switched `data` to plain JSON (UTF-8) array: `[func, null, args, kwargs]`.
 - Use RQ's `JSONSerializer` and default `Job` everywhere (removed custom serializer/job).
 - Standardized Redis keys to RQ-native: `rq:job:<id>` and `rq:queue:<queue>`.
 - Ensure a non-null `description` is written (prevents RQ logging issues).
 
 **Result**:
+
 - RQ worker processes Java-created jobs end-to-end reliably. Contract validated by tests and manual runs.
 
 ### Common Issues
@@ -951,6 +974,7 @@ None at the moment.
 **Symptoms**: Jobs enqueued but never processed by Python worker
 
 **Checks**:
+
 ```bash
 # 1. Verify Python worker is running
 ps aux | grep rq_worker
@@ -966,6 +990,7 @@ tail -f /tmp/gunicorn.log
 ```
 
 **Solutions**:
+
 - Ensure Python worker is started (via Gunicorn)
 - Verify queue names match between Java and Python
 - Check function names are correct
@@ -976,6 +1001,7 @@ tail -f /tmp/gunicorn.log
 **Error**: `'utf-8' codec can't decode byte 0x9c`
 
 **Check**:
+
 ```bash
 # Verify job structure
 redis-cli -a opik HGETALL "rq:job:<job-id>"
@@ -991,6 +1017,7 @@ redis-cli -a opik HGET "rq:job:<job-id>" data | xxd | head
 **Error**: `AttributeError: module 'opik_backend.rq_worker' has no attribute 'process_xxx'`
 
 **Solution**:
+
 - Ensure function name in `Queue` enum matches Python function name exactly
 - Check function is defined in `rq_worker.py`
 - Verify Python module path is correct
@@ -1000,6 +1027,7 @@ redis-cli -a opik HGET "rq:job:<job-id>" data | xxd | head
 **Symptoms**: Jobs disappear from Redis before being processed
 
 **Solution**:
+
 ```yaml
 # Increase TTL in config.yml
 queues:
@@ -1014,6 +1042,7 @@ queues:
 **Error**: `redis.exceptions.ConnectionError: Error connecting to Redis`
 
 **Checks**:
+
 ```bash
 # Test Redis connectivity
 redis-cli -h localhost -p 6379 PING
@@ -1026,6 +1055,7 @@ python -c "import redis; r = redis.Redis(); print(r.ping())"
 ```
 
 **Solutions**:
+
 - Verify Redis is running
 - Check `REDIS_HOST` and `REDIS_PORT` environment variables
 - Verify firewall rules allow Redis connection
@@ -1036,6 +1066,7 @@ python -c "import redis; r = redis.Redis(); print(r.ping())"
 **Error**: `TypeError: Object of type X is not JSON serializable`
 
 **Solution**:
+
 - Ensure message data is JSON-serializable
 - Convert complex objects to dictionaries
 - Use strings, numbers, lists, and dictionaries only
@@ -1058,6 +1089,7 @@ queueProducer.enqueue(Queue.OPTIMIZER_CLOUD, data);  // ✅ Works
 #### Enable Debug Logging
 
 **Java** (`config.yml`):
+
 ```yaml
 logging:
   loggers:
@@ -1066,6 +1098,7 @@ logging:
 ```
 
 **Python**:
+
 ```python
 logging.basicConfig(level=logging.DEBUG)
 ```
@@ -1098,6 +1131,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Use Java records instead of Lombok `@Data` classes
 
 **Reasons**:
+
 1. **Immutability**: Records are immutable by default - thread-safe
 2. **Less Boilerplate**: No need for equals/hashCode/toString
 3. **Modern Java**: Idiomatic Java 16+ feature
@@ -1108,6 +1142,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Use `java.time.Instant` instead of `Long` (epoch millis/seconds)
 
 **Reasons**:
+
 1. **Type Safety**: Strong typing prevents mixing seconds/millis
 2. **Rich API**: Built-in time manipulation methods
 3. **ISO 8601**: Standard serialization format
@@ -1119,6 +1154,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Use `JobStatus` enum instead of `String`
 
 **Reasons**:
+
 1. **Type Safety**: Compile-time validation
 2. **IDE Support**: Autocomplete prevents typos
 3. **Exhaustiveness**: Switch statements warn if cases missing
@@ -1129,6 +1165,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Configure TTL at queue level, not per message
 
 **Reasons**:
+
 1. **Consistency**: All jobs in a queue behave the same
 2. **Separation of Concerns**: Infrastructure config vs. message data
 3. **Easier Management**: Configure once per queue
@@ -1139,6 +1176,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Create `QueueProducer` interface instead of using `RqPublisher` directly
 
 **Reasons**:
+
 1. **Dependency Inversion**: Depend on abstraction, not implementation
 2. **Testability**: Easy to mock for unit tests
 3. **Flexibility**: Can swap implementations (Kafka, RabbitMQ)
@@ -1149,6 +1187,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 **Decision**: Store full job data in bucket, only job ID in queue
 
 **Reasons**:
+
 1. **RQ Protocol**: Required by Python RQ for job lifecycle management
 2. **Separation**: Queue for ordering, bucket for storage
 3. **Efficiency**: Only job IDs in queue (smaller memory footprint)
@@ -1161,6 +1200,7 @@ redis-cli LRANGE "rq:queue:opik:optimizer-cloud" 0 -1
 ### Initial Implementation
 
 **Original Structure**:
+
 ```
 infrastructure/rq/
 ├── RqPublisher.java (concrete class)
@@ -1170,6 +1210,7 @@ infrastructure/rq/
 ```
 
 **Issues**:
+
 - Tight coupling to concrete class
 - Hardcoded TTL values
 - String-based status (error-prone)
@@ -1179,12 +1220,14 @@ infrastructure/rq/
 ### Refactoring Phase 1: Records and Enums
 
 **Changes**:
+
 - ✅ Converted `RqMessage` from Lombok to record
 - ✅ Changed timestamps from `Long` to `Instant`
 - ✅ Created `JobStatus` enum
 - ✅ Removed TTL from message, moved to queue config
 
 **Benefits**:
+
 - Immutability and thread safety
 - Clear time semantics
 - Type-safe status handling
@@ -1193,6 +1236,7 @@ infrastructure/rq/
 ### Refactoring Phase 2: Architecture Improvements
 
 **Changes**:
+
 - ✅ Created `QueueProducer` interface
 - ✅ Created `Queue` enum for type-safe queue definitions
 - ✅ Moved classes to proper packages (`queues/` and `redis/`)
@@ -1200,6 +1244,7 @@ infrastructure/rq/
 - ✅ Integrated with Dropwizard config system
 
 **Benefits**:
+
 - Interface segregation
 - Better package structure
 - Configuration-driven design
@@ -1302,6 +1347,7 @@ rq empty opik:optimizer-cloud --url redis://localhost:6379
 ## Support
 
 For issues or questions:
+
 1. Check the [Troubleshooting](#troubleshooting) section
 2. Review logs in Java backend and Python worker
 3. Verify Redis connectivity and data
@@ -1311,4 +1357,3 @@ For issues or questions:
 
 **Last Updated**: 2025-10-15  
 **Version**: 2.0 (Post-Refactoring)
-

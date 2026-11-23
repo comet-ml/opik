@@ -99,10 +99,12 @@ Prefer this over `<Tabs>` when only the code varies.
   import opik
   opik.configure()
   ```
+
   ```ts title="Typescript"
   import Opik from "opik";
   const client = new Opik();
   ```
+
 </CodeBlocks>
 ```
 
@@ -208,6 +210,7 @@ npm run dev          # live-reload preview
 ```
 
 Open the rendered page and confirm:
+
 - Frontmatter renders (title shows, no stray H1 in body).
 - Every MDX component resolves (no raw `<Tabs>` tags visible).
 - Every link works (no 404s, no `Broken link` warnings in the terminal).

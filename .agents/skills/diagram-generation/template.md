@@ -135,6 +135,7 @@ async function copyAsImage(btn) {
 ## Section Recipes
 
 ### Flow Row (horizontal data flow)
+
 ```html
 <div class="section">
   <div class="section-label blue"><span class="dot"></span> REQUEST FLOW</div>
@@ -152,6 +153,7 @@ async function copyAsImage(btn) {
 ```
 
 ### Problem / Solution Side-by-Side
+
 ```html
 <div style="display: flex; gap: 16px; flex-wrap: wrap;">
   <div class="banner problem" style="flex: 1; min-width: 380px;">
@@ -166,6 +168,7 @@ async function copyAsImage(btn) {
 ```
 
 ### Before / After Flow Comparison
+
 ```html
 <div style="display: flex; gap: 24px; flex-wrap: wrap;">
   <div style="flex: 1; min-width: 380px;">
@@ -188,6 +191,7 @@ async function copyAsImage(btn) {
 ```
 
 ### Files Changed Grid
+
 ```html
 <div class="section">
   <div class="section-label blue"><span class="dot"></span> FILES CHANGED</div>
@@ -199,6 +203,7 @@ async function copyAsImage(btn) {
 ```
 
 ### Design Decisions / Safety Guards
+
 ```html
 <div class="section">
   <div class="section-label green"><span class="dot"></span> KEY DESIGN DECISIONS</div>

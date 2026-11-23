@@ -98,10 +98,10 @@ Screenshots must be placed in the correct directory structure:
 ### OpenAI-Based Integration Placeholders
 
 - `[INTEGRATION_NAME]` → "BytePlus"
-- `[INTEGRATION_WEBSITE_URL]` → "https://www.byteplus.com/"
+- `[INTEGRATION_WEBSITE_URL]` → "<https://www.byteplus.com/>"
 - `[INTEGRATION_DESCRIPTION]` → "ByteDance's AI-native enterprise platform"
 - `[SPECIFIC_DESCRIPTION]` → "OpenAI-compatible API endpoints"
-- `[INTEGRATION_BASE_URL]` → "https://ark.ap-southeast.bytepluses.com/api/v3"
+- `[INTEGRATION_BASE_URL]` → "<https://ark.ap-southeast.bytepluses.com/api/v3>"
 - `[INTEGRATION_API_KEY_NAME]` → "BYTEPLUS_API_KEY"
 - `[EXAMPLE_MODEL_NAME]` → "kimi-k2-250711"
 
