@@ -5,6 +5,7 @@ import { Database } from "lucide-react";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
+import { Filters } from "@/types/filters";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 1000;
@@ -21,6 +22,7 @@ type DatasetSelectBoxProps = {
   value: string;
   onValueChange: (value: string) => void;
   projectId?: string | null;
+  filters?: Filters;
   placeholder?: string;
   className?: string;
   /** Show the gold dataset icon next to the selected value (matches Figma). */
@@ -32,6 +34,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   value,
   onValueChange,
   projectId,
+  filters,
   placeholder = "Select an item source",
   className,
   showIcon = false,
@@ -44,6 +47,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   const { data, isLoading } = useProjectDatasetsList(
     {
       projectId: projectId!,
+      filters,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },

@@ -1,15 +1,20 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.codahale.metrics.MetricRegistry;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ShippedConfig;
+import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
+import com.comet.opik.infrastructure.http.HttpModule;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.sun.net.httpserver.HttpServer;
-import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Client;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -84,7 +90,7 @@ class InferenceClientDecideTest {
             """;
 
     private WireMockUtils.WireMockRuntime wireMock;
-    private AiLabelsConfig config;
+    private OpikConfiguration config;
     private InferenceClient client;
     private String credential;
     private String orgId;
@@ -94,7 +100,7 @@ class InferenceClientDecideTest {
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
         config = config(wireMock.runtimeInfo().getHttpBaseUrl());
-        client = new InferenceClient(TestHttpClientUtils.client(), config);
+        client = newClient(TestHttpClientUtils.client(), config);
     }
 
     @AfterAll
@@ -241,37 +247,24 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void callCutOffAtTheDeadlineKeepsItsSlotUntilItsBodyEnds() {
+    void callCutOffAtTheDeadlineGivesItsSlotBack() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 2_000)));
+                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 10_000)));
         var singleSlotConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
         singleSlotConfig.getInference().setMaxConcurrentDecides(1);
-        var singleSlot = new InferenceClient(TestHttpClientUtils.client(), singleSlotConfig);
+        var singleSlot = newClient(TestHttpClientUtils.client(), singleSlotConfig);
 
         assertThatThrownBy(() -> singleSlot.decide(request(noulQuestion()), Instant.now().plusMillis(300)).block())
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.isOutOfTime()).isTrue());
 
-        // Its thread is still reading the body, so the next call finds no slot, even after its retries.
-        assertThatThrownBy(() -> singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo(InferenceException.CLIENT_BUSY));
+        // The cut-off call closed its response, so its thread stopped reading the body and gave the one slot back,
+        // well before the body would have ended.
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
-        await().atMost(Duration.ofSeconds(5)).ignoreExceptionsInstanceOf(InferenceException.class)
+        await().atMost(Duration.ofSeconds(2)).ignoreExceptionsInstanceOf(InferenceException.class)
                 .untilAsserted(() -> assertThat(
                         singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
                         .isEqualTo(SUCCESS_RESPONSE));
-    }
-
-    @Test
-    void decideDoesNotUseTheSharedClient() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
-        var closedSharedClient = ClientBuilder.newClient();
-        closedSharedClient.close();
-        var isolated = new InferenceClient(closedSharedClient, config);
-
-        assertThat(isolated.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
-                .isEqualTo(SUCCESS_RESPONSE);
     }
 
     @Test
@@ -279,7 +272,7 @@ class InferenceClientDecideTest {
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(1_000)));
         var cappedConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
         cappedConfig.getInference().setMaxConcurrentDecides(2);
-        var capped = new InferenceClient(TestHttpClientUtils.client(), cappedConfig);
+        var capped = newClient(TestHttpClientUtils.client(), cappedConfig);
 
         var outcomes = Flux.range(0, 3)
                 .flatMap(i -> capped.decide(request(noulQuestion()), Instant.now().plusSeconds(5))
@@ -296,20 +289,24 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void consecutiveCallsShareOneConnection() throws IOException {
-        var clientPorts = clientPortsOfThreeCalls(null);
+    void consecutiveCallsShareOneConnectionOnTheShippedClient() throws Exception {
+        var executor = Executors.newCachedThreadPool();
+        var sharedClient = HttpModule.buildClient(
+                new DestinationGuardJerseyClientBuilder(new MetricRegistry()).using(executor),
+                ShippedConfig.load(Map.of()).getJerseyClient());
+        try {
+            var clientPorts = clientPortsOfThreeCalls(sharedClient);
 
-        // One client port: the three calls went over one connection, with no new handshake.
-        assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+            // One client port: the three calls went over one connection, with no new handshake.
+            assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+        } finally {
+            sharedClient.close();
+            executor.shutdownNow();
+        }
     }
 
-    @Test
-    void zeroKeepAliveOpensAConnectionPerCall() throws IOException {
-        assertThat(clientPortsOfThreeCalls(io.dropwizard.util.Duration.milliseconds(0))).doesNotHaveDuplicates();
-    }
-
-    /** The client port of each of three decide calls to a local server, with the given keep-alive or the default. */
-    private List<Integer> clientPortsOfThreeCalls(io.dropwizard.util.Duration decideKeepAlive) throws IOException {
+    /** The client port of each of three decide calls to a local server. */
+    private List<Integer> clientPortsOfThreeCalls(Client sharedClient) throws IOException {
         var clientPorts = new CopyOnWriteArrayList<Integer>();
         var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(PATH, exchange -> {
@@ -326,10 +323,7 @@ class InferenceClientDecideTest {
         try {
             var serverConfig = config("http://%s:%d".formatted(server.getAddress().getHostString(),
                     server.getAddress().getPort()));
-            if (decideKeepAlive != null) {
-                serverConfig.getInference().setDecideKeepAlive(decideKeepAlive);
-            }
-            var serverClient = new InferenceClient(TestHttpClientUtils.client(), serverConfig);
+            var serverClient = newClient(sharedClient, serverConfig);
 
             for (var call = 0; call < 3; call++) {
                 assertThat(serverClient.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
@@ -382,8 +376,8 @@ class InferenceClientDecideTest {
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
     }
 
-    private AiLabelsConfig config(String url) {
-        var newConfig = new AiLabelsConfig();
+    private OpikConfiguration config(String url) {
+        var newConfig = TestConfigUtils.loadConfigTest();
         newConfig.getInference().setUrl(url);
         newConfig.getInference().setCredential(credential);
         newConfig.getInference().setConnectTimeout(io.dropwizard.util.Duration.seconds(5));
@@ -413,5 +407,9 @@ class InferenceClientDecideTest {
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
+    }
+
+    private static InferenceClient newClient(Client httpClient, OpikConfiguration config) {
+        return new InferenceClient(httpClient, config.getInference(), config.getAiLabels());
     }
 }
