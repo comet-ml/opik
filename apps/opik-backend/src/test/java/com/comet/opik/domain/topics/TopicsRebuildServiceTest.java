@@ -46,7 +46,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -439,8 +438,8 @@ class TopicsRebuildServiceTest {
             }
 
             @Override
-            public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
-                return Optional.empty();
+            public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+                return vectors -> new UUID[vectors.size()];
             }
         };
         stubAnswer(FIXTURE.firstBuildAnswer);
