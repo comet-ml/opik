@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
-import com.comet.opik.domain.topics.TopicVectorsTickService.VectorKey;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
