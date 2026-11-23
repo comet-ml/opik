@@ -67,7 +67,8 @@
 --
 -- ../verify.sh is the single driver: it reads this file and runs the blocks below, never this file by hand. Which block,
 -- and when:
---   * `compare`       once per created_at week (optionally sampled), parsing the single verdict row;
+--   * `compare`       once per created_at week, parsing the single verdict row;
+--   * `compare-weeks` instead of `compare` under --single-pass: one read of a range of weeks, one verdict row per week;
 --   * `confirm-keys`  on a week that reported ok=0, to separate a real difference from a superseded-version artifact;
 --   * `version-ties`  on any week that reported ok=0, whichever way confirm-keys went: it DECIDES the verdict where
 --                     confirm-keys returned 0 (sound only where no version is tied) and DIAGNOSES it where confirm-keys
@@ -79,8 +80,11 @@
 -- NEW_TABLE=spans_local_v2 (the successor being built). After it, `spans` is the new schema and the old data is parked
 -- as `spans_pre_cutover_backup` — set OLD_TABLE=spans_pre_cutover_backup, NEW_TABLE=spans. After a stage B/C rollback
 -- the old-schema side is the restored original (`spans`) and the new-schema side the parked successor
--- (`spans_post_rollback_backup`). SAMPLE_MOD=1 compares every row; SAMPLE_MOD=100 compares a deterministic ~1% id sample
--- (same rows on both sides) when a full pass is infeasible — and on a table this size it often is.
+-- (`spans_post_rollback_backup`).
+--
+-- ROW_FILTER is `1` for a full compare. Under --coverage it is a predicate on created_at alone (a slice of every UTC
+-- hour), so it selects the same rows on both sides and, unlike a hash of the id, lets the created_at minmax skip index
+-- skip granules; ../verify.sh renders it and documents the bias it carries.
 
 -- >>> BEGIN compare
 WITH
@@ -122,7 +126,7 @@ WITH
             FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
             WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
               AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-              AND cityHash64(id) % ${SAMPLE_MOD} = 0
+              AND ${ROW_FILTER}
             GROUP BY workspace_id, project_id, trace_id, id
         )
     ),
@@ -162,7 +166,7 @@ WITH
         FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
         WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
           AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-          AND cityHash64(id) % ${SAMPLE_MOD} = 0
+          AND ${ROW_FILTER}
     )
 SELECT
     src.c AS src_rows,
@@ -173,6 +177,137 @@ SELECT
 FROM src, dst
 SETTINGS use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 4000000000;
 -- >>> END compare
+
+-- >>> BEGIN compare-weeks
+-- The `compare` verdict for every week of a range in ONE read, for --single-pass. Returns one row per week holding data
+-- on either side: week, src_rows, dst_rows, src_checksum, dst_checksum, ok — `compare`'s columns behind the week offset.
+-- A week with no row is empty on both sides, which `compare` reports as rows=0, ok=1.
+--
+-- WHY IT EXISTS. `spans` is unpartitioned and created_at is not in its sorting key, so a week's predicate narrows the
+-- read only through the created_at minmax skip index, granule by granule; a granule whose rows span many weeks is read
+-- again by every week it touches. Grouping by week in one statement reads each granule once.
+--
+-- IT IS `compare` WITH THE WEEK ADDED TO THE GROUP BY, nothing else. Same fingerprint, same normalization, same double
+-- reduction of the old side — argMax per destination key, now per (destination key, week), which is exactly what one
+-- `compare` per week computes because each week only ever groups its own rows. week = whole weeks between ${ANCHOR}
+-- (a Monday) and the row's UTC date, so a row lands in week N here exactly when it falls inside the [N, N+1) window
+-- `compare` would be given. ${FROM_WEEK} / ${WEEKS_STRIDE} keep --weeks-stride's selection; that predicate is per row,
+-- so a stride trims the GROUP BY and the output but not the read.
+--
+-- ONE DIFFERENCE IN WHAT FINAL SEES, AND IT ONLY REMOVES FALSE ALARMS. FINAL collapses versions among the granules a
+-- query reads. A wider read can only add versions, so a superseded-version artifact a single week surfaces can resolve
+-- here to the true winner and report ok=1; a live row that differs still differs. A week that reports ok=0 is resolved
+-- exactly as before — the driver runs `confirm-keys`, `version-ties` and `drill-down` on that week's own window.
+--
+-- MEMORY. The old side groups every key in the range. optimize_aggregation_in_order streams that GROUP BY in sorting-key
+-- order — its keys lead with the source's (workspace_id, project_id, trace_id) prefix, which FINAL already reads in
+-- order — so it holds one prefix at a time rather than every key; max_bytes_before_external_group_by remains the spill
+-- bound if the server declines the in-order plan.
+WITH
+    src AS (
+        SELECT
+            week,
+            count() AS c,
+            sum(h)  AS h
+        FROM (
+            SELECT
+                intDiv(dateDiff('day', toDate('${ANCHOR}'), toDate(created_at, 'UTC')), 7) AS week,
+                argMax(cityHash64(
+                    id,
+                    workspace_id,
+                    toString(project_id),
+                    toString(trace_id),
+                    if(length(parent_span_id) = 36, parent_span_id, ''),
+                    name,
+                    toString(type),
+                    toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
+                    coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
+                    input,
+                    output,
+                    metadata,
+                    arrayStringConcat(tags, '\x1f'),
+                    arrayStringConcat(arrayMap(k -> concat(k, '\x1e', toString(usage[k])), arraySort(mapKeys(usage))), '\x1f'),
+                    toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
+                    toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
+                    created_by,
+                    last_updated_by,
+                    toString(model),
+                    toString(provider),
+                    toString(total_estimated_cost),
+                    toString(total_estimated_cost_version),
+                    error_info,
+                    truncation_threshold,
+                    input_slim,
+                    output_slim,
+                    if(ttft IS NULL, 'nan', toString(ttft)),
+                    toString(source),
+                    toString(environment)), last_updated_at) AS h
+            FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
+            WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+              AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
+              AND (week - ${FROM_WEEK}) % ${WEEKS_STRIDE} = 0
+              AND ${ROW_FILTER}
+            GROUP BY workspace_id, project_id, trace_id, id, week
+        )
+        GROUP BY week
+    ),
+    dst AS (
+        SELECT
+            intDiv(dateDiff('day', toDate('${ANCHOR}'), toDate(created_at, 'UTC')), 7) AS week,
+            count() AS c,
+            sum(cityHash64(
+                id,
+                workspace_id,
+                toString(project_id),
+                toString(trace_id),
+                CAST(parent_span_id AS String),
+                name,
+                toString(type),
+                toUnixTimestamp64Micro(start_time),
+                toUnixTimestamp64Micro(end_time),
+                input,
+                output,
+                metadata,
+                arrayStringConcat(tags, '\x1f'),
+                arrayStringConcat(arrayMap(k -> concat(k, '\x1e', toString(usage[k])), arraySort(mapKeys(usage))), '\x1f'),
+                toUnixTimestamp64Micro(created_at),
+                toUnixTimestamp64Micro(last_updated_at),
+                created_by,
+                last_updated_by,
+                toString(model),
+                toString(provider),
+                toString(total_estimated_cost),
+                toString(total_estimated_cost_version),
+                error_info,
+                truncation_threshold,
+                input_slim,
+                output_slim,
+                if(isNaN(ttft), 'nan', toString(ttft)),
+                toString(source),
+                toString(environment))) AS h
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
+        WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
+          AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
+          AND (week - ${FROM_WEEK}) % ${WEEKS_STRIDE} = 0
+          AND ${ROW_FILTER}
+        GROUP BY week
+    )
+SELECT
+    week,
+    src.c AS src_rows,
+    dst.c AS dst_rows,
+    ifNull(src.h, 0) AS src_checksum,
+    ifNull(dst.h, 0) AS dst_checksum,
+    (src.c = dst.c AND ifNull(src.h, 0) = ifNull(dst.h, 0)) AS ok
+FROM src
+FULL OUTER JOIN dst USING (week)
+ORDER BY week
+-- A week present on one side only reads as 0 rows and checksum 0 on the other, the values `compare` reports for an
+-- empty side: join_use_nulls = 0 defaults the count to 0, and ifNull does the same for the old side's Nullable checksum,
+-- whose join default is NULL.
+SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 1,
+         max_bytes_before_external_group_by = 4000000000;
+-- >>> END compare-weeks
 
 -- >>> BEGIN drill-down
 -- Lists up to 100 keys that differ or exist on one side only, for a window the compare reported as ok=0. The key is the
@@ -222,7 +357,7 @@ FROM (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
     WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
       AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+      AND ${ROW_FILTER}
     GROUP BY key
 ) AS s
 FULL OUTER JOIN (
@@ -261,7 +396,7 @@ FULL OUTER JOIN (
     FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
     WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
       AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+      AND ${ROW_FILTER}
 ) AS d USING (key)
 WHERE src_hash != dst_hash
    OR src_hash IS NULL
@@ -348,7 +483,7 @@ WITH
             FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
             WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
               AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-              AND cityHash64(id) % ${SAMPLE_MOD} = 0
+              AND ${ROW_FILTER}
             GROUP BY key
         ) AS s
         FULL OUTER JOIN (
@@ -387,7 +522,7 @@ WITH
             FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
             WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
               AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-              AND cityHash64(id) % ${SAMPLE_MOD} = 0
+              AND ${ROW_FILTER}
         ) AS d USING (key)
         WHERE src_hash != dst_hash OR src_hash IS NULL OR dst_hash IS NULL
     ),
@@ -566,7 +701,7 @@ WITH
                     FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
                     WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
                       AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
-                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                      AND ${ROW_FILTER}
                     GROUP BY key, version
                 )
                 GROUP BY key
@@ -614,7 +749,7 @@ WITH
                     FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE}
                     WHERE created_at >= toDateTime64('${WINDOW_LO}', 6, 'UTC')
                       AND created_at <  toDateTime64('${WINDOW_HI}', 6, 'UTC')
-                      AND cityHash64(id) % ${SAMPLE_MOD} = 0
+                      AND ${ROW_FILTER}
                     GROUP BY key, version
                 )
                 GROUP BY key
@@ -635,7 +770,7 @@ FROM src_ties, dst_ties
 -- The window narrows the read through the created_at minmax skip index instead, which drops granules rather than parts,
 -- and this block runs without FINAL over every physical version the window still selects, on both sides, in the common
 -- case rather than the rare one: an artifact verdict is the normal pre-EXCHANGE outcome. So the cost is a full read of
--- the surviving granules per differing window, and on spans that is a read of very wide rows -- --sample-mod is the
--- lever that bounds it, and on this table it is not optional advice.
+-- the surviving granules per differing window, and on spans that is a read of very wide rows -- the driver logs its
+-- estimated size before issuing it, and --io-budget-pct throttles it like every other block.
 SETTINGS max_rows_to_read = 0, max_bytes_before_external_group_by = 4000000000;
 -- >>> END version-ties
