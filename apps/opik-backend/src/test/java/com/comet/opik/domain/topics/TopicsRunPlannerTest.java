@@ -37,7 +37,7 @@ class TopicsRunPlannerTest {
     @Test
     @DisplayName("a run by hand that cannot be published is dropped, and the caller gets an error")
     void runByHandDropsAnUnpublishedRun() {
-        var planner = plannerWithPublishError(true);
+        var planner = plannerWithPublishError(true, false);
 
         assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, night, true).block())
                 .isInstanceOf(ServiceUnavailableException.class);
@@ -45,14 +45,23 @@ class TopicsRunPlannerTest {
     }
 
     @Test
-    @DisplayName("a run by hand that left the queue despite its publish error is reported as started")
-    void runByHandReportsARunThatLeftTheQueue() {
-        var planner = plannerWithPublishError(false);
+    @DisplayName("a run by hand that a pod claimed despite its publish error is reported as started")
+    void runByHandReportsAClaimedRun() {
+        var planner = plannerWithPublishError(false, true);
 
         assertThat(planner.runByHand(workspaceId, projectId, night, true).block()).isEqualTo(runId);
     }
 
-    private TopicsRunPlanner plannerWithPublishError(boolean dropped) {
+    @Test
+    @DisplayName("a run by hand cancelled while queued after its publish error gives the caller an error")
+    void runByHandFailsForARunCancelledWhileQueued() {
+        var planner = plannerWithPublishError(false, false);
+
+        assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, night, true).block())
+                .isInstanceOf(ServiceUnavailableException.class);
+    }
+
+    private TopicsRunPlanner plannerWithPublishError(boolean dropped, boolean claimed) {
         var workspaces = mock(TopicWorkspaceService.class);
         var candidates = mock(TopicsFirstBuildCandidates.class);
         var publisher = mock(TopicsRunPublisher.class);
@@ -65,6 +74,7 @@ class TopicsRunPlannerTest {
                 .thenReturn(Mono.just(Optional.of(runId)));
         when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
         when(store.dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull())).thenReturn(Mono.just(dropped));
+        when(store.isClaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(claimed));
         return new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), workspaces, store,
                 mock(TopicsRunReconciler.class), candidates, publisher, new TopicsBackfillGate(CONFIG),
                 mock(TopicsNightPass.class));
