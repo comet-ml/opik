@@ -91,7 +91,7 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
             trainingService.create(id);
             return null;
         });
-        log.info("Created guardrail model with id '{}', name '{}' in workspace '{}'", id, name, workspaceId);
+        log.info("Created guardrail model, id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
         return id;
     }
 
@@ -143,7 +143,7 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
         if (updated == 0) {
             throw new NotFoundException(MODEL_NOT_FOUND);
         }
-        log.info("Updated the description of guardrail model '{}' in workspace '{}'", id, workspaceId);
+        log.info("Updated guardrail model description, id '{}', workspaceId '{}'", id, workspaceId);
     }
 
     @Override
@@ -164,7 +164,7 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
             }
             return trainingService.create(id).id();
         });
-        log.info("Retraining guardrail model '{}' in workspace '{}' with run '{}'", id, workspaceId, runId);
+        log.info("Retraining guardrail model, id '{}', workspaceId '{}', runId '{}'", id, workspaceId, runId);
         return runId;
     }
 
@@ -178,7 +178,7 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
             if (dao.lock(id, workspaceId).isEmpty()) {
                 return null;
             }
-            if (dao.isReferencedByRule(id, workspaceId)) {
+            if (dao.isUsedByCustomClassifierRule(id, workspaceId)) {
                 throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                         .entity(new ErrorMessage(List.of("Guardrail model is used by a policy rule")))
                         .build());
@@ -187,6 +187,6 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
             dao.delete(id, workspaceId);
             return null;
         });
-        log.info("Deleted guardrail model with id '{}' in workspace '{}'", id, workspaceId);
+        log.info("Deleted guardrail model, id '{}', workspaceId '{}'", id, workspaceId);
     }
 }
