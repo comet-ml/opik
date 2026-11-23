@@ -293,6 +293,7 @@ const useRuleEditorForm = ({
     setIsPickingTemplate,
     recordAction,
     resetHistory,
+    clearHistory,
     withoutHistory,
   } = useRuleEditorHistory(form, autoNameRef);
 
@@ -584,6 +585,7 @@ const useRuleEditorForm = ({
     openTemplates,
     openContent,
     showContent,
+    clearHistory,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,

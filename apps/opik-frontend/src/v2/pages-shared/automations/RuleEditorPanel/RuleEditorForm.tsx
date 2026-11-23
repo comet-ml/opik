@@ -66,6 +66,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     openTemplates,
     openContent,
     showContent,
+    clearHistory,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -88,6 +89,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   );
 
   const handleSubmit = useCallback(async () => {
+    clearHistory();
     prepareForSubmit();
     await form.handleSubmit(() => {
       const { scope, triggerScope, projectIds, enabled } = form.getValues();
@@ -126,6 +128,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     onRuleCreated,
     onClose,
     showContent,
+    clearHistory,
   ]);
 
   const templateActions = {

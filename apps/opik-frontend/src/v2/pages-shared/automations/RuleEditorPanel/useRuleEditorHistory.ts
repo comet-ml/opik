@@ -148,6 +148,11 @@ const useRuleEditorHistory = (
     [takeSnapshot, runSilently],
   );
 
+  const clearHistory = useCallback(
+    () => resetHistory(() => {}),
+    [resetHistory],
+  );
+
   const restore = useCallback(
     (snapshot: EditorSnapshot) => {
       const current = currentRef.current ?? takeSnapshot();
@@ -238,6 +243,7 @@ const useRuleEditorHistory = (
     setIsPickingTemplate,
     recordAction,
     resetHistory,
+    clearHistory,
     withoutHistory,
   };
 };
