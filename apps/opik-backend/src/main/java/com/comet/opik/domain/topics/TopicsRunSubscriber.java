@@ -131,8 +131,9 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                     .filterWhen(outcome -> store.projectExists(message.workspaceId(), message.projectId())
                             .onErrorReturn(true))
                     // The saved list's labelling pass is a run of its own: one place keeps it apart from a build.
-                    .flatMap(outcome -> planner.queueOne(new TopicsRunPlanner.Planned(message.workspaceId(),
-                            message.projectId(), RunMode.LABELS, null, 0)))
+                    .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                            .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
+                            .build()))
                     .then();
             case LABELS -> label(message, deadline);
             case NIGHTLY_UPDATE -> fail(message, RunError.INTERNAL);

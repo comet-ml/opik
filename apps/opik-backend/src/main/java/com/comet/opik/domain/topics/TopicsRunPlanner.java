@@ -5,6 +5,7 @@ import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsBackfillGate backfillGate;
 
     /** A run to queue: its message once queued, which gives it its id. */
+    @Builder(toBuilder = true)
     record Planned(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull RunMode mode, LocalDate night,
             long windowTraces) {
 
@@ -110,7 +112,8 @@ public class TopicsRunPlanner {
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
                                         .formatted(projectId, vectors, night, config.getBuild().getMinVectors())));
                     }
-                    return queueOne(new Planned(workspaceId, projectId, RunMode.FIRST_BUILD, night, vectors))
+                    return queueOne(Planned.builder().workspaceId(workspaceId).projectId(projectId)
+                            .mode(RunMode.FIRST_BUILD).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
                 })
@@ -148,12 +151,13 @@ public class TopicsRunPlanner {
         for (int i = 0; i < Math.max(labels.size(), builds.size()); i++) {
             if (i < labels.size()) {
                 var project = labels.get(i);
-                result.add(new Planned(project.workspaceId(), project.projectId(), RunMode.LABELS, null, 0));
+                result.add(Planned.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
+                        .mode(RunMode.LABELS).build());
             }
             if (i < builds.size()) {
                 var build = builds.get(i);
-                result.add(new Planned(build.workspaceId(), build.projectId(), RunMode.FIRST_BUILD, night,
-                        build.vectors()));
+                result.add(Planned.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
+                        .mode(RunMode.FIRST_BUILD).night(night).windowTraces(build.vectors()).build());
             }
         }
         return result;
