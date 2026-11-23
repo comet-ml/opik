@@ -22,12 +22,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
@@ -133,13 +132,12 @@ public class TopicVectorsTickService {
                             return Mono.just(new Visit(workspace, true, TickResult.EMPTY, read, Duration.ZERO));
                         }
                         long embedStarted = System.nanoTime();
-                        Set<VectorKey> done = ConcurrentHashMap.newKeySet();
-                        return embedAndWrite(workspace, found.get(), done, budget)
-                                .flatMap(result -> {
+                        return embedAndWrite(workspace, found.get(), budget)
+                                .flatMap(written -> {
                                     var embed = since(embedStarted);
-                                    var watermark = watermark(found.get(), done, find.limit(), start);
+                                    var watermark = watermark(found.get(), written.settled(), find.limit(), start);
                                     return saveWatermark(workspaceId, watermark)
-                                            .thenReturn(new Visit(workspace, true, result, read, embed));
+                                            .thenReturn(new Visit(workspace, true, written.result(), read, embed));
                                 });
                     });
         });
@@ -156,35 +154,36 @@ public class TopicVectorsTickService {
                 });
     }
 
-    private Mono<TickResult> embedAndWrite(TopicVectorsMetrics.Workspace workspace, List<Candidate> found,
-            Set<VectorKey> done, TickBudget budget) {
+    private Mono<ChunkWrite> embedAndWrite(TopicVectorsMetrics.Workspace workspace, List<Candidate> found,
+            TickBudget budget) {
         return embedder.embed(workspace, found, budget)
-                .concatMap(outcome -> write(workspace, outcome, done))
-                .reduce(TickResult.EMPTY, TickResult::plus);
+                .concatMap(outcome -> write(workspace, outcome))
+                .reduce(ChunkWrite.EMPTY, ChunkWrite::plus);
     }
 
-    /** Adds to {@code done} the chunk's traces no later tick would embed, and its vectors once they are written. */
-    private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
-            Set<VectorKey> done) {
+    /** The chunk's traces no later tick would embed are settled whether or not its insert succeeds. */
+    private Mono<ChunkWrite> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome) {
         return Mono.defer(() -> {
-            done.addAll(outcome.settled());
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
             var skipped = new TickResult(0, outcome.skipped());
             var vectors = outcome.vectors();
             if (vectors.isEmpty()) {
-                return Mono.just(skipped);
+                return Mono.just(new ChunkWrite(skipped, outcome.settled()));
             }
             return dao.insert(vectors)
                     .then(Mono.fromCallable(() -> {
-                        vectors.forEach(vector -> done.add(VectorKey.of(vector)));
                         metrics.written(workspace, vectors.size());
-                        return skipped.plus(TickResult.written(vectors.size()));
+                        var settled = new HashSet<>(outcome.settled());
+                        vectors.forEach(vector -> settled.add(VectorKey.of(vector)));
+                        return new ChunkWrite(skipped.plus(TickResult.written(vectors.size())), settled);
                     }))
                     .onErrorResume(exception -> {
                         log.warn("Topic vectors insert failed, embedding them again next tick, workspace '{}', rows "
                                 + "'{}'", workspace.id(), vectors.size(), exception);
                         metrics.skipped(workspace, SkipReason.INSERT_FAILED, vectors.size());
-                        return Mono.just(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, vectors.size())));
+                        return Mono.just(new ChunkWrite(
+                                skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, vectors.size())),
+                                outcome.settled()));
                     });
         });
     }
@@ -221,28 +220,28 @@ public class TopicVectorsTickService {
         }
     }
 
-    /** A {@code topic_vectors} row's key within a workspace's read. */
-    record VectorKey(@NonNull UUID projectId, @NonNull UUID traceId, int taskVersion) {
+    /** What writing one chunk produced: its counts, and the keys of its traces the watermark may pass. */
+    private record ChunkWrite(@NonNull TickResult result, @NonNull Set<VectorKey> settled) {
 
-        static VectorKey of(TopicVector vector) {
-            return new VectorKey(vector.projectId(), vector.traceId(), vector.taskVersion());
-        }
+        static final ChunkWrite EMPTY = new ChunkWrite(TickResult.EMPTY, Set.of());
 
-        static VectorKey of(Candidate candidate) {
-            return new VectorKey(candidate.projectId(), candidate.traceId(), candidate.taskVersion());
+        ChunkWrite plus(@NonNull ChunkWrite other) {
+            var union = new HashSet<>(settled);
+            union.addAll(other.settled);
+            return new ChunkWrite(result.plus(other.result), union);
         }
     }
 
     /**
      * A workspace's next watermark after a read that found {@code found}, oldest status first, and settled
-     * {@code done} (written, or never to be embedded): the status of the first one it found and did not settle, so the
+     * {@code settled} (written, or never to be embedded): the status of the first one it found and did not settle, so the
      * next read finds it again; with none, the last status found when the read hit {@code limit}, as more may share it,
      * and else the read's upper bound.
      */
-    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> done, int limit,
+    static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> settled, int limit,
             @NonNull Instant upperBound) {
         return found.stream()
-                .filter(candidate -> !done.contains(VectorKey.of(candidate)))
+                .filter(candidate -> !settled.contains(VectorKey.of(candidate)))
                 .findFirst()
                 .map(Candidate::statusUpdatedAt)
                 .orElseGet(() -> found.size() < limit ? upperBound : found.getLast().statusUpdatedAt());

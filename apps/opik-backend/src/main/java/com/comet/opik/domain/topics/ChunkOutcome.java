@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
-import com.comet.opik.domain.topics.TopicVectorsTickService.VectorKey;
 import lombok.NonNull;
 
 import java.util.List;
