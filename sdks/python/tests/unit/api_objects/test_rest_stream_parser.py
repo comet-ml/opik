@@ -487,3 +487,26 @@ def test_read_and_parse_full_stream__dict_items__page_without_an_id__ends_withou
     )
 
     assert items == [error_line]
+
+
+def test_read_and_parse_full_stream__full_page_without_ids__stops_instead_of_restarting():
+    # Rows without an id give no cursor. Resetting the cursor to None would
+    # restart the stream and serve the same rows again until max_results.
+    requested = []
+
+    def source(current_batch_size, last_retrieved_id):
+        requested.append(last_retrieved_id)
+        return [
+            json.dumps({"value": index}).encode("utf-8") + b"\n"
+            for index in range(current_batch_size)
+        ]
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=dict,
+        max_results=10,
+        max_endpoint_batch_size=2,
+    )
+
+    assert items == [{"value": 0}, {"value": 1}]
+    assert requested == [None]
