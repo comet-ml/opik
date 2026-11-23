@@ -9,6 +9,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.SqlStatements;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
@@ -35,9 +36,10 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The reads of {@link GuardrailTrainingRunDAO} that go through a secondary index use the one the design's "Operations
- * and indexes" table names for them. The optimizer chooses by table statistics, so the table is seeded with many
- * workspaces, models and finished runs and analysed first, on a container of this class's own.
+ * The reads of {@link GuardrailModelDAO} and {@link GuardrailTrainingRunDAO} that go through a secondary index use the
+ * one the design's "Operations and indexes" table names for them. The optimizer chooses by table statistics, so the
+ * tables are seeded with many workspaces, models and finished runs and analysed first, on a container of this class's
+ * own.
  *
  * <p>A single row read by primary key shows in a plan without its table: MySQL fetches it while optimising. The writes
  * are left out, since the v2 EXPLAIN format the capture uses cannot describe them; they are by primary key or by
@@ -47,14 +49,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Guardrail training query plans")
 class GuardrailTrainingQueryPlanTest {
 
+    private static final String MODELS = "guardrail_models";
     private static final String RUNS = "guardrail_training_runs";
+    private static final String POLICIES = "guardrail_policies";
+    private static final String RULES = "guardrail_policy_rules";
+
     private static final String PRIMARY = "PRIMARY";
+    private static final String MODELS_WORKSPACE_NAME = "guardrail_models_workspace_name_uk";
     private static final String RUNS_MODEL = "guardrail_training_runs_model_status_created_idx";
     private static final String RUNS_STATUS = "guardrail_training_runs_status_last_updated_idx";
+    private static final Set<String> POLICIES_BY_WORKSPACE = Set.of("guardrail_policies_workspace_name_uk",
+            "guardrail_policies_workspace_id_idx", "guardrail_policies_workspace_execution_scope_idx");
+    private static final String RULES_BY_POLICY = "guardrail_policy_rules_policy_id_type_uk";
 
     private static final int WORKSPACES = 40;
     private static final int MODELS_PER_WORKSPACE = 10;
     private static final int RUNS_PER_MODEL = 12;
+    private static final int POLICIES_PER_WORKSPACE = 5;
     private static final String USER = "user";
     private static final JsonNode METADATA = JsonUtils.getJsonNodeFromString("{\"files\": {\"layout\": \"v1\"}}");
     private static final List<GuardrailTrainingRunStatus> FINISHED = List.of(GuardrailTrainingRunStatus.COMPLETED,
@@ -66,6 +77,7 @@ class GuardrailTrainingQueryPlanTest {
 
     private String workspaceId;
     private UUID modelId;
+    private List<UUID> pageModelIds;
     private List<UUID> modelRunIds;
     private GuardrailTrainingRun runInFlight;
 
@@ -87,17 +99,30 @@ class GuardrailTrainingQueryPlanTest {
     }
 
     /**
-     * Each workspace: models whose runs are mostly finished, the first model with its last run in flight. The reads
-     * under test are for the first model of the first workspace.
+     * Each workspace: models whose runs are mostly finished, the first model with its last run in flight, and policies
+     * with three rules each. The reads under test are for the first model of the first workspace.
      */
     private void seed() {
         var start = Instant.now().minus(30, ChronoUnit.DAYS);
         jdbi.useHandle(handle -> {
+            var models = handle.prepareBatch("""
+                    INSERT INTO guardrail_models(id, workspace_id, name, description, created_by, last_updated_by)
+                    VALUES (:id, :workspaceId, :name, 'Flags it', :user, :user)
+                    """);
             var runs = handle.prepareBatch("""
                     INSERT INTO guardrail_training_runs(id, model_id, workspace_id, status, attempt, metadata,
                         created_at, created_by, last_updated_at, last_updated_by)
                     VALUES (:id, :modelId, :workspaceId, :status, :attempt, :metadata, :createdAt, :user,
                         :createdAt, :user)
+                    """);
+            var policies = handle.prepareBatch("""
+                    INSERT INTO guardrail_policies(id, workspace_id, name, execution_scope, created_by,
+                        last_updated_by)
+                    VALUES (:id, :workspaceId, :name, 'on_request', :user, :user)
+                    """);
+            var rules = handle.prepareBatch("""
+                    INSERT INTO guardrail_policy_rules(id, policy_id, type, config, created_by, last_updated_by)
+                    VALUES (:id, :policyId, :type, :config, :user, :user)
                     """);
             for (int workspace = 0; workspace < WORKSPACES; workspace++) {
                 var workspaceIdentifier = UUID.randomUUID().toString();
@@ -105,6 +130,8 @@ class GuardrailTrainingQueryPlanTest {
                 for (int model = 0; model < MODELS_PER_WORKSPACE; model++) {
                     var modelIdentifier = ID_GENERATOR.generate();
                     modelIds.add(modelIdentifier);
+                    models.bind("id", modelIdentifier.toString()).bind("workspaceId", workspaceIdentifier)
+                            .bind("name", "model-" + model).bind("user", USER).add();
                     for (int run = 0; run < RUNS_PER_MODEL; run++) {
                         var status = model == 0 && run == RUNS_PER_MODEL - 1
                                 ? GuardrailTrainingRunStatus.RUNNING
@@ -117,49 +144,93 @@ class GuardrailTrainingQueryPlanTest {
                                 .add();
                     }
                 }
+                for (int policy = 0; policy < POLICIES_PER_WORKSPACE; policy++) {
+                    var policyIdentifier = ID_GENERATOR.generate().toString();
+                    policies.bind("id", policyIdentifier).bind("workspaceId", workspaceIdentifier)
+                            .bind("name", "policy-" + policy).bind("user", USER).add();
+                    var classifier = JsonUtils.createObjectNode()
+                            .put("model_id", modelIds.get(policy).toString());
+                    for (var rule : List.of(Map.entry("TOPIC", "{}"), Map.entry("PII", "{}"),
+                            Map.entry("CUSTOM_CLASSIFIER", classifier.toString()))) {
+                        rules.bind("id", ID_GENERATOR.generate().toString()).bind("policyId", policyIdentifier)
+                                .bind("type", rule.getKey()).bind("config", rule.getValue()).bind("user", USER)
+                                .add();
+                    }
+                }
                 if (workspace == 0) {
                     workspaceId = workspaceIdentifier;
                     modelId = modelIds.getFirst();
+                    pageModelIds = List.copyOf(modelIds);
                 }
             }
+            models.execute();
             runs.execute();
-            handle.execute("ANALYZE TABLE guardrail_training_runs");
+            policies.execute();
+            rules.execute();
+            handle.execute("ANALYZE TABLE guardrail_models, guardrail_training_runs, guardrail_policies, "
+                    + "guardrail_policy_rules");
         });
     }
 
-    private record Read(String name, Consumer<GuardrailTrainingRunDAO> call, Map<String, Set<String>> indexes) {
+    private record Read(String name, Consumer<Handle> call, Map<String, Set<String>> indexes) {
         @Override
         public String toString() {
             return name;
         }
     }
 
+    private static Read models(String name, Consumer<GuardrailModelDAO> call, Map<String, Set<String>> indexes) {
+        return new Read(name, handle -> call.accept(handle.attach(GuardrailModelDAO.class)), indexes);
+    }
+
+    private static Read runs(String name, Consumer<GuardrailTrainingRunDAO> call, Map<String, Set<String>> indexes) {
+        return new Read(name, handle -> call.accept(handle.attach(GuardrailTrainingRunDAO.class)), indexes);
+    }
+
     Stream<Arguments> reads() {
+        var workspaceModels = Map.of(MODELS, Set.of(MODELS_WORKSPACE_NAME));
+        var workspaceModelsAndTheirRuns = Map.of(MODELS, Set.of(MODELS_WORKSPACE_NAME), RUNS, Set.of(RUNS_MODEL));
         var modelRuns = Map.of(RUNS, Set.of(RUNS_MODEL));
         var runsInFlight = Map.of(RUNS, Set.of(RUNS_STATUS));
         return Stream.of(
-                new Read("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId),
-                        Map.of(RUNS, Set.of(PRIMARY))),
-                new Read("serving run", dao -> dao.findServingRun(modelId, workspaceId), modelRuns),
-                new Read("run in flight", dao -> dao.findInFlight(modelId, workspaceId), modelRuns),
-                new Read("previous attempt",
-                        dao -> dao.findPreviousAttempt(runInFlight.toBuilder().attempt(2).build()), modelRuns),
-                new Read("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), modelRuns),
-                new Read("run history count", dao -> dao.countByModel(modelId, workspaceId), modelRuns),
-                new Read("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), modelRuns),
-                new Read("worker scan", dao -> dao.findAllInFlight(100), runsInFlight),
-                new Read("workspace's runs in flight", dao -> dao.countInFlight(workspaceId), runsInFlight))
+                models("count the workspace's models", dao -> dao.count(workspaceId, null, false, null),
+                        workspaceModels),
+                models("count the usable models", dao -> dao.count(workspaceId, null, true, null),
+                        workspaceModelsAndTheirRuns),
+                models("page by latest run status, sorted by name", dao -> dao.findPageIds(workspaceId, null, false,
+                        GuardrailTrainingRunStatus.RUNNING, "name ASC", 10, 0), workspaceModelsAndTheirRuns),
+                models("page by partial name", dao -> dao.findPageIds(workspaceId, "model", false, null, null, 10, 0),
+                        workspaceModels),
+                // Ten ids are the workspace's every model here, so reading them by the workspace is as good a plan.
+                models("a page's models with their serving and latest run ids",
+                        dao -> dao.findByIds(pageModelIds, workspaceId),
+                        Map.of(MODELS, Set.of(PRIMARY, MODELS_WORKSPACE_NAME), RUNS, Set.of(RUNS_MODEL))),
+                // The model row itself is read by primary key, so only its runs show in the plan.
+                models("a model with its serving and latest run ids", dao -> dao.findById(modelId, workspaceId),
+                        modelRuns),
+                models("delete guard", dao -> dao.isReferencedByRule(modelId, workspaceId),
+                        Map.of(POLICIES, POLICIES_BY_WORKSPACE, RULES, Set.of(RULES_BY_POLICY))),
+                runs("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId), Map.of(RUNS, Set.of(PRIMARY))),
+                runs("serving run", dao -> dao.findServingRun(modelId, workspaceId), modelRuns),
+                runs("run in flight", dao -> dao.findInFlight(modelId, workspaceId), modelRuns),
+                runs("previous attempt", dao -> dao.findPreviousAttempt(runInFlight.toBuilder().attempt(2).build()),
+                        modelRuns),
+                runs("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), modelRuns),
+                runs("run history count", dao -> dao.countByModel(modelId, workspaceId), modelRuns),
+                runs("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), modelRuns),
+                runs("worker scan", dao -> dao.findAllInFlight(100), runsInFlight),
+                runs("workspace's runs in flight", dao -> dao.countInFlight(workspaceId), runsInFlight))
                 .map(Arguments::of);
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("reads")
-    @DisplayName("Each read goes through the index named for it")
+    @DisplayName("Each read goes through the index named for it on every guardrail table")
     void readUsesItsIndex(Read read) {
         var logger = new CapturingSqlLogger();
         jdbi.useHandle(handle -> {
             handle.getConfig(SqlStatements.class).setSqlLogger(logger);
-            read.call().accept(handle.attach(GuardrailTrainingRunDAO.class));
+            read.call().accept(handle);
         });
 
         var captured = logger.captured();
