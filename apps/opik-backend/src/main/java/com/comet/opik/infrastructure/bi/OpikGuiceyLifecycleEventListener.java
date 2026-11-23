@@ -216,6 +216,13 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
 
+        var enabled = topicsConfig.enabledWorkspaceIds();
+        var ignored = topicsConfig.getFirstBuild().workspaceIds().stream().filter(id -> !enabled.contains(id)).toList();
+        if (!ignored.isEmpty()) {
+            log.warn("Topics first-build workspaces not in topics.enabledWorkspaces are ignored, workspaces '{}'",
+                    ignored);
+        }
+
         scheduleRepeatingJob(TopicsFirstBuildJob.class,
                 topicsConfig.getFirstBuild().getPlanInterval().toJavaDuration(), null);
     }
