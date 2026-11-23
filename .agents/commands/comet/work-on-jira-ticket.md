@@ -33,9 +33,11 @@ This workflow will:
 - **Check development environment**: Verify project dependencies, build tools, and project structure are ready.
 - **Check local git branch** in the Opik repository:
   - If on `main`, propose a new branch following Opik naming convention:
+
     ```
     {USERNAME}/OPIK-{TICKET-NUMBER}-{TICKET-SUMMARY}
     ```
+
     Example:
     - Ticket: `https://comet-ml.atlassian.net/browse/OPIK-2180`
     - Title: "Add cursor git workflow rule"
@@ -109,10 +111,12 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 
 1. Slugify `{TICKET-SUMMARY}` for the worktree name: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`. Then call `EnterWorktree` with name `{USERNAME}-OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}`.
 2. Inside the worktree, fetch the latest remote state and create the properly named branch based on `origin/main` (using the same slugified summary):
+
    ```bash
    git fetch origin
    git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY} origin/main
    ```
+
    The worktree intentionally branches off `origin/main` regardless of the parent checkout's current branch or local `main` state, and skips the rebase-strategy prompt — isolation is the whole point of the worktree.
 
    Do not inspect or prompt about the parent checkout's working tree (staged, unstaged, or untracked files; current branch). Worktrees are physically isolated, so parent state has no effect on the worktree and is not the agent's concern in this path.
@@ -126,11 +130,13 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
     - **Option 2**: Ask user what to do with uncommitted changes
 - Slugify `{TICKET-SUMMARY}` the same way as step 6b: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`.
 - If on `main`, create branch following Opik conventions:
+
   ```bash
   git checkout main
   git pull origin main
   git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}
   ```
+
 - **After branch creation**: Apply stashed changes if any: `git stash pop`
 - **Verify branch creation**: Confirm new branch is active and clean.
 
@@ -156,23 +162,28 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 - **Commit Message Format**: Use semantic commits. The first commit on a branch is critical because PR title is derived from it:
 
   **First Commit (PR-title source, required):**
+
   ```
   [OPIK-####] [BE/FE/SDK/DOCS] <type>: <description>
   ```
 
   **Allowed ticket-key variants (when applicable):**
+
   ```
   [issue-####] [BE/FE/SDK/DOCS] <type>: <description>
   [NA] [BE/FE/SDK/DOCS] <type>: <description>
   ```
 
   **Follow-up Commits (preferred):**
+
   ```
   <type>(<scope>): <description>
   ```
+
   where `<type>` is one of: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 
   **Last-resort fallback (discouraged):**
+
   ```
   Revision N: <description>
   ```
@@ -184,6 +195,7 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
   - `[DOCS]` - Documentation updates, README changes, comments, swagger/OpenAPI documentation
 
   **Examples:**
+
   ```
   [OPIK-1234] [BE] feat: add create trace endpoint
   [OPIK-1234] [FE] feat: add project custom metrics UI dashboard

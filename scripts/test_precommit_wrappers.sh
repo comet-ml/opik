@@ -52,6 +52,13 @@ check "oxlint uses --max-warnings=0"   "--max-warnings=0" "$out"
 check "routes .css to stylelint"       "stylelint"       "$out"
 check "formats with oxfmt"             "oxfmt"           "$out"
 
+echo "precommit-genui-lint.sh:"
+out=$(scripts/precommit-genui-lint.sh sdks/genui/js/src/a.tsx sdks/genui/js/src/b.css 2>&1)
+check "strips sdks/genui prefix"       "js/src/a.tsx"     "$out"
+check "routes .tsx to oxlint"          "oxlint --fix --max-warnings=0 js/src/a.tsx" "$out"
+check "formats with oxfmt"             "oxfmt js/src/a.tsx js/src/b.css" "$out"
+check_empty "no-arg is a no-op"        "$(scripts/precommit-genui-lint.sh 2>&1)"
+
 echo "precommit-ts-sdk-lint.sh:"
 out=$(scripts/precommit-ts-sdk-lint.sh sdks/typescript/src/opik/index.ts 2>&1)
 check "strips sdks/typescript prefix"  "eslint"             "$out"
@@ -75,9 +82,18 @@ out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/pre
 check "fe change emits fe-lint"          '"id": "fe-lint"'     "$out"
 check_empty "fe non-plugin change omits no-private-fe-plugins" \
 	"$(printf '%s' "$out" | leg_ids | grep -o 'no-private-fe-plugins' || true)"
-out=$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+out=$(printf 'sdks/genui/js/src/ViewHost.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "genui change emits genui-lint"    '"id": "genui-lint"'  "$out"
+check "genui leg provisions node-genui"  '"toolchain": "node-genui"' "$out"
+check_empty "genui dist change → no genui legs" \
+	"$(printf 'sdks/genui/js/dist/index.js\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids | grep -o 'genui-[a-z]*' || true)"
+out=$(printf 'LICENSE\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check_empty "unrelated file → no legs" "$(printf '%s' "$out" | scoped_leg_ids)"
 check "any file emits the repo-wide betterleaks leg" '"id": "betterleaks"' "$out"
+out=$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "md change emits markdownlint" '"id": "markdownlint"' "$out"
+check_empty "generated helm README omits markdownlint" \
+	"$(printf 'deployment/helm_chart/opik/README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids | grep -o 'markdownlint' || true)"
 # types: gate — a non-.py file under sdks/opik_optimizer must NOT emit the
 # python-only hooks (ruff/mypy/pyupgrade), or they'd spawn jobs that Skip at
 # runtime and drop from the timing table.

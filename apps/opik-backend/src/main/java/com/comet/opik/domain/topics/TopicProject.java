@@ -96,16 +96,22 @@ public record TopicProject(
     }
 
     /**
-     * Why an attempt failed. {@link #ABANDONED}: its pod died while it ran; the project's next attempt records it.
+     * Why an attempt failed: the code a {@link TopicsRunException} carries, or {@link #ABANDONED} when its pod died
+     * while it ran (the project's next attempt records it).
      */
     @Getter
     @RequiredArgsConstructor
     public enum RunError implements HasValue {
-        QWEN_TIMEOUT("qwen_timeout"),
-        QWEN_ERROR("qwen_error"),
-        QWEN_BAD_ANSWER("qwen_bad_answer"),
+        /** An LLM call ran out of its deadline. */
+        LLM_TIMEOUT("llm_timeout"),
+        /** An LLM call failed for another reason (an error answer after the retries, a 4xx). */
+        LLM_ERROR("llm_error"),
+        /** The answer has no JSON object or breaks the schema. */
+        LLM_BAD_ANSWER("llm_bad_answer"),
         WINDOW_READ("window_read"),
+        /** A check before the save failed: nothing is written. */
         INVARIANT("invariant"),
+        /** The run outlasted its time limit. */
         TIMEOUT("timeout"),
         SAVE("save"),
         INTERNAL("internal"),

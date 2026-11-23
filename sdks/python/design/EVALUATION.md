@@ -92,6 +92,7 @@ class EvaluationEngine:
 ```
 
 **Key Responsibilities**:
+
 1. **Task execution**: Run user's task function for each dataset item
 2. **Trace management**: Create trace context for each task execution
 3. **Metric application**: Apply all metrics to task outputs
@@ -134,6 +135,7 @@ def execute(
 ```
 
 **Design Decision**: Thread pool (not process pool or asyncio) because:
+
 - **Network I/O bound**: Tasks spend most time waiting for LLM API responses
 - **Thread-safe client**: Sharing Opik client across threads is safe (contextvars provide isolation)
 - **Lower overhead**: No serialization costs like multiprocessing
@@ -191,6 +193,7 @@ def evaluate(
 ```
 
 **Key Implementation Details**:
+
 - Creates `functools.partial` for each dataset item
 - Each partial is an `EvaluationTask` that captures item and task
 - Tasks are submitted to thread pool
@@ -233,6 +236,7 @@ def evaluate_prompt(
 ```
 
 **Internally created task**:
+
 ```python
 def _prompt_evaluation_task(dataset_item):
     # Format prompt with item values
@@ -301,6 +305,7 @@ def evaluate_threads(
 **Key Difference from Other Evaluation Methods**:
 
 Unlike `evaluate()`, `evaluate_prompt()`, and `evaluate_experiment()`, this method:
+
 - ❌ **No dataset required**: Works on existing production traces
 - ❌ **No task function required**: No new execution, evaluates historical data
 - ✅ **Fetches existing traces**: Pulls traces from backend based on filter
@@ -402,6 +407,7 @@ class BaseMetric(abc.ABC):
 ```
 
 **Metric Contract**:
+
 - Must implement `score()` method
 - Must return `ScoreResult` (value, name, reason)
 - Must raise `MetricComputationError` on failure (not hide errors)
@@ -424,6 +430,7 @@ class LevenshteinRatio(BaseMetric):
 ```
 
 **Characteristics**:
+
 - Fast (< 1ms)
 - Deterministic
 - No network calls
@@ -461,12 +468,14 @@ class Hallucination(BaseMetric):
 ```
 
 **Characteristics**:
+
 - Slow (LLM call: ~1-5 seconds)
 - Non-deterministic (LLM variance)
 - Network dependency
 - More nuanced evaluation
 
 **Common Components**:
+
 - `template.py`: Prompt templates for judge
 - `parser.py`: Parse LLM responses
 - `metric.py`: Metric implementation
@@ -476,6 +485,7 @@ class Hallucination(BaseMetric):
 **Pattern**: Evaluate multi-turn conversations.
 
 **Location**:
+
 - Base class: `opik/evaluation/metrics/conversation_metric_base.py`
 - Heuristic implementations: `opik/evaluation/metrics/heuristics/conversation/`
 - LLM-based implementations: `opik/evaluation/metrics/llm_judges/conversation/`
@@ -505,6 +515,7 @@ class ConversationalCoherence(ConversationThreadMetric):
 ```
 
 **Characteristics**:
+
 - Input: Full conversation history (list of turns)
 - Output: Single score for entire thread
 - Used by `evaluate_threads()` only
@@ -530,6 +541,7 @@ class AnswerRelevance(BaseMetric):
 ```
 
 **Error Example**:
+
 ```
 MetricComputationError:
 Metric 'answer_relevance_metric' requires argument 'input'
@@ -575,6 +587,7 @@ test_results = evaluation_tasks_executor.execute(
 ```
 
 **Why functools.partial?**
+
 - Creates zero-argument callable for thread pool
 - Captures context (item, task, trial_id)
 - Type-safe with `EvaluationTask` protocol
@@ -640,6 +653,7 @@ def evaluate_llm_task_context(
 ```
 
 **Why context manager?**
+
 - Guarantees cleanup even on exception
 - Automatically links trace to experiment
 - Error handling built-in
@@ -1011,6 +1025,7 @@ def prepare_scoring_input(
 ```
 
 **Example**:
+
 ```python
 # Dataset item
 {"user_question": "What is AI?", "expected_answer": "..."}
@@ -1073,6 +1088,7 @@ except Exception as e:
 **Design Decision**: Individual task failures don't stop evaluation. Each dataset item is independent.
 
 **Implementation**:
+
 - Error captured by context manager
 - Logged to trace for debugging
 - Exception propagated to thread pool
@@ -1102,11 +1118,13 @@ class CustomMetric(BaseMetric):
 **Design Principle**: Metrics must raise `MetricComputationError` on failure.
 
 **Why explicit errors?**
+
 - Missing data should be visible (not silently return 0)
 - Misconfiguration should fail fast (not produce wrong results)
 - Silent failures hide problems (hard to debug)
 
 **Handling in engine** (`evaluation/engine/engine.py`):
+
 ```python
 try:
     score = metric.score(**scoring_input)
@@ -1197,6 +1215,7 @@ def _evaluate_llm_task(...):
 ```
 
 **Span hierarchy**:
+
 ```
 Trace: evaluation_task
   ├─ Span: llm_task
@@ -1204,7 +1223,6 @@ Trace: evaluation_task
       ├─ Span: hallucination_metric
       └─ Span: answer_relevance_metric
 ```
-
 
 ## Summary
 
@@ -1218,6 +1236,7 @@ The evaluation framework is designed for **systematic quality assessment**:
 6. **Context isolation**: Each task runs in separate trace context
 
 **Key Architectural Decisions**:
+
 - **Synchronous design**: Evaluation waits for results (unlike tracing)
 - **Thread pool for parallelism**: Not process pool or asyncio
 - **Context managers**: Guarantee cleanup even on exceptions
@@ -1225,6 +1244,7 @@ The evaluation framework is designed for **systematic quality assessment**:
 - **Progress reporting**: tqdm integration for different environments
 
 For more information, see:
+
 - [API and Data Flow](API_AND_DATA_FLOW.md) - Core architecture
 - [Integrations](INTEGRATIONS.md) - LLM framework integrations
 - [Testing](TESTING.md) - Testing evaluation features

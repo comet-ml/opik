@@ -174,6 +174,7 @@ def test_titan_aggregator():
 ## Architecture Benefits
 
 ### Before (Single File)
+
 ```python
 # Mixed logic in one function
 if claude_condition:
@@ -185,6 +186,7 @@ elif titan_condition:  # Adding this requires modifying existing code
 ```
 
 ### After (Modular)
+
 ```python
 # Each format is isolated
 claude.py  # Claude logic only

@@ -108,12 +108,14 @@ tests/
 **Purpose**: Fast, isolated tests with no external dependencies.
 
 **Characteristics**:
+
 - Use fake backend (`fake_backend` fixture)
 - No network calls
 - Test internal logic and edge cases
 - Run in milliseconds (almost always)
 
 **Key Fixtures**:
+
 ```python
 @pytest.fixture
 def fake_backend(patch_streamer):
@@ -125,6 +127,7 @@ def fake_backend(patch_streamer):
 ```
 
 **Example Structure**:
+
 ```python
 def test_track__one_nested_function__happyflow(fake_backend):
     @opik.track
@@ -150,6 +153,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
 ```
 
 **What to Test**:
+
 - Decorator behavior (input/output capture, nesting)
 - Message creation and processing
 - Batching logic
@@ -163,12 +167,14 @@ def test_track__one_nested_function__happyflow(fake_backend):
 **Purpose**: Test integrations with external libraries using fake backend.
 
 **Characteristics**:
+
 - Real integration library calls (OpenAI, LangChain, etc.)
 - Fake Opik backend (no backend network calls)
 - Verify tracing structure without backend dependency
 - Requires API keys for external services
 
 **Directory Structure**:
+
 ```
 library_integration/
 ├── openai/
@@ -182,6 +188,7 @@ library_integration/
 ```
 
 **Example Structure**:
+
 ```python
 def test_openai_client_responses_create__happyflow(fake_backend):
     client = openai.OpenAI()
@@ -203,6 +210,7 @@ def test_openai_client_responses_create__happyflow(fake_backend):
 ```
 
 **What to Test**:
+
 - Integration decorator wrapping
 - Input/output capture from library responses
 - Usage tracking (tokens, costs)
@@ -213,6 +221,7 @@ def test_openai_client_responses_create__happyflow(fake_backend):
 
 **Requirements Files**:
 Each integration has its own `requirements.txt`:
+
 ```txt
 # openai/requirements.txt
 openai>=1.0.0
@@ -227,12 +236,14 @@ langchain-openai>=0.1.0
 **Purpose**: Test core functionality against real Opik backend.
 
 **Characteristics**:
+
 - Real backend calls
 - Slower (network + backend processing)
 - Full system validation
 - Requires configured Opik backend
 
 **Key Fixtures**:
+
 ```python
 @pytest.fixture()
 def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
@@ -250,6 +261,7 @@ def dataset_name(opik_client):
 ```
 
 **Example Structure**:
+
 ```python
 def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
     # Create trace
@@ -269,6 +281,7 @@ def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
 ```
 
 **What to Test**:
+
 - Trace/span creation and retrieval
 - Dataset CRUD operations
 - Experiment tracking
@@ -279,6 +292,7 @@ def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
 - Thread management
 
 **Verifiers (`verifiers.py`)**:
+
 ```python
 def verify_trace(opik_client, trace_id, name, input, output, ...):
     """Wait for trace to appear in backend and verify fields"""
@@ -305,12 +319,14 @@ def verify_experiment_items(opik_client, experiment_id, expected_items):
 **Purpose**: Test library integrations against real backend.
 
 **Characteristics**:
+
 - Real library calls + Real backend calls
 - Slowest test category
 - Full integration validation
 - Requires both service API keys and backend
 
 **Example Structure**:
+
 ```python
 def test_litellm_chat_model_e2e(opik_client_unique_project_name):
     """Test LiteLLM integration with real backend"""
@@ -332,6 +348,7 @@ def test_litellm_chat_model_e2e(opik_client_unique_project_name):
 ```
 
 **When to Use**:
+
 - Critical integration paths
 - Features that require real backend state
 - Complex multi-step workflows
@@ -342,6 +359,7 @@ def test_litellm_chat_model_e2e(opik_client_unique_project_name):
 **Purpose**: Quick sanity checks that SDK can be imported and basic operations work.
 
 **Example**:
+
 ```python
 # dry_run_import.py
 import opik
@@ -399,6 +417,7 @@ class FeedbackScoreModel:
 **Purpose**: Emulate backend behavior for unit and library integration tests.
 
 **Key Features**:
+
 - Processes messages without network calls
 - Builds trace and span trees from messages in memory
 - Supports duplicate merging (simulates backend behavior)
@@ -425,6 +444,7 @@ class BackendEmulatorMessageProcessor(BaseMessageProcessor):
 ```
 
 **Usage**:
+
 ```python
 def test_example(fake_backend):
     # Execute code that creates traces/spans
@@ -949,6 +969,7 @@ def test_double_function__various_inputs__correct_outputs(
 ### Integration Test Requirements
 
 Each integration should have:
+
 1. `requirements.txt` with integration dependencies
 2. `conftest.py` with integration-specific fixtures
 3. `constants.py` for test constants (models, etc.)
@@ -975,11 +996,13 @@ def test_myintegration_basic(fake_backend, ensure_myintegration_configured):
 ## Running Tests
 
 ### Run All Tests
+
 ```bash
 pytest tests/
 ```
 
 ### Run Specific Category
+
 ```bash
 # Unit tests only (fast)
 pytest tests/unit/
@@ -997,6 +1020,7 @@ pytest tests/library_integration/openai/
 ### Environment Variables
 
 Some library integration and E2E tests require certain environment variables to be configured:
+
 ```bash
 # Backend configuration
 export OPIK_URL_OVERRIDE="http://localhost:5000"
@@ -1022,6 +1046,7 @@ export GOOGLE_API_KEY="..."
 10. **Use Verifiers for E2E**: Leverage existing verification helpers
 
 For more information, see:
+
 - [API and Data Flow](API_AND_DATA_FLOW.md) - Core architecture and data flow
 - [Integrations](INTEGRATIONS.md) - Integration patterns and testing
 - [Evaluation](EVALUATION.md) - Evaluation framework architecture

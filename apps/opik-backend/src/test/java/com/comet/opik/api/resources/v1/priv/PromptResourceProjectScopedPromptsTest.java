@@ -13,6 +13,9 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.PromptDAO;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -32,6 +35,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URLEncoder;
@@ -50,6 +54,8 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -60,6 +66,8 @@ class PromptResourceProjectScopedPromptsTest {
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
 
     private static final String USER = UUID.randomUUID().toString();
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final TestContainersSetup setup = new TestContainersSetup();
 
@@ -72,10 +80,12 @@ class PromptResourceProjectScopedPromptsTest {
     private ClientSupport client;
     private PromptResourceClient promptResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
+        this.mySqlTemplate = mySqlTemplate;
         this.client = client;
         this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
@@ -94,6 +104,28 @@ class PromptResourceProjectScopedPromptsTest {
 
     private Prompt.PromptBuilder buildPrompt() {
         return PromptResourceClient.buildPrompt(factory).toBuilder();
+    }
+
+    /**
+     * Seeds a prompt with no project, as created before project scoping. Every API and service path now assigns a
+     * project (the Default Project when none is given), so this legacy shape can only be written directly.
+     */
+    private Prompt saveProjectlessPrompt(String name, String workspaceId) {
+        var prompt = buildPrompt()
+                .id(ID_GENERATOR.generateId())
+                .name(name)
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        mySqlTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(PromptDAO.class).save(workspaceId, prompt);
+            return null;
+        });
+        return prompt;
     }
 
     private UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
@@ -639,15 +671,8 @@ class PromptResourceProjectScopedPromptsTest {
         String projectName = "project-" + UUID.randomUUID();
         projectResourceClient.createProject(projectName, apiKey, workspaceName);
 
-        // Keeps the generated template: createPrompt only creates a version when one is present,
-        // and this test retrieves that version.
-        var workspacePrompt = buildPrompt()
-                .projectId(null)
-                .lastUpdatedBy(USER)
-                .createdBy(USER)
-                .templateStructure(TemplateStructure.TEXT)
-                .build();
-        createPrompt(workspacePrompt, apiKey, workspaceName);
+        var workspacePrompt = saveProjectlessPrompt("prompt-" + UUID.randomUUID(), workspaceId);
+        var expectedVersion = promptResourceClient.createPromptVersion(workspacePrompt, apiKey, workspaceName);
 
         var request = PromptVersionRetrieve.builder()
                 .name(workspacePrompt.name())
@@ -658,7 +683,78 @@ class PromptResourceProjectScopedPromptsTest {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNotNull();
-            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+            assertThat(response.readEntity(PromptVersion.class)).usingRecursiveComparison()
+                    .isEqualTo(expectedVersion);
         }
+    }
+
+    @Test
+    @DisplayName("Create prompt without a project creates it in the Default Project")
+    void createPromptWithoutProjectCreatesItInDefaultProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var prompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+
+        var id = createPrompt(prompt, apiKey, workspaceName);
+
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        assertPrompt(promptResourceClient.getPrompt(id, apiKey, workspaceName),
+                prompt.toBuilder().id(id).projectId(defaultProjectId).build());
+    }
+
+    @Test
+    @DisplayName("Create prompt version without a project for a new name creates the prompt in the Default Project")
+    void createPromptVersionWithoutProjectCreatesPromptInDefaultProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var prompt = buildPrompt()
+                .name("prompt-" + UUID.randomUUID())
+                .projectId(null)
+                .build();
+        var createdAfter = Instant.now();
+
+        var version = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        var expectedPrompt = Prompt.builder()
+                .id(version.promptId())
+                .name(prompt.name())
+                .projectId(defaultProjectId)
+                .templateStructure(TemplateStructure.TEXT)
+                .versionCount(1L)
+                .createdBy(USER)
+                .createdAt(createdAfter)
+                .lastUpdatedBy(USER)
+                .lastUpdatedAt(createdAfter)
+                .build();
+        assertPrompt(promptResourceClient.getPrompt(version.promptId(), apiKey, workspaceName), expectedPrompt);
+    }
+
+    @Test
+    @DisplayName("Create prompt version without a project keeps versioning the project-less prompt with that name")
+    void createPromptVersionWithoutProjectVersionsProjectlessPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectlessPrompt = saveProjectlessPrompt("prompt-" + UUID.randomUUID(), workspaceId);
+
+        var version = promptResourceClient.createPromptVersion(projectlessPrompt, apiKey, workspaceName);
+
+        assertThat(version.promptId()).isEqualTo(projectlessPrompt.id());
+        assertPrompt(promptResourceClient.getPrompt(projectlessPrompt.id(), apiKey, workspaceName),
+                projectlessPrompt.toBuilder().versionCount(1L).build());
     }
 }
