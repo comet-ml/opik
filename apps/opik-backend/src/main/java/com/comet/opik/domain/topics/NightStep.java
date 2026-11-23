@@ -28,23 +28,23 @@ public sealed interface NightStep<T> {
     record Done<T>(@NonNull T result) implements NightStep<T> {
     }
 
-    static <T> NightStep<T> done(@NonNull T result) {
+    static <T> NightStep<T> done(T result) {
         return Done.<T>builder().result(result).build();
     }
 
-    static <T> NightStep<T> ask(@NonNull LlmRequest request, @NonNull Function<JsonNode, NightStep<T>> next) {
+    static <T> NightStep<T> ask(LlmRequest request, Function<JsonNode, NightStep<T>> next) {
         return Ask.<T>builder().request(request).next(next).build();
     }
 
     /** This step, then {@code after} on its result. */
-    default <R> NightStep<R> then(@NonNull Function<? super T, NightStep<R>> after) {
+    default <R> NightStep<R> then(Function<? super T, NightStep<R>> after) {
         return switch (this) {
             case Done<T> done -> after.apply(done.result());
             case Ask<T> ask -> ask(ask.request(), answer -> ask.next().apply(answer).then(after));
         };
     }
 
-    default <R> NightStep<R> map(@NonNull Function<? super T, R> after) {
+    default <R> NightStep<R> map(Function<? super T, R> after) {
         return then(result -> done(after.apply(result)));
     }
 }
