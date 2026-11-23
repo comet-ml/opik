@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -127,15 +128,11 @@ public class TopicsRunPlanner {
      * queued: the next plans publish it again.
      */
     Mono<UUID> queueOne(@NonNull Planned run) {
-        return store.queue(run.workspaceId(), run.projectId(), run.mode())
-                .flatMap(Mono::justOrEmpty)
-                .flatMap(runId -> publisher.publish(run.message(runId))
-                        .onErrorResume(error -> {
-                            log.warn("Topics run '{}' queued but not published, project '{}'; it is published again "
-                                    + "later", runId, run.projectId(), error);
-                            return Mono.empty();
-                        })
-                        .thenReturn(runId));
+        return queueAndPublish(run, (runId, error) -> {
+            log.warn("Topics run '{}' queued but not published, project '{}'; it is published again later", runId,
+                    run.projectId(), error);
+            return Mono.just(runId);
+        });
     }
 
     /**
@@ -143,25 +140,29 @@ public class TopicsRunPlanner {
      * error to retry on: a run left queued would block the project's next run by hand until a plan publishes it again.
      */
     private Mono<UUID> queueByHand(Planned run) {
+        return queueAndPublish(run, (runId, error) -> {
+            log.warn("Topics run '{}' queued by hand but not published, project '{}'; it is dropped", runId,
+                    run.projectId(), error);
+            // No reason: nothing cancelled the run, no pod ever had it.
+            return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
+                    .onErrorResume(dropError -> {
+                        log.error("Topics run '{}' not published and not dropped, project '{}'; it stays queued "
+                                + "until a plan publishes it", runId, run.projectId(), dropError);
+                        return Mono.just(false);
+                    })
+                    .then(Mono.error(() -> new ServiceUnavailableException(
+                            "The topics run of project '%s' could not be started, try again"
+                                    .formatted(run.projectId()))));
+        });
+    }
+
+    /** Queues the run and publishes it; empty when the project has a run in flight. */
+    private Mono<UUID> queueAndPublish(Planned run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
         return store.queue(run.workspaceId(), run.projectId(), run.mode())
                 .flatMap(Mono::justOrEmpty)
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
-                        .onErrorResume(error -> {
-                            log.warn("Topics run '{}' queued by hand but not published, project '{}'; it is dropped",
-                                    runId, run.projectId(), error);
-                            // No reason: nothing cancelled the run, no pod ever had it.
-                            return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
-                                    .onErrorResume(dropError -> {
-                                        log.error("Topics run '{}' not published and not dropped, project '{}'; it "
-                                                + "stays queued until a plan publishes it", runId, run.projectId(),
-                                                dropError);
-                                        return Mono.just(false);
-                                    })
-                                    .then(Mono.error(() -> new ServiceUnavailableException(
-                                            "The topics run of project '%s' could not be started, try again"
-                                                    .formatted(run.projectId()))));
-                        }));
+                        .onErrorResume(error -> onPublishError.apply(runId, error)));
     }
 
     private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
