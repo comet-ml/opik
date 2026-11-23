@@ -11,6 +11,7 @@ import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -206,11 +207,11 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     private Context buildReactorContext(ExperimentItemToProcess message) {
-        return Context.of(
+        return AsyncUtils.setOrganizationId(Context.of(
                 RequestContext.WORKSPACE_ID, message.workspaceId(),
                 RequestContext.USER_NAME, message.userName(),
                 RequestContext.WORKSPACE_NAME, "",
-                RequestContext.VISIBILITY, Visibility.PRIVATE);
+                RequestContext.VISIBILITY, Visibility.PRIVATE), message.organizationId());
     }
 
     /**
