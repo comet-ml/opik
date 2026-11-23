@@ -95,15 +95,16 @@ public class GuardrailModelsResource {
     @RateLimited
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response createGuardrailModel(
-            @FormDataParam("name") @NotBlank @Size(max = GuardrailModel.NAME_MAX_LENGTH) String name,
-            @FormDataParam("description") @NotBlank @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH) String description,
+            // Dropwizard reports a form field's violation as "The request body ...", without its name, so each message
+            // names its field.
+            @FormDataParam("name") @NotBlank(message = "name must not be blank") @Size(max = GuardrailModel.NAME_MAX_LENGTH, message = "name cannot exceed {max} characters") String name,
+            @FormDataParam("description") @NotBlank(message = "description must not be blank") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "description cannot exceed {max} characters") String description,
             @FormDataParam("file") @NotNull @Schema(description = FILE_DESCRIPTION) InputStream file,
             @Context UriInfo uriInfo) {
         checkAccess();
 
         GuardrailTrainingDataset.validate(file);
-        log.info("Creating guardrail model with name '{}' in workspace '{}'", name,
-                requestContext.get().getWorkspaceId());
+        log.info("Creating guardrail model, name '{}', workspaceId '{}'", name, requestContext.get().getWorkspaceId());
         var id = modelService.create(name, description);
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
         return Response.created(uri).build();
@@ -153,7 +154,7 @@ public class GuardrailModelsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailModelUpdate.class))) @NotNull @Valid GuardrailModelUpdate update) {
         checkAccess();
 
-        log.info("Updating guardrail model with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
+        log.info("Updating guardrail model, id '{}', workspaceId '{}'", id, requestContext.get().getWorkspaceId());
         modelService.updateDescription(id, update.description());
         return Response.noContent().build();
     }
@@ -169,7 +170,7 @@ public class GuardrailModelsResource {
     public Response deleteGuardrailModel(@PathParam("id") UUID id) {
         checkAccess();
 
-        log.info("Deleting guardrail model with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
+        log.info("Deleting guardrail model, id '{}', workspaceId '{}'", id, requestContext.get().getWorkspaceId());
         modelService.delete(id);
         return Response.noContent().build();
     }
@@ -194,8 +195,7 @@ public class GuardrailModelsResource {
         checkAccess();
 
         GuardrailTrainingDataset.validate(file);
-        log.info("Retraining guardrail model with id '{}' in workspace '{}'", id,
-                requestContext.get().getWorkspaceId());
+        log.info("Retraining guardrail model, id '{}', workspaceId '{}'", id, requestContext.get().getWorkspaceId());
         var runId = modelService.retrain(id);
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(runId)).build();
         return Response.created(uri).build();
@@ -243,7 +243,7 @@ public class GuardrailModelsResource {
     public Response cancelGuardrailTrainingRun(@PathParam("id") UUID id, @PathParam("runId") UUID runId) {
         checkAccess();
 
-        log.info("Cancelling guardrail training run '{}' of model '{}' in workspace '{}'", runId, id,
+        log.info("Cancelling guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, id,
                 requestContext.get().getWorkspaceId());
         trainingService.cancel(id, runId);
         return Response.noContent().build();

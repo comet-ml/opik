@@ -74,38 +74,44 @@ public class GuardrailTrainingDataset {
             problems.add("the file is larger than 50 MB");
         } else {
             if (rows < MIN_ROWS || rows > MAX_ROWS) {
-                problems.add("the file has %d valid rows; %d to %d are needed".formatted(rows, MIN_ROWS, MAX_ROWS));
+                problems.add("the file needs 20 to 50,000 valid rows, rows '%d'".formatted(rows));
             }
             rowsPerLabel.forEach((label, count) -> {
                 if (count < MIN_ROWS_PER_LABEL) {
-                    problems.add("the file has %d rows labelled \"%s\"; at least %d are needed"
-                            .formatted(count, label, MIN_ROWS_PER_LABEL));
+                    problems.add("the file needs at least 5 rows per label, label '%s', rows '%d'".formatted(label,
+                            count));
                 }
             });
         }
-        if (!problems.isEmpty()) {
-            throw new BadRequestException(Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(listed(problems)))
-                    .build());
+        if (problems.isEmpty()) {
+            return;
         }
+        if (problems.size() > MAX_PROBLEMS_LISTED) {
+            int unlisted = problems.size() - MAX_PROBLEMS_LISTED;
+            problems.subList(MAX_PROBLEMS_LISTED, problems.size()).clear();
+            problems.add("more problems not listed, count '%d'".formatted(unlisted));
+        }
+        throw new BadRequestException(Response.status(Response.Status.BAD_REQUEST)
+                .entity(new ErrorMessage(problems))
+                .build());
     }
 
     /** The row's label, or null with the row's problem added when it is not a valid row. */
     private static String labelOf(String line, int lineNumber, List<String> problems) {
         var row = parse(line);
         if (row == null || !row.isObject()) {
-            problems.add("line %d: not a JSON object".formatted(lineNumber));
+            problems.add("not a JSON object, line '%d'".formatted(lineNumber));
             return null;
         }
         var text = row.path("text");
         var label = row.path("label");
         String problem = null;
         if (!text.isTextual() || text.asText().isBlank()) {
-            problem = "line %d: \"text\" must be a non-empty string".formatted(lineNumber);
+            problem = "\"text\" must be a non-empty string, line '%d'".formatted(lineNumber);
         } else if (text.asText().length() > MAX_TEXT_LENGTH) {
-            problem = "line %d: \"text\" is longer than %,d characters".formatted(lineNumber, MAX_TEXT_LENGTH);
+            problem = "\"text\" is longer than 12,000 characters, line '%d'".formatted(lineNumber);
         } else if (!label.isTextual() || !LABELS.contains(label.asText())) {
-            problem = "line %d: \"label\" must be \"yes\" or \"no\"".formatted(lineNumber);
+            problem = "\"label\" must be \"yes\" or \"no\", line '%d'".formatted(lineNumber);
         }
         if (problem != null) {
             problems.add(problem);
@@ -120,14 +126,5 @@ public class GuardrailTrainingDataset {
         } catch (UncheckedIOException exception) {
             return null;
         }
-    }
-
-    private static List<String> listed(List<String> problems) {
-        if (problems.size() <= MAX_PROBLEMS_LISTED) {
-            return problems;
-        }
-        var listed = new ArrayList<>(problems.subList(0, MAX_PROBLEMS_LISTED));
-        listed.add("and %d more problems".formatted(problems.size() - MAX_PROBLEMS_LISTED));
-        return listed;
     }
 }

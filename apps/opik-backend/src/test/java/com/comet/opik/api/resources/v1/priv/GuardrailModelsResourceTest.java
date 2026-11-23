@@ -55,6 +55,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -70,6 +71,7 @@ import static com.comet.opik.api.GuardrailTrainingRunStatus.COMPLETED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.QUEUED;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -130,17 +132,19 @@ class GuardrailModelsResourceTest {
     private Client multipartClient;
     private String baseURI;
     private GuardrailTrainingRunDAO runs;
-    private GuardrailPolicyDAO policies;
+    private TransactionTemplate template;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate template) {
         this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         multipartClient = ClientBuilder.newClient().register(MultiPartFeature.class);
-        // The job side of a run is not wired yet, so the tests move runs in MySQL the way it will.
+        // The job side of a run is not wired yet, so the tests move runs in MySQL the way it will. Reads go straight
+        // to the app's Jdbi; writes go through its TransactionTemplate, because a handle borrowed outside one can be a
+        // pooled connection an earlier read-only transaction left read-only.
         runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
-        policies = jdbi.onDemand(GuardrailPolicyDAO.class);
+        this.template = template;
     }
 
     @AfterAll
@@ -241,7 +245,9 @@ class GuardrailModelsResourceTest {
     /** Moves the model's run in flight to the status, as its job will once training runs on opik-inference. */
     private GuardrailTrainingRun end(Workspace workspace, UUID modelId, GuardrailTrainingRunStatus status) {
         var run = runs.findInFlight(modelId, workspace.id()).orElseThrow();
-        assertThat(runs.updateStatus(run.id(), workspace.id(), run.status(), status, null, null, USER)).isOne();
+        int updated = template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
+                .updateStatus(run.id(), workspace.id(), run.status(), status, null, null, USER));
+        assertThat(updated).isOne();
         return runs.findById(run.id(), workspace.id()).orElseThrow();
     }
 
@@ -288,16 +294,17 @@ class GuardrailModelsResourceTest {
         var tooLongText = "x".repeat(12_001);
         return Stream.of(
                 Arguments.of("a line that is not JSON", dataset(10, 10) + "\nnot json",
-                        List.of("line 21: not a JSON object")),
-                Arguments.of("a label other than yes or no", dataset(10, 10) + "\n{\"text\": \"t\", \"label\": \"maybe\"}",
-                        List.of("line 21: \"label\" must be \"yes\" or \"no\"")),
+                        List.of("not a JSON object, line '21'")),
+                Arguments.of("a label other than yes or no",
+                        dataset(10, 10) + "\n{\"text\": \"t\", \"label\": \"maybe\"}",
+                        List.of("\"label\" must be \"yes\" or \"no\", line '21'")),
                 Arguments.of("a text that is too long",
                         dataset(10, 10) + "\n{\"text\": \"%s\", \"label\": \"no\"}".formatted(tooLongText),
-                        List.of("line 21: \"text\" is longer than 12,000 characters")),
+                        List.of("\"text\" is longer than 12,000 characters, line '21'")),
                 Arguments.of("too few rows", dataset(5, 5),
-                        List.of("the file has 10 valid rows; 20 to 50000 are needed")),
+                        List.of("the file needs 20 to 50,000 valid rows, rows '10'")),
                 Arguments.of("too few rows of one label", dataset(18, 4),
-                        List.of("the file has 4 rows labelled \"no\"; at least 5 are needed")));
+                        List.of("the file needs at least 5 rows per label, label 'no', rows '4'")));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -330,13 +337,42 @@ class GuardrailModelsResourceTest {
         var workspace = newWorkspace();
 
         try (var response = postModel(workspace, null, "Flags it", VALID_DATASET)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body name must not be blank");
         }
         try (var response = postModel(workspace, "model", " ", VALID_DATASET)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                    "The request body description must not be blank");
         }
 
         assertThat(find(workspace, target -> target).total()).isZero();
+    }
+
+    @Test
+    @DisplayName("A name or a description at its maximum length is accepted, one character longer is a 422")
+    void createWhenNameOrDescriptionAtMaxLength() {
+        var workspace = newWorkspace();
+        var name = "n".repeat(GuardrailModel.NAME_MAX_LENGTH);
+        var description = "d".repeat(GuardrailModel.DESCRIPTION_MAX_LENGTH);
+
+        try (var response = postModel(workspace, name + "n", "Flags it", VALID_DATASET)) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                    "The request body name cannot exceed 255 characters");
+        }
+        try (var response = postModel(workspace, "model", description + "d", VALID_DATASET)) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                    "The request body description cannot exceed 1000 characters");
+        }
+        UUID id;
+        try (var response = postModel(workspace, name, description, VALID_DATASET)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            id = TestUtils.getIdFromLocation(response.getLocation());
+        }
+
+        assertThat(get(workspace, id).name()).isEqualTo(name);
+        try (var response = request(workspace, "/" + id).method("PATCH",
+                Entity.json(new GuardrailModelUpdate(description + "d")))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "description cannot exceed 1000 characters");
+        }
     }
 
     @Test
@@ -420,9 +456,13 @@ class GuardrailModelsResourceTest {
                 .name("policy")
                 .executionScope(GuardrailExecutionScope.ON_REQUEST)
                 .build();
-        policies.save(policy, workspace.id(), USER);
-        policies.saveRules(List.of(randomUUID()), policy.id(), List.of(GuardrailType.CUSTOM_CLASSIFIER),
-                List.of(JsonUtils.createObjectNode().put("model_id", id.toString())), USER);
+        template.inTransaction(WRITE, handle -> {
+            var policies = handle.attach(GuardrailPolicyDAO.class);
+            policies.save(policy, workspace.id(), USER);
+            policies.saveRules(List.of(randomUUID()), policy.id(), List.of(GuardrailType.CUSTOM_CLASSIFIER),
+                    List.of(JsonUtils.createObjectNode().put("model_id", id.toString())), USER);
+            return null;
+        });
 
         try (var response = request(workspace, "/" + id).delete()) {
             assertErrors(response, HttpStatus.SC_CONFLICT, "Guardrail model is used by a policy rule");

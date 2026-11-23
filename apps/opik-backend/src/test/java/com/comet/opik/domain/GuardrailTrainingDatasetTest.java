@@ -50,8 +50,9 @@ class GuardrailTrainingDatasetTest {
         };
 
         assertThatThrownBy(() -> GuardrailTrainingDataset.validate(endless))
-                .isInstanceOfSatisfying(BadRequestException.class, exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
-                        .containsExactly("the file is larger than 50 MB"));
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("the file is larger than 50 MB"));
     }
 
     @Test
@@ -63,8 +64,8 @@ class GuardrailTrainingDatasetTest {
                 .isInstanceOfSatisfying(BadRequestException.class, exception -> {
                     var errors = ((ErrorMessage) exception.getResponse().getEntity()).errors();
                     assertThat(errors).hasSize(21);
-                    assertThat(errors.getFirst()).isEqualTo("line 1: not a JSON object");
-                    assertThat(errors.getLast()).isEqualTo("and 8 more problems");
+                    assertThat(errors.getFirst()).isEqualTo("not a JSON object, line '1'");
+                    assertThat(errors.getLast()).isEqualTo("more problems not listed, count '8'");
                 });
     }
 }

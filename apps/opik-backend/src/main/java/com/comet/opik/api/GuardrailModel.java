@@ -54,6 +54,6 @@ public record GuardrailModel(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record GuardrailModelUpdate(
-            @NotBlank @Size(max = DESCRIPTION_MAX_LENGTH, message = "description cannot exceed 1000 characters") String description) {
+            @NotBlank @Size(max = DESCRIPTION_MAX_LENGTH, message = "cannot exceed {max} characters") String description) {
     }
 }
