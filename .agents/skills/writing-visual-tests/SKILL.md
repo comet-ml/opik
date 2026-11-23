@@ -195,18 +195,22 @@ Regenerate whenever any of these change, not just on first add: the screenshot n
 3. **Page object(s).** Follow the pattern above exactly; reuse an existing page object if the page already has one.
 4. **Spec.** One `test()` per screenshot, unique names (see "Unique screenshot names").
 5. **Generate/refresh baselines for the whole suite** — every time, whether or not baselines already exist (see "Baselines are local and gitignored" above). Run **all** spec files, not just the one you touched: adding or changing a test can shift shared page chrome, and stale baselines in untouched files are otherwise only caught by accident.
+
    ```bash
    cd tests_end_to_end/visual-tests
    SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --update-snapshots --reporter=list
    ```
+
    `SKIP_TEARDOWN=1` keeps the seeded projects alive for a fast next run; the plain `npx playwright test` invocation still always cleans and recreates them at the *start* (global-setup), so each run starts from a known state. If the full-suite run surfaces failures in files you didn't touch, don't reflexively blame your change — check whether those baselines simply predate a recent, unrelated app change (compare `ls -la screenshots/baseline/` timestamps against recent frontend commits) before deciding whether to regenerate them or investigate further; confirm with the user before regenerating baselines outside the scope of your own change.
 6. **Stress-test for stability — do not skip this.** Run the full-suite compare pass (no `--update-snapshots`) 3 times in a row:
+
    ```bash
    for i in 1 2 3; do
      echo "=== Run $i ==="
      SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --reporter=list
    done
    ```
+
    A single green run proves nothing — real timestamps, real durations, and font/layout jitter only show up over several runs. If anything fails, open the `*-diff.png` attachment under `test-results/` before touching anything — it tells you exactly which pixels moved. Don't guess. If you change the spec, masks, or seed data in response, go back to step 5 and regenerate the baseline before stress-testing again — a stale baseline will just fail for a different, misleading reason.
    > macOS gotcha: `timeout` is not a built-in command (no coreutils by default) — a loop like `timeout 60 npx playwright test ...` silently no-ops. Don't wrap runs in `timeout`.
    > Shell-tool gotcha: 3 sequential runs of the full suite easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 2 3; do ...`) if one gets cut off.
@@ -218,9 +222,11 @@ All specs share **one flat directory**, `screenshots/baseline/` (see `snapshotPa
 
 - Prefix every screenshot name with a short, spec-unique code, e.g. `visual-comparison.spec.ts` uses `01-`, `02-…`; `empty-states.spec.ts` uses `E01-`, `E02-…`; `trace-sidebar.spec.ts` uses `S01-`, `S02-…`. Pick a prefix letter/word not already in use.
 - Before naming, check for collisions:
+
   ```bash
   grep -rn "screenshot(page, '" tests_end_to_end/visual-tests/tests/*.spec.ts
   ```
+
 - Keep the rest of the name descriptive (`S02-trace-sidebar-details`, not `S02`) — the file is the only durable record of what a screenshot covers once `screenshots/` is gitignored.
 
 ## Masks: scope them to your test, don't touch the shared list
@@ -269,17 +275,21 @@ Follow the existing pattern in `test-helper-service/routes/*.py`: a Flask bluepr
 **Make the seeded data deterministic — this is the #1 source of visual-test flakiness:**
 
 - **Don't rely on `@track`/`opik_context` decorator timing** if the trace/span's duration will be visible on screen. Real wall-clock execution time varies run to run, even if it always rounds to "0s" — the rendered text can still differ by a sub-pixel width and shift siblings. Instead call `client.trace(...)` / `trace.span(...)` directly with an **identical `start_time` and `end_time`**, so duration is exactly zero every time:
+
   ```python
   now = datetime.datetime.now(datetime.timezone.utc)
   trace = client.trace(..., start_time=now, end_time=now)
   span = trace.span(..., start_time=now, end_time=now)
   ```
+
 - **Log at most one feedback score per trace/span in a screenshot-visible table** unless you've confirmed the UI sorts them deterministically. Two scores logged in the same call have no guaranteed render order (no explicit sort key), so a table showing both can silently swap row order between runs.
 - **To attach a prompt to a trace/span for the Prompts tab**, don't rely on the `@track` context helpers — build the metadata directly so it works with plain `client.trace()`:
+
   ```python
   prompt = client.create_prompt(name=..., prompt=...)
   client.trace(..., metadata={"opik_prompts": [prompt.__internal_api__to_info_dict__()]})
   ```
+
 - Attachments: resolve paths via the existing `resolve_attachment_path()` helper (relative to `tests_end_to_end/`), and check in a small fixture file under `visual-tests/fixtures/` if one doesn't already exist for your case.
 
 ## Know your defaults before you seed or delete

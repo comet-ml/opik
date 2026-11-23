@@ -1,0 +1,24 @@
+{
+  "name": "genui-workspace",
+  "private": true,
+  "workspaces": [
+    "js",
+    "dev-host"
+  ],
+  "scripts": {
+    "build": "npm run build -w opik-genui && npm run build -w dev-host",
+    "build:python": "npm run build -w opik-genui && cd python && rm -rf dist && uv build",
+    "check": "npm run smoke -w opik-genui && npm run check -w dev-host",
+    "ci": "npm run lint && npm run typecheck && npm run build && npm run smoke -w opik-genui && cd python && uv run --locked pytest -q",
+    "lint": "oxlint . --max-warnings=0 && npm run format:check",
+    "lint:fix": "oxlint . --fix --max-warnings=0 && npm run format",
+    "format": "oxfmt --no-error-on-unmatched-pattern '**/*.{ts,tsx,js,jsx,mjs,cjs,css}'",
+    "format:check": "oxfmt --check --no-error-on-unmatched-pattern '**/*.{ts,tsx,js,jsx,mjs,cjs,css}'",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@puppeteer/browsers": "^3.2.6",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0"
+  }
+}

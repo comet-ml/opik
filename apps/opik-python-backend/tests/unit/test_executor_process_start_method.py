@@ -15,7 +15,7 @@ from opik_backend.executor_process import PROCESS_NETWORK_ISOLATION_ENV_VAR, Pro
 
 @pytest.mark.skipif(sys.platform != "linux", reason="fork is pinned on Linux only")
 def test_create_worker_process_forks_and_signals_ready(monkeypatch):
-    monkeypatch.delenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, raising=False)
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false")
     executor = ProcessExecutor()
 
     executor.create_worker_process()

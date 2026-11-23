@@ -1,0 +1,26 @@
+{
+  "name": "dev-host",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5191 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 5196 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "opik-genui": "*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react-swc": "^4.0.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

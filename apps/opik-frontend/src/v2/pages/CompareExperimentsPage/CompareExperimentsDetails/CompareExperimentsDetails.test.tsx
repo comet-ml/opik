@@ -2,8 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import CompareExperimentsDetails from "./CompareExperimentsDetails";
-import { Experiment, ExperimentPromptVersion } from "@/types/datasets";
+import {
+  EVALUATION_METHOD,
+  Experiment,
+  ExperimentPromptVersion,
+} from "@/types/datasets";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
+import { TooltipProvider } from "@/ui/tooltip";
 
 // Records the props each tag receives, so the link target and the version it
 // opens stay asserted rather than erased by routing.
@@ -75,10 +80,12 @@ const experiment = (id: string, overrides: Partial<Experiment> = {}) =>
 
 const renderDetails = (experiments: Experiment[]) =>
   render(
-    <CompareExperimentsDetails
-      experimentsIds={experiments.map((e) => e.id)}
-      experiments={experiments}
-    />,
+    <TooltipProvider>
+      <CompareExperimentsDetails
+        experimentsIds={experiments.map((e) => e.id)}
+        experiments={experiments}
+      />
+    </TooltipProvider>,
   );
 
 const promptTags = () => screen.queryAllByTestId(`tag-${RESOURCE_TYPE.prompt}`);
@@ -140,5 +147,43 @@ describe("CompareExperimentsDetails prompt tags", () => {
     renderDetails([experiment("e1")]);
 
     expect(promptTags()).toHaveLength(0);
+  });
+});
+
+// The badge must match the Experiments table's pass-rate tag, which never
+// reads "100%" unless every item passed (OPIK_9234).
+describe("CompareExperimentsDetails pass rate badge", () => {
+  const renderPassRate = (passedCount: number, totalCount: number) =>
+    renderDetails([
+      experiment("e1", {
+        evaluation_method: EVALUATION_METHOD.TEST_SUITE,
+        pass_rate: passedCount / totalCount,
+        passed_count: passedCount,
+        total_count: totalCount,
+      }),
+    ]);
+
+  const badgeIcon = (label: string) =>
+    screen.getByText(label).parentElement?.querySelector("svg");
+
+  it("caps a rate just under 100% at 99% with the red icon", () => {
+    renderPassRate(199, 200);
+
+    expect(badgeIcon("99% pass rate")).toHaveClass("text-[var(--color-red)]");
+    expect(screen.queryByText("100% pass rate")).toBeNull();
+  });
+
+  it("shows 100% with the green icon when every item passed", () => {
+    renderPassRate(200, 200);
+
+    expect(badgeIcon("100% pass rate")).toHaveClass(
+      "text-[var(--color-green)]",
+    );
+  });
+
+  it("rounds a rate well below 100% as usual", () => {
+    renderPassRate(120, 200);
+
+    expect(screen.getByText("60% pass rate")).toBeInTheDocument();
   });
 });

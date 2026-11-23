@@ -39,7 +39,7 @@ This TSV is the single source of truth for the per-hook descriptions shown in th
 **Miss this and the hook renders with a blank description in the CI summary.** Add a row:
 
 ```
-hadolint	Lint Dockerfiles
+hadolint Lint Dockerfiles
 ```
 
 **Order matters — most-specific first.** Matching is first-substring-wins top-to-bottom, so a more specific keyword must precede any that it contains (the file already does this: `ruff-format` before `ruff`). If your keyword is a substring of an existing one, place it above that line.
@@ -81,12 +81,15 @@ See the OPIK-6673 discussion for a worked case where some rules genuinely couldn
 Before opening the PR, confirm the wiring end-to-end — don't trust that the four edits compose:
 
 1. **Detect emits a leg for a target file.** Run the detector against a file the hook should gate and confirm your hook id appears in `legs` with the right `toolchain`:
+
    ```bash
    python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml path/to/target.file
    ```
+
    If it lands in `skipped` instead, your `files:` regex doesn't match. If it errors about `types:` without `files:`, add the `files:` regex (step 1).
 
 2. **Hook passes clean.** Run it on the current tree and confirm green (this is also the retroactive check):
+
    ```bash
    pre-commit run <hook-id> --all-files
    ```
@@ -94,9 +97,11 @@ Before opening the PR, confirm the wiring end-to-end — don't trust that the fo
 3. **Hook fails on a new violation.** Introduce a deliberate violation in a target file and confirm the hook catches it, then revert. A hook that can't fail isn't gating anything.
 
 4. **Description resolves.** Confirm the summary won't render blank:
+
    ```bash
    echo "<your hook display name>" | python3 scripts/precommit-hook-desc.py
    ```
+
    Expect `<name>\t<description>` — an empty second column means the keyword row (step 2) is missing or mis-ordered.
 
 ## Checklist

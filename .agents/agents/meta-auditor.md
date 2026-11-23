@@ -89,11 +89,13 @@ This repo uses a shared configuration setup for Claude Code and Cursor interoper
 ```
 
 **Key Commands:**
+
 - `make cursor` - Create .cursor symlink to .agents
 - `make claude` - Sync .agents → .claude + generate .mcp.json
 - `make clean-agents` - Remove generated files (keeps .agents)
 
 **Format Conversions (make claude):**
+
 - Rules: `.mdc` → `.md`, frontmatter `globs/alwaysApply` → `paths`
 - MCP: `${workspaceFolder}/` cleaned, `envFile` → `--env-file` for docker
 
@@ -109,7 +111,9 @@ This repo uses a shared configuration setup for Claude Code and Cursor interoper
 ## Trigger Modes
 
 ### Proactive (during creation)
+
 When user is creating a new rule/skill/agent/MCP:
+
 1. Scan existing config in `.agents/` first
 2. Check if proposed addition duplicates existing content
 3. Validate it's the right type (rule vs skill vs agent)
@@ -117,7 +121,9 @@ When user is creating a new rule/skill/agent/MCP:
 5. **IMPORTANT**: Create files in `.agents/`, then remind to run `make claude`
 
 ### Audit (explicit request)
+
 When user asks to audit or check config:
+
 1. Full scan of `.agents/` (source of truth)
 2. If `.cursor` exists, verify it points to `.agents`; if absent, note optional setup and recommend `make cursor`
 3. Check `.claude/` is in sync with `.agents/`
@@ -144,6 +150,7 @@ ls -la .claude/ .mcp.json
 ### Step 2: Discover Configuration
 
 Scan `.agents/` (source of truth):
+
 - `.agents/rules/*.mdc` - Rules (Cursor format)
 - `.agents/skills/*/` - Domain skills with SKILL.md
 - `.agents/agents/*.md` - Subagent configurations
@@ -153,6 +160,7 @@ Scan `.agents/` (source of truth):
 ### Step 3: Check for Anti-Patterns
 
 **Architecture Issues**
+
 - ❌ Files created directly in `.claude/` instead of `.agents/`
 - ⚠️ `.cursor` exists but is not a symlink to `.agents`
 - ❌ `.claude/` out of sync with `.agents/` (forgot `make claude`)
@@ -161,6 +169,7 @@ Scan `.agents/` (source of truth):
 - ✅ All edits should go to `.agents/`, then run `make claude`
 
 **Rules Misuse**
+
 - ❌ Rules > 100 lines (should be skills)
 - ❌ Rules with code examples (should be skills)
 - ❌ Rules that are domain-specific (should be skills)
@@ -170,12 +179,14 @@ Scan `.agents/` (source of truth):
 - ✅ Rules in `.agents/` use Cursor format: `globs:`, `alwaysApply:`, `description:`
 
 **Skills Misuse**
+
 - ❌ Skills with `alwaysApply: true` (should be rules)
 - ❌ Skills > 500 lines without reference files
 - ❌ Duplicate content across skills
 - ✅ Skills should be: domain-specific, on-demand, comprehensive
 
 **Agents Misuse**
+
 - ❌ Agents without example triggers
 - ❌ Agents with vague descriptions
 - ❌ Agents duplicating skill content
@@ -183,6 +194,7 @@ Scan `.agents/` (source of truth):
 - ✅ Agents should be: focused, triggered clearly, minimal tools
 
 **MCP Concerns**
+
 - ❌ Too many MCPs enabled (context bloat)
 - ❌ MCPs with overlapping functionality
 - ❌ Unused MCPs still configured
@@ -194,6 +206,7 @@ Scan `.agents/` (source of truth):
 ### Step 4: Analyze Context Impact
 
 Estimate context usage:
+
 - Count lines in alwaysApply rules (`.agents/rules/*.mdc` with `alwaysApply: true`)
 - Count lines in CLAUDE.md (if exists)
 - Check MCP tool counts in `.agents/mcp.json`
@@ -202,6 +215,7 @@ Estimate context usage:
 ### Step 5: Check Sync State
 
 Verify `.claude/` is properly generated from `.agents/`:
+
 ```bash
 # Check if make claude needs to run
 # Compare file counts
@@ -214,11 +228,13 @@ cat .agents/mcp.json | grep -c "workspaceFolder"  # May have entries
 ```
 
 Common sync issues:
+
 - `.agents/` has newer changes (forgot to run `make claude`)
 - `.mcp.json` still has `${workspaceFolder}` (conversion failed)
 
 **Local Customizations:**
 Files in `.claude/` that don't have a source in `.agents/` are considered "local customizations":
+
 - These are preserved by both `make claude` and `make clean-agents`
 - Use for personal agents/skills/rules you don't want in the shared repo
 - To identify local files: compare `.claude/` contents with `.agents/`
@@ -278,6 +294,7 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 ## Classification Guidelines
 
 **Should be a RULE if:**
+
 - Applies to ALL code (not domain-specific)
 - Is concise (< 50 lines)
 - Is a hard constraint or convention
@@ -285,6 +302,7 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 - **Location**: `.agents/rules/name.mdc` (Cursor format)
 
 **Should be a SKILL if:**
+
 - Is domain-specific (backend, frontend, SDK)
 - Contains patterns, examples, reference material
 - Is loaded on-demand when working in that area
@@ -292,6 +310,7 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 - **Location**: `.agents/skills/domain-name/SKILL.md`
 
 **Should be an AGENT if:**
+
 - Is an autonomous task (review, test, build)
 - Benefits from isolated context
 - Has clear trigger conditions
@@ -299,12 +318,14 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 - **Location**: `.agents/agents/agent-name.md`
 
 **Should be a COMMAND if:**
+
 - Is user-invoked via slash command (/command-name)
 - Performs a specific workflow
 - Examples: /commit, /create-pr, /review
 - **Location**: `.agents/commands/command-name.md` or `.agents/commands/group/command-name.md`
 
 **MCP Best Practices:**
+
 - Only enable MCPs you actively use
 - Prefer fewer MCPs with more capability
 - Check for tool overlap between MCPs
@@ -330,6 +351,7 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 3. **Verify** the generated `.claude/` and `.mcp.json`
 
 **NEVER:**
+
 - Edit files directly in `.claude/` (they get overwritten)
 - Edit `.mcp.json` at repo root (it's generated)
 - Create rules with `.md` extension in `.agents/rules/`

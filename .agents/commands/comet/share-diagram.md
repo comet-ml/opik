@@ -44,6 +44,7 @@ This workflow will:
 ### 2. Extract Context
 
 #### Ticket Context
+
 - **Parse branch name**: Extract `OPIK-<number>` from current branch (format: `<username>/OPIK-<number>-<description>`)
 - **If ticket not found in branch name** (including `main`, `NA` branches like `user/NA-some-task`, or other non-standard formats): Check if a ticket number was provided as input. If not, ask the user for one.
 - **If no ticket number available**: Skip Jira fetch entirely — generate diagram from code diff alone, using the branch description as the title.
@@ -51,6 +52,7 @@ This workflow will:
 - **Build ticket context**: Title, type, key requirements, acceptance criteria
 
 #### Code Changes
+
 - **Check for PR**: Use `gh pr view --json number,title,url` (preferred) or GitHub MCP to find an open PR for the current branch on `comet-ml/opik`
   - If PR exists: use `gh pr diff` or GitHub MCP PR diff (preferred — includes review context)
   - If no PR or no GitHub tool available: use `git diff main...HEAD` for local changes
@@ -148,22 +150,26 @@ If Playwright MCP is **not available**, skip this step and fall back to showing 
 ## Error Handling
 
 ### Jira MCP Failures
+
 - Connection issues: Check network and authentication
 - Ticket not found: Ask user to verify ticket number
 - No description: Generate diagram from code diff alone, note the gap
 
 ### GitHub CLI / MCP Failures
+
 - `gh` not installed or unauthenticated: Fall back to GitHub MCP
 - Both unavailable: Fall back to local `git diff main...HEAD`
 - No PR found: Fall back to local `git diff main...HEAD`
 - PR diff too large: Summarize by file, focus on key changes
 
 ### Git Failures
+
 - On `main` with no ticket: Prompt for ticket number
 - No commits ahead of main: Show error — nothing to diagram
 - Merge conflicts: Warn but generate from available diff
 
 ### Diagram Generation Failures
+
 - Changes too small: Generate a minimal diagram with just files changed
 - Changes too large (>30 files): Group by component, show top-level flow only
 
