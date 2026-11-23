@@ -29,6 +29,7 @@ import {
   describeReplaceResult,
   parseLiteLlmUpload,
   problemsForRows,
+  summarizeBatch,
   upsertMany,
 } from "@/lib/model-prices";
 import useSaveModelPrices from "./useSaveModelPrices";
@@ -229,11 +230,11 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
     ? Math.max(0, preview.uploaded - changeCount)
     : 0;
   const summary = described
-    ? [
-        `${described.created.length} added`,
-        `${described.updated.length} changed`,
-        ...(unchangedCount ? [`${unchangedCount} unchanged`] : []),
-      ].join(", ")
+    ? summarizeBatch({
+        added: described.created.length,
+        changed: described.updated.length,
+        unchanged: unchangedCount,
+      })
     : "";
 
   return (
@@ -335,8 +336,11 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                     onClick={save}
                     disabled={isSaving || !changeCount}
                   >
-                    Save {changeCount}{" "}
-                    {changeCount === 1 ? "change" : "changes"}
+                    {changeCount
+                      ? `Save ${changeCount} ${
+                          changeCount === 1 ? "change" : "changes"
+                        }`
+                      : "Nothing to save"}
                   </Button>
                 ) : (
                   <Button
@@ -381,9 +385,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   className="comet-body-s space-y-2 rounded-md border p-3"
                   data-testid="batch-preview"
                 >
-                  <p className="comet-body-s-accented">
-                    {changeCount ? summary : "Nothing changes"}
-                  </p>
+                  <p className="comet-body-s-accented">{summary}</p>
                   <ul className="list-disc pl-5 text-muted-slate">
                     {described.created.map((line, i) => (
                       <li key={`c${i}`}>Added {line}</li>

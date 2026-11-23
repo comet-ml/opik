@@ -202,7 +202,7 @@ describe("CostCenterTab", () => {
 
       openRow("gpt-4o");
 
-      expect(priceInput("Input")).toBeDisabled();
+      expect(priceInput("Input")).toHaveAttribute("readonly");
       expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
       expect(screen.queryByRole("button", { name: /Add price/ })).toBeNull();
     });
@@ -212,7 +212,7 @@ describe("CostCenterTab", () => {
 
       openRow("acme-llama-70b");
 
-      expect(priceInput("Input")).toBeDisabled();
+      expect(priceInput("Input")).toHaveAttribute("readonly");
       expect(screen.queryByRole("button", { name: "Own price" })).toBeNull();
       expect(screen.queryByText(/Cached tokens are billed/)).toBeNull();
     });
@@ -457,6 +457,44 @@ describe("CostCenterTab", () => {
       expect(quickAccessModels()).not.toContain("gpt-4o-mini");
     });
 
+    it("pins the open model from the drawer header", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o-mini");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pin to quick access" }),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Unpin from quick access" }),
+      ).toHaveAttribute("aria-pressed", "true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
+    });
+
+    it("moves focus to search when an unpinned card leaves quick access", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pin gpt-4o-mini to quick access" }),
+      );
+      const star = within(screen.getByTestId("quick-access")).getByRole(
+        "button",
+        { name: "Unpin gpt-4o-mini from quick access" },
+      );
+      star.focus();
+      fireEvent.click(star);
+
+      expect(quickAccessModels()).not.toContain("gpt-4o-mini");
+      await waitFor(() =>
+        expect(
+          screen.getByPlaceholderText("Search models or providers"),
+        ).toHaveFocus(),
+      );
+    });
+
     it("stops pinning once quick access holds 8 models", () => {
       const extra = ["m-1", "m-2", "m-3", "m-4"].map((model) => ({
         model,
@@ -500,6 +538,18 @@ describe("CostCenterTab", () => {
 
       expect(notPrevented).toBe(false);
       expect(priceInput("Input")).toBeInTheDocument();
+    });
+
+    it("closes on the first Escape although the pin star gets the first focus", async () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      expect(
+        screen.getByRole("button", { name: "Pin to quick access" }),
+      ).toHaveFocus();
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
     it("gives focus back to the row once the drawer closes", async () => {
@@ -922,6 +972,26 @@ describe("CostCenterTab", () => {
       expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
         "1 added, 1 changed, 1 unchanged",
       );
+    });
+
+    it("says there is nothing to save when every uploaded model stays the same", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
+        "2 unchanged",
+      );
+      expect(
+        screen.getByRole("button", { name: "Nothing to save" }),
+      ).toBeDisabled();
     });
 
     it("names the model and the field when the backend rejects a price", async () => {

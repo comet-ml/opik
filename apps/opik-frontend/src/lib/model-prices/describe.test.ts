@@ -5,6 +5,7 @@ import {
   describeRowPrice,
   groupHistory,
   rowLabel,
+  summarizeBatch,
 } from "./describe";
 
 const GPT_4O: ModelPriceRow = {
@@ -126,5 +127,22 @@ describe("describe", () => {
       updated: ["gpt-4o on openai: input 2 → 1.9"],
       deleted: ["old on openai"],
     });
+  });
+});
+
+describe("summarizeBatch", () => {
+  it("names only the counts that are not zero", () => {
+    expect(summarizeBatch({ added: 2, changed: 0, unchanged: 3 })).toBe(
+      "2 added, 3 unchanged",
+    );
+    expect(summarizeBatch({ added: 0, changed: 1, unchanged: 0 })).toBe(
+      "1 changed",
+    );
+    expect(summarizeBatch({ added: 0, changed: 0, unchanged: 4 })).toBe(
+      "4 unchanged",
+    );
+    expect(summarizeBatch({ added: 0, changed: 0, unchanged: 0 })).toBe(
+      "Nothing changes",
+    );
   });
 });

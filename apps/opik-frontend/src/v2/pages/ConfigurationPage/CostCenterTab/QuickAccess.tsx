@@ -41,7 +41,7 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
                     card is clickable without nesting the pin inside a button. */}
                 <button
                   type="button"
-                  className="min-w-0 truncate text-left font-mono text-[15px] font-semibold leading-5 outline-none after:absolute after:inset-0 after:rounded-md after:content-[''] focus-visible:after:ring-1 focus-visible:after:ring-ring"
+                  className="min-w-0 truncate text-left font-mono text-[15px] font-medium leading-5 outline-none after:absolute after:inset-0 after:rounded-md after:content-[''] focus-visible:after:ring-1 focus-visible:after:ring-ring"
                   title={entry.model}
                   aria-label={`Open ${entry.model}`}
                   onClick={() => onOpen(entry)}
@@ -88,8 +88,8 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
                 in{" "}
                 <span className="text-foreground">
                   {formatPrice(entry.prices.input_price) ?? "—"}
-                </span>
-                <span className="ml-2">out</span>{" "}
+                </span>{" "}
+                <span className="ml-1.5">out</span>{" "}
                 <span className="text-foreground">
                   {formatPrice(entry.prices.output_price) ?? "—"}
                 </span>

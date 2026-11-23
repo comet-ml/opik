@@ -55,7 +55,7 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
             {models.map((model) => (
               <li
                 key={`${model.model}|${model.provider}`}
-                className="flex items-center gap-3 px-3 py-2"
+                className="flex items-center gap-3 px-3 py-2.5"
               >
                 <span className="break-all font-mono text-[15px] leading-5">
                   {model.model}
@@ -66,7 +66,7 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
                 </span>
                 {canEdit && (
                   <Button
-                    size="2xs"
+                    size="xs"
                     variant="outline"
                     onClick={() => onAddPrices(model)}
                   >

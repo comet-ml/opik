@@ -142,3 +142,16 @@ export const describeReplaceResult = (result: ModelPriceReplaceResult) => ({
   }),
   deleted: result.deleted.map((row) => rowLabel(row)),
 });
+
+export const summarizeBatch = (counts: {
+  added: number;
+  changed: number;
+  unchanged: number;
+}) => {
+  const parts = [
+    counts.added ? `${counts.added} added` : "",
+    counts.changed ? `${counts.changed} changed` : "",
+    counts.unchanged ? `${counts.unchanged} unchanged` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "Nothing changes";
+};

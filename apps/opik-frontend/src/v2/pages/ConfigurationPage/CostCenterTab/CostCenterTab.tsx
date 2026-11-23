@@ -82,14 +82,23 @@ const CostCenterTab: React.FC = () => {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const drawerKey = useRef(0);
   const returnFocusTo = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const isAnyDrawerOpen = Boolean(drawerTarget) || isBatchOpen;
 
   // Radix hands focus back only to its own trigger, and these drawers are
-  // opened from rows and cards, so without this focus falls to <body>.
+  // opened from rows and cards, so without this focus falls to <body>. The
+  // opener can be gone by then (a quick access card that dropped out after a
+  // save), hence the search box as the fallback.
   useEffect(() => {
     if (isAnyDrawerOpen) return;
-    returnFocusTo.current?.focus();
+    const target = returnFocusTo.current;
     returnFocusTo.current = null;
+    if (!target) return;
+    if (target.isConnected) {
+      target.focus();
+    } else {
+      searchRef.current?.focus();
+    }
   }, [isAnyDrawerOpen]);
 
   const rememberFocus = () => {
@@ -236,6 +245,21 @@ const CostCenterTab: React.FC = () => {
     },
     [setPinned],
   );
+  const togglePinFromCard = useCallback(
+    (entry: CatalogEntry) => {
+      togglePin(entry);
+      // Unpinning can remove the card holding the focused star.
+      requestAnimationFrame(() => {
+        if (
+          !document.activeElement ||
+          document.activeElement === document.body
+        ) {
+          searchRef.current?.focus();
+        }
+      });
+    },
+    [togglePin],
+  );
 
   const pinnedEntries = useMemo(
     () =>
@@ -262,6 +286,7 @@ const CostCenterTab: React.FC = () => {
       .slice(0, limit);
   }, [pinnedEntries, modelsUsed, byIdentity]);
 
+  const drawerEntry = drawerTarget?.entry;
   const openDrawer = (target: DrawerTarget) => {
     rememberFocus();
     drawerKey.current += 1;
@@ -320,7 +345,7 @@ const CostCenterTab: React.FC = () => {
         entries={quickAccess}
         onOpen={(entry) => openDrawer({ entry })}
         isPinned={isPinned}
-        onTogglePin={togglePin}
+        onTogglePin={togglePinFromCard}
       />
 
       <div className="mb-3 flex flex-wrap items-start gap-1.5">
@@ -340,6 +365,7 @@ const CostCenterTab: React.FC = () => {
             onOpenChipIdChange={chips.setOpenChipId}
             prefix={
               <SearchInput
+                ref={searchRef}
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
                 className="w-[260px] shrink-0"
@@ -411,6 +437,9 @@ const CostCenterTab: React.FC = () => {
           list={list}
           builtIns={builtIns ?? []}
           canEdit={canEdit}
+          isPinned={drawerEntry ? isPinned(drawerEntry) : false}
+          canPin={canPin}
+          onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}
         />
       )}
 

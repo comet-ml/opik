@@ -66,7 +66,9 @@ export const buildCatalog = (
       overridden.add(identity);
     }
     return {
-      key: `org:${row.id ?? identity}`,
+      // Keyed by model and provider, not by row, so a default that gets
+      // overridden keeps its table row (and focus) instead of remounting.
+      key: row.kind === "alias" ? `alias:${identity}` : identity,
       model: row.model,
       provider: row.provider ?? "",
       type: builtIn ? "override" : "custom",
@@ -80,7 +82,7 @@ export const buildCatalog = (
   byIdentity.forEach((builtIn, identity) => {
     if (!overridden.has(identity)) {
       entries.push({
-        key: `built-in:${identity}`,
+        key: identity,
         model: builtIn.model,
         provider: builtIn.provider,
         type: "default",

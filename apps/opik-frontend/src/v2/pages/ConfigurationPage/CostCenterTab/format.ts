@@ -10,7 +10,10 @@ export const formatPrice = (perMillion?: string) => {
   }
   const value = Number(perMillion);
   if (value >= 1) {
-    return `$${value.toFixed(2)}`;
+    return `$${value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   }
   if (value === 0 || value >= 0.001) {
     return `$${value.toFixed(3)}`;

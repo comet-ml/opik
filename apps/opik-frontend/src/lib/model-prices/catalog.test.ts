@@ -88,6 +88,35 @@ describe("buildCatalog", () => {
     expect(catalog).toHaveLength(4);
   });
 
+  it("keeps the key of a model when its default price gets overridden", () => {
+    const before = buildCatalog(builtIns, []).find(
+      (entry) => entry.model === "claude-haiku-4-5",
+    )!;
+    const after = buildCatalog(builtIns, [
+      {
+        model: "claude-haiku-4-5",
+        provider: "anthropic",
+        kind: "fixed" as const,
+        input_price: "2",
+      },
+    ]).find((entry) => entry.model === "claude-haiku-4-5")!;
+    expect(before.type).toBe("default");
+    expect(after.type).toBe("override");
+    expect(after.key).toBe(before.key);
+  });
+
+  it("gives an alias its own key next to the built-in of the same name", () => {
+    const keys = buildCatalog(builtIns, [
+      {
+        model: "gpt-5",
+        provider: "openai",
+        kind: "alias" as const,
+        alias_of: { model: "claude-haiku-4-5", provider: "anthropic" },
+      },
+    ]).map((entry) => entry.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
   it("counts the extra price fields beyond input and output", () => {
     expect(extraFields(byModel("GPT-5", "openai"))).toEqual([
       "cache_read_price",

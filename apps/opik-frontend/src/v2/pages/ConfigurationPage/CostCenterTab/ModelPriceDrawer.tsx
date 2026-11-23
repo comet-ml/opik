@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Info, Lock, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Info, Lock, Plus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -38,7 +38,12 @@ import {
   replaceOne,
   validateRow,
 } from "@/lib/model-prices";
-import { MODE_LABELS, TYPE_TAG_VARIANT, formatDay } from "./format";
+import {
+  MAX_QUICK_ACCESS,
+  MODE_LABELS,
+  TYPE_TAG_VARIANT,
+  formatDay,
+} from "./format";
 import useSaveModelPrices from "./useSaveModelPrices";
 
 export type DrawerTarget = {
@@ -63,6 +68,8 @@ const KeyName: React.FC<{ name: string }> = ({ name }) => (
   </>
 );
 
+const READ_ONLY_INPUT = "bg-muted hover:shadow-none";
+
 type ModelPriceDrawerProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -70,6 +77,9 @@ type ModelPriceDrawerProps = {
   list: ModelPriceList;
   builtIns: BuiltInPrice[];
   canEdit: boolean;
+  isPinned?: boolean;
+  canPin?: boolean;
+  onTogglePin?: () => void;
 };
 
 const initialLines = (entry?: CatalogEntry): Line[] => {
@@ -96,6 +106,9 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   list,
   builtIns,
   canEdit,
+  isPinned = false,
+  canPin = true,
+  onTogglePin,
 }) => {
   const { entry, prefill } = target;
   const isNew = !entry;
@@ -317,12 +330,45 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             <SheetTitle className="comet-title-m break-all text-left font-mono">
               {title}
             </SheetTitle>
-            <SheetClose asChild>
-              <Button variant="outline" size="icon-2xs" className="shrink-0">
-                <X />
-                <span className="sr-only">Close</span>
-              </Button>
-            </SheetClose>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {onTogglePin && (
+                <TooltipWrapper
+                  hoverOnly
+                  content={
+                    isPinned
+                      ? "Unpin from quick access"
+                      : canPin
+                        ? "Pin to quick access"
+                        : `Quick access holds ${MAX_QUICK_ACCESS} models`
+                  }
+                >
+                  <Button
+                    variant="outline"
+                    size="icon-2xs"
+                    className={cn(
+                      isPinned && "text-warning-box-text",
+                      !isPinned && !canPin && "cursor-not-allowed opacity-50",
+                    )}
+                    aria-label={
+                      isPinned
+                        ? "Unpin from quick access"
+                        : "Pin to quick access"
+                    }
+                    aria-pressed={isPinned}
+                    aria-disabled={!isPinned && !canPin}
+                    onClick={() => (isPinned || canPin) && onTogglePin()}
+                  >
+                    <Star className={cn(isPinned && "fill-current")} />
+                  </Button>
+                </TooltipWrapper>
+              )}
+              <SheetClose asChild>
+                <Button variant="outline" size="icon-2xs">
+                  <X />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </SheetClose>
+            </div>
           </div>
           <SheetDescription className="sr-only">
             {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
@@ -414,10 +460,10 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 <Input
                   id="model-price-alias-model"
                   dimension="sm"
-                  className="font-mono"
+                  className={cn("font-mono", readOnly && READ_ONLY_INPUT)}
                   placeholder="e.g. gpt-4o"
                   value={aliasModel}
-                  disabled={readOnly}
+                  readOnly={readOnly}
                   onChange={(event) => {
                     resetFeedback();
                     setAliasModel(event.target.value);
@@ -429,9 +475,10 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 <Input
                   id="model-price-alias-provider"
                   dimension="sm"
+                  className={cn(readOnly && READ_ONLY_INPUT)}
                   placeholder="The span's own provider"
                   value={aliasProvider}
-                  disabled={readOnly}
+                  readOnly={readOnly}
                   onChange={(event) => {
                     resetFeedback();
                     setAliasProvider(event.target.value);
@@ -471,16 +518,17 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 return (
                   <div key={line.id} className="space-y-1">
                     <div className="flex items-center gap-2">
-                      {line.locked ? (
+                      {line.locked || readOnly ? (
                         <div className="comet-body-s flex h-8 flex-1 items-center gap-2 rounded-md bg-muted px-3">
-                          <Lock className="size-3.5 text-light-slate" />
+                          {line.locked && (
+                            <Lock className="size-3.5 text-light-slate" />
+                          )}
                           {PRICE_LABELS[line.field]}
                         </div>
                       ) : (
                         <SelectBox
                           className="h-8 flex-1"
                           value={line.field}
-                          disabled={readOnly}
                           onChange={(field: PriceField) =>
                             updateLine(line.id, { field })
                           }
@@ -494,23 +542,21 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                         />
                       )}
                       <div className="relative flex-1">
-                        <span
-                          className={cn(
-                            "comet-body-s absolute left-3 top-1/2 -translate-y-1/2",
-                            readOnly ? "text-light-slate" : "text-foreground",
-                          )}
-                        >
+                        <span className="comet-body-s absolute left-3 top-1/2 -translate-y-1/2 text-foreground">
                           $
                         </span>
                         <Input
                           dimension="sm"
-                          className="pl-6 pr-16 font-mono"
+                          className={cn(
+                            "pl-6 pr-16 font-mono",
+                            readOnly && READ_ONLY_INPUT,
+                          )}
                           aria-label={`${
                             PRICE_LABELS[line.field]
                           } price per 1M tokens`}
                           placeholder={builtInValue ?? "No price"}
                           value={line.value}
-                          disabled={readOnly}
+                          readOnly={readOnly}
                           onChange={(event) =>
                             updateLine(line.id, { value: event.target.value })
                           }

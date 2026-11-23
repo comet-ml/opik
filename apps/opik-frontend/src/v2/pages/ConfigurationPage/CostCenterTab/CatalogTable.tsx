@@ -42,7 +42,7 @@ const Price: React.FC<{ value?: string }> = ({ value }) => {
   return formatted ? (
     <span className="whitespace-nowrap">
       <span className="font-mono text-foreground">{formatted}</span>
-      <span className="comet-body-xs ml-1 font-mono text-light-slate">
+      <span className="comet-body-xs ml-1 hidden font-mono text-light-slate min-[1400px]:inline">
         /1M tok
       </span>
     </span>
@@ -75,8 +75,18 @@ const MoreFields: React.FC<{ entry: CatalogEntry }> = ({ entry }) => {
   );
 };
 
-const WIDE_ONLY = "hidden xl:table-cell";
-const PRICE_HEAD_CLASS = cn(HEAD_CLASS, "w-[148px] text-right");
+const WIDE_ONLY = "hidden min-[1400px]:table-cell";
+const PRICE_HEAD_CLASS = cn(
+  HEAD_CLASS,
+  "w-[112px] text-right min-[1400px]:w-[156px]",
+);
+
+const PriceHead: React.FC<{ label: string }> = ({ label }) => (
+  <TableHead className={PRICE_HEAD_CLASS}>
+    {label}
+    <span className="ml-1 font-normal min-[1400px]:hidden">/1M tok</span>
+  </TableHead>
+);
 
 const Cell: React.FC<{
   children: React.ReactNode;
@@ -134,12 +144,14 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                 <SortIcon className="size-3.5" />
               </button>
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[128px] xl:w-[160px]")}>
+            <TableHead
+              className={cn(HEAD_CLASS, "w-[120px] min-[1400px]:w-[160px]")}
+            >
               Provider
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[104px]")}>Type</TableHead>
-            <TableHead className={PRICE_HEAD_CLASS}>Input</TableHead>
-            <TableHead className={PRICE_HEAD_CLASS}>Output</TableHead>
+            <TableHead className={cn(HEAD_CLASS, "w-[100px]")}>Type</TableHead>
+            <PriceHead label="Input" />
+            <PriceHead label="Output" />
             <TableHead className={cn(HEAD_CLASS, WIDE_ONLY, "w-[96px]")}>
               More
             </TableHead>
@@ -157,7 +169,7 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
             return (
               <TableRow
                 key={entry.key}
-                className="group cursor-pointer"
+                className="group cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                 onClick={() => onOpen(entry)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" && event.key !== " ") return;
