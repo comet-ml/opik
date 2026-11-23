@@ -31,17 +31,17 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-@pytest.mark.parametrize("hardening", [None, "", "false", "False"])
-def test_containers_are_not_hardened_without_setting(monkeypatch, hardening):
-    if hardening is not None:
-        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+@pytest.mark.parametrize("hardening", ["false", "False"])
+def test_containers_are_not_hardened_when_turned_off(monkeypatch, hardening):
+    monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
 
     assert sandbox_hardening_options() == {}
 
 
-@pytest.mark.parametrize("hardening", ["true", "True"])
+@pytest.mark.parametrize("hardening", [None, "", "true", "True"])
 def test_containers_are_hardened_with_defaults(monkeypatch, hardening):
-    monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+    if hardening is not None:
+        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
 
     assert sandbox_hardening_options() == HARDENED_DEFAULTS
 
@@ -168,10 +168,8 @@ def config_paths(tmp_path, monkeypatch):
     return operator_config_path, hardened_config_path
 
 
-@pytest.mark.parametrize("hardening", [None, "false"])
-def test_entrypoint_contract_prints_nothing_when_off(monkeypatch, capsys, config_paths, hardening):
-    if hardening is not None:
-        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+def test_entrypoint_contract_prints_nothing_when_off(monkeypatch, capsys, config_paths):
+    monkeypatch.setenv(HARDENING_ENV_VAR, "false")
 
     docker_daemon_config.main()
 
@@ -179,8 +177,10 @@ def test_entrypoint_contract_prints_nothing_when_off(monkeypatch, capsys, config
     assert not config_paths[1].exists()
 
 
-def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, config_paths):
-    monkeypatch.setenv(HARDENING_ENV_VAR, "true")
+@pytest.mark.parametrize("hardening", [None, "true"])
+def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, config_paths, hardening):
+    if hardening is not None:
+        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
 
     docker_daemon_config.main()
 

@@ -101,6 +101,7 @@ track_library(client) → Wraps methods → client.method() intercepted
 ### OpenAI Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main entry point, wraps client methods
 - `openai_chat_completions_decorator.py` - Chat completions decorator
 - `openai_responses_decorator.py` - Responses API decorator
@@ -109,6 +110,7 @@ track_library(client) → Wraps methods → client.method() intercepted
 - `response_events_aggregator.py` - Response events aggregation
 
 **Wrapped Methods**:
+
 - `chat.completions.create()` - Standard chat API
 - `beta.chat.completions.parse()` - Structured outputs
 - `responses.create()` - Responses API
@@ -118,11 +120,13 @@ track_library(client) → Wraps methods → client.method() intercepted
 ### Anthropic Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main entry point
 - `messages_create_decorator.py` - Messages decorator
 - `stream_patchers.py` - Stream/context manager patching
 
 **Wrapped Methods**:
+
 - `messages.create()` - Both standard and streaming
 - `messages.stream()` - Context manager pattern
 
@@ -135,12 +139,14 @@ Anthropic streams delta events (not complete chunks) that must be accumulated. E
 ### Bedrock Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main entry point
 - `converse/converse_decorator.py` - Converse API
 - `invoke_model/invoke_model_decorator.py` - Legacy InvokeModel API
 - `invoke_model/chunks_aggregator/` - Extensible aggregator system
 
 **Wrapped Methods**:
+
 1. `client.converse()` - Unified Converse API
 2. `client.invoke_model()` - Legacy API (multiple formats)
 3. `client.invoke_agent()` - Agent invocations
@@ -152,6 +158,7 @@ Anthropic streams delta events (not complete chunks) that must be accumulated. E
 **Solution**: Registry pattern with pluggable aggregators.
 
 **Architecture** (`invoke_model/chunks_aggregator/`):
+
 - `base.py` - `ChunkAggregator` protocol
 - `format_detector.py` - Detection registry + aggregator registry
 - `claude.py`, `nova.py`, `llama.py`, `mistral.py` - Format-specific aggregators
@@ -166,6 +173,7 @@ Anthropic streams delta events (not complete chunks) that must be accumulated. E
 ### Google GenAI Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main entry point
 - `generate_content_decorator.py` - Content generation decorator
 - `stream_wrappers.py` - Stream handling
@@ -176,6 +184,7 @@ Anthropic streams delta events (not complete chunks) that must be accumulated. E
 ### AISuite Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main entry point
 - `aisuite_decorator.py` - Decorator implementation
 
@@ -198,6 +207,7 @@ Framework execution → Fires events → Callback methods
 ### LangChain Integration
 
 **Files**:
+
 - `opik_tracer.py` - Implements `BaseTracer`
 - `langgraph_tracer_injector.py` - Graph configuration injection for LangGraph
 - `langgraph_async_context_bridge.py` - Explicit trace context propagation for LangGraph nodes via distributed headers (optional)
@@ -210,11 +220,13 @@ Framework execution → Fires events → Callback methods
 **Key Feature**: **Supports parent-child relations with external Opik spans/traces**
 
 When used within `@track` decorated functions or existing Opik trace context:
+
 - Detects existing trace in `context_storage`
 - Creates LangChain spans as children of current Opik span
 - Maintains proper hierarchy between Opik and LangChain operations
 
 Example:
+
 ```python
 @opik.track                          # Opik trace + span
 def my_function():
@@ -222,6 +234,7 @@ def my_function():
 ```
 
 **State Management**:
+
 - `_span_data_map: Dict[UUID, SpanData]` - Maps LangChain run_id to Opik span
 - `_created_traces_data_map: Dict[UUID, TraceData]` - Maps run_id to trace
 - `_externally_created_traces_ids: Set[str]` - Tracks external traces
@@ -229,11 +242,13 @@ def my_function():
 **Callback Methods** (implements full `BaseTracer` interface):
 
 **Chain callbacks**:
+
 - `_on_chain_start(run)` → Check for existing trace, create span as child if exists
 - `_on_chain_end(run)` → Finalize span, send to backend
 - `_on_chain_error(run)` → Capture error info, finalize span
 
 **LLM callbacks**:
+
 - `on_chat_model_start(...)` → Special handling for chat models
 - `_on_chat_model_start(run)` → Internal processing
 - `_on_llm_start(run)` → Create LLM span (type="llm"), extract provider
@@ -241,6 +256,7 @@ def my_function():
 - `_on_llm_error(run)` → Capture error, finalize span
 
 **Tool callbacks**:
+
 - `_on_tool_start(run)` → Create tool span (type="tool")
 - `_on_tool_end(run)` → Finalize tool span
 - `_on_tool_error(run)` → Capture error, finalize span
@@ -256,6 +272,7 @@ Error callbacks ensure spans finalized even when LangChain operations fail.
 **Solution**: Registry pattern with provider-specific extractors.
 
 Extractors:
+
 - `OpenAIUsageExtractor` - Extracts from `run.outputs.llm_output.token_usage`
 - `AnthropicUsageExtractor` - Handles Anthropic format
 - `BedrockUsageExtractor` - Handles Bedrock format
@@ -275,6 +292,7 @@ The integration provides enhanced support for LangGraph through:
 3. **Explicit Context Propagation**: `extract_current_langgraph_span_data()` helper for propagating trace context to `@track`-decorated functions via distributed headers. Not required since `OpikTracer` sets `run_inline = True`, which keeps the tracer's context in async LangGraph nodes; kept for compatibility.
 
 **Usage Pattern**:
+
 ```python
 from opik.integrations.langchain import OpikTracer, track_langgraph
 from langgraph.graph import StateGraph, START, END
@@ -295,6 +313,7 @@ result = app.invoke({"message": "Hello"})
 ```
 
 **Implementation Details**:
+
 - `langgraph_tracer_injector.py` - Injects `OpikTracer` into graph's default config
 - `langgraph_async_context_bridge.py` - Extracts the current span data from a LangGraph node config for explicit propagation; not required since `OpikTracer` sets `run_inline = True`
 - `OpikTracer.set_graph()` - Stores graph visualization in `_trace_default_metadata["_opik_graph_definition"]`
@@ -302,10 +321,12 @@ result = app.invoke({"message": "Hello"})
 ### LlamaIndex Integration
 
 **Files**:
+
 - `callback.py` - Implements `BaseCallbackHandler`
 - `event_parsing_utils.py` - Parses LlamaIndex event payloads
 
 **Event Handling**:
+
 - `on_event_start(event_type, payload, event_id, parent_id)` → Parse payload, create span
 - `on_event_end(event_type, payload, event_id)` → Parse output/usage, send span
 
@@ -314,10 +335,12 @@ result = app.invoke({"message": "Hello"})
 ### DSPy Integration
 
 **Files**:
+
 - `callback.py` - Implements `dspy.utils.callback.BaseCallback`
 - `graph.py` - Mermaid graph builder for DSPy programs
 
 **Callbacks**:
+
 - `on_module_start/end()` - DSPy module execution
 - `on_lm_start/end()` - LM calls (extracts provider/model from "provider/model" format)
 - `on_tool_start/end()` - Tool executions
@@ -325,6 +348,7 @@ result = app.invoke({"message": "Hello"})
 **Key Implementation Detail**: **Global Context Storage with Safe Operations**
 
 Uses global `OpikContextStorage` instance, enabling `opik.opik_context` API access to spans/traces created by DSPy callbacks. This allows users to:
+
 - Access current span/trace data via `opik_context.get_current_span_data()` / `opik_context.get_current_trace_data()`
 - Update spans/traces via `opik_context.update_current_span()` / `opik_context.update_current_trace()`
 
@@ -335,6 +359,7 @@ Uses global `OpikContextStorage` instance, enabling `opik.opik_context` API acce
 ### Haystack Integration
 
 **Files**:
+
 - `opik_connector.py` - Component added to pipeline
 - `opik_tracer.py` - Tracer for pipeline execution
 - `converters.py` - Convert Haystack objects to Opik format
@@ -346,6 +371,7 @@ Uses global `OpikContextStorage` instance, enabling `opik.opik_context` API acce
 ### ADK Integration
 
 **Files**:
+
 - `opik_tracer.py` - Agent callbacks
 - `patchers/adk_otel_tracer/opik_adk_otel_tracer.py` - OpenTelemetry tracer
 - `recursive_callback_injector.py` - Recursive callback injection
@@ -382,6 +408,7 @@ for creating them and working with context (it's done to benefit from reliabilit
 ### CrewAI Integration
 
 **Files**:
+
 - `opik_tracker.py` - Main tracking setup
 - `crewai_decorator.py` - Decorator for CrewAI methods
 - `flow_patchers.py` - Flow class patching
@@ -389,6 +416,7 @@ for creating them and working with context (it's done to benefit from reliabilit
 **Why Hybrid**: CrewAI methods wrapped + LiteLLM used for LLM tracking + direct provider client patching for v1.0.0+.
 
 **Approach**:
+
 1. **Method Wrapping**: Wrap `Crew.kickoff`, `Agent.execute_task`, `Task.execute_sync`
 2. **LiteLLM Delegation**: Enable `litellm.track_litellm()` (CrewAI uses LiteLLM internally for v0.x)
 3. **Flow Patching**: Patch `Flow.__init__` to auto-wrap dynamically registered methods (v1.0.0+ only)
@@ -406,6 +434,7 @@ for creating them and working with context (it's done to benefit from reliabilit
    - Ensures integration doesn't fail if some optional dependencies are missing
 
 **Usage**:
+
 ```python
 # For CrewAI v0.x (LiteLLM-based)
 track_crewai(project_name="my-project")
@@ -432,6 +461,7 @@ track_crewai(project_name="my-project", crew=crew)  # crew argument enables LLM 
 **Files**: `stream_patchers.py` in each integration
 
 **Approach**:
+
 1. Save original `__iter__` from class
 2. Create wrapper that accumulates chunks
 3. Replace class method: `Stream.__iter__ = wrapper`
@@ -442,6 +472,7 @@ track_crewai(project_name="my-project", crew=crew)  # crew argument enables LLM 
 **Key Pattern - Context Pop Before Streaming**:
 
 Before returning stream, pop span/trace from context:
+
 ```python
 def _streams_handler(self, output, ...):
     if is_stream(output):
@@ -455,6 +486,7 @@ def _streams_handler(self, output, ...):
 **Key Pattern - Finalization Guarantee**:
 
 All stream wrappers use `finally`:
+
 ```python
 def wrapper(self):
     try:
@@ -474,6 +506,7 @@ def wrapper(self):
 **Used by**: Anthropic (`MessageStreamManager`)
 
 **Approach**:
+
 - Patch `__enter__` and `__exit__` of stream manager
 - Accumulate during iteration (between enter/exit)
 - Finalize in `__exit__`
@@ -497,6 +530,7 @@ Suitable for stream managers that use `with` statement pattern.
 **Location**: `opik/llm_usage/opik_usage.py`
 
 All providers map to standardized format:
+
 ```python
 class OpikUsage(pydantic.BaseModel):
     completion_tokens: Optional[int]
@@ -510,6 +544,7 @@ class OpikUsage(pydantic.BaseModel):
 **Location**: `opik/llm_usage/opik_usage_factory.py`
 
 Registry with builder functions per provider:
+
 ```python
 _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[Provider, List[Callable]] = {
     LLMProvider.OPENAI: [
@@ -523,12 +558,14 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[Provider, List[Callable]] = {
 ```
 
 **Process**:
+
 1. Integration extracts usage dict from response
 2. Calls `build_opik_usage(provider, usage_dict)`
 3. Factory tries each builder (supports multiple formats per provider)
 4. Returns standardized `OpikUsage`
 
 **Extensibility**: Add new provider by:
+
 1. Create `MyProviderUsage` class
 2. Add `from_myprovider_dict()` to `OpikUsage`
 3. Register in factory
@@ -538,6 +575,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[Provider, List[Callable]] = {
 **Location**: `opik/types.py`
 
 Supported providers for cost tracking:
+
 - `OPENAI`, `ANTHROPIC`, `BEDROCK`
 - `GOOGLE_VERTEXAI`, `GOOGLE_AI`
 - `COHERE`, `GROQ`
@@ -546,12 +584,14 @@ Supported providers for cost tracking:
 ### Cost Calculation
 
 **SDK Responsibility**: Provide data
+
 - `model`: Model name (e.g., "gpt-4")
 - `provider`: Provider enum
 - `usage`: Token counts (OpikUsage)
 - `total_cost`: Optional override
 
 **Backend Responsibility**: Calculate cost
+
 - Pricing tables (model → price per token)
 - Region-specific pricing (Bedrock)
 - Token usage multiplication
@@ -561,16 +601,19 @@ Supported providers for cost tracking:
 ## Summary
 
 **Integration Patterns**:
+
 - **Method Patching**: OpenAI, Anthropic, Bedrock, GenAI, AISuite
 - **Callback**: LangChain, LlamaIndex, DSPy, Haystack
 - **Hybrid**: ADK (callbacks + OTel), CrewAI (methods + LiteLLM)
 
 **Streaming Strategies**:
+
 - Class method patching (OpenAI, Anthropic Stream)
 - Context manager patching (Anthropic MessageStreamManager)
 - Generator wrapper (Bedrock, GenAI)
 
 **Key Patterns**:
+
 - **Idempotent tracking**: `opik_tracked` marker prevents double-wrapping
 - **Context pop for streams**: Pop before returning stream (consumed later)
 - **Finalization guarantee**: `finally` blocks ensure span completion
@@ -578,6 +621,7 @@ Supported providers for cost tracking:
 - **Protocol-based**: Clear extension interfaces
 
 **Notable Implementations**:
+
 - **Bedrock**: Extensible aggregator system (add formats without modifying code)
 - **ADK**: OpenTelemetry interception (single tracing backend)
 - **LangChain**: External context support (composes with `@track`)
@@ -585,11 +629,13 @@ Supported providers for cost tracking:
 - **CrewAI**: LiteLLM delegation (reuses existing integration)
 
 For implementation details, see source code in:
+
 - `opik/integrations/` - All integration implementations
 - `opik/llm_usage/` - Usage tracking and conversion
 - `opik/decorator/` - Base decorator and streaming utilities
 
 For more information, see:
+
 - [API and Data Flow](API_AND_DATA_FLOW.md) - Core SDK architecture
 - [Evaluation](EVALUATION.md) - Evaluation framework
 - [Testing](TESTING.md) - Testing integrations

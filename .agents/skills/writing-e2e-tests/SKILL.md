@@ -107,6 +107,7 @@ docker exec opik-frontend-1 sh -c 'grep -r "your-testid" /usr/share/nginx/html/ 
 ```
 
 > **Network note:** if the rebuilt container loses connectivity to the backend (502 errors), the container may have ended up on the wrong Docker network. Fix it:
+>
 > ```bash
 > docker network disconnect opik-opik_default opik-frontend-1
 > docker network connect opik-opik_default opik-frontend-1

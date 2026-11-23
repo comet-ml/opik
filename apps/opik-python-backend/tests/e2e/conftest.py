@@ -24,9 +24,16 @@ import pytest
 import opik
 
 from llm_constants import ANTHROPIC_CLAUDE_HAIKU, OPENAI_GPT_MINI
+from opik_backend.executor_process import PROCESS_NETWORK_ISOLATION_ENV_VAR
 from opik_backend.jobs.optimizer import process_optimizer_job
 
 _PROVIDER = "anthropic"
+
+
+@pytest.fixture(autouse=True)
+def process_workers_unisolated(monkeypatch):
+    """Optimizations run on the CI runner, which is not root on Python 3.14 as isolation needs."""
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false")
 
 
 _PROVIDER_SECRET_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}

@@ -198,9 +198,10 @@ class _IsolationFailureLog:
             self._logged = True
         # cause, when this process raised it, adds its traceback to the same line.
         logger.error(
-            f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({reason}). "
+            f"{PROCESS_NETWORK_ISOLATION_ENV_VAR} is on but process workers cannot be isolated ({reason}). "
             f"It needs Linux and Python {_TEMPLATE_PYTHON[0]}.{_TEMPLATE_PYTHON[1]}, with python-backend running as "
-            f"root (CAP_SETUID and CAP_SETGID, granted by default). No process worker will start until then.",
+            f"root (CAP_SETUID and CAP_SETGID, granted by default). No process worker will start until then, "
+            f"or until {PROCESS_NETWORK_ISOLATION_ENV_VAR} is set to false.",
             exc_info=cause,
         )
 
@@ -256,16 +257,16 @@ def terminate_worker(worker):
 
 
 def isolation_enabled() -> bool:
-    """Opt-in, so installs that run python-backend as non-root keep working unchanged.
+    """On when unset or empty; installs that run python-backend as non-root set it to false.
 
-    Any value other than true/false (any case) or empty raises, so a typo fails startup
+    Any value other than true/false (any case) raises, so a typo fails startup
     instead of leaving workers unisolated.
     """
     value = os.getenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "")
-    if value.lower() in ("", "false"):
-        return False
-    if value.lower() == "true":
+    if value.lower() in ("", "true"):
         return True
+    if value.lower() == "false":
+        return False
     raise ValueError(f"{PROCESS_NETWORK_ISOLATION_ENV_VAR} must be true or false, not {value!r}")
 
 

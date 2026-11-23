@@ -87,7 +87,7 @@ Produce:
 
 - **Verdict** — classification (regression / flake / environment-or-selector) + a confidence level.
 - **Evidence** — the trace step, the error, the history pattern, and the correlated change (if any), each cited.
-- **Proposed fix** — specific. For a regression: the code/selector/poll change to make. For a flake: a poll instead of a fixed wait, a quarantine, or "no code fix — known flaky, retry." 
+- **Proposed fix** — specific. For a regression: the code/selector/poll change to make. For a flake: a poll instead of a fixed wait, a quarantine, or "no code fix — known flaky, retry."
 
 Do **not** edit anything. If the developer wants the fix applied, hand off to `writing-e2e-tests`.
 
