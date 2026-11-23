@@ -144,7 +144,7 @@ public class TopicsArrivalService {
         // Set by any failure: arrival does nothing more this tick.
         private final AtomicBoolean stopped = new AtomicBoolean();
         // Per workspace: the time its steps took this tick.
-        private final Map<String, AtomicLong> spentNanos = new ConcurrentHashMap<>();
+        private final Map<String, AtomicLong> spentNanosByWorkspace = new ConcurrentHashMap<>();
 
         private Tick(boolean enabled) {
             this.enabled = enabled;
@@ -168,7 +168,7 @@ public class TopicsArrivalService {
                     return Mono.<Void>empty();
                 }
                 var now = clock.instant();
-                var spent = spentNanos.computeIfAbsent(workspaceId, __ -> new AtomicLong());
+                var spent = spentNanosByWorkspace.computeIfAbsent(workspaceId, __ -> new AtomicLong());
                 var left = config.getArrival().getTimeout().toJavaDuration().minusNanos(spent.get());
                 var until = min(now.plus(left), tickDeadline);
                 if (Duration.between(now, until).compareTo(MIN_TIME) < 0) {
