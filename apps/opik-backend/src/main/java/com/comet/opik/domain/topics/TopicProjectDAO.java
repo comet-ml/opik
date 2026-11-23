@@ -245,6 +245,15 @@ public interface TopicProjectDAO {
     Optional<TopicProject.RunStatus> findRunStatus(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId, @Bind("runId") UUID runId);
 
+    /** True when the project's attempt is {@code runId} and a pod claimed it. */
+    @SqlQuery("""
+            SELECT COUNT(*) > 0 FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+                AND run_started_at IS NOT NULL
+            """)
+    boolean isClaimed(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId);
+
     /** The run's error code, empty unless the project's attempt is {@code runId}, failed. */
     @SqlQuery("""
             SELECT run_error_code FROM topic_projects
