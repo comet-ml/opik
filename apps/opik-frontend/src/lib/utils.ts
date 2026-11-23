@@ -15,8 +15,8 @@ import isString from "lodash/isString";
 import isPlainObject from "lodash/isPlainObject";
 import mapValues from "lodash/mapValues";
 import pickBy from "lodash/pickBy";
+import isEqual from "lodash/isEqual";
 import { twMerge } from "tailwind-merge";
-import isEqual from "fast-deep-equal";
 import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
@@ -379,6 +379,7 @@ export const removeUndefinedKeys = <T>(value: T): T => {
   return value;
 };
 
+// lodash, not fast-deep-equal, which calls a key named "valueOf" or "toString" as a method.
 export const isLooseEqual = <T>(a: T, b: T): boolean => {
   return isEqual(removeUndefinedKeys(a), removeUndefinedKeys(b));
 };

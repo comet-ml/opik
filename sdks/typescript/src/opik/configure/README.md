@@ -24,7 +24,7 @@ npx opik-ts configure --use-local
 ```
 
 This skips API key and workspace prompts and automatically configures for local
-deployment (http://localhost:5173/api).
+deployment (<http://localhost:5173/api>).
 
 # Options
 

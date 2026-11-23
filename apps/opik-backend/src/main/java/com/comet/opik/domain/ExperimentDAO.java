@@ -1791,8 +1791,8 @@ public class ExperimentDAO {
                 LIMIT 1 BY id
             )
             WHERE type = 'regular'
-            <if(dataset_version_id)>
-            AND (dataset_version_id = :dataset_version_id
+            <if(dataset_version_ids)>
+            AND (dataset_version_id IN :dataset_version_ids
             <if(include_unversioned)>OR dataset_version_id = ''<endif>)
             <endif>
             SETTINGS log_comment = '<log_comment>'
@@ -2603,21 +2603,25 @@ public class ExperimentDAO {
     }
 
     @WithSpan
-    public Mono<Set<UUID>> findIdsByDatasetId(@NonNull UUID datasetId, UUID datasetVersionId,
+    /**
+     * @param datasetVersionIds empty for every version, otherwise only experiments run against one of them
+     */
+    public Mono<Set<UUID>> findIdsByDatasetId(@NonNull UUID datasetId, @NonNull Set<UUID> datasetVersionIds,
             boolean includeUnversioned) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND_IDS_BY_DATASET_ID,
                             "find_experiment_ids_by_dataset_id", workspaceId, userName, datasetId);
-                    if (datasetVersionId != null) {
-                        template.add("dataset_version_id", true);
+                    if (!datasetVersionIds.isEmpty()) {
+                        template.add("dataset_version_ids", true);
                         template.add("include_unversioned", includeUnversioned);
                     }
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("dataset_id", datasetId);
-                    if (datasetVersionId != null) {
-                        statement.bind("dataset_version_id", datasetVersionId.toString());
+                    if (!datasetVersionIds.isEmpty()) {
+                        statement.bind("dataset_version_ids",
+                                datasetVersionIds.stream().map(UUID::toString).toArray(String[]::new));
                     }
                     return Flux.from(statement.execute());
                 }))

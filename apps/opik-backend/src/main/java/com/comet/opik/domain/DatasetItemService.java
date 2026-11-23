@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -13,6 +14,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
@@ -69,6 +71,8 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.infrastructure.FilterUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static java.util.stream.Collectors.toUnmodifiableSet;
+import static org.apache.commons.collections4.SetUtils.emptyIfNull;
 
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
@@ -95,6 +99,9 @@ public interface DatasetItemService {
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(DatasetItemStreamRequest request, List<DatasetItemFilter> filters);
+
+    Flux<ExperimentItem> streamExperimentItems(UUID datasetId, DatasetExperimentItemStreamRequest request,
+            List<DatasetItemFilter> filters, String workspaceId);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -1382,19 +1389,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     private Mono<DatasetItemPage> getItemsWithAllDatasetExperimentItems(DatasetItemSearchCriteria criteria,
             int page, int size, String workspaceId) {
-        UUID versionId = null;
-        boolean includeUnversioned = false;
-        if (StringUtils.isNotBlank(criteria.experimentsVersionHashOrTag())) {
-            versionId = versionService.resolveVersionId(workspaceId, criteria.datasetId(),
-                    criteria.experimentsVersionHashOrTag());
-            includeUnversioned = versionId.equals(
-                    versionService.getLatestVersionId(criteria.datasetId(), workspaceId).orElse(null));
-        }
+        log.info("Finding dataset items with all experiment items for dataset '{}', page '{}', size '{}'",
+                criteria.datasetId(), page, size);
 
-        log.info("Finding dataset items with all experiment items for dataset '{}', version '{}', page '{}', size '{}'",
-                criteria.datasetId(), versionId, page, size);
-
-        return experimentDAO.findIdsByDatasetId(criteria.datasetId(), versionId, includeUnversioned)
+        return findDatasetExperimentIds(workspaceId, criteria.datasetId(), criteria.experimentsDatasetVersions())
                 .flatMap(experimentIds -> {
                     if (experimentIds.isEmpty()) {
                         return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
@@ -1402,6 +1400,51 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return getItemsWithExperimentItems(criteria.toBuilder().experimentIds(experimentIds).build(),
                             page, size, workspaceId);
                 });
+    }
+
+    @Override
+    public Flux<ExperimentItem> streamExperimentItems(@NonNull UUID datasetId,
+            @NonNull DatasetExperimentItemStreamRequest request, @NonNull List<DatasetItemFilter> filters,
+            @NonNull String workspaceId) {
+        // Resolves the versions eagerly, so an unknown version fails the request before the stream starts
+        var experimentIdsMono = findDatasetExperimentIds(workspaceId, datasetId, request.datasetVersions());
+
+        return experimentIdsMono.flatMapMany(experimentIds -> {
+            if (experimentIds.isEmpty()) {
+                return Flux.empty();
+            }
+            return versionDao.streamExperimentItems(DatasetExperimentItemStreamCriteria.builder()
+                    .datasetId(datasetId)
+                    .experimentIds(experimentIds)
+                    .fallbackVersionId(
+                            getFallbackVersionId(datasetId, workspaceId).map(UUID::toString).orElse(""))
+                    .filters(filters)
+                    .limit(request.limit())
+                    .lastRetrievedExperimentId(request.lastRetrievedExperimentId())
+                    .lastRetrievedId(request.lastRetrievedId())
+                    .truncate(request.truncate())
+                    .build());
+        });
+    }
+
+    /**
+     * Regular experiments on the dataset, optionally only those run against one of the given versions (hash or
+     * tag; empty means every version). Experiments created before dataset versioning carry no version and match
+     * only when the latest version is among the requested ones. Versions are resolved on call, not on
+     * subscription, so an unknown one fails the request before any query runs.
+     */
+    private Mono<Set<UUID>> findDatasetExperimentIds(String workspaceId, UUID datasetId,
+            Set<String> versionHashesOrTags) {
+        Set<UUID> versionIds = emptyIfNull(versionHashesOrTags).stream()
+                .map(hashOrTag -> versionService.resolveVersionId(workspaceId, datasetId, hashOrTag))
+                .collect(toUnmodifiableSet());
+        boolean includeUnversioned = !versionIds.isEmpty() && versionService
+                .getLatestVersionId(datasetId, workspaceId).map(versionIds::contains).orElse(false);
+
+        log.info("Finding experiments for dataset '{}', versions '{}', include unversioned '{}'", datasetId,
+                versionIds, includeUnversioned);
+
+        return experimentDAO.findIdsByDatasetId(datasetId, versionIds, includeUnversioned);
     }
 
     private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,

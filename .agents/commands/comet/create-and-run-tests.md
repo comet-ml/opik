@@ -39,24 +39,28 @@ This workflow will:
 ### 2. Project-Specific Test Setup
 
 #### **Backend (Java)**
+
 - **Framework**: JUnit 5, AssertJ, PODAM, Testcontainers
 - **Test organization**: Mirror `src/main/java` structure in `src/test/java`
 - **Naming conventions**: `shouldCreateUser_whenValidRequest`, `shouldThrowBadRequestException_whenInvalidInput`
 - **Test location**: `apps/opik-backend/src/test/java/`
 
 #### **Frontend (TypeScript/React)**
+
 - **Framework**: Vitest, Playwright, React Testing Library
 - **Test organization**: Co-located with components or in dedicated test directories
 - **Naming conventions**: `should render user profile`, `should handle form submission`
 - **Test location**: `apps/opik-frontend/src/` (unit) or `tests_end_to_end/e2e/` (cross-stack)
 
 #### **Python SDK**
+
 - **Framework**: pytest, fake_backend fixture, testlib utilities
 - **Test organization**: Mirror `src/opik` structure in `tests/`
 - **Naming conventions**: `test_create_user__happyflow`, `test_create_user__when_invalid_email__throws_bad_request_exception`
 - **Test location**: `sdks/python/tests/`
 
 #### **TypeScript SDK**
+
 - **Framework**: Vitest, node-fetch mocking
 - **Test organization**: Mirror source structure in `tests/`
 - **Naming conventions**: `should create user when valid request`, `should throw error when invalid input`
@@ -67,6 +71,7 @@ This workflow will:
 ### 3. Run Relevant Tests
 
 - **Execute relevant tests** based on project type and changes:
+
   ```bash
   # Backend - Run specific test classes or packages
   mvn test -Dtest="UserServiceTest"
@@ -83,6 +88,7 @@ This workflow will:
   # TypeScript SDK - Run specific test files
   npm test -- UserService.test.ts
   ```
+
 - **Capture output**: Record test results, failures, and coverage information
 - **Identify gaps**: Note which functionality lacks test coverage
 
@@ -112,6 +118,7 @@ This workflow will:
 ### 6. Create Missing Tests
 
 #### **Backend Test Creation**
+
 - **Follow established patterns**: Use existing test classes as templates
 - **Test organization**: Create tests in appropriate package structure
 - **Use PODAM**: Generate test data with `PodamFactoryUtils.newPodamFactory()`
@@ -142,6 +149,7 @@ void shouldCreateUser_whenValidRequest() {
 ```
 
 #### **Frontend Test Creation**
+
 - **Component testing**: Test React components with React Testing Library
 - **Hook testing**: Test custom hooks in isolation
 - **Integration testing**: Test component interactions and data flow
@@ -163,6 +171,7 @@ test('should render user profile with data', async () => {
 ```
 
 #### **Python SDK Test Creation**
+
 - **Use fake_backend**: For integration tests that create traces/spans
 - **Follow naming conventions**: Use descriptive test names with double underscores
 - **Use testlib utilities**: Leverage `TraceModel`, `SpanModel`, `assert_equal`
@@ -182,6 +191,7 @@ def test_create_user__happyflow(fake_backend):
 ```
 
 #### **TypeScript SDK Test Creation**
+
 - **Test public API**: Focus on testing the public interface
 - **Mock network calls**: Use Vitest to mock HTTP requests
 - **Test error handling**: Cover error scenarios and edge cases
@@ -228,16 +238,19 @@ test('should create user when valid request', async () => {
 ### 9. Fix Test Issues Systematically
 
 #### **Flaky Test Fixes**
+
 - **Add proper waiting**: Use appropriate synchronization mechanisms
 - **Fix race conditions**: Ensure proper test isolation
 - **Stabilize test data**: Use consistent, predictable test data
 
 #### **Broken Test Fixes**
+
 - **Update test expectations**: Align tests with current implementation
 - **Fix mock configurations**: Update mocks to match new interfaces
 - **Correct assertions**: Fix test assertions to match expected behavior
 
 #### **New Failure Fixes**
+
 - **Review recent changes**: Understand what caused the failures
 - **Update test logic**: Modify tests to match new requirements
 - **Add missing coverage**: Create tests for new functionality
@@ -256,11 +269,13 @@ test('should create user when valid request', async () => {
 ### 11. Quality Assurance
 
 #### **Test Coverage Review**
+
 - **Check coverage metrics**: Ensure adequate test coverage
 - **Identify gaps**: Look for untested code paths
 - **Add edge case tests**: Test boundary conditions and error scenarios
 
 #### **Test Quality Review**
+
 - **Follow naming conventions**: Ensure tests follow established patterns
 - **Check test isolation**: Verify tests don't depend on each other
 - **Review test data**: Ensure test data is realistic and varied
@@ -272,6 +287,7 @@ test('should create user when valid request', async () => {
 
 - **Stage test files**: Add new and modified test files
 - **Follow commit conventions**: Use appropriate commit message format
+
   ```bash
   # For new tests
   git commit -m "Revision X: Add comprehensive tests for <feature>"
@@ -279,6 +295,7 @@ test('should create user when valid request', async () => {
   # For test fixes
   git commit -m "Revision X: Fix failing test cases"
   ```
+
 - **Push changes**: Update the remote branch with test improvements
 
 ---
@@ -301,21 +318,25 @@ test('should create user when valid request', async () => {
 ## Error Handling
 
 ### **Framework Detection Errors**
+
 - **Unknown project type**: Provide manual project type selection
 - **Missing testing framework**: Guide user through framework setup
 - **Configuration issues**: Help resolve testing configuration problems
 
 ### **Test Execution Errors**
+
 - **Build failures**: Fix compilation issues before running tests
 - **Dependency issues**: Resolve missing or conflicting dependencies
 - **Environment problems**: Help set up proper testing environment
 
 ### **Test Creation Errors**
+
 - **Pattern violations**: Ensure tests follow established conventions
 - **Missing dependencies**: Add required testing dependencies
 - **Configuration issues**: Fix test configuration problems
 
 ### **Test Fix Errors**
+
 - **Complex failures**: Break down complex test issues into manageable parts
 - **Mock configuration**: Help configure mocks correctly
 - **Assertion problems**: Guide proper assertion writing
