@@ -297,7 +297,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       // so no field the dialog does not render can fail validation on a queue configured while it was
       // on. Nothing stored is touched — the payload carries no automation at all.
       automation_enabled: isAutomationEnabled
-        ? defaultQueue?.automation?.enabled ?? false
+        ? (defaultQueue?.automation?.enabled ?? false)
         : false,
       // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
       // queue can still arrive with automation and no conditions.

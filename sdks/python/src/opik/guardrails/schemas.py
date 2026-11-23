@@ -10,7 +10,6 @@ class ValidationType(str, enum.Enum):
     TOPIC = "TOPIC"
     LLM_JUDGE = "LLM_JUDGE"
     PROMPT_INJECTION = "PROMPT_INJECTION"
-    CUSTOM_CLASSIFIER = "CUSTOM_CLASSIFIER"
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -18,6 +17,9 @@ class ValidationResult(pydantic.BaseModel):
     type: ValidationType
     validation_config: Dict[str, Any]
     validation_details: Dict[str, Any]
+    # Set by the Opik backend when the check could not run; the entry then passes (the
+    # backend fails open on an outage of its inference service).
+    error: Optional[str] = None
 
 
 class ValidationResponse(pydantic.BaseModel):
@@ -25,7 +27,7 @@ class ValidationResponse(pydantic.BaseModel):
     validations: List[ValidationResult]
     # These are client side injected
     guardrail_result: Optional[CheckPublicResult] = None
-    # Set when the guardrail could not be evaluated (backend unreachable, timeout, or
-    # local guard failure). Kept on the response so the guardrail span still carries an
-    # output when failing closed, rather than only an error.
+    # Set when the guardrail could not be evaluated (backend unreachable, timeout,
+    # guardrails not available, or an LLM judge failure). Kept on the response so the
+    # guardrail span still carries an output when failing closed, rather than only an error.
     error: Optional[str] = None

@@ -2386,7 +2386,9 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    `cutover_start` fell in, so an unbounded run reports them and looks like a fidelity failure on a perfectly good
    retry. Same shape and direction as the post-rollback compare above (the **new-table** side is the superset), so reuse
    the offset `rollback.sh` printed then: the last week wholly before that `cutover_start`. It also covers the live
-   current week, which the restored original keeps writing to while the delta catches up.
+   current week, which the restored original keeps writing to while the delta catches up. If the writes were
+   re-imported first (see "Recovering the post-cutover writes"), there is no superset: the restored original already
+   holds them, so that week no longer differs on their account.
 
    `--to-week last-sealed` is the wrong token here — it tracks the calendar, so a retry run in any later week stops
    excluding the window's own week. And the same caveat carries over: a write that touched a pre-existing span during
@@ -2762,11 +2764,21 @@ ones most often worth reading).
 - **the rollback's sentinel repair** — `ALTER UPDATE end_time = NULL` / `ttft = NULL` over the flag's window restores
   both columns AND the mutation recomputes the original's MATERIALIZED `duration`, so `stale_duration` reaches 0. That
   last count exists because the behaviour was not obvious; the test settles it, which is what makes the documented
-  repair sufficient without a follow-up `MATERIALIZE COLUMN` (which would re-evaluate the same expression);
+  repair sufficient without a follow-up `MATERIALIZE COLUMN` (which would re-evaluate the same expression). A
+  **genuine** negative duration inside the window — `end_time` really before `start_time` — and a sentinel-bearing row
+  written before the window opened both come through unchanged, while a row created earlier but updated inside the
+  window is repaired, and a row carrying only one sentinel has only that column restored. So an over-matching
+  predicate, a dropped window or `last_updated_at` arm, or the two commands merged into one fails the test rather than
+  nulling client data while the counts still report success;
 - **reversibility** — stage A discards the shadow leaving the live table untouched, and stage B restores the original
   and reverse-replays so a post-cutover delete does not resurrect. **Stage C is NOT covered**, and cannot be: it
   reverses a wrap this runbook defers, so no estate reaches the state it asserts while that holds. Its SQL ships and
   is reviewed; the rehearsal's job is to confirm its topology guard REFUSES on an unwrapped estate;
+- **retrying after a stage B rollback without re-backfilling** — `spans_post_rollback_backup` renamed back to
+  `spans_local_v2` matches the live successor's pre-rollback fingerprint field-for-field (not merely its row count),
+  the delta resumes from the original `backfill_start`, the reused shadow is a superset of the restored original by
+  exactly the discarded post-cutover writes, and those writes are live again after the retry's `EXCHANGE` — except an
+  id deleted and then re-created after `cutover_start`, which stays absent, as step 3 of the retry procedure states;
 - **the wrap and its un-wrap** — the `Distributed` wrapper reads the shard transparently on one shard, and
   `--unwrap-only` restores the partitioned successor with its post-wrap writes still live (the contrast with stage C,
   which would discard them). The product side of the wrap — that span mutations route to `spans_local` under it — is

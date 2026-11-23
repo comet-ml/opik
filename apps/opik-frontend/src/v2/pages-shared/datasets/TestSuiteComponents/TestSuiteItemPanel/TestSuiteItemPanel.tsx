@@ -196,7 +196,7 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
               tags={tags}
               onAddTag={handleAddTag}
               onDeleteTag={handleDeleteTag}
-              size="sm"
+              size="md"
               align="start"
             />
           </div>

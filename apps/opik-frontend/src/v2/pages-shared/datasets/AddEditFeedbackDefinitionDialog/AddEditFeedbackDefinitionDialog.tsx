@@ -102,7 +102,7 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   const [name, setName] = useState<CreateFeedbackDefinition["name"]>(
     mode === "clone" && feedbackDefinition
       ? `${feedbackDefinition.name} (Copy)`
-      : feedbackDefinition?.name ?? "",
+      : (feedbackDefinition?.name ?? ""),
   );
   const [description, setDescription] = useState<
     CreateFeedbackDefinition["description"]

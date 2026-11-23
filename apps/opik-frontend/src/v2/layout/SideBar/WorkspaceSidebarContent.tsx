@@ -8,6 +8,7 @@ import GitHubStarListItem from "@/v2/layout/SideBar/GitHubStarListItem/GitHubSta
 import BackToProjectButton from "@/v2/layout/SideBar/BackToProjectButton";
 import { getWorkspaceSidebarMenuItems } from "@/v2/layout/SideBar/helpers/getMenuItems";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import useGuardrailsEnabled from "@/api/guardrail-policies/useGuardrailsEnabled";
 
 interface WorkspaceSidebarContentProps {
   expanded: boolean;
@@ -26,7 +27,12 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
 
   const displayName = calculateWorkspaceName(workspaceName);
 
-  const menuGroups = getWorkspaceSidebarMenuItems({ canViewDashboards });
+  const { isEnabled: canViewGuardrails } = useGuardrailsEnabled();
+
+  const menuGroups = getWorkspaceSidebarMenuItems({
+    canViewDashboards,
+    canViewGuardrails,
+  });
 
   const initial = (displayName || workspaceName).charAt(0).toUpperCase();
 

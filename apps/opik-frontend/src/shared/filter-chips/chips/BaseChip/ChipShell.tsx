@@ -3,8 +3,7 @@ import { CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
-export interface ChipShellProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ChipShellProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   applied?: boolean;
   isOpen?: boolean;
   onClear?: (source?: "chip_x") => void;

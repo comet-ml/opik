@@ -89,7 +89,8 @@ def evaluate_threads(
         num_workers: Number of concurrent workers for thread evaluation.
             Default is 8.
         max_traces_per_thread: Maximum number of traces to fetch per thread.
-            Default is 1000.
+            Default is 1000. A longer thread is evaluated on its most recent
+            traces only, so a warning is logged.
         max_threads: Maximum number of threads to evaluate, at least 1. Default is 1000.
             When the search returns this many threads, more matching threads may
             be left out, so a warning is logged.

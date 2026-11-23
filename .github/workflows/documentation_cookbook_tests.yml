@@ -16,6 +16,9 @@ on:
         options:
           - 'false'
           - 'true'
+permissions:
+  contents: read
+
 jobs:
   test-notebooks:
     runs-on: ${{ matrix.os }}
@@ -43,12 +46,12 @@ jobs:
       OPIK_SENTRY_ENABLE: False
       OPIK_ANALYTICS_ENABLE: False
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Install dependencies
         run: |
           uv pip install --system -U ipython nbconvert

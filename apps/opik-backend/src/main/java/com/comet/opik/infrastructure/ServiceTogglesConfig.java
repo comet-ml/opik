@@ -31,6 +31,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
+    @NotNull boolean guardrailsValidationsEnabled;
+    @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
     @NotNull boolean alertsEnabled;
@@ -40,6 +42,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean exportEnabled;
     @JsonProperty
     @NotNull boolean costIntelligenceEnabled;
+    @JsonProperty
+    @NotNull boolean modelPricesEnabled;
     @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
