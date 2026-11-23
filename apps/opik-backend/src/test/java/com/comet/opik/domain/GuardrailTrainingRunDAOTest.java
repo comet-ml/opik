@@ -60,16 +60,10 @@ class GuardrailTrainingRunDAOTest {
         return JsonUtils.getJsonNodeFromString(value);
     }
 
-    /** A new model and its first attempt, as the create request writes them: one transaction. */
+    /** A new model's first attempt. The runs table needs no model row: it holds no foreign key. */
     private GuardrailTrainingRun createModel(String workspaceId) {
-        var modelId = ID_GENERATOR.generate();
         var runId = ID_GENERATOR.generate();
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(GuardrailModelDAO.class).save(modelId, workspaceId, "model-" + modelId, "Flags it", USER);
-            handle.attach(GuardrailTrainingRunDAO.class).insert(runId, modelId, workspaceId, 1, CREATED_METADATA,
-                    USER);
-            return null;
-        });
+        runs.insert(runId, ID_GENERATOR.generate(), workspaceId, 1, CREATED_METADATA, USER);
         return find(runId, workspaceId);
     }
 

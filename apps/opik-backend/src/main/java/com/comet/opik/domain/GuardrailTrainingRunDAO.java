@@ -36,7 +36,7 @@ public interface GuardrailTrainingRunDAO {
     @SqlQuery(SELECT_RUNS + "WHERE id = :id AND workspace_id = :workspaceId")
     Optional<GuardrailTrainingRun> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    // The serving and latest runs of a page of models, by the ids GuardrailModelDAO reads for each.
+    // The serving and latest runs of a page of models, by the run ids read with each model.
     @SqlQuery(SELECT_RUNS + "WHERE workspace_id = :workspaceId AND id IN (<ids>)")
     @UseStringTemplateEngine
     List<GuardrailTrainingRun> findByIds(@BindList("ids") Collection<UUID> ids,

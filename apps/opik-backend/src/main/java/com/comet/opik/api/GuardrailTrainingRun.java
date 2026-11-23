@@ -4,10 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * One attempt to train a {@link GuardrailModel}. It carries its workspace because the run worker reads runs across
+ * One attempt to train a guardrail model. It carries its workspace because the run worker reads runs across
  * workspaces and needs each run's workspace for its writes and its S3 keys.
  */
 @Builder(toBuilder = true)
@@ -23,4 +24,12 @@ public record GuardrailTrainingRun(
         String createdBy,
         Instant lastUpdatedAt,
         String lastUpdatedBy) {
+
+    @Builder(toBuilder = true)
+    public record GuardrailTrainingRunPage(
+            List<GuardrailTrainingRun> content,
+            int page,
+            int size,
+            long total) implements Page<GuardrailTrainingRun> {
+    }
 }
