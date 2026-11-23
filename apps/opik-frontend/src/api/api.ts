@@ -75,6 +75,7 @@ export const LLM_MODEL_PROFILES_REST_ENDPOINT =
   "/v1/private/llm/models/profiles";
 export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
 export const AI_SPEND_REST_ENDPOINT = "/v1/private/ai-spend/";
+export const MODEL_PRICES_REST_ENDPOINT = "/v1/private/model-prices";
 export const AGENT_INSIGHTS_REST_ENDPOINT = "/v1/private/agent-insights/";
 export const GUARDRAIL_POLICIES_REST_ENDPOINT =
   "/v1/private/guardrails/policies/";
@@ -117,6 +118,9 @@ export const OLLIE_CREDITS_KEY = "ollie-credits";
 export const GUARDRAILS_ENABLED_KEY = "guardrails-enabled";
 export const GUARDRAIL_POLICIES_KEY = "guardrail-policies";
 export const GUARDRAIL_POLICY_KEY = "guardrail-policy";
+export const MODEL_PRICES_KEY = "model-prices";
+export const MODEL_PRICE_HISTORY_KEY = "model-price-history";
+export const MODELS_USED_KEY = "models-used";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

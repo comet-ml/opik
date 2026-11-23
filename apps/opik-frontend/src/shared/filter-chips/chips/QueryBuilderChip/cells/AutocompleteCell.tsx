@@ -16,6 +16,7 @@ interface AutocompleteCellProps {
   value: string;
   placeholder: string;
   options: ChipOptionsResult;
+  optionsHeading?: string;
   itemNoun: string;
   onChange: (next: string) => void;
   onPick?: (next: string) => void;
@@ -52,6 +53,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   value,
   placeholder,
   options,
+  optionsHeading = "Recently used",
   itemNoun,
   onChange,
   onPick,
@@ -164,7 +166,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
             )}
             {showResults && (
               <CommandGroup
-                heading="Recently used"
+                heading={optionsHeading || undefined}
                 className="p-0 [&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-light-slate"
               >
                 {filtered.map((item) => (

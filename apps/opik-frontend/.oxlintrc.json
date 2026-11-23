@@ -66,6 +66,22 @@
       }
     },
     {
+      "files": ["src/lib/model-prices/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*", "!.", "!./*"],
+                "message": "src/lib/model-prices is copied into comet-react, so it may import only from its own folder."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Vendor snippets, kept exactly as the vendor ships them.
       "files": ["**/snippet.js"],
       "rules": {

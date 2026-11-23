@@ -1,6 +1,7 @@
 import React, { ReactNode, useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AiSpendProvider as BaseAiSpendProvider } from "@/contexts/AiSpendContext";
+import { ModelPricesAccessProvider } from "@/contexts/ModelPricesAccessContext";
 import useAppStore, {
   useActiveWorkspaceName,
   useSetPreviousWorkspaceName,
@@ -76,7 +77,22 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     ],
   );
 
-  return <BaseAiSpendProvider value={value}>{children}</BaseAiSpendProvider>;
+  const modelPricesAccess = useMemo(
+    () => ({
+      canEdit: Boolean(isOrganizationAdmin),
+      isPending,
+      organizationName: organization?.name,
+    }),
+    [isOrganizationAdmin, isPending, organization?.name],
+  );
+
+  return (
+    <BaseAiSpendProvider value={value}>
+      <ModelPricesAccessProvider value={modelPricesAccess}>
+        {children}
+      </ModelPricesAccessProvider>
+    </BaseAiSpendProvider>
+  );
 };
 
 export default AiSpendProvider;
