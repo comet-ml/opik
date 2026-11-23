@@ -240,7 +240,7 @@ class FreeFormSqlQueryServiceTest {
                     assertThat(error).isInstanceOf(BadRequestException.class);
                     assertThat(((WebApplicationException) error).getResponse().getEntity())
                             .isEqualTo(
-                                    new ErrorMessage(List.of("Query must return exactly one column named 'result'")));
+                                    new ErrorMessage(List.of(FreeFormSqlQueryService.RESULT_SHAPE_MESSAGE)));
                 });
     }
 

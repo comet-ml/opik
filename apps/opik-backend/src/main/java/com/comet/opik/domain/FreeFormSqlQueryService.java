@@ -137,8 +137,13 @@ public class FreeFormSqlQueryService {
             "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
             "displayname", "enabledroles", "defaultroles", "getoskernelversion", "tcpport", "authenticateduser",
             "enabledprofiles", "defaultprofiles");
+    public static final String PARSE_ERROR_MESSAGE = "Query rejected: could not be parsed";
+    public static final String SETTINGS_CLAUSE_MESSAGE = "Query rejected: SETTINGS/SET clauses are not allowed";
+    public static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
+    public static final String RESULT_SHAPE_MESSAGE = "Query must return exactly one column named 'result'";
+    public static final String INVALID_JSON_RESULT_MESSAGE = "Query 'result' column must contain valid JSON produced via toJSONString(...)";
+    public static final String EXECUTION_FAILED_MESSAGE = "Query execution failed";
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
-    static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
     static final String SCALAR_SUBQUERY_MESSAGE = """
             Query rejected: a scalar subquery (a subquery used as a value, e.g. SELECT (SELECT count() FROM spans)) \
             cannot read a table; this one reads %s. Compute the value in a CTE and select from it instead, e.g. \
@@ -357,12 +362,11 @@ public class FreeFormSqlQueryService {
     private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
         if (error != null) {
             throw isSyntaxError(error)
-                    ? reject(Outcome.PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
+                    ? reject(Outcome.PARSE_ERROR, startMillis, PARSE_ERROR_MESSAGE, error)
                     : mapExecutionError(error, startMillis);
         }
         if (containsSetNode(nodeLabels)) {
-            throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
-                    "Query rejected: SETTINGS/SET clauses are not allowed", null);
+            throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsForbiddenCatalogTableNode(nodeLabels)) {
             throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
@@ -546,21 +550,19 @@ public class FreeFormSqlQueryService {
 
     private WebApplicationException mapExecutionError(Throwable error, long startMillis) {
         if (findCause(error, NoSuchColumnException.class) != null) {
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
-                    "Query must return exactly one column named 'result'", error);
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, RESULT_SHAPE_MESSAGE, error);
         }
 
         if (findCause(error, UncheckedIOException.class) != null) {
             // A non-JSON 'result' value is a bad query shape (caller's fault, not infra), so a 400 rather than a 503.
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
-                    "Query 'result' column must contain valid JSON produced via toJSONString(...)", error);
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, INVALID_JSON_RESULT_MESSAGE, error);
         }
 
         ServerException serverException = findCause(error, ServerException.class);
         if (serverException == null) {
             // No response from ClickHouse (connection/transport failure): an infrastructure problem, not a bad query,
             // so surface it as 5xx for alerting instead of a misleading 400.
-            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, "Query execution failed",
+            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, EXECUTION_FAILED_MESSAGE,
                     error);
         }
 
@@ -578,7 +580,7 @@ public class FreeFormSqlQueryService {
                     ACCESS_DENIED_MESSAGE, error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
-        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
+        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
     }
 
     private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {

@@ -45,6 +45,12 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.domain.FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE;
+import static com.comet.opik.domain.FreeFormSqlQueryService.EXECUTION_FAILED_MESSAGE;
+import static com.comet.opik.domain.FreeFormSqlQueryService.INVALID_JSON_RESULT_MESSAGE;
+import static com.comet.opik.domain.FreeFormSqlQueryService.PARSE_ERROR_MESSAGE;
+import static com.comet.opik.domain.FreeFormSqlQueryService.RESULT_SHAPE_MESSAGE;
+import static com.comet.opik.domain.FreeFormSqlQueryService.SETTINGS_CLAUSE_MESSAGE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -58,9 +64,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @DisplayName("Analytics Queries Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class AnalyticsQueriesResourceTest {
-
-    private static final String ACCESS_DENIED = "Query rejected: access denied";
-    private static final String RESULT_SHAPE_ERROR = "Query must return exactly one column named 'result'";
 
     private enum Endpoint {
         EXECUTE,
@@ -200,26 +203,27 @@ class AnalyticsQueriesResourceTest {
         return Stream.of(
                 arguments("SETTINGS clause at top level",
                         "SELECT toJSONString(map('id', toString(id))) AS result FROM traces SETTINGS max_threads = 1",
-                        "Query execution failed"),
+                        EXECUTION_FAILED_MESSAGE),
                 arguments("SETTINGS clause in a subquery",
                         "SELECT toJSONString(map('id', toString(id))) AS result FROM (SELECT id FROM traces SETTINGS max_threads = 1)",
-                        "Query rejected: SETTINGS/SET clauses are not allowed"),
+                        SETTINGS_CLAUSE_MESSAGE),
                 arguments("SETTINGS clause in a CTE",
                         "WITH t AS (SELECT id FROM traces SETTINGS max_threads = 1) SELECT toJSONString(map('id', toString(id))) AS result FROM t",
-                        "Query rejected: SETTINGS/SET clauses are not allowed"),
-                arguments("unparseable query", "SELECT FROM WHERE", "Query rejected: could not be parsed"),
+                        SETTINGS_CLAUSE_MESSAGE),
+                arguments("unparseable query", "SELECT FROM WHERE", PARSE_ERROR_MESSAGE),
                 arguments("statement stacking", "SELECT 1 AS result; SELECT 2 AS result",
-                        "Query rejected: could not be parsed"),
+                        PARSE_ERROR_MESSAGE),
                 arguments("write statement (read-only profile)",
                         "INSERT INTO traces (id, workspace_id, project_id, name) VALUES ('%s', '%s', '%s', 'x')"
                                 .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA),
-                        ACCESS_DENIED),
+                        ACCESS_DENIED_MESSAGE),
                 arguments("non-granted table",
-                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM span_weeks", ACCESS_DENIED),
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM span_weeks",
+                        ACCESS_DENIED_MESSAGE),
                 arguments("non-JSON result value", "SELECT 'not json{' AS result FROM traces",
-                        "Query 'result' column must contain valid JSON produced via toJSONString(...)"),
+                        INVALID_JSON_RESULT_MESSAGE),
                 arguments("system table (outside row policies)",
-                        "SELECT toJSONString(map('q', query)) AS result FROM system.query_log", ACCESS_DENIED))
+                        "SELECT toJSONString(map('q', query)) AS result FROM system.query_log", ACCESS_DENIED_MESSAGE))
                 .flatMap(testCase -> Stream.of(Endpoint.values())
                         .map(endpoint -> arguments(testCase.get()[0], endpoint, testCase.get()[1], testCase.get()[2])));
     }
@@ -281,7 +285,7 @@ class AnalyticsQueriesResourceTest {
     @MethodSource("forbiddenQueriesByEndpoint")
     @DisplayName("catalog and metadata reads are denied through both HTTP endpoints")
     void forbiddenQuery__thenAccessDenied(String label, Endpoint endpoint, String query) {
-        assertRejected(endpoint, query, ACCESS_DENIED);
+        assertRejected(endpoint, query, ACCESS_DENIED_MESSAGE);
     }
 
     private Stream<Arguments> catalogMergeQueriesByEndpoint() {
@@ -298,7 +302,7 @@ class AnalyticsQueriesResourceTest {
     void catalogMergeQuery__thenExecutionFailed(String tablePattern, Endpoint endpoint, String query) {
         // ClickHouse cannot find a matching table to derive the merge() schema; this is a database rejection,
         // not evidence that the application's catalog-table AST guard recognized the table function.
-        assertRejected(endpoint, query, "Query execution failed");
+        assertRejected(endpoint, query, EXECUTION_FAILED_MESSAGE);
     }
 
     private Stream<Arguments> allowedQueries() {
@@ -359,7 +363,7 @@ class AnalyticsQueriesResourceTest {
     @MethodSource("invalidResultShapesByEndpoint")
     @DisplayName("invalid result shapes return the exact contract error through both HTTP endpoints")
     void invalidResultShape__thenBadRequest(String label, Endpoint endpoint, String query) {
-        assertRejected(endpoint, query, RESULT_SHAPE_ERROR);
+        assertRejected(endpoint, query, RESULT_SHAPE_MESSAGE);
     }
 
     @Test
