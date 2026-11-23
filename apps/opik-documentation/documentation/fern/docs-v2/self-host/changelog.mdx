@@ -13,7 +13,7 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
-## Release 2.2.153, 2026-11-20
+## Release 2.3.0, 2026-11-23
 
 ### Security Change
 
@@ -27,6 +27,7 @@ Docker Compose and Helm deployments that keep the default python-backend setting
 Set either one back to `false` (in the Helm chart under `component.python-backend.env`, or as an environment variable for Docker Compose) when:
 
 - **python-backend runs as non-root with the `process` strategy.** Isolation can't be applied there, so no process worker starts and every code metric evaluation fails. The python-backend log names `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` and the step that failed. Set it to `false`.
+- **Code metrics open network connections or read environment variables under the `process` strategy.** Isolated workers can't create sockets and see only a minimal environment, so such a metric now fails. Set `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` to `false`.
 - **Code metrics write outside `/tmp`, write more than 16 MB to `/tmp`, or start more than 64 processes or threads under the `docker` strategy.** Set `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING` to `false`, or raise `PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE` and `PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT`.
 
 ## Release 2.2.101, 2026-10-14
