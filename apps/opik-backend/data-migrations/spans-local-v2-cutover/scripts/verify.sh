@@ -84,7 +84,7 @@
 #                       from the old table at startup. Every weekly run logs the anchor it used; pass it back with
 #                       --from-week to resume, and the resumed run's offsets name exactly the windows the first run's
 #                       did. Refused when later than the data's own first Monday, which would leave earlier rows out.
-#                       A resumed run on a pinned anchor labels its PASSED line RESUMED rather than PARTIAL.
+#                       A resumed run on a pinned anchor labels its verdict line RESUMED rather than PARTIAL.
 #   --io-budget-pct N   cap the compare at N% (1-100) of the volume's throughput, given by --volume-mbps. Enforced on
 #                       every query of the run as max_execution_speed_bytes, converted from disk bytes to the
 #                       uncompressed bytes ClickHouse throttles on with the two tables' own compression ratio.
@@ -495,8 +495,6 @@ resolve_week_grid() {
     fi
 }
 
-(( WINDOW_MODE == 1 )) || resolve_week_grid
-
 # The table holding the parts: the table itself, or a Distributed wrapper's target once the estate is wrapped.
 # system.parts and EXPLAIN ESTIMATE read storage, and the wrapper has none.
 storage_table() {
@@ -541,6 +539,9 @@ if [[ -n "$IO_BUDGET_PCT" ]]; then
         RATE_SOURCE="the I/O budget"
     fi
 fi
+
+# After the budget, so the grid's min/max(created_at) scans of the old table run under the cap too.
+(( WINDOW_MODE == 1 )) || resolve_week_grid
 
 # Under FINAL, servers that have use_skip_indexes_if_final_exact_mode re-read the key neighbours of every granule a skip
 # index selects. That keeps FINAL exact for a contiguous created_at window at modest cost, but the coverage slices select
@@ -849,15 +850,35 @@ else
     done
 fi
 
+# STATING THE COVERAGE IS NOT THE SAME AS DISQUALIFYING THE RUN. The runbook's Go/No-Go requires the pre-EXCHANGE gate
+# to be a FULL weekly compare, because sampling, a stride or a narrowed week range can miss a single-row deletion leak
+# and still report ok=1 — and the verdict line is what an operator quotes into that checklist, with the coverage trailing
+# behind it. So a weekly run that is not full says so in the verdict itself, PASSED or FAILED: under live updates the
+# gate normally ends in a triaged MISMATCH, so the FAILED lines need the label as much as the PASSED one. Judged on the
+# values, not on which flags were passed: an explicit --weeks-stride 1 or a --to-week at the last week is still a full
+# compare. A run that starts past week 0 on a PINNED anchor is a resumption and says so instead, naming the weeks it
+# must be paired with.
+# Window mode is a different tool (the post-swap reconciled range) and prints its own explicit bounds, so it is not
+# labelled against a gate it was never meant to satisfy.
+PARTIAL=""
+if (( WINDOW_MODE != 1 )); then
+    if (( COVERAGE != 100 || WEEKS_STRIDE != 1 || TO_WEEK != LAST_WEEK )) \
+        || { (( FROM_WEEK > 0 )) && [[ -z "$ANCHOR_PIN" ]]; }; then
+        PARTIAL=" (PARTIAL — NOT valid as the pre-EXCHANGE gate)"
+    elif (( FROM_WEEK > 0 )); then
+        PARTIAL=" (RESUMED at week $FROM_WEEK on anchor $ANCHOR — counts toward the pre-EXCHANGE gate only together with"
+        PARTIAL+=" a run on this anchor that verified weeks [0..$(( FROM_WEEK - 1 ))])"
+    fi
+fi
 # Fidelity mismatch is the hard failure, and so is a window the re-check could not decide (both exit 1).
 if (( mismatches != 0 || inconclusive != 0 || uncertifiable != 0 )); then
-    (( mismatches == 0 )) || log "FAILED: $mismatches of $checked windows mismatched." >&2
+    (( mismatches == 0 )) || log "FAILED$PARTIAL: $mismatches of $checked windows mismatched." >&2
     if (( uncertifiable != 0 )); then
-        log "FAILED: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
+        log "FAILED$PARTIAL: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
         log "        counts, so those windows are neither certified nor shown to differ. Re-run them." >&2
     fi
     if (( inconclusive != 0 )); then
-        log "FAILED: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
+        log "FAILED$PARTIAL: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
         log "        arbitrary on at least one side, so the re-check's 'no genuine difference' cannot be relied on." >&2
         log "        Triage those windows per the runbook. This is neither a mismatch nor a pass." >&2
     fi
@@ -883,25 +904,6 @@ fi
 # The PASSED line states the range it covered, so a pass can never be read as broader than it was — the same reason the
 # weekly form prints its bounds and stride. In window mode that is the explicit window, which is the whole point of the
 # mode: a reconciliation compare has to be quotable as "this exact range was checked".
-#
-# STATING THE COVERAGE IS NOT THE SAME AS DISQUALIFYING THE RUN. The runbook's Go/No-Go requires the pre-EXCHANGE gate
-# to be a FULL weekly compare, because sampling, a stride or a narrowed week range can miss a single-row deletion leak
-# and still report ok=1 — and "PASSED" is the word an operator quotes into that checklist, with the coverage trailing
-# behind it. So a weekly run that is not full says so in the verdict itself. Judged on the values, not on which flags
-# were passed: an explicit --weeks-stride 1 or a --to-week at the last week is still a full compare. A run that starts
-# past week 0 on a PINNED anchor is a resumption and says so instead, naming the weeks a pass must be paired with.
-# Window mode is a different tool (the post-swap reconciled range) and prints its own explicit bounds, so it is not
-# labelled against a gate it was never meant to satisfy.
-PARTIAL=""
-if (( WINDOW_MODE != 1 )); then
-    if (( COVERAGE != 100 || WEEKS_STRIDE != 1 || TO_WEEK != LAST_WEEK )) \
-        || { (( FROM_WEEK > 0 )) && [[ -z "$ANCHOR_PIN" ]]; }; then
-        PARTIAL=" (PARTIAL — NOT valid as the pre-EXCHANGE gate)"
-    elif (( FROM_WEEK > 0 )); then
-        PARTIAL=" (RESUMED at week $FROM_WEEK on anchor $ANCHOR — a pre-EXCHANGE gate pass only together with a run on"
-        PARTIAL+=" this anchor that verified weeks [0..$(( FROM_WEEK - 1 ))])"
-    fi
-fi
 if (( WINDOW_MODE == 1 )); then
     # "created in" rather than just the range: 000005 bounds on created_at, so a span created earlier and merely
     # updated inside the window is not in this compare (see --window-from's doc). Saying so on the PASSED line is what

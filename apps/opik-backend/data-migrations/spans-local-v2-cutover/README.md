@@ -2575,9 +2575,10 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **Resume the pre-`EXCHANGE` gate run only on a pinned anchor.** That gate (see the exit checklist) requires a full
 > compare with no narrowing, and it is the last backstop before an irreversible step. Two runs whose windows add up are
 > one compare only if they share the anchor, and with `--anchor` they do by construction rather than by luck. A run that
-> starts past week 0 on a pinned anchor prints `PASSED (RESUMED at week N on anchor <date> …)`, naming the weeks it has to
-> be paired with; the gate is met by that line together with the earlier run's log on the same anchor (its
-> `Week grid: anchor <date>` line) showing weeks `[0..N-1]` verified, at full coverage and stride 1. The two runs are one
+> starts past week 0 on a pinned anchor labels its final verdict line, `PASSED` or `FAILED`, with
+> `(RESUMED at week N on anchor <date> …)`, naming the weeks it has to be paired with. The gate is met by that run,
+> passing or failing only on differing keys that are all explained (see below), together with the earlier run's log on
+> the same anchor (its `Week grid: anchor <date>` line) showing weeks `[0..N-1]` verified, at full coverage and stride 1. The two runs are one
 > compare only if nothing wrote to the shadow between them — no `delta_replay.sh` run, no reconciliation. A delta changes
 > rows in every week, so weeks `[0..N-1]` would have been checked against an earlier copy than the rest. If a delta ran
 > in between, restart from week 0. Without `--anchor`, a run that starts past week 0 is `PARTIAL` and cannot be part of
@@ -2596,7 +2597,9 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > gate to report `MISMATCH` with a small number of `genuinely_differing_keys`, and clear each one with `--drill-down`: a
 > key whose source version has `last_updated_at` at or after the start of the last `delta_replay.sh` run is a
 > post-delta update, which the post-swap reconciliation covers. Record the count with **0 unexplained**; a differing key
-> with no such version is a fidelity failure.
+> with no such version is a fidelity failure. `--drill-down` lists at most 100 keys per window, in no particular order,
+> so a window whose list stops at 100 may hold more than it showed and cannot be cleared from it: narrow that week with
+> `--window-from`/`--window-to` until each window lists fewer than 100, or run `delta_replay.sh` again and re-verify.
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
@@ -2880,9 +2883,9 @@ walk, `--single-pass`, and `--coverage` at 1%, 10% and 50% — which the Go/No-G
 
 - refusing to report `PASSED` when the bounds selected **no** window, or when every window it compared was empty on
   both sides (a pass over nothing would be vacuous);
-- the scope a `PASSED` line claims: a full compare unlabelled, `PARTIAL` under a coverage below 100, a stride, a short
-  `--to-week` or a resume without `--anchor`, and `RESUMED` on a pinned anchor; and `--anchor`'s refusals (not a
-  Monday, later than the data's first Monday);
+- the scope a verdict line claims, on `PASSED` and `FAILED` alike: a full compare unlabelled, `PARTIAL` under a
+  coverage below 100, a stride, a short `--to-week` or a resume without `--anchor`, and `RESUMED` on a pinned anchor;
+  and `--anchor`'s refusals (not a Monday, later than the data's first Monday);
 - `--single-pass` printing the same per-week lines as the walk, batched or not, and resolving a differing week on its
   own window;
 - the estimate and ETA before the first window and the elapsed time and calibrated rate after the last, and
@@ -3140,9 +3143,9 @@ these is working the wrong problem.
       sample, stride or narrowing can miss that one row and still report `ok=1`; the driver labels such a run `PARTIAL`.
       Two things the gate does **not** rule out, because neither drops a row: `--single-pass` (with or without
       `--batch-weeks`) reports the same per-week verdicts from one read and satisfies the gate exactly as the weekly
-      walk does; and the gate may be **resumed** on a pinned `--anchor` — a `PASSED (RESUMED at week N …)` together with
-      the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no `delta_replay.sh`
-      ran between the two runs. Use whichever the Go/No-Go's measured
+      walk does; and the gate may be **resumed** on a pinned `--anchor` — a run labelled `RESUMED at week N …` together
+      with the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no
+      `delta_replay.sh` ran between the two runs. Use whichever the Go/No-Go's measured
       runtimes make affordable, run it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the
       ETA printed before the run and the runtime measured after it. Reserve coverage/ranged runs for follow-up confidence
       *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh`, and read the result for what it can be
