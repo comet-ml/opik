@@ -57,7 +57,10 @@ ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_
 # accounts. The two count shortcuts are off, and a single-shard Distributed read stays on the initiator, so every
 # read shows as a policy-filtered read in the query plan, where its scope can be verified. Re-test them on every ClickHouse upgrade (FreeFormSqlRowPolicyConformanceTest).
 pinned_settings="readonly = 1 CONST, allow_ddl = 0 CONST, serialize_query_plan = 0 CONST, make_distributed_plan = 0 CONST, enable_parallel_replicas = 0 CONST, max_parallel_replicas = 1 CONST, use_query_cache = 0 CONST, query_cache_share_between_users = 0 CONST, use_query_condition_cache = 0 CONST, enable_analyzer = 1 CONST, apply_row_policy_after_final = 1 CONST, allow_introspection_functions = 0 CONST, optimize_trivial_count_query = 0 CONST, optimize_use_implicit_projections = 0 CONST, prefer_localhost_replica = 1 CONST"
-profile_settings="${pinned_settings}, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, max_bytes_to_read = 20000000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY"
+limit_settings="max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, max_bytes_to_read = 20000000000, read_overflow_mode = 'throw', use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY"
+profile_settings="${pinned_settings}, ${limit_settings}, max_concurrent_queries_for_user = 5"
+# The cap is per replica and shared by every workspace; one dashboard of Custom Charts widgets fans out past 5.
+extended_profile_settings="${pinned_settings}, ${limit_settings}, max_concurrent_queries_for_user = 20"
 
 echo "Provisioning Agent Insights read-only ClickHouse user '${ro_user}' on ${ch_host}:${ch_port}/${ch_db}..."
 
@@ -113,7 +116,9 @@ if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"
     echo "Provisioning extended free-form SQL read-only ClickHouse user '${ro_extended_user}'..."
     statements+=(
         "CREATE USER IF NOT EXISTS ${ro_extended_user} IDENTIFIED BY '${ro_extended_pass}'"
-        "ALTER USER ${ro_extended_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
+        "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_extended_sql_profile SETTINGS ${extended_profile_settings} TO ${ro_extended_user}"
+        "ALTER SETTINGS PROFILE comet_llm_readonly_freeform_extended_sql_profile SETTINGS ${extended_profile_settings}"
+        "ALTER USER ${ro_extended_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_extended_sql_profile'"
     )
     policy_statements "${ro_extended_user}" freeform_extended_sql_isolation "${workspace_optional_project}" \
         spans traces authored_feedback_scores feedback_scores trace_threads
