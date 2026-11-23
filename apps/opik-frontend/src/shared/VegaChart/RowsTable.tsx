@@ -280,11 +280,11 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
     ),
   );
 
-  const fontsLoaded = useFontsLoaded();
+  const fontsVersion = useFontsVersion();
   const limits = useMemo(
     () => contentWidths(keys, data),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- measure again once the font loads
-    [keys, data, fontsLoaded],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measure again after each font load
+    [keys, data, fontsVersion],
   );
   // A column is never saved or drawn wider than its content or the widget, which another viewer's screen may make narrow,
   // nor narrower than the minimum.
