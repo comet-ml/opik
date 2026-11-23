@@ -6,6 +6,7 @@ import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -120,12 +121,16 @@ class TopicRunStore {
         })).doOnNext(code -> code.ifPresent(value -> countFailed(workspaceId, value)));
     }
 
-    /** {@code queued -> failed} with {@code cancelled}, for a queued run whose project or workspace left. */
-    Mono<Boolean> dropQueued(@NonNull InFlightRun run, @NonNull TopicProject.CancelReason reason) {
-        return write(dao -> dao.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason, Instant.now()))
+    /**
+     * {@code queued -> failed} with {@code cancelled}: its project or workspace left (the reason), or a run by hand was
+     * not published (no reason).
+     */
+    Mono<Boolean> dropQueued(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @Nullable TopicProject.CancelReason reason) {
+        return write(dao -> dao.dropQueued(workspaceId, projectId, runId, reason, Instant.now()))
                 .doOnNext(dropped -> {
                     if (dropped) {
-                        countFailed(run.workspaceId(), RunError.CANCELLED);
+                        countFailed(workspaceId, RunError.CANCELLED);
                     }
                 });
     }
