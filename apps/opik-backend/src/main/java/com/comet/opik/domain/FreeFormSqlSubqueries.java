@@ -40,8 +40,14 @@ class FreeFormSqlSubqueries {
             "RIGHT TABLE EXPRESSION", "TABLE EXPRESSION");
     private static final String STORED_SCALAR = "__getScalar";
     private static final Pattern TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
-    private static final Pattern FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
+    private static final Pattern FUNCTION_NAME = Pattern
+            .compile("^FUNCTION id: \\d+(?=, ).*?, function_name: ([^,]+)");
     private static final Pattern SUBQUERY = Pattern.compile("(?:^|, )is_subquery: 1(?:,|$)");
+
+    static Optional<String> resolvedFunctionName(String line) {
+        var matcher = FUNCTION_NAME.matcher(line.stripLeading());
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
 
     /** One query tree line: its label ({@code QUERY}, {@code TABLE}, {@code JOIN TREE}, ...) and its attributes. */
     private record Node(String label, String attributes, Node parent, List<Node> children) {
@@ -53,6 +59,10 @@ class FreeFormSqlSubqueries {
         Optional<String> attribute(Pattern pattern) {
             var matcher = pattern.matcher(attributes);
             return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+        }
+
+        Optional<String> functionName() {
+            return is("FUNCTION") ? resolvedFunctionName(label + " " + attributes) : Optional.empty();
         }
 
         boolean is(String expected) {
@@ -106,7 +116,7 @@ class FreeFormSqlSubqueries {
                 }
             });
         }
-        if (node.is("FUNCTION") && node.attribute(FUNCTION_NAME).filter(STORED_SCALAR::equals).isPresent()) {
+        if (node.functionName().filter(STORED_SCALAR::equals).isPresent()) {
             opaque[0] = true;
         }
         node.children().forEach(child -> collect(child, prefix, scalar, filter, opaque));
@@ -138,8 +148,7 @@ class FreeFormSqlSubqueries {
         var arguments = list.parent();
         var function = arguments == null ? null : arguments.parent();
         return list.is("LIST") && arguments != null && arguments.is("ARGUMENTS") && function != null
-                && function.is("FUNCTION")
-                && function.attribute(FUNCTION_NAME).filter(FILTER_FUNCTIONS::contains).isPresent();
+                && function.functionName().filter(FILTER_FUNCTIONS::contains).isPresent();
     }
 
     /** One node per line, indented two spaces per level: {@code LABEL id: n, key: value, ...} or a section label. */

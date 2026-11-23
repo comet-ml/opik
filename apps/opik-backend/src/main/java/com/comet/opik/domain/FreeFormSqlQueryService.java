@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -90,6 +91,7 @@ public class FreeFormSqlQueryService {
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
         PARSE_ERROR("rejected", "parse_error"),
         PERMISSION_DENIED("error", "permission_denied"),
+        FORBIDDEN_TABLE("rejected", "forbidden_table"),
         FORBIDDEN_FUNCTION("rejected", "forbidden_function"),
         SCALAR_SUBQUERY_NOT_ALLOWED("rejected", "scalar_subquery_not_allowed"),
         POLICY_UNVERIFIED("error", "policy_unverified"),
@@ -113,6 +115,8 @@ public class FreeFormSqlQueryService {
      */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
+    private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final String TABLE_EXPRESSION_AST_PREFIX = "TableExpression ";
     /**
      * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
      * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
@@ -120,8 +124,6 @@ public class FreeFormSqlQueryService {
      * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; direct
      * table references are rejected in the app even if those grants change.
      */
-    private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
-    private static final String TABLE_EXPRESSION_AST_PREFIX = "TableExpression ";
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
     private static final String TABLE_QUERY_TREE_PREFIX = "TABLE ";
     private static final String TABLE_FUNCTION_QUERY_TREE_PREFIX = "TABLE_FUNCTION ";
@@ -132,17 +134,16 @@ public class FreeFormSqlQueryService {
             FreeFormSqlAccount.EXTENDED, Set.of("spans", "traces", "authored_feedback_scores", "feedback_scores",
                     "trace_threads", "experiments", "experiment_items", "dataset_items", "dataset_item_versions"));
 
+    private static final String FUNCTION_AST_PREFIX = "Function ";
+    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
     /**
      * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
      * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
-     * identity out of both the result and the error surface. Compared lower-cased; ClickHouse function names are
-     * case-insensitive. ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such
+     * identity out of both the result and the error surface. Names are compared in lowercase so case variants of
+     * case-insensitive functions match.
+     * ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such
      * as {@code current_user} and {@code database} are Identifier nodes, not Function nodes, in EXPLAIN AST.
      */
-    private static final String FUNCTION_AST_PREFIX = "Function ";
-    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
-    private static final String FUNCTION_QUERY_TREE_PREFIX = "FUNCTION ";
-    private static final Pattern RESOLVED_FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
     private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
             "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
             "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
@@ -282,7 +283,7 @@ public class FreeFormSqlQueryService {
                     }
                     try {
                         if (containsForbiddenResolvedTable(account, queryTree)) {
-                            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
                         }
                         if (containsForbiddenResolvedMetadataFunction(queryTree)) {
                             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
@@ -348,10 +349,10 @@ public class FreeFormSqlQueryService {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsForbiddenCatalogTableNode(nodeLabels)) {
-            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsTableFunctionNode(nodeLabels)) {
-            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
@@ -555,11 +556,10 @@ public class FreeFormSqlQueryService {
     }
 
     private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {
-        return queryTree.stream().map(String::stripLeading)
-                .filter(line -> line.startsWith(FUNCTION_QUERY_TREE_PREFIX))
-                .map(RESOLVED_FUNCTION_NAME::matcher)
-                .filter(java.util.regex.Matcher::find)
-                .map(matcher -> matcher.group(1).toLowerCase(Locale.ROOT))
+        return queryTree.stream()
+                .map(FreeFormSqlSubqueries::resolvedFunctionName)
+                .flatMap(Optional::stream)
+                .map(name -> name.toLowerCase(Locale.ROOT))
                 .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
