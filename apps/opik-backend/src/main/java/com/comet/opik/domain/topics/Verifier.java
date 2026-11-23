@@ -32,7 +32,7 @@ public class Verifier {
                 .schema(TopicPrompts.VERIFY_SCHEMA)
                 .maxTokens(BASE_TOKENS + TOKENS_PER_PAIR * prompts.size())
                 .build();
-        return new NightStep.Ask<>(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
+        return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
     }
 
     private static Map<Integer, Boolean> verdicts(JsonNode answer, int pairs) {
