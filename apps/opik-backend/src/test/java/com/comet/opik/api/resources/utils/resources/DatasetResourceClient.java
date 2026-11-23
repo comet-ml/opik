@@ -4,6 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -16,6 +17,7 @@ import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
@@ -26,6 +28,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
@@ -83,6 +86,21 @@ public class DatasetResourceClient {
                 .projectId(null)
                 .projectName(null)
                 .build();
+    }
+
+    /**
+     * Asserts the status and the whole error body. The body is read as the expected error's type, since endpoints
+     * return either the Opik or the Dropwizard error shape.
+     */
+    public static void assertErrorResponse(Response response, int expectedStatus, Object expectedError) {
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        assertThat(response.readEntity(expectedError.getClass())).isEqualTo(expectedError);
+    }
+
+    public static ErrorMessage buildAmbiguousDatasetNameError(String datasetName) {
+        return new ErrorMessage(HttpStatus.SC_CONFLICT,
+                "Multiple datasets with this name exist in different projects, specify a project that contains it or use the dataset id. Dataset name: '%s'"
+                        .formatted(datasetName));
     }
 
     public Response callCreateDataset(Dataset dataset, String apiKey, String workspaceName) {
@@ -462,17 +480,25 @@ public class DatasetResourceClient {
     }
 
     public void deleteDatasetByName(String name, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        deleteDatasetByIdentifier(DatasetIdentifier.builder().datasetName(name).build(), apiKey, workspaceName);
+    }
+
+    public void deleteDatasetByIdentifier(DatasetIdentifier identifier, String apiKey, String workspaceName) {
+        try (var actualResponse = callDeleteDatasetByIdentifier(identifier, apiKey, workspaceName)) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callDeleteDatasetByIdentifier(DatasetIdentifier identifier, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(DatasetIdentifier.builder().datasetName(name).build()))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .post(Entity.json(identifier));
     }
 
     public void deleteDatasetsBatch(Set<UUID> ids, String apiKey, String workspaceName) {
@@ -594,7 +620,7 @@ public class DatasetResourceClient {
     }
 
     public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
-            String datasetVersion, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
+            String datasetVersions, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("items")
@@ -609,8 +635,8 @@ public class DatasetResourceClient {
             webTarget = webTarget.queryParam("experiment_ids", experimentIds);
         }
 
-        if (StringUtils.isNotBlank(datasetVersion)) {
-            webTarget = webTarget.queryParam("dataset_version", datasetVersion);
+        if (datasetVersions != null) {
+            webTarget = webTarget.queryParam("dataset_versions", datasetVersions);
         }
 
         if (CollectionUtils.isNotEmpty(filters)) {
@@ -985,6 +1011,31 @@ public class DatasetResourceClient {
 
     public Response callStreamDatasetItems(DatasetItemStreamRequest request, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public List<ExperimentItem> streamDatasetExperimentItems(DatasetExperimentItemStreamRequest request,
+            String apiKey, String workspaceName) {
+        try (var response = callStreamDatasetExperimentItems(request, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(String.class).lines()
+                    .filter(line -> !line.isBlank())
+                    .map(line -> JsonUtils.readValue(line, ExperimentItem.class))
+                    .toList();
+        }
+    }
+
+    public Response callStreamDatasetExperimentItems(DatasetExperimentItemStreamRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("experiments")
                 .path("items")
                 .path("stream")
                 .request()

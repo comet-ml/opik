@@ -69,36 +69,44 @@ cd sdks/typescript && npm run typecheck
 ## Workflow
 
 ### Step 1: Capture All Errors
+
 Run the failing build command and collect all error messages.
 
 ### Step 2: Categorize Errors
+
 Group by type:
+
 - Type errors (missing types, wrong types)
 - Import errors (missing imports, wrong paths)
 - Syntax errors (typos, missing brackets)
 - Dependency errors (missing packages)
 
 ### Step 3: Fix Systematically
+
 Address one category at a time, starting with most fundamental (imports before types).
 
 ### Step 4: Verify
+
 Re-run build after fixes. Repeat until passing.
 
 ## Common Fixes
 
 **Java/Maven**
+
 - Missing import → Add import statement
 - Type mismatch → Add cast or fix method signature
 - Spotless failure → Run `mvn spotless:apply`
 - Missing dependency → Check pom.xml
 
 **TypeScript**
+
 - Type error → Add type annotation
 - Missing property → Add required property
 - Import error → Fix import path
 - Null check → Add optional chaining or null check
 
 **Python**
+
 - Import error → Fix module path
 - Type hint error → Fix or remove type hint
 - Syntax error → Fix syntax
