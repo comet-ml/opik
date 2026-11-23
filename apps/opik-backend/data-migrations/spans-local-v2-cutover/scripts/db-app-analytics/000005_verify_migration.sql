@@ -202,7 +202,9 @@ SETTINGS use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 400
 -- exactly as before — the driver runs `confirm-keys`, `version-ties` and `drill-down` on that week's own window.
 --
 -- MEMORY. The old side groups every key in the range, so max_bytes_before_external_group_by bounds it by spilling.
--- optimize_aggregation_in_order is deliberately not used: the GROUP BY shares only the (workspace_id, project_id,
+-- Past that bound the whole range's state goes to the server's temporary path, about 70 bytes per key compressed,
+-- written and read back once; --io-budget-pct throttles table reads only, not this. optimize_aggregation_in_order is
+-- set to 0 so that a profile enabling it cannot bring it back: the GROUP BY shares only the (workspace_id, project_id,
 -- trace_id) prefix with the source's sorting key, so the in-order aggregator closes a group every few rows, and under
 -- FINAL it runs on one thread — several times slower than the walk.
 WITH
@@ -307,7 +309,8 @@ ORDER BY week
 -- A week present on one side only reads as 0 rows and checksum 0 on the other, the values `compare` reports for an
 -- empty side: join_use_nulls = 0 defaults the count to 0, and ifNull does the same for the old side's Nullable checksum,
 -- whose join default is NULL.
-SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, max_bytes_before_external_group_by = 4000000000;
+SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 0,
+         max_bytes_before_external_group_by = 4000000000;
 -- >>> END compare-weeks
 
 -- >>> BEGIN drill-down

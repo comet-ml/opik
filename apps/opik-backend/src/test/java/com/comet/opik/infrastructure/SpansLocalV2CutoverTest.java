@@ -4298,7 +4298,7 @@ class SpansLocalV2CutoverTest {
                 FROM src
                 FULL OUTER JOIN dst USING (week)
                 ORDER BY week
-                SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1
+                SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 0
                 """);
         var sql = renderCompare(compare, oldTable, newTable, coverage);
         return template.nonTransaction(connection -> {

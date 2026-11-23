@@ -28,9 +28,11 @@
 # every week it touches; under FINAL, use_skip_indexes_if_final_exact_mode also re-reads every selected granule's key
 # neighbours, which can widen one week to most of both tables. The default one-query-per-week walk, and each
 # confirm-keys re-check of a differing week, can therefore cost up to a full read of both tables. --single-pass reads
-# the range once and emits the same per-week verdicts (000005's compare-weeks block); it is exact, not a sample.
-# --coverage compares a time slice of every hour; it shrinks the read only as far as the tables' granules are narrow. Before the first window the driver prints
-# the estimated bytes and an ETA, and at the end the elapsed time and the rate it implies, for --throughput-mbps.
+# the range once and emits the same per-week verdicts (000005's compare-weeks block); it is exact, not a sample, but
+# its aggregation can spill the whole range's keys to the server's temporary path, which --io-budget-pct does not
+# throttle. --coverage compares a time slice of every hour; it shrinks the read only as far as the tables' granules are
+# narrow. Before the first window the driver prints the estimated bytes and an ETA, and at the end the elapsed time and
+# the rate it implies, for --throughput-mbps.
 # The PRE-EXCHANGE gate must still be a full compare — every week, full coverage — because a sample can miss a single-row
 # deletion leak and still report ok=1; it may be split across runs when they share a pinned --anchor (see --anchor).
 #
@@ -80,10 +82,12 @@
 #                       compare-weeks), instead of one query per week. Same verdict lines, same exit status; a week that
 #                       differs is resolved on its own window exactly as in the default walk. FINAL sees more of each
 #                       key's versions in one wide read, so a superseded-version artifact the weekly walk reports as
-#                       "OK — superseded-version artifact" may simply read OK here.
+#                       "OK — superseded-version artifact" may simply read OK here. Past 4 GB of aggregation state, the
+#                       range's keys spill to the server's temporary path (see the README); check its free space.
 #   --batch-weeks N     with --single-pass: N selected weeks per query rather than the whole range, so an interrupted
-#                       run keeps the verdicts of the batches it finished. Each batch can cost up to a full read of both
-#                       tables (see "Cost at this scale"), so use as few batches as resuming allows.
+#                       run keeps the verdicts of the batches it finished, and each holds only its own spill. Each batch
+#                       can cost up to a full read of both tables (see "Cost at this scale"), so use as few batches as
+#                       resuming allows.
 #   --anchor DATE       pin the week grid to DATE (YYYY-MM-DD, a Monday) instead of reading toMonday(min(created_at))
 #                       from the old table at startup. Every weekly run logs the anchor it used; pass it back with
 #                       --from-week to resume, and the resumed run's offsets name exactly the windows the first run's

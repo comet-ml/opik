@@ -2715,12 +2715,16 @@ storage-bound, with CPU largely idle. Raising
   is resolved on its own window exactly as in the walk. The one difference is in `FINAL`'s favour: a wider read sees
   more of each key's versions, so a superseded-version artifact the walk reports as `OK — superseded-version artifact`
   may read plain `OK`. The old side's `GROUP BY` covers every key in the range, bounded by
-  `max_bytes_before_external_group_by`, which spills to disk. It deliberately does not aggregate in sorting-key order:
-  that `GROUP BY` shares only a key prefix with the source's sorting key, and in-order aggregation under `FINAL` ran on
-  one thread, several times slower than the walk. `--batch-weeks N` splits the range into queries of N weeks —
-  resumable at batch granularity, but each batch can cost up to a full read of both tables, so use as few as resuming
-  allows. In a local volume test it returned the walk's verdict lines in a fraction of the walk's time; the walk stays
-  the default, and `--estimate-only` shows the two modes' estimated reads beforehand.
+  `max_bytes_before_external_group_by` (4 GB). Past it, the state of every key in the range spills to the server's
+  temporary path, about 70 bytes per key compressed in a local measurement, written and read back once: a small fraction
+  of the table read, but held all at once where the walk holds one week's, and covered by neither `--io-budget-pct` nor
+  the estimate. Check the temporary path's free space against it before the run. The block sets
+  `optimize_aggregation_in_order = 0`: that `GROUP BY` shares only a key prefix with the source's sorting key, and
+  in-order aggregation under `FINAL` ran on one thread, several times slower than the walk. `--batch-weeks N` splits the
+  range into queries of N weeks — resumable at batch granularity and holding one batch's spill, but each batch can cost
+  up to a full read of both tables, so use as few as resuming and the temporary path allow. In a local volume test it
+  returned the walk's verdict lines in a fraction of the walk's time; the walk stays the default, and `--estimate-only`
+  shows the two modes' estimated reads beforehand.
 - `--coverage PCT` compares PCT% of the rows: those created in the first `36 × PCT` seconds of every UTC hour. The slice
   is a condition on `created_at` alone, so it selects the *same* rows on both sides, every week and every hour is
   represented, and — unlike a hash of the `id` — the skip index can drop granules lying wholly outside it, so the read
@@ -2885,7 +2889,9 @@ below, alongside the other driver guards, rather than in a suite that drives SQL
 So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and the
 `verify.sh` behaviours worth separating from the rest because they decide a *verdict*
 rather than reject an argument — and a wrong verdict from a fidelity gate is the failure this whole procedure exists to
-avoid:
+avoid. The rehearsal is also where the gate's compare gets its **measured cost** on a production-sized estate — the
+walk's and `--single-pass`'s runtime, and the single pass's temporary-disk use — which the Go/No-Go's fidelity item
+records:
 
 - refusing to report `PASSED` when the bounds selected **no** window, or when every window it compared was empty on
   both sides (a pass over nothing would be vacuous);
@@ -3151,9 +3157,11 @@ these is working the wrong problem.
       `--batch-weeks`) reports the same per-week verdicts from one read and satisfies the gate exactly as the weekly
       walk does; and the gate may be **resumed** on a pinned `--anchor` — a run labelled `RESUMED at week N …` together
       with the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no
-      `delta_replay.sh` ran between the two runs. Prefer `--single-pass`, which reads each table once; run it under
-      `--io-budget-pct` on a live estate, and record the mode, the anchor, the
-      ETA printed before the run and the runtime measured after it. Reserve coverage/ranged runs for follow-up confidence
+      `delta_replay.sh` ran between the two runs. Prefer `--single-pass`, which reads each table once, where the
+      server's temporary path holds its spill (see "Feasibility at scale"; otherwise `--batch-weeks` or the walk); run
+      it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the ETA printed before the run, the
+      runtime measured after it and, for a single pass, its temporary-disk use (`ExternalAggregationCompressedBytes` in
+      `system.query_log`, by the driver's `log_comment`). Reserve coverage/ranged runs for follow-up confidence
       *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh`, and read the result for what it can be
       under live traffic: windows bound on `created_at`, so spans updated after the last delta read differ inside their
       own week and a clean `PASSED` is not generally obtainable. The gate passes when every `genuinely_differing_keys`
