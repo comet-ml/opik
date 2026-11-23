@@ -42,7 +42,7 @@ public class TracesUpdated extends BaseEvent {
         this(projectIds, traceIds, workspaceId, userName, traceUpdate, workspaceName, traceIdToProjectId, null);
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     private TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate, @Nullable String workspaceName,
             @Nullable Map<UUID, UUID> traceIdToProjectId, @Nullable String organizationId) {
