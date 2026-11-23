@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { JsonNodePublic } from "./JsonNodePublic.js";
+import { LlmAsJudgeModelParametersPublicApi } from "./LlmAsJudgeModelParametersPublicApi.js";
 
 export const LlmAsJudgeModelParametersPublic: core.serialization.ObjectSchema<
     serializers.LlmAsJudgeModelParametersPublic.Raw,
@@ -13,6 +14,7 @@ export const LlmAsJudgeModelParametersPublic: core.serialization.ObjectSchema<
     temperature: core.serialization.number().optional(),
     seed: core.serialization.number().optional(),
     customParameters: core.serialization.property("custom_parameters", JsonNodePublic.optional()),
+    api: LlmAsJudgeModelParametersPublicApi.optional(),
 });
 
 export declare namespace LlmAsJudgeModelParametersPublic {
@@ -21,5 +23,6 @@ export declare namespace LlmAsJudgeModelParametersPublic {
         temperature?: number | null;
         seed?: number | null;
         custom_parameters?: JsonNodePublic.Raw | null;
+        api?: LlmAsJudgeModelParametersPublicApi.Raw | null;
     }
 }

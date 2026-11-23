@@ -351,8 +351,8 @@ export const isVideoContent = (content?: Partial<VideoContent>) => {
   if (content.type === "file") {
     return Boolean(
       content.file?.file_id ||
-        content.file?.file_data ||
-        (content.file?.format && content.file.format.startsWith("video/")),
+      content.file?.file_data ||
+      (content.file?.format && content.file.format.startsWith("video/")),
     );
   }
 
@@ -426,8 +426,8 @@ export const isAudioContent = (content?: Partial<AudioContent>) => {
   if (content.type === "file") {
     return Boolean(
       content.file?.file_id ||
-        content.file?.file_data ||
-        (content.file?.format && content.file.format.startsWith("audio/")),
+      content.file?.file_data ||
+      (content.file?.format && content.file.format.startsWith("audio/")),
     );
   }
 

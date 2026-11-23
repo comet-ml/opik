@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ExpandedState } from "@tanstack/react-table";
 import isFunction from "lodash/isFunction";
 
@@ -23,8 +23,11 @@ export const useExpandingConfig = ({
   groups,
   maxExpandedDeepestGroups = Number.MAX_SAFE_INTEGER,
 }: UseExpandingConfigProps) => {
-  const [expanded, setExpanded] = useState<ExpandedState>({});
-  const deepestOrderRef = useRef<string[]>([]);
+  // The deepest-row expansion order lives in state with `expanded`, so the updater stays pure.
+  const [{ expanded }, setExpandingState] = useState<{
+    expanded: ExpandedState;
+    deepestOrder: string[];
+  }>({ expanded: {}, deepestOrder: [] });
 
   const maxDepth = groups?.length ?? 0;
   const hasLimit =
@@ -32,12 +35,12 @@ export const useExpandingConfig = ({
 
   const handleSetExpanded = useCallback(
     (updaterOrValue: Updater<ExpandedState>) => {
-      setExpanded((currentExpanded) => {
+      setExpandingState(({ expanded: currentExpanded, deepestOrder }) => {
         const newExpanded = isFunction(updaterOrValue)
           ? updaterOrValue(currentExpanded)
           : updaterOrValue;
 
-        if (!hasLimit) return newExpanded;
+        if (!hasLimit) return { expanded: newExpanded, deepestOrder };
 
         const expandedRowIds = getExpandedRowIds(newExpanded);
         const deepestRows = expandedRowIds.filter(
@@ -45,23 +48,28 @@ export const useExpandingConfig = ({
         );
 
         const updatedOrder = [
-          ...deepestOrderRef.current.filter((id) => deepestRows.includes(id)),
-          ...deepestRows.filter((id) => !deepestOrderRef.current.includes(id)),
+          ...deepestOrder.filter((id) => deepestRows.includes(id)),
+          ...deepestRows.filter((id) => !deepestOrder.includes(id)),
         ];
 
         const limitedDeepestRows = updatedOrder.slice(
           -maxExpandedDeepestGroups,
         );
-        deepestOrderRef.current = limitedDeepestRows;
 
-        return expandedRowIds.reduce<Record<string, boolean>>((acc, id) => {
-          if (getRowDepth(id) === maxDepth - 1) {
-            acc[id] = limitedDeepestRows.includes(id);
-          } else {
-            acc[id] = true;
-          }
-          return acc;
-        }, {});
+        return {
+          expanded: expandedRowIds.reduce<Record<string, boolean>>(
+            (acc, id) => {
+              if (getRowDepth(id) === maxDepth - 1) {
+                acc[id] = limitedDeepestRows.includes(id);
+              } else {
+                acc[id] = true;
+              }
+              return acc;
+            },
+            {},
+          ),
+          deepestOrder: limitedDeepestRows,
+        };
       });
     },
     [hasLimit, maxDepth, maxExpandedDeepestGroups],

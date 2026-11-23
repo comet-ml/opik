@@ -5,10 +5,12 @@ import isNumber from "lodash/isNumber";
 import { CellContext } from "@tanstack/react-table";
 
 import { Explainer } from "@/types/shared";
+import { formatCount } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
   RESOURCE_TYPE,
+  ResourceLinkProps,
 } from "@/shared/ResourceLink/ResourceLink";
 
 type CustomMeta = {
@@ -18,6 +20,7 @@ type CustomMeta = {
   getSearch?: (cellData: unknown) => Record<string, string | number>;
   getParams?: (cellData: unknown) => Record<string, string | number>;
   getIsDeleted?: (cellData: unknown) => boolean;
+  variant?: ResourceLinkProps["variant"];
 };
 
 const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -30,6 +33,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getSearch,
     getParams,
     getIsDeleted,
+    variant,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -54,6 +58,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           search={search}
           params={params}
           isDeleted={isDeleted}
+          variant={variant}
         />
       ) : (
         "-"
@@ -66,6 +71,7 @@ type GroupCustomMeta = {
   valueKey: string;
   labelKey: string;
   countAggregationKey?: string;
+  countUnit?: string;
   explainer?: Explainer;
   getResource?: (cellData: unknown) => RESOURCE_TYPE;
 } & CustomMeta;
@@ -82,6 +88,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getIsDeleted,
     getResource,
     countAggregationKey,
+    countUnit,
     explainer,
   } = (custom ?? {}) as GroupCustomMeta;
 
@@ -104,7 +111,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ? get(data, countAggregationKey, undefined)
       : undefined;
 
-  const countText = isNumber(count) ? `(${count})` : "";
+  const countText = isNumber(count) ? formatCount(count, countUnit) : "";
 
   return (
     <CellWrapper
@@ -124,7 +131,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ) : (
         <div>-</div>
       )}
-      <div className="flex shrink-0 items-center">
+      <div className="ml-auto flex shrink-0 items-center text-light-slate">
         {countText}
         {isDeleted && explainer && (
           <ExplainerIcon {...explainer} className="ml-1" />

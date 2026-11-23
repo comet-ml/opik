@@ -7,6 +7,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,10 +34,12 @@ public class CostService {
         NONE
     }
 
+    @Builder(toBuilder = true)
     public record PricedCost(@NonNull BigDecimal cost, @NonNull CostSource source) {
     }
 
-    private record Estimate(BigDecimal cost, boolean fromOrganization) {
+    @Builder(toBuilder = true)
+    private record Estimate(@NonNull BigDecimal cost, boolean fromOrganization) {
     }
 
     /** Prices the usage as its provider's format reads it; the usage itself isn't changed. */
@@ -54,13 +57,16 @@ public class CostService {
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata, @NonNull PriceLayers layers) {
         Estimate estimate = estimateCost(modelName, provider, usage, layers);
         if (estimate.fromOrganization() && hasUsage(usage)) {
-            return new PricedCost(estimate.cost(), CostSource.ORGANIZATION);
+            return PricedCost.builder().cost(estimate.cost()).source(CostSource.ORGANIZATION).build();
         }
         if (estimate.cost().compareTo(BigDecimal.ZERO) > 0) {
-            return new PricedCost(estimate.cost(), CostSource.BUILT_IN);
+            return PricedCost.builder().cost(estimate.cost()).source(CostSource.BUILT_IN).build();
         }
         BigDecimal metadataCost = getCostFromMetadata(metadata);
-        return new PricedCost(metadataCost, metadataCost.signum() == 0 ? CostSource.NONE : CostSource.METADATA);
+        return PricedCost.builder()
+                .cost(metadataCost)
+                .source(metadataCost.signum() == 0 ? CostSource.NONE : CostSource.METADATA)
+                .build();
     }
 
     private static boolean hasUsage(@Nullable Map<String, Integer> usage) {
@@ -79,10 +85,13 @@ public class CostService {
             spanUsage.warnings().forEach(warning -> USAGE_WARNINGS.add(1,
                     Attributes.of(WARNING_TYPE_KEY, warning.type().name())));
             boolean fromOrganization = match.map(ModelPriceResolver.PriceMatch::customRow).isPresent();
-            return new Estimate(modelPrice.calculator().apply(modelPrice, spanUsage), fromOrganization);
+            return Estimate.builder()
+                    .cost(modelPrice.calculator().apply(modelPrice, spanUsage))
+                    .fromOrganization(fromOrganization)
+                    .build();
         } catch (RuntimeException exception) {
             log.warn("Failed to estimate the cost of model '{}', provider '{}'", modelName, provider, exception);
-            return new Estimate(BigDecimal.ZERO, false);
+            return Estimate.builder().cost(BigDecimal.ZERO).build();
         }
     }
 

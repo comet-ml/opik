@@ -103,6 +103,12 @@ bind. Inert until a later, environment-gated migration attaches the
 {{- if not $s3.endpoint -}}
 {{- fail "clickhouse.tieredStorage.cold.s3.endpoint must be set to the cold bucket's S3 URL when tiered storage is enabled" -}}
 {{- end -}}
+{{- /* Without it, clickhouse-backup fails every backup once a part reaches cold. envFrom can't be inspected, so it is trusted. */ -}}
+{{- $bs := .Values.clickhouse.backupServer -}}
+{{- $objectDiskPathKey := "S3_OBJECT_DISK_PATH" -}}
+{{- if and $bs.enabled (not $bs.envFrom) (not (get ($bs.env | default dict) $objectDiskPathKey)) -}}
+{{- fail (printf "clickhouse.backupServer.env.%s must be set (outside S3_PATH) when tiered storage and backupServer are both enabled, or every backup fails once a part reaches cold" $objectDiskPathKey) -}}
+{{- end -}}
 {{- $endpoint := printf "%s/%s/" (trimSuffix "/" $s3.endpoint) (trimSuffix "/" (trimPrefix "/" $s3.prefix)) -}}
 <clickhouse>
   <storage_configuration>

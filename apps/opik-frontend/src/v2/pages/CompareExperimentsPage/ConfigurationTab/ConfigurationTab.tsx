@@ -132,8 +132,8 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
     // Labels can collide (prompt names are only unique per project, and every
     // deleted prompt reads the same), so diff on the versions themselves.
-    const versionKeys = experimentsIds.map(
-      (id) => promptVersionsByExperimentId[id]?.map((pv) => pv.id).join(),
+    const versionKeys = experimentsIds.map((id) =>
+      promptVersionsByExperimentId[id]?.map((pv) => pv.id).join(),
     );
 
     return {

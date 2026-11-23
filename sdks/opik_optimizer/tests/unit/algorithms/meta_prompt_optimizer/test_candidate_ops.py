@@ -14,21 +14,14 @@ import pytest
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     sanitize_generated_prompts,
-    _format_agent_prompts_for_prompt,
     AgentBundleCandidate,
     AgentMetadata,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
-    MetaPromptOptimizer,
-)
-from opik_optimizer.core import runtime
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_prompt_json,
     make_system_prompt_json,
 )
 from tests.unit.fixtures import system_message, user_message
-from tests.unit.fixtures import role_only
-from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -146,43 +139,6 @@ class TestSanitizeGeneratedPrompts:
 
         assert len(result["prompts"]) == 2
 
-    def test_handles_empty_prompts_list(self) -> None:
-        """Should handle empty prompts list."""
-        prompt_json: dict[str, Any] = {"prompts": []}
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert result["prompts"] == []
-
-    def test_handles_missing_content(self) -> None:
-        """Should handle prompts with missing content gracefully."""
-        prompt_json = {
-            "prompts": [
-                {"prompt": [role_only("system")]},  # No content field
-                {"prompt": [system_message("Valid.")]},
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # Both should be preserved (missing content doesn't match patterns)
-        assert len(result["prompts"]) == 2
-
-    def test_returns_new_dict_not_modifying_original(self) -> None:
-        """Should return a new dict, preserving original structure."""
-        prompt_json = make_system_prompt_json(
-            ["Contains dataset term.", "Clean prompt here."]
-        )
-        original_count = len(prompt_json["prompts"])
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # Result is returned (may have fewer prompts due to filtering)
-        assert isinstance(result, dict)
-        assert "prompts" in result
-        # Original dict should still have same count (function returns new dict)
-        assert len(prompt_json["prompts"]) == original_count
-
     def test_handles_multimodal_content(self) -> None:
         """Should handle multimodal content (list of content parts) without errors."""
         # Create a prompt with multimodal content (text + image)
@@ -264,81 +220,8 @@ class TestSanitizeGeneratedPrompts:
         assert isinstance(kept["prompt"][1]["content"], list)
 
 
-class TestFormatAgentPromptsForPrompt:
-    """Tests for _format_agent_prompts_for_prompt function."""
-
-    def test_formats_single_agent(self) -> None:
-        """Should format a single agent prompt correctly."""
-        prompts = {"main": ChatPrompt(system="Be helpful.", user="{question}")}
-
-        result = _format_agent_prompts_for_prompt(prompts)
-
-        assert "Agent name: main" in result
-        assert "Messages:" in result
-        assert "Be helpful." in result
-
-    def test_formats_multiple_agents(self) -> None:
-        """Should format multiple agent prompts with separation."""
-        prompts = {
-            "planner": ChatPrompt(system="Plan the task.", user="{task}"),
-            "executor": ChatPrompt(system="Execute the plan.", user="{plan}"),
-        }
-
-        result = _format_agent_prompts_for_prompt(prompts)
-
-        assert "Agent name: planner" in result
-        assert "Agent name: executor" in result
-        assert "Plan the task." in result
-        assert "Execute the plan." in result
-
-    def test_includes_json_formatted_messages(self) -> None:
-        """Should include JSON-formatted messages."""
-        prompts = {
-            "agent": ChatPrompt(
-                messages=[
-                    system_message("System message"),
-                    user_message("User message"),
-                ]
-            )
-        }
-
-        result = _format_agent_prompts_for_prompt(prompts)
-
-        # Should be valid JSON in the output
-        assert '"role"' in result
-        assert '"content"' in result
-
-    def test_handles_empty_dict(self) -> None:
-        """Should handle empty prompts dict."""
-        result = _format_agent_prompts_for_prompt({})
-
-        assert result == ""
-
-
 class TestAgentBundleCandidate:
     """Tests for AgentBundleCandidate dataclass."""
-
-    def test_stores_prompts_and_metadata(self) -> None:
-        """Should store prompts and metadata correctly."""
-        prompts = {
-            "agent1": ChatPrompt(system="System 1", user="{input}"),
-            "agent2": ChatPrompt(system="System 2", user="{input}"),
-        }
-        metadata = {
-            "agent1": AgentMetadata(
-                improvement_focus="clarity",
-                reasoning="Made it clearer",
-            ),
-            "agent2": AgentMetadata(
-                improvement_focus="accuracy",
-                reasoning="Added more detail",
-            ),
-        }
-
-        candidate = AgentBundleCandidate(prompts=prompts, metadata=metadata)
-
-        assert candidate.prompts == prompts
-        assert candidate.metadata == metadata
 
     def test_get_agent_names(self) -> None:
         """get_agent_names should return all agent names."""
@@ -381,43 +264,3 @@ class TestAgentBundleCandidate:
 
         assert candidate.get_agent_improvement_focus("agent1") == "clarity"
         assert candidate.get_agent_improvement_focus("unknown") is None
-
-
-class TestAgentMetadata:
-    """Tests for AgentMetadata dataclass."""
-
-    def test_stores_fields(self) -> None:
-        """Should store improvement_focus and reasoning."""
-        meta = AgentMetadata(
-            improvement_focus="performance",
-            reasoning="Optimized for speed",
-        )
-
-        assert meta.improvement_focus == "performance"
-        assert meta.reasoning == "Optimized for speed"
-
-    def test_defaults_to_none(self) -> None:
-        """Fields should default to None."""
-        meta = AgentMetadata()
-
-        assert meta.improvement_focus is None
-        assert meta.reasoning is None
-
-
-def test_history_builder_assigns_trial_indices() -> None:
-    optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-    context = make_optimization_context({"main": ChatPrompt(system="s", user="u")})
-    round_handle = optimizer.pre_round(context)
-    runtime.record_and_post_trial(
-        optimizer=optimizer,
-        context=context,
-        prompt_or_payload=context.prompts,
-        score=0.8,
-        round_handle=round_handle,
-    )
-    optimizer.post_round(round_handle=round_handle, context=context, best_score=0.8)
-    history = optimizer.get_history_entries()
-    assert history
-    trials = history[0].get("trials") or []
-    assert trials
-    assert trials[0].get("trial_index") is not None

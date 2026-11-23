@@ -3,9 +3,8 @@
 import typing
 
 from ..core.api_error import ApiError
-from ..types.error_message import ErrorMessage
 
 
 class ServiceUnavailableError(ApiError):
-    def __init__(self, body: ErrorMessage, headers: typing.Optional[typing.Dict[str, str]] = None):
+    def __init__(self, body: typing.Optional[typing.Any], headers: typing.Optional[typing.Dict[str, str]] = None):
         super().__init__(status_code=503, headers=headers, body=body)

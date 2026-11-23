@@ -46,8 +46,7 @@ import TextCell from "@/shared/DataTableCells/TextCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useIsDatasetExportEnabled from "@/hooks/useIsDatasetExportEnabled";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { Filter } from "@/types/filters";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
@@ -232,9 +231,7 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
 
-  const isDatasetExportEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
-  );
+  const isDatasetExportEnabled = useIsDatasetExportEnabled();
 
   const {
     permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },

@@ -2,7 +2,6 @@
   "compilerOptions": {
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/frontend.tsbuildinfo",
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"

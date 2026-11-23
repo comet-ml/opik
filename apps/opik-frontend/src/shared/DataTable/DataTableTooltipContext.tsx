@@ -14,13 +14,13 @@ const HIDE_DELAY = 100;
 
 interface PopoverState {
   content: ReactNode | null;
-  triggerRef: React.RefObject<HTMLElement> | null;
+  triggerRef: React.RefObject<HTMLElement | null> | null;
 }
 
 interface TablePopoverContextValue {
   showPopover: (
     content: ReactNode,
-    triggerRef: React.RefObject<HTMLElement>,
+    triggerRef: React.RefObject<HTMLElement | null>,
   ) => void;
   hidePopover: () => void;
 }
@@ -45,7 +45,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
     content: null,
     triggerRef: null,
   });
-  const timeoutRef = React.useRef<NodeJS.Timeout>();
+  const timeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined);
   const previousTriggerRef = React.useRef<HTMLElement | null>(null);
   const isMouseOverPopoverRef = React.useRef(false);
   const isMouseOverTriggerRef = React.useRef(false);
@@ -54,7 +54,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
     // Only hide if a mouse is not over either trigger or popover
     setTimeout(() => {
       if (!isMouseOverPopoverRef.current && !isMouseOverTriggerRef.current) {
-        timeoutRef.current && clearTimeout(timeoutRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setPopoverState({ content: null, triggerRef: null });
         previousTriggerRef.current = null;
       }
@@ -62,11 +62,11 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
   }, []);
 
   const showPopover = useCallback(
-    (content: ReactNode, triggerRef: React.RefObject<HTMLElement>) => {
+    (content: ReactNode, triggerRef: React.RefObject<HTMLElement | null>) => {
       isMouseOverTriggerRef.current = true;
       // Check if it's the same trigger
       if (previousTriggerRef.current !== triggerRef.current) {
-        timeoutRef.current && clearTimeout(timeoutRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
           setPopoverState({ content, triggerRef });
         }, delayDuration);

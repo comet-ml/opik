@@ -65,7 +65,6 @@ import useColumnVirtualization, {
 } from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface TableMeta<TData extends RowData> {
     columnsStatistic?: ColumnsStatistic;
     rowHeight: ROW_HEIGHT;
@@ -77,7 +76,6 @@ declare module "@tanstack/react-table" {
     projectName?: string;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   export interface ColumnMeta<TData extends RowData, TValue> {
     type?: COLUMN_TYPE;
     header?: string;
@@ -463,7 +461,7 @@ const DataTable = <TData, TValue>({
             <TableHeader
               className={cn(stickyHeader && "sticky z-10")}
               {...(stickyHeader && {
-                ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+                [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical,
               })}
             >
               {table.getHeaderGroups().map((headerGroup, index, groups) => {
