@@ -13,13 +13,40 @@ const TRACKED_FIELDS = [
   "llmJudgeDetails.messages",
   "llmJudgeDetails.schema",
 ];
-const TYPING_GROUP_MS = 1000;
+const TYPING_PAUSE_MS = 500;
+const WORD_END_REGEX = /[\s.,;:!?]$/;
 
 type EditorSnapshot = {
   llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
   ruleName: string;
   autoName: string;
   isPickingTemplate: boolean;
+};
+
+type TypingGroup = { at: number; isDeleting: boolean; endedWord: boolean };
+
+const getContentText = ({ ruleName, llmJudgeDetails }: EditorSnapshot) =>
+  [
+    ruleName,
+    ...llmJudgeDetails.messages.map(({ content }) =>
+      typeof content === "string" ? content : JSON.stringify(content),
+    ),
+    ...llmJudgeDetails.schema.map(
+      ({ name, description }) => `${name}\n${description}`,
+    ),
+  ].join("\n");
+
+const getInsertedText = (previous: string, next: string) => {
+  let start = 0;
+  while (start < previous.length && previous[start] === next[start]) start++;
+  let end = 0;
+  while (
+    end < previous.length - start &&
+    previous[previous.length - 1 - end] === next[next.length - 1 - end]
+  ) {
+    end++;
+  }
+  return next.slice(start, next.length - end);
 };
 
 const isTrackedField = (name: string) =>
@@ -58,7 +85,7 @@ const useRuleEditorHistory = (
   const futureRef = useRef<EditorSnapshot[]>([]);
   const currentRef = useRef<EditorSnapshot | null>(null);
   const isSilentRef = useRef(false);
-  const lastTypingAtRef = useRef(0);
+  const typingGroupRef = useRef<TypingGroup | null>(null);
 
   const setIsPickingTemplate = useCallback((isPicking: boolean) => {
     isPickingTemplateRef.current = isPicking;
@@ -92,7 +119,7 @@ const useRuleEditorHistory = (
       pastRef.current.push(before);
       futureRef.current = [];
       currentRef.current = takeSnapshot();
-      lastTypingAtRef.current = 0;
+      typingGroupRef.current = null;
     },
     [takeSnapshot, runSilently],
   );
@@ -103,7 +130,7 @@ const useRuleEditorHistory = (
       pastRef.current = [];
       futureRef.current = [];
       currentRef.current = takeSnapshot();
-      lastTypingAtRef.current = 0;
+      typingGroupRef.current = null;
     },
     [takeSnapshot, runSilently],
   );
@@ -126,7 +153,7 @@ const useRuleEditorHistory = (
       }
       setIsPickingTemplate(snapshot.isPickingTemplate);
       currentRef.current = takeSnapshot();
-      lastTypingAtRef.current = 0;
+      typingGroupRef.current = null;
     },
     [form, autoNameRef, takeSnapshot, runSilently, setIsPickingTemplate],
   );
@@ -145,16 +172,30 @@ const useRuleEditorHistory = (
     currentRef.current = takeSnapshot();
     const subscription = form.watch((_, { name }) => {
       if (isSilentRef.current || !name || !isTrackedField(name)) return;
+      const previous = currentRef.current;
+      const next = takeSnapshot();
+      const previousText = previous ? getContentText(previous) : "";
+      const nextText = getContentText(next);
+      const isDeleting = nextText.length < previousText.length;
       const now = Date.now();
-      if (
-        currentRef.current &&
-        now - lastTypingAtRef.current > TYPING_GROUP_MS
-      ) {
-        pastRef.current.push(currentRef.current);
+      const group = typingGroupRef.current;
+      const startsStep =
+        !group ||
+        now - group.at > TYPING_PAUSE_MS ||
+        group.isDeleting !== isDeleting ||
+        group.endedWord;
+      if (previous && startsStep) {
+        pastRef.current.push(previous);
         futureRef.current = [];
       }
-      lastTypingAtRef.current = now;
-      currentRef.current = takeSnapshot();
+      typingGroupRef.current = {
+        at: now,
+        isDeleting,
+        endedWord:
+          !isDeleting &&
+          WORD_END_REGEX.test(getInsertedText(previousText, nextText)),
+      };
+      currentRef.current = next;
     });
     return () => subscription.unsubscribe();
   }, [form, takeSnapshot]);

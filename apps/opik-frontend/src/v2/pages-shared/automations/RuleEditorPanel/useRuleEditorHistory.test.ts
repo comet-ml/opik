@@ -14,6 +14,32 @@ const press = (key: string, shiftKey = false) =>
   });
 
 describe("useRuleEditorHistory", () => {
+  it("undoes typing one word at a time", () => {
+    const { result } = renderHook(() => {
+      const form = useForm<EvaluationRuleFormType>({
+        defaultValues: {
+          ruleName: "",
+          uiType: UI_EVALUATORS_RULE_TYPE.llm_judge,
+          llmJudgeDetails: { messages: [], schema: [] },
+        } as unknown as EvaluationRuleFormType,
+      });
+      const history = useRuleEditorHistory(form, { current: "" });
+      return { form, history };
+    });
+    const ruleName = () => result.current.form.getValues("ruleName");
+
+    ["M", "My", "My ", "My r", "My ru", "My rul", "My ru"].forEach((value) =>
+      act(() => result.current.form.setValue("ruleName", value)),
+    );
+
+    press("z");
+    expect(ruleName()).toBe("My rul");
+    press("z");
+    expect(ruleName()).toBe("My ");
+    press("z");
+    expect(ruleName()).toBe("");
+  });
+
   it("undoes typing and actions in order, and redoes them", () => {
     const { result } = renderHook(() => {
       const form = useForm<EvaluationRuleFormType>({
