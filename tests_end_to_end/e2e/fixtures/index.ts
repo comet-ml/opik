@@ -1,4 +1,4 @@
-export { test, expect } from './same-name-datasets.fixture';
+export { test, expect } from './experiments-filter-chip.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -815,3 +815,8 @@ export type {
   SameNameDatasetsRef,
   SameNameDatasetsFixtures,
 } from './same-name-datasets.fixture';
+export type {
+  FilterChipSourceRef,
+  ExperimentsFilterChipRef,
+  ExperimentsFilterChipFixtures,
+} from './experiments-filter-chip.fixture';

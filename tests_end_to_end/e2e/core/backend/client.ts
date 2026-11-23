@@ -5685,6 +5685,84 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/projects/{projectId}/experiments` under the prompt
+     * filter — the read behind the prompt detail page's Experiments tab.
+     *
+     * A third experiments reader beside `listExperimentsForDataset` and
+     * `listExperimentsForProject`, because the tab's own read is neither of
+     * them and a spec about what that tab LISTS has to reach what the tab
+     * reaches. Two things make it its own address:
+     *
+     *  - The endpoint is the PROJECT-scoped one (`/projects/{id}/experiments`),
+     *    not `/experiments?project_id=`. `useExperimentsList` switches to it
+     *    the moment a `projectId` is given, and the prompt tab always gives
+     *    one.
+     *  - The prompt is not a parameter at all. `generatePromptFilters` sends it
+     *    as a FILTER — `prompt_ids contains <promptId>` — so reproducing the
+     *    tab's population means reproducing that filter, which no typed SDK
+     *    call offers. It is the prompt's id here, never a version id, even
+     *    though the link table stores versions.
+     *
+     * `datasetId` adds the tab's own Item source narrowing as a second filter,
+     * conjoined exactly as the filter bar conjoins it, so one call can answer
+     * both "what does the tab list" and "what does the tab list once filtered".
+     *
+     * `total` and `ids` both travel, for the reason the compare readers give: a
+     * filter that leaked rows can move either without the other. `ids` is left
+     * in server order, since ordering is not what a filter assertion is about.
+     */
+    async listExperimentsForPrompt(args: {
+      projectId: string;
+      promptId: string;
+      /** The Item source filter the tab's own bar sends, when narrowing. */
+      datasetId?: string;
+      /** Deliberately explicit: a closed-set assertion must not inherit a page size. */
+      size?: number;
+    }): Promise<{ total: number; ids: string[] }> {
+      const filters: BackendFilter[] = [
+        {
+          field: 'prompt_ids',
+          type: 'string',
+          operator: 'contains',
+          value: args.promptId,
+        },
+      ];
+      if (args.datasetId !== undefined) {
+        filters.push({
+          field: 'dataset_id',
+          type: 'string',
+          operator: '=',
+          value: args.datasetId,
+        });
+      }
+      const query = new URLSearchParams({
+        size: String(args.size ?? 100),
+        filters: JSON.stringify(filters),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/projects/${args.projectId}/experiments`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listExperimentsForPrompt(${args.promptId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as { total?: unknown; content?: Array<{ id?: unknown }> };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listExperimentsForPrompt(${args.promptId}): the answer carried no numeric 'total' — ` +
+            'cannot assert a closed set against a page of unknown completeness',
+        );
+      }
+      return {
+        total: body.total,
+        ids: (body.content ?? []).map((row) => String(row.id ?? '')),
+      };
+    },
+
+    /**
      * The `evaluation_method` one experiment reads back as.
      *
      * Read, never assumed, by any spec about the filter opik#9456 added: an
@@ -5752,6 +5830,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         name,
         datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
         projectId: experiment.projectId ? String(experiment.projectId) : null,
+      };
+    },
+
+    /**
+     * One experiment's pass rate as the server computed it — `pass_rate`,
+     * `passed_count` and `total_count` on `GET /v1/private/experiments/{id}`.
+     *
+     * Raw rather than through the pinned SDK, which projects none of the three.
+     * This is the number the compare header's badge renders, and reading it is
+     * what makes a badge assertion a claim about the FORMATTING rather than
+     * about the arithmetic: a badge reading "99%" over a server that stored
+     * 0.98 is a different defect from one that rounded 0.995 up, and only the
+     * pair separates them.
+     *
+     * All three are required rather than defaulted. A `?? 0` here would turn
+     * "the server reported no pass rate" into a comparison against zero, which
+     * is itself a legitimate pass rate — so the absence has to fail loudly or a
+     * spec could go green having verified nothing. An experiment that genuinely
+     * has none (the `dataset` method) is not this reader's subject; callers that
+     * need to tell "no pass rate" from "a pass rate of zero" read the group
+     * aggregations, which omit the keys entirely.
+     */
+    async getExperimentPassRate(id: string): Promise<{
+      passRate: number;
+      passedCount: number;
+      totalCount: number;
+    }> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/experiments/${id}`);
+      if (status !== 200) {
+        throw new Error(`getExperimentPassRate: ${id} answered ${status}: ${message}`);
+      }
+      const body = (json ?? {}) as Record<string, unknown>;
+      const read = (key: string): number => {
+        const value = body[key];
+        if (typeof value !== 'number') {
+          throw new Error(
+            `getExperimentPassRate: experiment ${id} answered 200 with no numeric '${key}' ` +
+              `(got ${JSON.stringify(value)}) — a missing pass rate must not read as zero`,
+          );
+        }
+        return value;
+      };
+      return {
+        passRate: read('pass_rate'),
+        passedCount: read('passed_count'),
+        totalCount: read('total_count'),
       };
     },
 

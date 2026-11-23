@@ -84,6 +84,65 @@ export class CompareExperimentsPage {
   }
 
   /**
+   * The pass-rate badge in the header — `CompareExperimentsDetails`' own `Tag`,
+   * carrying both the "<n>% pass rate" label and the icon whose colour is the
+   * verdict.
+   *
+   * Only rendered in SINGLE-experiment mode, and only for a test-suite
+   * experiment that reports a numeric `pass_rate` (`!isCompare &&
+   * isTestSuiteExperiment && isNumber`) — so a caller must open the compare
+   * route with exactly one id.
+   *
+   * It carries no `data-testid`, and the two halves it has to be addressed by
+   * are the reason this is a composition rather than a text lookup. The label
+   * sits in its own `<div>` and the icon is that div's SIBLING, so the Tag is
+   * the only element holding both: `hasText` with an ANCHORED regex matches
+   * only an element whose entire text is the label (which rules out every
+   * header ancestor, each of which carries more), and `has` the icon then rules
+   * out the inner label div. A testid on the Tag would be the better handle and
+   * belongs in the frontend — but a release-time spec runs against a DEPLOYED
+   * build, so one added here would not exist in the bundle under test.
+   */
+  get passRateBadge(): Locator {
+    return this.page
+      .locator('div')
+      .filter({ has: this.page.locator('svg.lucide-circle-check') })
+      .filter({ hasText: /^\d+% pass rate$/ });
+  }
+
+  /**
+   * Assert the header's pass-rate badge reads exactly `label`, with a passing
+   * or failing icon.
+   *
+   * The label and the icon together, never one alone: the defect opik#9692
+   * fixed rendered "100% pass rate" beside a RED icon, so a build that got the
+   * verdict right and the number wrong — or the reverse — is exactly what this
+   * has to separate. `toHaveText` is an equality, so "99%" cannot be satisfied
+   * by "199%", and the colour is asserted as the CSS variable the component
+   * names rather than a resolved rgb triple, which is what the estate's other
+   * pass-rate assertions do (see `ExperimentGroupRows.expectGroupPassRate`).
+   */
+  async expectPassRateBadge(expected: {
+    label: string;
+    icon: 'passed' | 'failed';
+  }): Promise<void> {
+    await test.step(`the header badge reads "${expected.label}" with a ${expected.icon} icon`, async () => {
+      const badge = this.passRateBadge;
+      await expect(badge, 'exactly one pass-rate badge in the header').toHaveCount(1, {
+        timeout: 30_000,
+      });
+      await expect(badge, 'the pass-rate badge').toHaveText(expected.label, { timeout: 30_000 });
+      const icon = badge.locator('svg.lucide-circle-check');
+      await expect(icon, 'exactly one status icon in the badge').toHaveCount(1);
+      await expect(icon, "the badge's status icon colour").toHaveClass(
+        expected.icon === 'passed'
+          ? /text-\[var\(--color-green\)\]/
+          : /text-\[var\(--color-red\)\]/,
+      );
+    });
+  }
+
+  /**
    * Open the Results tab with view state already applied, and with one row's
    * detail panel expanded.
    *
