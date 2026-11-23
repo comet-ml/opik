@@ -1180,6 +1180,9 @@ serviceToggles:
   # Description: Whether or not the backend runs guardrails itself
   guardrailsValidationsEnabled: "false"
   # Default: false
+  # Description: Whether or not workspaces can train their own guardrail models
+  guardrailsTrainingEnabled: "false"
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
   # Default: true
