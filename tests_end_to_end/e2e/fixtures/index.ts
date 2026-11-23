@@ -1,4 +1,4 @@
-export { test, expect } from './experiments-filter-chip.fixture';
+export { test, expect } from './widget-edit-traces.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -820,3 +820,22 @@ export type {
   ExperimentsFilterChipRef,
   ExperimentsFilterChipFixtures,
 } from './experiments-filter-chip.fixture';
+export type {
+  NumpyPayloadTracesRef,
+  NumpyPayloadTracesFixtures,
+} from './numpy-payload-traces.fixture';
+export {
+  NUMPY_EXPECTED_PAYLOAD,
+  NUMPY_NUMERIC_KEY,
+  NUMPY_NUMERIC_VALUE,
+} from './numpy-payload-traces.fixture';
+export type {
+  WidgetEditTracesRef,
+  WidgetEditTracesFixtures,
+} from './widget-edit-traces.fixture';
+export {
+  WET_FILTER_COLUMN,
+  WET_FILTER_OPERATOR,
+  WET_MATCHING_TRACES,
+  WET_TOTAL_TRACES,
+} from './widget-edit-traces.fixture';

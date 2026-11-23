@@ -410,6 +410,192 @@ export class DashboardsPage {
   }
 
   /**
+   * The actions-menu trigger on a SAVED widget's header.
+   *
+   * Addressed by `aria-haspopup="menu"`, which Radix's `DropdownMenuTrigger`
+   * puts on whatever it wraps. The button itself is icon-only — a bare
+   * `MoreHorizontal` with no `aria-label` and no text — so it has no accessible
+   * name to match on, and it is the only dropdown trigger inside a widget.
+   * `online-evaluation.page.ts` reaches its row menu the same way.
+   *
+   * It would be better as a `data-testid` on the FE component, which is what
+   * this estate's conventions ask for. This branch may only touch
+   * `tests_end_to_end/`, so the attribute cannot be added here — worth adding
+   * next time `DashboardWidgetActionsMenu.tsx` is open.
+   *
+   * The header reveals its actions on hover (`opacity-0
+   * group-hover/widget:opacity-100`), which does not affect hit-testing:
+   * `opacity: 0` still has a box and Playwright still considers it visible and
+   * clickable, so no explicit hover is needed.
+   */
+  widgetActionsTrigger(title: string): Locator {
+    return this.widget(title).locator('button[aria-haspopup="menu"]');
+  }
+
+  /**
+   * Opens a saved widget's configuration dialog through its own Edit action,
+   * and answers the dialog.
+   *
+   * This is the IN-PLACE edit path, which is a different thing from
+   * `openWidgetDialog`: that one adds a widget, where the section's widget
+   * array grows and `DashboardWidgetGrid`'s `React.memo` comparator rejects the
+   * props on length alone. An edit leaves the length unchanged, so the
+   * comparator has to actually compare the widget — which is the path
+   * `areWidgetsEqual` -> `isLooseEqual` sits on.
+   *
+   * The dialog is identified by its own title ("Edit widget" rather than "Add
+   * widget"), so a click that somehow landed on the section's Add control
+   * fails here rather than quietly configuring a second widget.
+   */
+  async editWidget(title: string): Promise<Locator> {
+    return test.step(`Edit the "${title}" widget in place`, async () => {
+      const trigger = this.widgetActionsTrigger(title);
+      await expect(trigger, `exactly one actions menu on the "${title}" widget`).toHaveCount(1);
+      await trigger.click();
+      const edit = this.page.getByRole('menuitem', { name: 'Edit widget' });
+      await expect(edit, 'the menu offers exactly one Edit widget action').toHaveCount(1);
+      await edit.click();
+      const dialog = this.page.getByRole('dialog');
+      await dialog.waitFor({ state: 'visible' });
+      await expect(
+        dialog.getByRole('heading', { name: 'Edit widget', exact: true }),
+        'the dialog opened in edit mode, not add mode',
+      ).toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
+   * Submits an open EDIT dialog.
+   *
+   * "Save changes" rather than "Add widget": `WidgetConfigDialog` labels its
+   * submit from `isEditMode`, so the label is also the assertion that the
+   * dialog really was editing an existing widget.
+   */
+  async saveWidgetChanges(dialog: Locator): Promise<void> {
+    await test.step('Save the widget changes', async () => {
+      await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The filter rows inside the open widget dialog's Filters section.
+   *
+   * `FiltersAccordionSection` renders `FiltersContent`, the same component the
+   * rule editor uses, so the row carries the shared
+   * `data-testid="filter-column"` — see `online-evaluation.page.ts`'s
+   * `filterRows`, which this mirrors deliberately rather than inventing a
+   * second way to address the same markup.
+   */
+  widgetFilterRows(dialog: Locator): Locator {
+    return dialog.locator('tr').filter({ has: this.page.locator('[data-testid="filter-column"]') });
+  }
+
+  /**
+   * Expands the dialog's Filters accordion, if it is not already open.
+   *
+   * Idempotent, and it has to be: `AccordionTrigger` TOGGLES, so a second click
+   * collapses what the caller just opened and every control below becomes
+   * unreachable.
+   */
+  async expandWidgetFilters(dialog: Locator): Promise<void> {
+    await test.step('Expand the widget Filters section', async () => {
+      const section = dialog.getByRole('button', { name: /^Filters/ });
+      await expect(section, 'exactly one Filters accordion trigger').toHaveCount(1);
+      if ((await section.getAttribute('aria-expanded')) !== 'true') {
+        await section.click();
+      }
+      await expect(section, 'the Filters section is expanded').toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+  }
+
+  /**
+   * Adds one filter row and sets its column and value.
+   *
+   * The operator is left at the column type's own default and ASSERTED rather
+   * than selected: a string column defaults to `contains`
+   * (`DEFAULT_OPERATORS[COLUMN_TYPE.string]`), and asserting it is what stops a
+   * change of default silently turning a substring filter into an equality one
+   * — which would select nothing and make every "the chart narrowed" assertion
+   * pass for the wrong reason.
+   *
+   * Selecting the column resets the row's operator and value, so the column is
+   * set first.
+   */
+  async addWidgetFilter(
+    dialog: Locator,
+    args: { column: string; operator: string; value: string },
+  ): Promise<void> {
+    await test.step(`Add a widget filter: ${args.column} ${args.operator} "${args.value}"`, async () => {
+      await this.expandWidgetFilters(dialog);
+      const before = await this.widgetFilterRows(dialog).count();
+      await dialog.getByRole('button', { name: 'Add filter', exact: true }).click();
+      await expect(
+        this.widgetFilterRows(dialog),
+        'the filter row count after Add filter',
+      ).toHaveCount(before + 1);
+
+      const row = this.widgetFilterRows(dialog).nth(before);
+      await row.locator('button[role="combobox"]:has([data-testid="filter-column"])').click();
+      const option = this.page.getByRole('option', { name: args.column, exact: true });
+      await expect(option, `exactly one "${args.column}" filter column option`).toHaveCount(1);
+      await option.click();
+
+      const operator = row.locator(
+        'button[role="combobox"]:has([data-testid="filter-operator"])',
+      );
+      await expect(
+        operator,
+        `the filter operator defaults to "${args.operator}" for this column`,
+      ).toContainText(args.operator);
+
+      await this.setWidgetFilterValue(dialog, before, args.value);
+    });
+  }
+
+  /**
+   * Rewrites one existing filter row's VALUE and nothing else.
+   *
+   * The whole point of the in-place-edit spec: this is the only field that
+   * changes between two saves, so the widget's config differs from its previous
+   * state only inside a nested array of objects — the case the `React.memo`
+   * comparator's deep equality has to catch, with the generated title, the
+   * metric and the project all identical.
+   *
+   * `DebounceInput` commits on a timer, so the blur is explicit and the value
+   * is read back before returning — the same shape
+   * `online-evaluation.page.ts`'s `setFilterValue` uses.
+   */
+  async setWidgetFilterValue(dialog: Locator, index: number, value: string): Promise<void> {
+    await test.step(`Set widget filter ${index + 1}'s value to "${value}"`, async () => {
+      const input = this.widgetFilterRows(dialog)
+        .nth(index)
+        .locator('[data-testid="filter-number-input"], [data-testid="filter-string-input"]');
+      await expect(input, `exactly one value box on filter ${index + 1}`).toHaveCount(1);
+      await input.fill(value);
+      await input.blur();
+      await expect(input, `filter ${index + 1}'s value box`).toHaveValue(value);
+    });
+  }
+
+  /**
+   * The "no data" message a metrics widget renders in place of its chart.
+   *
+   * `MetricChartContainer` falls back to `NoData` with this message when every
+   * point of every line is nil or zero, and `ProjectMetricsWidget` supplies no
+   * custom empty state for the count metrics. It is therefore the user-visible
+   * difference between a filter that selects rows and one that selects none —
+   * and the thing a stale, memoized-away chart would NOT show.
+   */
+  widgetNoDataMessage(title: string): Locator {
+    return this.widget(title).getByText('No data to show', { exact: true });
+  }
+
+  /**
    * Picks a widget type in the open widget-config dialog's type selector.
    *
    * The selector renders each type as a `CardSelector` button whose accessible
