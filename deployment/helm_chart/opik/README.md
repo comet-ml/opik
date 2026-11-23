@@ -404,6 +404,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.contentSecurityPolicy.worker-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.worker-src[1] | string | `"blob:"` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.extraServerHeaders.Permissions-Policy | string | `"accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"` |  |
+| component.frontend.extraServerHeaders.Referrer-Policy | string | `"strict-origin-when-cross-origin"` |  |
 | component.frontend.extraServerHeaders.X-Content-Type-Options | string | `"nosniff"` |  |
 | component.frontend.extraServerHeaders.X-Frame-Options | string | `"DENY"` |  |
 | component.frontend.extraServerHeaders.X-XSS-Protection | string | `"0"` |  |
