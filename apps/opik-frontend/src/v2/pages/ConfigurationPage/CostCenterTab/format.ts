@@ -4,6 +4,8 @@ import { TagProps } from "@/ui/tag";
 
 export const MAX_QUICK_ACCESS = 8;
 
+export const PRICE_UNIT_SUFFIX = "/1M tok";
+
 export const formatPrice = (perMillion?: string) => {
   if (!perMillion) {
     return undefined;

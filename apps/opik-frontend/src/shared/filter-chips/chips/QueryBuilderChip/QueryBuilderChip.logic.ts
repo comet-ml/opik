@@ -139,7 +139,7 @@ export const formatQueryBuilderSummary = (
   const custom = definition.operatorLabels;
   const labelOf =
     (fallback: (op: FilterOperator) => string) => (op: FilterOperator) =>
-      definition.hideOperatorInSummary ? "" : custom?.[op] ?? fallback(op);
+      definition.hideOperatorInSummary ? "" : (custom?.[op] ?? fallback(op));
   const longLabel = labelOf(getOperatorLabel);
   if (valid.length > 1) {
     return {

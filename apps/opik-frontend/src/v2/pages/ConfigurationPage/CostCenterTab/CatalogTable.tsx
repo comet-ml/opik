@@ -20,6 +20,7 @@ import {
 } from "@/lib/model-prices";
 import {
   MAX_QUICK_ACCESS,
+  PRICE_UNIT_SUFFIX,
   TYPE_TAG_VARIANT,
   formatDay,
   formatPrice,
@@ -43,7 +44,7 @@ const Price: React.FC<{ value?: string }> = ({ value }) => {
     <span className="whitespace-nowrap">
       <span className="font-mono text-foreground">{formatted}</span>
       <span className="comet-body-xs ml-1 hidden font-mono text-light-slate min-[1400px]:inline">
-        /1M tok
+        {PRICE_UNIT_SUFFIX}
       </span>
     </span>
   ) : (
@@ -64,7 +65,7 @@ const MoreFields: React.FC<{ entry: CatalogEntry }> = ({ entry }) => {
           (field) =>
             `${PRICE_LABELS[field]}: ${formatPrice(
               entry.prices[field],
-            )} /1M tok`,
+            )} ${PRICE_UNIT_SUFFIX}`,
         )
         .join("\n")}
     >
@@ -84,7 +85,9 @@ const PRICE_HEAD_CLASS = cn(
 const PriceHead: React.FC<{ label: string }> = ({ label }) => (
   <TableHead className={PRICE_HEAD_CLASS}>
     {label}
-    <span className="ml-1 font-normal min-[1400px]:hidden">/1M tok</span>
+    <span className="ml-1 font-normal min-[1400px]:hidden">
+      {PRICE_UNIT_SUFFIX}
+    </span>
   </TableHead>
 );
 

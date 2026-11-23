@@ -43,18 +43,40 @@ describe("classifySaveError", () => {
   });
 
   it("cleans a server message before it reaches the toast", () => {
-    const stack = `boom\n\tat Foo.bar(Foo.java:1)\u0000${"x".repeat(400)}`;
+    const stack = `boom\n\tat Foo.bar(Foo.java:1)\u0000\u0085done`;
 
-    const { message } = classifySaveError(500, { message: stack }) as {
-      message: string;
-    };
-
-    expect(message.startsWith("boom at Foo.bar(Foo.java:1) xxx")).toBe(true);
-    expect(message).toHaveLength(200);
-    expect(message.endsWith("…")).toBe(true);
+    expect(classifySaveError(500, { message: stack })).toEqual({
+      kind: "unknown",
+      message: "boom at Foo.bar(Foo.java:1) done",
+    });
     expect(classifySaveError(500, { message: "\n\t " })).toEqual({
       kind: "unknown",
       message: undefined,
     });
+  });
+
+  it("strips bidi and other invisible format characters", () => {
+    const disguised =
+      "Save failed for \u202Etxt.exe\u202C \u2066model\u2069\u200B\uFEFF";
+
+    expect(classifySaveError(500, { message: disguised })).toEqual({
+      kind: "unknown",
+      message: "Save failed for txt.exe model",
+    });
+    expect(classifySaveError(500, { message: "\u202E\u2066 " })).toEqual({
+      kind: "unknown",
+      message: undefined,
+    });
+  });
+
+  it("keeps a long message whole, so request IDs and details survive", () => {
+    const long = `Validation failed: ${"detail ".repeat(60)}request id abc-123`;
+
+    const { message } = classifySaveError(500, { message: long }) as {
+      message: string;
+    };
+
+    expect(message).toBe(long.replace(/\s+/g, " ").trim());
+    expect(message.endsWith("request id abc-123")).toBe(true);
   });
 });

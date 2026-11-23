@@ -40,23 +40,18 @@ const messageOf = (body: unknown): string | undefined => {
   return undefined;
 };
 
-const MAX_MESSAGE_LENGTH = 200;
-
-const isControl = (char: string) => {
-  const code = char.charCodeAt(0);
-  return code < 32 || (code >= 127 && code < 160);
-};
+const CONTROL_CHARS = /\p{Cc}/gu;
+// Bidi overrides like U+202E could show a server message reordered in the toast.
+const FORMAT_CHARS = /\p{Cf}/gu;
 
 const cleanMessage = (message: string | undefined) => {
   if (message === undefined) return undefined;
-  const printable = Array.from(message, (char) =>
-    isControl(char) ? " " : char,
-  ).join("");
-  const collapsed = printable.replace(/\s+/g, " ").trim();
-  if (!collapsed) return undefined;
-  return collapsed.length > MAX_MESSAGE_LENGTH
-    ? `${collapsed.slice(0, MAX_MESSAGE_LENGTH - 1)}…`
-    : collapsed;
+  const cleaned = message
+    .replace(CONTROL_CHARS, " ")
+    .replace(FORMAT_CHARS, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || undefined;
 };
 
 export const classifySaveError = (

@@ -57,7 +57,10 @@ const EDITABLE_FIELDS: (keyof ModelPriceRow)[] = [
 
 const comparable = (row: ModelPriceRow, field: keyof ModelPriceRow) => {
   if (field === "alias_of") {
-    return `${text(row.alias_of?.model)}|${text(row.alias_of?.provider)}`;
+    return JSON.stringify([
+      text(row.alias_of?.model),
+      text(row.alias_of?.provider),
+    ]);
   }
   const value = row[field] as string | null | undefined;
   return (PRICE_FIELDS as string[]).includes(field)

@@ -41,6 +41,7 @@ import {
 import {
   MAX_QUICK_ACCESS,
   MODE_LABELS,
+  PRICE_UNIT_SUFFIX,
   TYPE_TAG_VARIANT,
   formatDay,
 } from "./format";
@@ -562,7 +563,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                           }
                         />
                         <span className="comet-body-xs absolute right-3 top-1/2 -translate-y-1/2 font-mono text-light-slate">
-                          / 1M tok
+                          {PRICE_UNIT_SUFFIX}
                         </span>
                       </div>
                       {canReset ? (

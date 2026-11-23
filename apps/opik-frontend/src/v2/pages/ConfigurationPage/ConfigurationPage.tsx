@@ -43,10 +43,7 @@ const ConfigurationPage = () => {
       <h1 className="comet-body-accented">Configuration</h1>
 
       <div className="mt-6">
-        <Tabs
-          value={visibleTab ?? DEFAULT_TAB}
-          onValueChange={setTab}
-        >
+        <Tabs value={visibleTab ?? DEFAULT_TAB} onValueChange={setTab}>
           <TabsList variant="underline">
             <TabsTrigger
               variant="underline"

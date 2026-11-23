@@ -52,7 +52,7 @@ const useSaveModelPrices = () => {
           title: "Prices not saved",
           description:
             failure.kind === "unknown"
-              ? failure.message ?? SAVE_ERROR_MESSAGES.unknown
+              ? (failure.message ?? SAVE_ERROR_MESSAGES.unknown)
               : SAVE_ERROR_MESSAGES[failure.kind],
           variant: "destructive",
         });
