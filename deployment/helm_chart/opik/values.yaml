@@ -867,6 +867,12 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+  # Also publish opik.clickhouse.tiered_table.* gauges (cold-tier reads, read latency, failed reads, failed
+  # moves) from system.query_log and system.part_log. Reads every replica with clusterAllReplicas, so it
+  # needs the `cluster` macro and the backend user's REMOTE grant.
+  tieredStorageEnabled: false
+  # How far behind now the tiered-storage window ends, so rows still buffered for the system logs aren't skipped.
+  tieredStorageLogFlushLag: 15s
 
 # Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
 # default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
