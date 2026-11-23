@@ -90,6 +90,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -139,6 +140,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -194,6 +196,7 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_CREATE;
@@ -291,6 +294,7 @@ class DatasetsResourceTest {
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
@@ -311,6 +315,7 @@ class DatasetsResourceTest {
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
+        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -366,7 +371,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.id()).isEqualTo(id);
         assertThat(actualEntity).usingRecursiveComparison()
                 .ignoringFields(DATASET_IGNORED_FIELDS)
-                .isEqualTo(expected);
+                .isEqualTo(withDefaultProject(List.of(expected), workspaceName, apiKey).getFirst());
 
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
@@ -721,6 +726,69 @@ class DatasetsResourceTest {
                 } else {
                     assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
+            }
+        }
+
+        @Test
+        @DisplayName("Get dataset by name: when public access and a private dataset shares the name, then return the public one")
+        void getDatasetByName__whenPublicAccessAndPrivateDatasetSharesName__thenReturnPublicDataset() {
+            String name = "dataset-" + UUID.randomUUID();
+            var privateProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            var publicProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(privateProjectId)
+                    .visibility(PRIVATE).build());
+            var publicDataset = buildDataset().toBuilder().id(null).name(name).projectId(publicProjectId)
+                    .visibility(PUBLIC).build();
+            createAndAssert(publicDataset);
+
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, "")
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(name).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.readEntity(Dataset.class))
+                        .usingRecursiveComparison()
+                        .ignoringFields(DATASET_IGNORED_FIELDS)
+                        .isEqualTo(publicDataset);
+            }
+        }
+
+        @Test
+        @DisplayName("Get dataset by name: when public access names a project whose dataset is private, then return not found")
+        void getDatasetByName__whenPublicAccessAndNamedProjectDatasetIsPrivate__thenReturnNotFound() {
+            String name = "dataset-" + UUID.randomUUID();
+            String privateProjectName = "project-" + UUID.randomUUID();
+            var privateProjectId = projectResourceClient.createProject(privateProjectName, okApikey, TEST_WORKSPACE);
+            var publicProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(privateProjectId)
+                    .visibility(PRIVATE).build());
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(publicProjectId)
+                    .visibility(PUBLIC).build());
+
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, "")
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(name).projectName(privateProjectName)
+                            .build()))) {
+
+                DatasetResourceClient.assertErrorResponse(actualResponse, HttpStatus.SC_NOT_FOUND,
+                        new ErrorMessage(List.of("Dataset not found")));
             }
         }
 
@@ -1826,7 +1894,7 @@ class DatasetsResourceTest {
                 var actualEntity = actualResponse.readEntity(Dataset.class);
                 assertThat(actualEntity).usingRecursiveComparison()
                         .ignoringFields(DATASET_IGNORED_FIELDS)
-                        .isEqualTo(dataset);
+                        .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
             }
         }
 
@@ -1944,7 +2012,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity).usingRecursiveComparison()
                     .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(dataset);
+                    .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
         }
 
         @Test
@@ -2355,7 +2423,8 @@ class DatasetsResourceTest {
                     .filter(__ -> expectedContent.size() < defaultPageSize)
                     .forEach(expectedContent::add);
 
-            findAndAssertPage(actualEntity, defaultPageSize, expectedContent.size() + 1, 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, defaultPageSize, expectedContent.size() + 1, 1,
+                    expectedContent);
         }
 
         @Test
@@ -2388,7 +2457,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, pageSize, expected1.size() + expected2.size(), 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, pageSize, expected1.size() + expected2.size(), 1,
+                    expectedContent);
         }
 
         @Test
@@ -2415,7 +2485,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, expected.size(), expected.size(), 1, expected.reversed());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expected.size(), expected.size(), 1,
+                    expected.reversed());
         }
 
         @ParameterizedTest
@@ -2687,7 +2758,7 @@ class DatasetsResourceTest {
 
             assertThat(actualEntity.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
-                    .containsExactlyElementsOf(allDatasets);
+                    .containsExactlyElementsOf(withDefaultProject(allDatasets, workspaceName, apiKey));
         }
 
         @ParameterizedTest
@@ -3068,7 +3139,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(dataset1));
+            findAndAssertPage(actualEntity, TEST_WORKSPACE, API_KEY, 1, 1, 1, List.of(dataset1));
         }
 
         @Test
@@ -3099,7 +3170,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @Test
@@ -3236,7 +3307,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @ParameterizedTest
@@ -3267,7 +3338,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3307,7 +3378,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(),
+                                expectedDatasets.size(), 1,
                                 expectedDatasets.reversed());
                     });
 
@@ -3353,7 +3425,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(),
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedMatchedDatasets.size(),
+                                expectedMatchedDatasets.size(),
                                 1,
                                 expectedMatchedDatasets.reversed());
                     });
@@ -3478,7 +3551,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3541,7 +3614,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3586,7 +3659,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 2, 2, 1, List.of(testSuite, regularDataset));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 2, 2, 1, List.of(testSuite, regularDataset));
         }
 
         @ParameterizedTest
@@ -3629,7 +3702,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 1, 1, 1, List.of(expected));
         }
 
         @Test
@@ -3675,8 +3748,24 @@ class DatasetsResourceTest {
 
     }
 
-    private void findAndAssertPage(Dataset.DatasetPage actualEntity, int expected, int total, int page,
-            List<Dataset> expectedContent) {
+    /**
+     * Datasets created without a project are created in the Default Project.
+     */
+    private List<Dataset> withDefaultProject(List<Dataset> expectedDatasets, String workspaceName, String apiKey) {
+        if (expectedDatasets.stream().allMatch(dataset -> dataset.projectId() != null)) {
+            return expectedDatasets;
+        }
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        return expectedDatasets.stream()
+                .map(dataset -> dataset.projectId() == null
+                        ? dataset.toBuilder().projectId(defaultProjectId).build()
+                        : dataset)
+                .toList();
+    }
+
+    private void findAndAssertPage(Dataset.DatasetPage actualEntity, String workspaceName, String apiKey,
+            int expected, int total, int page, List<Dataset> expectedContent) {
+        expectedContent = withDefaultProject(expectedContent, workspaceName, apiKey);
         assertThat(actualEntity.size()).isEqualTo(expected);
         assertThat(actualEntity.content()).hasSize(expected);
         assertThat(actualEntity.page()).isEqualTo(page);
@@ -9465,6 +9554,70 @@ class DatasetsResourceTest {
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                             .build())
                     .containsExactlyInAnyOrderElementsOf(pagedExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when every experiment is aggregated and its items point at legacy version row ids, then page every item exactly once")
+        void streamWhenAllExperimentsAggregatedWithLegacyItemIdsThenEveryItemOnce() {
+            var datasetItems = IntStream.range(0, 5)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
+                    .toList();
+            var dataset = createDatasetWithItems(datasetItems);
+            // A delta rewrites the version and mints a new row id per item, so each row id differs from its stable
+            // dataset_item_id: the id a legacy experiment item stores
+            var latestVersion = createVersion(dataset.id(), firstVersion(dataset.id()));
+            var rowIdByStableId = readRowIdsByStableId(dataset.id(), latestVersion.id());
+            assertThat(datasetItems)
+                    .as("every item needs a row id different from its stable id, or there is no legacy id to page")
+                    .allSatisfy(item -> assertThat(rowIdByStableId.get(item.id())).isNotEqualTo(item.id()));
+
+            var experimentId = createExperiment(dataset);
+            var experimentItems = datasetItems.stream()
+                    .map(item -> createExperimentItem(experimentId, item).toBuilder()
+                            .datasetItemId(rowIdByStableId.get(item.id()))
+                            .build())
+                    .toList();
+            createExperimentItems(experimentItems.toArray(ExperimentItem[]::new));
+            var expectedIds = experimentItems.stream().map(ExperimentItem::id).toList();
+            var request = DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).limit(1).build();
+
+            assertThat(streamAll(request))
+                    .as("raw experiment with legacy item ids")
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+
+            // Aggregation stores the stable id in experiment_item_aggregates while experiment_items keeps the legacy
+            // row id, so the two tables disagree on the cursor row's dataset_item_id. With the only experiment
+            // aggregated, the raw branch (the only one that reads traces) isn't rendered at all
+            experimentAggregatesService.populateAggregations(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            assertThat(streamAll(request))
+                    .as("the same experiment, aggregated")
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+        }
+
+        private Map<UUID, UUID> readRowIdsByStableId(UUID datasetId, UUID versionId) {
+            return clickHouseTemplate.nonTransaction(connection -> Flux
+                    .from(connection.createStatement("""
+                            SELECT dataset_item_id, id
+                            FROM dataset_item_versions FINAL
+                            WHERE workspace_id = :workspace_id
+                            AND dataset_id = :dataset_id
+                            AND dataset_version_id = :version_id
+                            """)
+                            .bind("workspace_id", workspaceId)
+                            .bind("dataset_id", datasetId.toString())
+                            .bind("version_id", versionId.toString())
+                            .execute())
+                    .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                            row.get("dataset_item_id", UUID.class), row.get("id", UUID.class))))
+                    .collectMap(Map.Entry::getKey, Map.Entry::getValue))
+                    .block();
         }
 
         @Test

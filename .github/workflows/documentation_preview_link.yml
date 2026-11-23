@@ -20,7 +20,7 @@ jobs:
           pull-requests: write
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
                 
             - name: Install Fern
               working-directory: apps/opik-documentation/documentation
@@ -165,7 +165,7 @@ jobs:
 
             - name: Comment URL in PR
               if: always()
-              uses: thollander/actions-comment-pull-request@v3
+              uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
               with:
                   file-path: apps/opik-documentation/documentation/preview_url.txt
                   comment-tag: docs-preview

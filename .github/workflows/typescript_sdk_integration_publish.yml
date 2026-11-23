@@ -96,7 +96,7 @@ jobs:
         # be a workflow's first step — the repo isn't checked out yet, so the
         # composite's action.yml is not on the runner's filesystem. Keep the
         # checkout inline.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.IS_RELEASE == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
           token: ${{ steps.app-token.outputs.token || github.token }}

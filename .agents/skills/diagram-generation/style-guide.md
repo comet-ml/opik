@@ -95,6 +95,7 @@
 ```html
 <hr class="divider">
 ```
+
 `border: none; border-top: 1px solid #21262d; margin: 24px 0`
 
 ## Notes
@@ -102,6 +103,7 @@
 ```html
 <div class="note">Explanation with <span class="code">inline code</span></div>
 ```
+
 `color: #6e7681; font-size: 11px`
 
 ## Tags

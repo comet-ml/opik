@@ -300,7 +300,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: PassRateCell as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
-          aggregationKey: "pass_rate",
+          aggregationKey: "pass_rate_avg",
         },
       },
       {
@@ -490,18 +490,18 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
           <GroupsButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
+          />
+          <FiltersButton
+            columns={FILTER_AND_GROUP_COLUMNS}
+            config={filtersAndGroupsConfig as never}
+            filters={filters}
+            onChange={setFilters}
+            layout="add"
           />
         </div>
         <div className="flex items-center gap-2">

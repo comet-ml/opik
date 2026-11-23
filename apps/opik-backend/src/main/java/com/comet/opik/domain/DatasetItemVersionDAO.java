@@ -3072,22 +3072,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     // Finds the cursor row by id alone among the stream's experiments; the minmax skip index on id (000152) keeps
-    // this to a granule or two per table instead of every in-scope experiment
+    // this to a granule or two per table instead of every in-scope experiment.
+    // Reads each experiment from the table its page reads, with the same experiment_aggregated_scope_ids split as
+    // STREAM_DATASET_EXPERIMENT_ITEMS: aggregation can rewrite a legacy dataset_item_id to the stable id, so the
+    // raw row of an aggregated experiment does not hold the sort key its page compares against. The newest version
+    // wins, as in ExperimentItemDAO's lookup by id.
     private static final String RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR = """
+            WITH experiment_aggregated_scope_ids AS (
+                SELECT id
+                FROM experiment_aggregates FINAL
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id IN :experiment_ids
+            )
             SELECT experiment_id, dataset_item_id
             FROM (
-                SELECT experiment_id, dataset_item_id
+                SELECT experiment_id, dataset_item_id, last_updated_at
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
+                AND experiment_id NOT IN (SELECT id FROM experiment_aggregated_scope_ids)
                 AND id = :id
                 UNION ALL
-                SELECT experiment_id, dataset_item_id
+                SELECT experiment_id, dataset_item_id, last_updated_at
                 FROM experiment_item_aggregates
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
+                AND experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 AND id = :id
             )
+            ORDER BY last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -4347,6 +4361,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     "resolve_experiment_item_stream_cursor", workspaceId, "", criteria.datasetId());
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
+                    .bind("datasetId", criteria.datasetId())
                     .bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new))
                     .bind("id", criteria.lastRetrievedId().toString());
 
@@ -4391,8 +4406,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             template.add("cursor_resolved", cursor.isPresent());
             template.add("cursor_unresolved", resumeFromHint);
             addDatasetItemFiltersToTemplate(template, criteria.filters());
-            var targetProjectIds = preQueryResults.targetProjectIds();
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+            // Only the raw branch reads traces and spans, so only it references :target_project_ids. Binding it
+            // when that branch isn't rendered (every experiment aggregated) fails the bind
+            boolean bindTargetProjects = counts.hasRaw()
+                    && CollectionUtils.isNotEmpty(preQueryResults.targetProjectIds());
+            if (bindTargetProjects) {
                 template.add("has_target_projects", true);
             }
 
@@ -4408,8 +4426,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             if (resumeFromHint) {
                 statement.bind("cursor_experiment_id", criteria.lastRetrievedExperimentId().toString());
             }
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            if (bindTargetProjects) {
+                statement.bind("target_project_ids", preQueryResults.targetProjectIds().toArray(UUID[]::new));
             }
             bindDatasetItemFilters(statement, criteria.filters());
 

@@ -1413,11 +1413,15 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
                           dateDiff('week', toMonday(min(created_at)), toMonday(toDateTime64('$CUTOVER_START', 6))) - 1,
                           dateDiff('week', toMonday(min(created_at)), toMonday(max(created_at)))
                       ) FROM spans" 2>/dev/null || true)"
+    # The offset counts from this Monday. Pinning it with --anchor keeps the printed offset naming the same week even if
+    # the oldest row of `spans` changes before the verify runs.
+    anchor_monday="$(ch "SELECT toString(toMonday(min(created_at))) FROM spans" 2>/dev/null || true)"
+    [[ "$anchor_monday" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && anchor_arg="--anchor $anchor_monday " || anchor_arg=""
     echo "Verify with the POST-ROLLBACK table pair — the verify.sh defaults no longer apply (spans_local_v2 is gone), and"
     echo "the cutover window's week legitimately mismatches by the post-cutover writes this rollback discarded, so stop"
     echo "before it. That week is fixed by cutover_start, so the bound does not drift if you verify later:"
     if [[ "$bound_week" =~ ^-?[0-9]+$ ]] && (( bound_week >= 0 )); then
-        echo "  ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --old-table spans --new-table spans_post_rollback_backup --to-week $bound_week"
+        echo "  ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --old-table spans --new-table spans_post_rollback_backup ${anchor_arg}--to-week $bound_week"
     elif [[ "$bound_week" =~ ^-?[0-9]+$ ]]; then
         echo "  (none: every row in 'spans' predates no earlier week than the cutover window's own, so there is nothing"
         echo "   to compare below it. Skip the bounded compare.)"

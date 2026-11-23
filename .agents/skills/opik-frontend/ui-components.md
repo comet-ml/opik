@@ -82,6 +82,7 @@ COLUMN_TYPE.category    // Category/tag data
 ## Custom CSS Class Prefix
 
 Always use `comet-` prefix for custom classes:
+
 ```typescript
 className="comet-table-row-active"
 className="comet-sidebar-collapsed"
@@ -101,6 +102,7 @@ className="comet-sidebar-collapsed"
 ```
 
 Add new colors to `main.css` with dark alternatives:
+
 ```css
 :root {
   --my-custom-color: 210 100% 50%;

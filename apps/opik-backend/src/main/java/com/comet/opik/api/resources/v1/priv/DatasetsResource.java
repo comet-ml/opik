@@ -517,9 +517,10 @@ public class DatasetsResource {
             Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
             Optimizer trial, mini-batch and mutation experiments are excluded.
 
-            Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
-            id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
-            rows than the limit is the last one.""", responses = {
+            Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+            received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+            send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+            resume from the start of its experiment instead of from the start of the stream.""", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment items stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
                     ExperimentItem.class,
                     ErrorMessage.class

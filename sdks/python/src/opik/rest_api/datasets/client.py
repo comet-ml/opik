@@ -247,7 +247,7 @@ class DatasetsClient:
             Project ID. Takes precedence over project_name when both are provided.
 
         project_name : typing.Optional[str]
-            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created in the Default Project.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -1291,9 +1291,10 @@ class DatasetsClient:
         Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
         Optimizer trial, mini-batch and mutation experiments are excluded.
 
-        Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
-        id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
-        rows than the limit is the last one.
+        Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+        received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+        send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+        resume from the start of its experiment instead of from the start of the stream.
 
         Parameters
         ----------
@@ -1881,7 +1882,7 @@ class AsyncDatasetsClient:
             Project ID. Takes precedence over project_name when both are provided.
 
         project_name : typing.Optional[str]
-            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created in the Default Project.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -3003,9 +3004,10 @@ class AsyncDatasetsClient:
         Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
         Optimizer trial, mini-batch and mutation experiments are excluded.
 
-        Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
-        id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
-        rows than the limit is the last one.
+        Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+        received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+        send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+        resume from the start of its experiment instead of from the start of the stream.
 
         Parameters
         ----------
