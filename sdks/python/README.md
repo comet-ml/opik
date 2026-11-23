@@ -38,6 +38,7 @@ opik configure
 ```
 
 You can also configure the SDK programmatically in your Python code:
+
 ```python
 import opik
 
@@ -51,6 +52,7 @@ opik.configure(
 # For self-hosted Opik instances
 # opik.configure(use_local=True, project_name="optional-project-name")
 ```
+
 Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
 
 ### Dynamic Tracing Control
@@ -74,6 +76,7 @@ opik.reset_tracing_to_config_default()
 ```
 
 This is useful for:
+
 - Performance optimization in high-throughput systems
 - Conditional tracing based on user type or request parameters
 - Debugging and troubleshooting without redeployment
@@ -107,6 +110,7 @@ def my_llm_function(user_question: str) -> str:
 
 my_llm_function("Hello, Opik!")
 ```
+
 Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/integrations/overview/) for popular LLM frameworks.
 
 ## CLI Commands
@@ -125,10 +129,13 @@ For detailed information about the CLI export/import functionality, see [Import/
 For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).
 
 # Coding guidelines
+
 This guide is still in progress, however, it already contains useful information that you should know before submitting your PR.
 
 ## General
+
 We care a lot about the code maintainability. Well-organized logic which is easy to extend, re-factor and, most importantly - **read**, is what we are striving for.
+
 1. Follow [SOLID](https://realpython.com/solid-principles-python/) principles. Pay special attention to the "Single Responsibility" one.
 2. Avoid large modules, large classes, and large functions. Separate the code properly and describe this separation with names, not with comments. (See [1])
 3. If the name is not used outside of the class/module - it should be `_protected`.
@@ -136,37 +143,46 @@ We care a lot about the code maintainability. Well-organized logic which is easy
 5. Use comments only for something non-trivial that is hard to describe in any other way. Apart from these cases, comments should be used to answer the question "Why?" not "What?".
 
 ## Imports
+
 1. Import module - not name.
     Instead of this:
+
     ```python
     from threading import Thread  # bad!
     thread = Thread()
     ```
+
     do this:
+
     ```python
     import threading  # good!
     thread = threading.Thread
     ```
 
 2. If the import statement is too big, you can do the following
+
     ```python
     from opik.rest_api.core import error as rest_api_error  # ok!
     ```
 
 3. If you are working in the namespace, you likely don't need to keep most of the parent namespaces
+
     ```python
     # inside opik.api_objects.dataset
     from . import dataset_item  # ok!
     ```
 
 4. Of course, there might be exceptions from this rule, for example, some common types can be imported as is.
+
     ```python
     from typing import Dict, List  # ok!
     from opik.types import FeedbackScoreDict  # ok!
     ```
 
 ## Naming
+
 1. Avoid abbreviations. In the vast majority of cases, it is not a problem to use variable names. People spend more time understanding what "fs" means than reading the word "files" or "file_system".
+
    ```python
    for d in dataset_items:  # bad!
 
@@ -175,10 +191,13 @@ We care a lot about the code maintainability. Well-organized logic which is easy
    for dataset_item in dataset_items  # ok!
        ...
    ```
+
 2. Avoid creating modules like `utils.py`, `helpers.py`, `misc.py` etc. Especially in the big namespaces. They can quickly become dumps where people put everything that they haven't been able to create a better place for in 10 seconds after they started thinking about it. You can create those files though, but they should be localized in their namespaces designed for some specific features. In vast majority of cases there are better module names.
 
 ## Testing
+
 We highly encourage writing tests and we develop a lot of features in a test-driven way.
+
 1. Test public API, don't violate privacy.
 2. If you are an external contributor - make sure that the unit tests and e2e tests are green (they can be executed anywhere because they don't require any API keys or permissions). For internal Opik developers everything should be green in the CI.
 3. If you have `if-statements` in your code or some non-trivial boiler-plate code - it's probably a reason to think about add some unit tests for that. The more complex your code, the higher chance you'll be asked to provide unit tests for it.

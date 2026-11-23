@@ -1,10 +1,12 @@
 # Repository Guidelines
 
 ## Scope & Inheritance
+
 - This file contains docs-module specifics only.
 - Follow `../../AGENTS.md` for shared monorepo workflow, PR, and security policy.
 
 ## Project Structure & Module Organization
+
 `apps/opik-documentation` contains two documentation pipelines:
 
 - `documentation/` (primary Fern docs site)
@@ -18,6 +20,7 @@
 - `README.md` is present in this folder; follow `documentation/fern/docs-v2/contributing/*` for contribution process details and conventions.
 
 ## Build, Test, and Development Commands
+
 See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
 
 - `cd documentation && npm install`
@@ -32,6 +35,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
   - Generate static HTML into `python-sdk-docs/build/html`.
 
 ## Coding Style & Naming Conventions
+
 - Write concise, user-oriented docs (avoid internal implementation detail unless needed).
 - Use existing Markdown/MDX style in `documentation/fern/docs-v2/**` and reStructuredText style in `python-sdk-docs/source/**`.
 - Keep file names descriptive and kebab-case (`quickstart.mdx`, `api-reference.mdx`).
@@ -40,6 +44,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 - Store new images under `documentation/fern/img/`.
 
 ## Testing Guidelines
+
 - There is no dedicated automated docs test suite in this directory.
 - Validation is primarily local render verification:
   - run `npm run dev` for Fern pages,
@@ -47,13 +52,16 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 - For generated artifacts (cookbooks/SDK docs), verify output in local preview before merging.
 
 ## Agent Contribution Workflow
+
 - This module is part of the Opik monorepo; follow the shared workflow in `../../AGENTS.md#agent-contribution-workflow`.
 - Run docs-local validation commands in this file before requesting review.
 
 ## Commit & Pull Request Guidelines
+
 - Follow shared commit/PR policy in `../../AGENTS.md`.
 - Docs-specific additions: include validation steps and screenshots for visible docs changes when relevant.
 
 ## Security & Configuration Tips
+
 - Follow shared security policy in `../../AGENTS.md`.
 - Docs-specific rule: use placeholders (`<API_KEY>`, `<TOKEN>`) and never publish real credentials in docs or notebooks.
