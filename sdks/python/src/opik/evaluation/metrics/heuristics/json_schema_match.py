@@ -7,6 +7,7 @@ import pydantic
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.metrics.heuristics.is_json import _reject_non_standard_constant
 
 try:
     import jsonschema
@@ -23,10 +24,6 @@ _MAX_ERRORS_IN_REASON = 5
 # exhaust memory. One more is read only to tell whether the list was cut, which
 # `metadata["truncated"]` reports.
 _MAX_ERRORS_COLLECTED = 100
-
-
-def _reject_non_standard_constant(constant: str) -> None:
-    raise ValueError(f"{constant} is not valid JSON")
 
 
 def _resolve_schema(schema: SchemaType) -> ResolvedSchema:
@@ -120,6 +117,73 @@ def _format_path(path: Any) -> str:
     return result
 
 
+# Formats defined by the JSON Schema drafts. ``jsonschema`` checks some of them
+# only when an optional package is installed (for example ``date-time`` needs
+# ``rfc3339-validator``) and otherwise skips them without a word. Formats outside
+# this set are custom annotations, which the specification says to ignore.
+_STANDARD_FORMATS = frozenset(
+    {
+        "date-time",
+        "date",
+        "time",
+        "duration",
+        "email",
+        "idn-email",
+        "hostname",
+        "idn-hostname",
+        "ipv4",
+        "ipv6",
+        "uri",
+        "uri-reference",
+        "iri",
+        "iri-reference",
+        "uuid",
+        "uri-template",
+        "json-pointer",
+        "relative-json-pointer",
+        "regex",
+        # Draft 3
+        "host-name",
+        "ip-address",
+        "color",
+    }
+)
+# Keywords whose values are data, not subschemas, so a "format" inside them is
+# not a format assertion.
+_DATA_KEYWORDS = frozenset({"const", "enum", "default", "examples"})
+
+
+def _format_checker_for(validator_class: Any) -> Any:
+    """Return the format checker for the validator's draft.
+
+    ``FORMAT_CHECKER`` exists on the validator classes from jsonschema 4.5;
+    older 4.x versions expose the same per-draft checkers as module attributes.
+    A per-draft checker is used rather than ``jsonschema.FormatChecker()``,
+    which mixes every draft's rules (it checks ``time`` with Draft 3's rule).
+    """
+    checker = getattr(validator_class, "FORMAT_CHECKER", None)
+    if checker is None:
+        draft = validator_class.__name__[: -len("Validator")].lower()
+        checker = getattr(jsonschema, f"{draft}_format_checker", None)
+    return checker if checker is not None else jsonschema.FormatChecker()
+
+
+def _formats_used(schema: Any) -> FrozenSet[str]:
+    found = set()
+    stack = [schema]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if isinstance(node.get("format"), str):
+                found.add(node["format"])
+            stack.extend(
+                value for key, value in node.items() if key not in _DATA_KEYWORDS
+            )
+        elif isinstance(node, list):
+            stack.extend(node)
+    return frozenset(found)
+
+
 class JsonSchemaMatch(base_metric.BaseMetric):
     """
     A metric that checks whether an output conforms to a JSON Schema.
@@ -150,7 +214,12 @@ class JsonSchemaMatch(base_metric.BaseMetric):
             item) takes precedence.
         check_formats: Whether to assert the ``format`` keyword (``email``,
             ``date-time``, ...). Defaults to False, matching the JSON Schema
-            specification, where ``format`` is an annotation by default.
+            specification, where ``format`` is an annotation by default. Some
+            formats need optional packages (``pip install
+            "jsonschema[format-nongpl]"``); if the schema uses a standard format
+            that cannot be checked, ``MetricComputationError`` is raised instead
+            of skipping it. Custom formats are ignored, as the specification
+            requires.
         name: The name of the metric. Defaults to "json_schema_match_metric".
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases
@@ -201,6 +270,17 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 f"JsonSchemaMatch: the schema is not a valid JSON Schema: "
                 f"{exception.message}"
             ) from exception
+        if self._check_formats:
+            checkable = _format_checker_for(validator_class).checkers
+            unchecked = sorted(
+                (_formats_used(schema) & _STANDARD_FORMATS) - set(checkable)
+            )
+            if unchecked:
+                raise MetricComputationError(
+                    "JsonSchemaMatch: check_formats=True, but these formats "
+                    f"cannot be checked: {', '.join(unchecked)}. Install the "
+                    'optional packages with `pip install "jsonschema[format-nongpl]"`.'
+                )
 
     def score(
         self,
@@ -242,7 +322,9 @@ class JsonSchemaMatch(base_metric.BaseMetric):
             return self._not_json_result(str(exception))
 
         validator_class = _validator_class_for(resolved_schema)
-        format_checker = validator_class.FORMAT_CHECKER if self._check_formats else None
+        format_checker = (
+            _format_checker_for(validator_class) if self._check_formats else None
+        )
         validator = validator_class(resolved_schema, format_checker=format_checker)
 
         try:
@@ -279,7 +361,8 @@ class JsonSchemaMatch(base_metric.BaseMetric):
             f"{error['path']}: {error['message']}"
             for error in errors[:_MAX_ERRORS_IN_REASON]
         )
-        reason = f"Output does not match the schema ({count} errors): {shown}"
+        noun = "error" if count == "1" else "errors"
+        reason = f"Output does not match the schema ({count} {noun}): {shown}"
         more = len(errors) - _MAX_ERRORS_IN_REASON
         if more > 0:
             reason += f"; and {more}{'+' if truncated else ''} more"

@@ -96,6 +96,14 @@ def test_json_schema_match__all_violations_reported__in_metadata() -> None:
     assert "Additional properties are not allowed" in result.reason
 
 
+def test_json_schema_match__single_violation__reason_uses_singular() -> None:
+    result = _metric(schema=INVOICE_SCHEMA).score(output='{"invoice_id": "A-1"}')
+
+    assert result.reason == (
+        "Output does not match the schema (1 error): $: 'total' is a required property"
+    )
+
+
 def test_json_schema_match__many_violations__collection_is_capped() -> None:
     schema = {"type": "array", "items": {"type": "integer"}}
     output = ["x"] * 10_000
@@ -250,6 +258,76 @@ def test_json_schema_match__format__ignored_unless_check_formats() -> None:
         _metric(schema=schema, check_formats=True).score(output='"2026-11-11"').value
         == 1.0
     )
+
+
+def test_json_schema_match__date_time_and_uri__checked_with_format_packages() -> None:
+    pytest.importorskip("rfc3339_validator")
+    pytest.importorskip("rfc3986_validator")
+    metric = _metric(
+        schema={
+            "type": "object",
+            "properties": {
+                "at": {"type": "string", "format": "date-time"},
+                "link": {"type": "string", "format": "uri"},
+                "time": {"type": "string", "format": "time"},
+            },
+        },
+        check_formats=True,
+    )
+
+    valid = (
+        '{"at": "2026-11-24T10:00:00Z", "link": "https://a.b/c", "time": "12:00:00Z"}'
+    )
+    assert metric.score(output=valid).value == 1.0
+    assert metric.score(output='{"at": "yesterday"}').value == 0.0
+    assert metric.score(output='{"link": "not a uri"}').value == 0.0
+    assert metric.score(output='{"time": "25:99"}').value == 0.0
+
+
+def test_json_schema_match__standard_format_that_cannot_be_checked__raises(
+    monkeypatch,
+) -> None:
+    # Simulate a missing optional package: only "date" can be checked.
+    monkeypatch.setattr(
+        json_schema_match,
+        "_format_checker_for",
+        lambda validator_class: json_schema_match.jsonschema.FormatChecker(
+            formats=["date"]
+        ),
+    )
+    schema = {
+        "type": "object",
+        "properties": {
+            "day": {"type": "string", "format": "date"},
+            "at": {"type": "string", "format": "date-time"},
+            "links": {"type": "array", "items": {"format": "uri"}},
+        },
+    }
+
+    with pytest.raises(
+        MetricComputationError, match="cannot be checked: date-time, uri"
+    ):
+        _metric(schema=schema, check_formats=True)
+    with pytest.raises(MetricComputationError, match="cannot be checked: date-time"):
+        _metric(check_formats=True).score(output="{}", schema=schema)
+    # Without check_formats the formats are annotations, so nothing is raised.
+    assert _metric(schema=schema).score(output='{"at": "yesterday"}').value == 1.0
+
+
+def test_json_schema_match__custom_format_and_format_in_data__are_ignored() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "format": "invoice-id"},
+            "kind": {"enum": [{"format": "date-time"}]},
+            "format": {"type": "string"},
+        },
+        "default": {"format": "uri"},
+    }
+
+    metric = _metric(schema=schema, check_formats=True)
+
+    assert metric.score(output='{"id": "anything", "format": "x"}').value == 1.0
 
 
 def test_json_schema_match__draft_selected_from_dollar_schema() -> None:
