@@ -390,6 +390,7 @@ far; the call logs a WARN `ignores the vectors backfill gate`.
 | `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
 | `409` | The workspace is not opted in, the project has a list or a run in flight or no trace in the window, the window has too few vectors, or the backfill has not drained. The body's message says which. |
 | `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
+| `503` | The run could not be started, so nothing is queued. Try again. |
 
 To build a project that already has a list again (for example after a bad first build), delete its list first. Keep
 the project's `topic_projects` row: its `backfill_*` columns are the vectors tick's, and the first build waits for
