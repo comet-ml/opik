@@ -58,6 +58,7 @@ There are **three distinct categories** of feedback to collect — missing any o
 > **Why category 3 matters**: A reviewer can submit `state=CHANGES_REQUESTED` (or `COMMENTED`) with all their feedback in the review body and no inline comments. Such reviews do **not** appear in the GraphQL `reviewThreads` query (which only surfaces reviews containing inline comments) and they do **not** appear in `pulls/{N}/comments` or `issues/{N}/comments`. They are only visible via `pulls/{N}/reviews`. Past incident: PR #6507 had a `CHANGES_REQUESTED` review whose body asked us to investigate a regression; it was missed on re-runs of this skill because the body wasn't surfaced.
 
 - **Fetch all three sources**: Use GitHub MCP / `gh api` for each. When using `gh api` for any list endpoint, **always** use `--paginate` to ensure all results are fetched:
+
   ```bash
   # 1. Inline review comments (code-line-anchored)
   gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
@@ -68,6 +69,7 @@ There are **three distinct categories** of feedback to collect — missing any o
   # 3. PR-level reviews (includes review BODY text — required for category 3)
   gh api repos/comet-ml/opik/pulls/{pr_number}/reviews --paginate
   ```
+
   > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the agent silently gets only the first page and may miss real review feedback.
 - **Determine pending/unaddressed items** — evaluate each category separately:
 
@@ -141,13 +143,14 @@ PR-level review bodies (Category 3) have no thread to attach to (`in_reply_to` i
 Both quote generation here AND the addressed-check in Step 3 (Category 3 idempotency) MUST use this exact same `normalize(body)` function — otherwise a long body's truncated quote on first run won't match the full body on a re-run and the skill will post duplicate "Fixed"/"Skipping" replies.
 
 `normalize(body)`:
+
 1. Trim leading/trailing whitespace from the whole body
 2. Strip any leading `>` quote markers and one optional space (so previously quoted text inside the body doesn't double-prefix on re-quoting)
 3. Collapse runs of internal whitespace to a single space within each line; preserve line breaks between lines
 4. If the resulting string is longer than **280 characters**, truncate at 280 chars and append `…` (single Unicode horizontal ellipsis, U+2026)
 5. Return the normalized string
 
-For the **on-the-wire quote block** in the comment body, prefix each line of the normalized string with `> ` (greater-than + single space). For the **addressed-check**, extract candidate quote blocks from existing issue-thread comments by stripping that same `> ` prefix per line, then compare the resulting string to `normalize(<review body>)` — exact equality.
+For the **on-the-wire quote block** in the comment body, prefix each line of the normalized string with `>` (greater-than + single space). For the **addressed-check**, extract candidate quote blocks from existing issue-thread comments by stripping that same `>` prefix per line, then compare the resulting string to `normalize(<review body>)` — exact equality.
 
 The 280-char limit is a hard contract, not a heuristic: changing it without updating both call sites silently breaks idempotency for previously-addressed long reviews.
 
@@ -200,6 +203,7 @@ When the user opts to fix an item, **defer the reply** until the fix is pushed t
 5. Post deferred replies referencing the commit:
 
    For inline (threaded):
+
    ```
    Fixed in <commit_sha> — <brief description of what was changed>
 
@@ -207,6 +211,7 @@ When the user opts to fix an item, **defer the reply** until the fix is pushed t
    ```
 
    For PR-level (quote-reply on issue thread, using the "Quote-body normalization" rule and reply template above):
+
    ```
    > @<reviewer-login> wrote in their review (<review-state>):
    >

@@ -79,6 +79,14 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
 
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A first build over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
+
         @JsonProperty
         @Min(1) @Max(100_000) private int nightlyMinCandidate;
 
@@ -115,13 +123,6 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
             return nightlyFrequent <= nightlyExamples;
         }
-        /** Most topics in a project's list. */
-        @JsonProperty
-        @Min(1) @Max(100) private int maxTopics;
-
-        /** A first build over fewer traces is marked provisional in its stats. */
-        @JsonProperty
-        @Min(0) @Max(100_000) private int provisionalBelow;
 
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {

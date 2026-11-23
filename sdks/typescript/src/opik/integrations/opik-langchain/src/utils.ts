@@ -1,6 +1,6 @@
 import { Serialized } from "@langchain/core/load/serializable";
-import { Generation, ChatGeneration } from "@langchain/core/outputs";
-import { BaseMessage, ToolMessage } from "@langchain/core/messages";
+import { Generation, ChatGeneration, LLMResult } from "@langchain/core/outputs";
+import { AIMessage, BaseMessage, ToolMessage } from "@langchain/core/messages";
 import { ChainValues } from "@langchain/core/utils/types";
 import {
   ContentContainer,
@@ -113,6 +113,45 @@ export const outputFromGenerations = (
   });
 
   return { generations };
+};
+
+type TokenUsage = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+};
+
+// Every LangChain chat model puts the call's usage on the returned AIMessage.
+// llmOutput is provider-specific: Anthropic has no tokenUsage there, and the
+// OpenAI streaming and Responses paths, Gemini streaming and others use
+// estimatedTokenUsage instead.
+export const usageFromLLMResult = (
+  generations: Generation[][] | ChatGeneration[],
+  llmOutput?: LLMResult["llmOutput"],
+): Record<string, number> => {
+  // With n > 1 every choice carries the usage of the whole call, so take one.
+  const usageMetadata = generations
+    .flat()
+    .map(
+      (generation) =>
+        ((generation as ChatGeneration).message as AIMessage | undefined)
+          ?.usage_metadata,
+    )
+    .find((usage) => usage !== undefined);
+
+  const tokenUsage: TokenUsage = usageMetadata
+    ? {
+        promptTokens: usageMetadata.input_tokens,
+        completionTokens: usageMetadata.output_tokens,
+        totalTokens: usageMetadata.total_tokens,
+      }
+    : llmOutput?.tokenUsage || llmOutput?.estimatedTokenUsage || {};
+
+  return cleanObject({
+    prompt_tokens: tokenUsage.promptTokens,
+    completion_tokens: tokenUsage.completionTokens,
+    total_tokens: tokenUsage.totalTokens,
+  }) as Record<string, number>;
 };
 
 export const outputFromToolOutput = (output: unknown | ToolMessage) =>
