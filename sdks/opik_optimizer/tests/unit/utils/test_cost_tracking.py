@@ -114,8 +114,8 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
 
     tool_call_msg = MagicMock()
     tool_call_msg.tool_calls = tool_calls_data
-    tool_call_msg.__getitem__ = (
-        lambda self, key: tool_calls_data if key == "tool_calls" else None
+    tool_call_msg.__getitem__ = lambda self, key: (
+        tool_calls_data if key == "tool_calls" else None
     )
     tool_call_msg.to_dict = lambda: assistant_message("", tool_calls=tool_calls_data)
 
@@ -131,8 +131,8 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
 
     final_msg = MagicMock()
     final_msg.tool_calls = None
-    final_msg.__getitem__ = (
-        lambda self, key: "The weather is Sunny in NYC" if key == "content" else None
+    final_msg.__getitem__ = lambda self, key: (
+        "The weather is Sunny in NYC" if key == "content" else None
     )
     final_msg.to_dict = lambda: assistant_message("The weather is Sunny in NYC")
 

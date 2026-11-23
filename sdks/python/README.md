@@ -45,8 +45,8 @@ import opik
 # For Comet.com Cloud
 opik.configure(
     api_key="YOUR_API_KEY",
-    workspace="YOUR_WORKSPACE", # Usually found in your Comet URL: https://www.comet.com/YOUR_WORKSPACE/...
-    project_name="optional-project-name" # Optional: set a default project for traces
+    workspace="YOUR_WORKSPACE",  # Usually found in your Comet URL: https://www.comet.com/YOUR_WORKSPACE/...
+    project_name="optional-project-name",  # Optional: set a default project for traces
 )
 
 # For self-hosted Opik instances
@@ -95,6 +95,7 @@ import opik
 # Ensure Opik is configured (see Configuration section above)
 # opik.configure(...)
 
+
 @opik.track
 def my_llm_function(user_question: str) -> str:
     # Your LLM call or business logic here
@@ -107,6 +108,7 @@ def my_llm_function(user_question: str) -> str:
     opik.log_metadata({"question_length": len(user_question)})
 
     return response
+
 
 my_llm_function("Hello, Opik!")
 ```
@@ -149,6 +151,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
 
     ```python
     from threading import Thread  # bad!
+
     thread = Thread()
     ```
 
@@ -156,6 +159,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
 
     ```python
     import threading  # good!
+
     thread = threading.Thread
     ```
 

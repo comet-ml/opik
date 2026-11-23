@@ -73,7 +73,10 @@ class BaseTrackDecorator(abc.ABC):
         entrypoint: bool = False,
         source: Optional[TraceSource] = None,
         environment: Optional[str] = None,
-    ) -> Union[Callable, Callable[[Callable], Callable]]:
+        # Bare Callable already covers the decorator-factory form; mypy 2 no
+        # longer collapses Union[Callable, Callable[[Callable], Callable]], which
+        # made every call to a decorated function fail to type-check.
+    ) -> Callable:
         """
         Decorator to track the execution of a function.
 

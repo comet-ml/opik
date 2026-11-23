@@ -113,7 +113,7 @@ class TestDoStopFilters:
         with patch.object(
             stop_module,
             "_signal_until_gone",
-            lambda info: (seen.append(info.runner_id) or (True, "")),
+            lambda info: seen.append(info.runner_id) or (True, ""),
         ):
             do_stop(
                 runner_type=RunnerType.CONNECT,
@@ -134,7 +134,7 @@ class TestDoStopFilters:
         with patch.object(
             stop_module,
             "_signal_until_gone",
-            lambda info: (seen.append(info.runner_id) or (True, "")),
+            lambda info: seen.append(info.runner_id) or (True, ""),
         ):
             do_stop(
                 runner_type=RunnerType.CONNECT,

@@ -132,35 +132,37 @@ from opik_optimizer.datasets import hotpot
 # Load a sample dataset
 hot_pot_dataset = hotpot(count=300)
 
-project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
+project_name = "optimize-few-shot-bayesian-hotpot"  # For Comet logging
 
 # Define the instruction for your chat prompt.
 # Input parameters from dataset examples will be interpolated into the full prompt.
 prompt = ChatPrompt(
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "{question}"}
+        {"role": "user", "content": "{question}"},
     ]
 )
 
 optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini", # LiteLLM name to use for generation and optimization
-    min_examples=3,      # Min few-shot examples
-    max_examples=8,      # Max few-shot examples
-    n_threads=16,        # Parallel threads for evaluation
+    model="gpt-4o-mini",  # LiteLLM name to use for generation and optimization
+    min_examples=3,  # Min few-shot examples
+    max_examples=8,  # Max few-shot examples
+    n_threads=16,  # Parallel threads for evaluation
     project_name=project_name,
     seed=42,
 )
 
+
 def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+
 
 # Run the optimization
 result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=hot_pot_dataset,
     metric=levenshtein_ratio,
-    n_samples=150  # Number of dataset samples for evaluation per trial
+    n_samples=150,  # Number of dataset samples for evaluation per trial
 )
 
 # Display the best prompt and its score
@@ -226,14 +228,12 @@ prompt = ChatPrompt(
                     "properties": {
                         "query": {"type": "string", "description": "Search query"}
                     },
-                    "required": ["query"]
-                }
-            }
+                    "required": ["query"],
+                },
+            },
         }
     ],
-    function_map={
-        "search_wikipedia": lambda query: search_wikipedia(query)
-    }
+    function_map={"search_wikipedia": lambda query: search_wikipedia(query)},
 )
 
 # GEPA optimizes the agent's prompt, not the tools themselves
@@ -392,6 +392,7 @@ To suppress deprecation warnings during development:
 
 ```python
 import warnings
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 ```
 

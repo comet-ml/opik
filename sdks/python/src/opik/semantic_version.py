@@ -1,5 +1,3 @@
-# type: ignore
-
 # The content of this module is copied from comet-ml.
 
 import collections

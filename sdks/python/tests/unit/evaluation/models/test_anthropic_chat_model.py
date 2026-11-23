@@ -1035,7 +1035,7 @@ class TestFactoryRouting:
         monkeypatch.setitem(sys.modules, "litellm", litellm_stub)
 
         litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
-        litellm_integration_stub.track_completion = lambda **kw: (lambda f: f)
+        litellm_integration_stub.track_completion = lambda **kw: lambda f: f
         patch_submodule(
             monkeypatch, "opik.integrations.litellm", litellm_integration_stub
         )

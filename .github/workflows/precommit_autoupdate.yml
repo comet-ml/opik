@@ -1,0 +1,156 @@
+name: '🐙 Pre-commit Autoupdate'
+
+# Weekly bump of the remote hooks' pinned `rev:`s in .pre-commit-config.yaml.
+# Pinned revs keep every contributor and CI on identical linter versions, but
+# they go stale without a refresh. A bump can also add rules that fail files no
+# diff touched, so the bumped hooks (and only those) are re-run against the
+# whole repo and their results land in the PR body. No PR when nothing bumped.
+#
+# Two jobs, so freshly bumped (not yet reviewed) hook code never shares a job
+# with the PR-creation token: `scan` runs the hooks with no secrets and hands
+# over only a patch; `pr` applies it to a fresh checkout and opens the PR.
+# No pre-commit env cache either — environments built by unreviewed hook code
+# would otherwise be persisted and restored into later runs.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 06:00 UTC ≈ 09:00 Israel (drifts 1h across DST)
+  workflow_dispatch:
+
+concurrency:
+  group: precommit-autoupdate
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      has_changes: ${{ steps.patch.outputs.has_changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Bump revs and re-scan bumped hooks
+        run: scripts/precommit-autoupdate.sh "$RUNNER_TEMP/report.md"
+
+      - name: Build PR body
+        run: |
+          mkdir -p "$RUNNER_TEMP/bump"
+          {
+            echo "## Details"
+            echo "Automated weekly \`pre-commit autoupdate\`. Only the hooks whose \`rev:\` changed were re-run with \`--all-files\`; unchanged hooks have no new rules to apply."
+            echo
+            cat "$RUNNER_TEMP/report.md"
+            echo
+            echo "## Change checklist"
+            echo "- [ ] User facing"
+            echo "- [ ] Documentation update"
+            echo
+            echo "## Issues"
+            echo "N/A"
+            echo
+            echo "## Testing"
+            echo "- Bumped hooks re-run against the whole repo (results above)"
+            echo
+            echo "## Documentation"
+            echo "N/A"
+          } > "$RUNNER_TEMP/bump/pr-body.md"
+
+      - name: Export patch
+        id: patch
+        run: |
+          git diff --binary > "$RUNNER_TEMP/bump/bump.patch"
+          if [ -s "$RUNNER_TEMP/bump/bump.patch" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload patch
+        if: steps.patch.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: precommit-autoupdate
+          path: ${{ runner.temp }}/bump/
+          retention-days: 7
+
+  pr:
+    needs: scan
+    if: needs.scan.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download patch
+        uses: actions/download-artifact@v8
+        with:
+          name: precommit-autoupdate
+          path: ${{ runner.temp }}/bump
+
+      # The patch comes from unreviewed hook code, and a branch pushed with this
+      # token runs pull_request workflows with secrets — so a patch that touches
+      # workflows/actions is refused before any PR is opened. No hook in the config
+      # writes under .github/, so a legitimate bump never trips this. The check
+      # asks git about the staged result by pathspec rather than parsing patch
+      # paths, which git quotes (non-ASCII names) or rewrites (renames as `a => b`).
+      - name: Apply patch
+        run: |
+          git apply --index "$RUNNER_TEMP/bump/bump.patch"
+          if ! git diff --cached --quiet -- .github/; then
+            echo "::error::Autoupdate patch modifies .github/ — refusing to open a PR"
+            exit 1
+          fi
+
+      # Opened as comet-ci-bot (not GITHUB_TOKEN), so the PR's pull_request
+      # workflows — Code Quality included — actually run on it.
+      - name: Mint comet-ci-bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # The bot's noreply commit identity needs its user id; looked up rather
+      # than hardcoded so it follows whichever app the client id points at.
+      - name: Resolve comet-ci-bot identity
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          echo "identity=${APP_SLUG}[bot] <${user_id}+${APP_SLUG}[bot]@users.noreply.github.com>" >> "$GITHUB_OUTPUT"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: automation/precommit-autoupdate
+          delete-branch: true
+          commit-message: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
+          author: ${{ steps.bot.outputs.identity }}
+          committer: ${{ steps.bot.outputs.identity }}
+          title: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
+          body-path: ${{ runner.temp }}/bump/pr-body.md
+          base: main

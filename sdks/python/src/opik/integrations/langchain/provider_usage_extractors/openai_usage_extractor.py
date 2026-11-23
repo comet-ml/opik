@@ -50,7 +50,7 @@ class OpenAIUsageExtractor(
         """
         Returns "openai" unless the base url is different (in that case returns the base url)
         """
-        provider = self.PROVIDER
+        provider: str = self.PROVIDER
 
         # Check base URL to detect custom providers
         invocation_params = (run_dict.get("extra") or {}).get("invocation_params")

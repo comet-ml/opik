@@ -50,6 +50,7 @@ The e2e suite runs under `pytest-xdist` with `--dist=loadfile`: each test file i
 
   ```python
   from ..testlib import generate_project_name
+
   PROJECT_NAME = generate_project_name("e2e", __name__)
   ```
 
@@ -61,7 +62,8 @@ The e2e suite runs under `pytest-xdist` with `--dist=loadfile`: each test file i
   def test_xxx(opik_client, override_project_name):
       project_name = (
           generate_project_name("e2e", "anonymization", "override")
-          if override_project_name else None
+          if override_project_name
+          else None
       )
       ...
   ```

@@ -37,7 +37,7 @@ def test_litellm_opik_logging__happyflow(
     _response = streaming_function("Reply with one word: hello")
 
     if not synchronization.until(
-        function=lambda: (len(opik_client.search_traces()) > 0),
+        function=lambda: len(opik_client.search_traces()) > 0,
         allow_errors=True,
         max_try_seconds=30,
     ):
