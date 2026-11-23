@@ -8,7 +8,7 @@ import * as environments from "../../../../environments.js";
 import { handleNonStatusCodeError } from "../../../../errors/handleNonStatusCodeError.js";
 import * as errors from "../../../../errors/index.js";
 import * as serializers from "../../../../serialization/index.js";
-import type * as OpikApi from "../../../index.js";
+import * as OpikApi from "../../../index.js";
 
 export declare namespace AutomationRuleEvaluatorsClient {
     export type Options = BaseClientOptions;
@@ -345,6 +345,8 @@ export class AutomationRuleEvaluatorsClient {
      * @param {OpikApi.UpdateAutomationRuleEvaluatorRequest} request
      * @param {AutomationRuleEvaluatorsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.ConflictError}
+     *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", {
      *         body: {
@@ -403,11 +405,16 @@ export class AutomationRuleEvaluatorsClient {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         return handleNonStatusCodeError(

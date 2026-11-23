@@ -10,6 +10,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - `apps/opik-frontend`: React/TypeScript frontend (`src` and related assets/config).
 - `apps/opik-documentation`: documentation website and generated API docs.
 - `sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`: SDK packages and examples.
+- `sdks/genui`: the generative UI engine: the iframe host and HTML contract for generated views, the tokens and the authoring guidance.
 - `deployment`, `scripts`, `extensions`: infra, tooling, and integration extension points.
 - `tests_end_to_end`, `tests_load`: cross-stack and performance test suites.
 
@@ -23,13 +24,14 @@ This repository is a multi-module Opik codebase. Main areas:
 - `scripts/dev-runner.sh --build-be` / `--build-fe` — build one side only.
 - `scripts/dev-runner.sh --lint-be` — Java lint/format checks.
 - `scripts/dev-runner.sh --lint-fe` — frontend lint/type checks via `npm`.
-- `cd apps/opik-frontend && npm run lint && npm run test` — run ESLint + Vitest.
+- `cd apps/opik-frontend && npm run lint && npm run test` — run oxlint, oxfmt check, stylelint + Vitest.
 - `cd apps/opik-frontend && npm run build` — production frontend build.
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 - `cd sdks/python && pip install -r tests/test_requirements.txt && pip install -r tests/unit/test_requirements.txt && pytest tests/unit tests/e2e` — Python SDK test suites.
 - `make precommit` — run pre-commit hooks on changed files (vs origin/main) from the root `.pre-commit-config.yaml` across all modules (do not duplicate per-module command lines in multiple places).
 - `cd sdks/typescript && npm run lint && npm run test && npm run build` — TS SDK checks.
+- `cd sdks/genui && npm ci && npm run ci` — engine checks, as CI runs them: lint, typecheck, build, smoke, Python tests (`npm run lint:fix` applies oxlint fixes and oxfmt); `npm run build && npm run check` for the browser checks.
 - `cd tests_end_to_end/e2e && npx playwright test` — cross-stack Playwright E2E suite.
 
 ## Coding Style & Naming Conventions

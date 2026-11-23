@@ -89,7 +89,7 @@ const useTraceThreadPanelsState = <TRow extends { id: string }>({
     [setThreadId, setTraceId],
   );
 
-  const activeRowId = type === "trace" ? traceId ?? "" : threadId ?? "";
+  const activeRowId = type === "trace" ? (traceId ?? "") : (threadId ?? "");
 
   const rowIndex = useMemo(
     () => findIndex(rows, (row) => row.id === activeRowId),

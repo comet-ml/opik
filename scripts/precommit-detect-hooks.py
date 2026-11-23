@@ -19,7 +19,7 @@ hook (siblings sharing the id report "no files to check"). `files` therefore
 carries that hook's matched paths.
 
 `toolchain` tells the matrix job which heavy runtime to provision (java/node-fe/
-node-ts) or none (python hooks self-provision in pre-commit's isolated envs).
+node-ts/node-genui) or none (python hooks self-provision in pre-commit's isolated envs).
 
 Usage:
     git diff --name-only BASE..HEAD | precommit-detect-hooks.py <config>
@@ -49,11 +49,13 @@ DEFAULT_EXCLUDE = "^$"     # pre-commit default: match nothing
 TOOLCHAIN_BY_ID = {
     "spotless": "java",
     "swagger-resolve": "java",
-    "fe-eslint": "node-fe",
+    "fe-lint": "node-fe",
     "fe-typecheck": "node-fe",
     "no-private-fe-plugins": "none",  # plain bash, but gated to FE paths
     "ts-sdk-eslint": "node-ts",
     "ts-sdk-typecheck": "node-ts",
+    "genui-lint": "node-genui",
+    "genui-typecheck": "node-genui",
 }
 
 # Some hooks carry a `types:` filter (often defined upstream in the hook repo's

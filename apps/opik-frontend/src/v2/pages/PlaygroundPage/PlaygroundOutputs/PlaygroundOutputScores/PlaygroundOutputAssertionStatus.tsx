@@ -91,11 +91,8 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
 
   const statusInfo = useMemo(() => {
     const items = data?.content ?? [];
-    const matchingRow = items.find(
-      (item) =>
-        item.experiment_items?.some(
-          (ei) => ei.dataset_item_id === datasetItemId,
-        ),
+    const matchingRow = items.find((item) =>
+      item.experiment_items?.some((ei) => ei.dataset_item_id === datasetItemId),
     );
 
     if (!matchingRow) return lastStatusRef.current;

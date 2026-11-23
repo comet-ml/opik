@@ -11,7 +11,8 @@ const ButtonWithDropdown = DropdownMenuPrimitive.Root;
 
 // Trigger component - renders as a split button
 interface ButtonWithDropdownTriggerProps
-  extends Omit<ButtonProps, "asChild">,
+  extends
+    Omit<ButtonProps, "asChild">,
     Omit<
       React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>,
       "asChild"

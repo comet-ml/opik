@@ -136,6 +136,16 @@ class JSDivergence(_DistributionMetricBase):
         reference: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"JSDivergence metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
+        if not isinstance(reference, str):
+            raise MetricComputationError(
+                f"JSDivergence metric requires a string 'reference' argument, "
+                f"got {type(reference).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError(
                 "Candidate is empty (Jensen-Shannon divergence)."
@@ -314,6 +324,16 @@ class KLDivergence(_DistributionMetricBase):
         reference: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"KLDivergence metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
+        if not isinstance(reference, str):
+            raise MetricComputationError(
+                f"KLDivergence metric requires a string 'reference' argument, "
+                f"got {type(reference).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty (KL divergence metric).")
         if not reference.strip():

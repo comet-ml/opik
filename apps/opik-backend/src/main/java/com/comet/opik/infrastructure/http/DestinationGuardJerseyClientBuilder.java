@@ -15,7 +15,8 @@ import org.glassfish.jersey.client.ClientResponse;
 /**
  * Builds the shared client so a request carrying {@link DestinationGuardDnsResolver#PROPERTY} connects only to
  * addresses that guard approved, and closing its response ends the connection instead of reading the rest of the body.
- * Requests without it, all the internal ones, behave as before.
+ * Requests without it behave as before. An internal client can set a {@link DestinationGuard.Mode#RELAXED} guard only
+ * to get that close, see {@code InferenceClient}.
  */
 public class DestinationGuardJerseyClientBuilder extends JerseyClientBuilder {
 

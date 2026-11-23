@@ -16,9 +16,8 @@ const seed = (state: unknown, version?: number) =>
 // The store is a module singleton that hydrates on import, so each case needs a fresh module.
 const loadPromptMap = async () => {
   vi.resetModules();
-  const { default: usePlaygroundStore } = await import(
-    "@/store/PlaygroundStore"
-  );
+  const { default: usePlaygroundStore } =
+    await import("@/store/PlaygroundStore");
   return usePlaygroundStore.getState().promptMap;
 };
 
@@ -183,7 +182,11 @@ describe("PLAYGROUND_STATE hydration of a prompt loaded from the library", () =>
   it("stores that the backfill ran, so the next load skips it", async () => {
     seed({ promptIds: [], promptMap: {} });
 
-    await loadPromptMap();
+    vi.resetModules();
+    const { default: usePlaygroundStore } =
+      await import("@/store/PlaygroundStore");
+    // zustand writes back on hydration only after a migrate, so the flag lands with the next write.
+    usePlaygroundStore.setState({});
 
     const stored = JSON.parse(localStorage.getItem("PLAYGROUND_STATE")!);
     expect(stored.state.appliedChatPromptVersionsBackfilled).toBe(true);
