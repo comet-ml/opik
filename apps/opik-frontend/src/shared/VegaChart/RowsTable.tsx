@@ -116,20 +116,16 @@ const measureTexts = (texts: string[]): number[] => {
   }
 };
 
-// Widths measured before the web font loads use fallback metrics; true once it has, so they are measured again.
-const useFontsLoaded = () => {
-  const [loaded, setLoaded] = useState(
-    () => !document.fonts || document.fonts.status === "loaded",
-  );
+// Widths measured before a web font loads use fallback metrics; each finished load measures them again.
+const useFontsVersion = () => {
+  const [version, setVersion] = useState(0);
   useEffect(() => {
-    if (loaded) return;
-    let active = true;
-    document.fonts.ready.then(() => active && setLoaded(true));
-    return () => {
-      active = false;
-    };
-  }, [loaded]);
-  return loaded;
+    if (!document.fonts) return;
+    const onLoaded = () => setVersion((v) => v + 1);
+    document.fonts.addEventListener("loadingdone", onLoaded);
+    return () => document.fonts.removeEventListener("loadingdone", onLoaded);
+  }, []);
+  return version;
 };
 
 // The width that shows a column's header and longest value in full.
