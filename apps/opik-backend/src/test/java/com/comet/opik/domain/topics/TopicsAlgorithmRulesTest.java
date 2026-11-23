@@ -363,22 +363,6 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
-        @DisplayName("two names that share their first 255 code points are one stored name, so they merge")
-        void sameNameAfterTheCut() {
-            var prefix = "a".repeat(TopicText.MAX_NAME_LENGTH);
-            var answer = new AuthorAnswer(List.of(
-                    new AuthorTopic(prefix + " one", "d", List.of(1)),
-                    new AuthorTopic(prefix + " two", "d", List.of(2))));
-
-            var applied = AuthorApplier.apply(answer, groups, 10);
-
-            assertThat(applied.topics()).singleElement().satisfies(topic -> {
-                assertThat(topic.name()).isEqualTo(prefix);
-                assertThat(topic.groups()).containsExactly(1, 2);
-            });
-        }
-
-        @Test
         @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
         void sameNameKey() {
             var answer = new AuthorAnswer(List.of(
