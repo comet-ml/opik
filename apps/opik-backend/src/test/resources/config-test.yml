@@ -113,7 +113,7 @@ databaseAnalytics:
   #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
   #   connection is taken.
   streamPayloads: false
-  clientMaxOpenConnections: 20
+  clientMaxOpenConnections: 10
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:

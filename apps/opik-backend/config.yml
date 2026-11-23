@@ -140,14 +140,14 @@ databaseAnalytics:
   #   payloads serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered before the
   #   connection is taken.
   streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-false}
-  #  Default: 20
+  #  Default: 10
   #  Description: Size of the ClickHouse v2 client's connection pool per backend instance. Every JSONEachRow bulk insert
   #   and v2 query holds one connection for its whole request, including ClickHouse's async-insert wait, so this caps how
   #   many run at once; a request that cannot get one within 10s is retried by the client. Every backend instance opens
   #   up to this many, so ClickHouse sees instances x this: keep that within its max_concurrent_queries headroom, and
   #   raise it only while opik.clickhouse.client.pool.pending stays above zero and ClickHouse insert and read latency
   #   have room. max_open_connections in queryParameters does not apply here: it only reaches the R2DBC driver.
-  clientMaxOpenConnections: ${ANALYTICS_DB_CLIENT_MAX_OPEN_CONNECTIONS:-20}
+  clientMaxOpenConnections: ${ANALYTICS_DB_CLIENT_MAX_OPEN_CONNECTIONS:-10}
   #  Default: false
   #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
   #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);
