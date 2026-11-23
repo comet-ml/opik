@@ -569,7 +569,9 @@ class DatasetsResourceTest {
                     ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/stats",
                             DATASET_VIEW, EXPERIMENT_VIEW),
                     ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/output/columns",
-                            DATASET_VIEW, EXPERIMENT_VIEW));
+                            DATASET_VIEW, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base + "/items/experiments/items/stream", DATASET_VIEW,
+                            EXPERIMENT_VIEW));
         }
 
         @ParameterizedTest
