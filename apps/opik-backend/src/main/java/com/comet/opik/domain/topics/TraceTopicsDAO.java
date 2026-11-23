@@ -260,7 +260,7 @@ public class TraceTopicsDAO {
     public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     record TopicCount(@NonNull UUID topicId, long traces) {
     }
 }
