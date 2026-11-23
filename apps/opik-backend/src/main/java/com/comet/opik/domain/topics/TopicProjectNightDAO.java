@@ -34,28 +34,31 @@ public interface TopicProjectNightDAO {
             @Bind("night") LocalDate night);
 
     /**
-     * The streak a night that did not reach the project gives it: the nights since the last one that looked at it, or
-     * since its last save when none did, at least 1. It comes from the dates alone, so writing it again for the same
-     * night changes nothing.
-     */
-    String NOT_REACHED_STREAK = """
-            GREATEST(1, DATEDIFF(:night, GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
-                COALESCE(DATE(last_success_at), last_night, :night))))""";
-
-    /**
      * The projects of {@code workspaceIds} with a list that the night did not look at and whose streak does not count
-     * the night yet: the ones {@link #markNotReached} writes.
+     * the night yet: the ones {@link #markNotReached} writes. The streak expression is the one it writes.
      */
-    @SqlQuery("SELECT workspace_id, project_id FROM topic_projects WHERE workspace_id IN (<workspaceIds>) "
-            + "AND list_run_id IS NOT NULL AND (last_night IS NULL OR last_night < :night) "
-            + "AND not_reached_nights < " + NOT_REACHED_STREAK)
+    @SqlQuery("""
+            SELECT workspace_id, project_id FROM topic_projects
+            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL
+            AND (last_night IS NULL OR last_night < :night)
+            AND not_reached_nights < GREATEST(1, DATEDIFF(:night, GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
+                COALESCE(DATE(last_success_at), last_night, :night))))
+            """)
     List<TopicProjectKey> findNotReached(@BindList("workspaceIds") Collection<String> workspaceIds,
             @Bind("night") LocalDate night);
 
-    /** The night's budget ended before the projects: their streak counts it, once (see {@link #NOT_REACHED_STREAK}). */
-    @SqlUpdate("UPDATE topic_projects SET not_reached_nights = " + NOT_REACHED_STREAK
-            + " WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) "
-            + "AND (last_night IS NULL OR last_night < :night)")
+    /**
+     * The night's budget ended before the projects: their streak counts it, once. The streak is the nights since the
+     * last one that looked at the project, or since its last save when none did, at least 1. It comes from the dates
+     * alone, so writing it again for the same night changes nothing. {@link #findNotReached} uses the same expression.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET not_reached_nights = GREATEST(1, DATEDIFF(:night, GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
+                COALESCE(DATE(last_success_at), last_night, :night))))
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            AND (last_night IS NULL OR last_night < :night)
+            """)
     int markNotReached(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
             @Bind("night") LocalDate night);
 

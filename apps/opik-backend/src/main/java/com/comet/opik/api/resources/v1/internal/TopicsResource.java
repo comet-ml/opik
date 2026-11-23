@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -53,6 +54,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "202", description = "The run is queued"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The workspace is not opted in, the window is too small, a run is in flight, the project has a list, or its vectors backfill has not drained"),
+            @ApiResponse(responseCode = "503", description = "The run could not be started; nothing is queued, try again"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProject(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
@@ -78,7 +80,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProjectNight(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
-            @QueryParam("night") String night) {
+            @QueryParam("night") @Schema(description = "The night, yyyy-MM-dd (UTC). Default today's date in UTC; at most tomorrow, at least 365 days ago") String night) {
         if (!config.isEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }

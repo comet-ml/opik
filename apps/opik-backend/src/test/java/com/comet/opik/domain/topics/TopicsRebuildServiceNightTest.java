@@ -60,6 +60,7 @@ class TopicsRebuildServiceNightTest {
     private InferenceClient client;
     private TopicsConfig config;
     private TopicRun run;
+    private TopicsRebuildService.RunStats stats;
     /** What the client got, in order: the request and its deadline. */
     private final List<Map.Entry<GenerateRequest, Instant>> calls = Collections.synchronizedList(new ArrayList<>());
     /** What the stub algorithm's steps got, in order; an empty Optional for a null answer. */
@@ -71,6 +72,7 @@ class TopicsRebuildServiceNightTest {
         client = mock(InferenceClient.class);
         config = TestConfigUtils.loadConfigTest().getTopics();
         run = TopicRun.of(runId, workspaceId, workspaceName, projectId, NIGHT, config.getBuild().getWindowDays());
+        stats = TopicsRebuildService.RunStats.of(run);
     }
 
     @Test
@@ -83,13 +85,13 @@ class TopicsRebuildServiceNightTest {
                 "naming_new", Mono.just(object("{\"step\": 3}"))));
         var started = Instant.now();
 
-        var update = service().update(run, state(), window()).block();
+        var update = service().update(run, stats, state(), window()).block();
         var ended = Instant.now();
 
         assertThat(calls).extracting(call -> call.getKey().requestId())
                 .containsExactly(runId + ":naming", runId + ":verify_naming", runId + ":naming_new");
         assertThat(calls).extracting(call -> call.getKey().maxTokens()).containsExactly(11, 12, 13);
-        deadline(calls.get(0).getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
+        deadline(calls.getFirst().getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
         deadline(calls.get(1).getValue(), started, ended, config.getBuild().getVerifyDeadline().toJavaDuration());
         deadline(calls.get(2).getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
         assertThat(answers).containsExactly(Optional.of(object("{\"step\": 1}")), Optional.empty(),
@@ -98,11 +100,10 @@ class TopicsRebuildServiceNightTest {
         assertThat(sum(metricReader, "topics.llm.calls", "call", "naming", "outcome", "ok")).isEqualTo(2);
         assertThat(sum(metricReader, "topics.llm.calls", "call", "verify", "outcome", "bad_answer")).isEqualTo(1);
         assertThat(sum(metricReader, "topics.llm.calls")).isEqualTo(3);
-        var stats = run.stats();
-        assertThat(stats.get("night_stat").asInt()).isEqualTo(3);
-        assertThat(stats.get("llm_calls").asInt()).isEqualTo(3);
-        assertThat(stats.get("llm_input_tokens").asInt()).isEqualTo(3_000);
-        assertThat(run.seconds().has("llm")).isTrue();
+        assertThat(stats.stats().get("night_stat").asInt()).isEqualTo(3);
+        assertThat(stats.stats().get("llm_calls").asInt()).isEqualTo(3);
+        assertThat(stats.stats().get("llm_input_tokens").asInt()).isEqualTo(3_000);
+        assertThat(stats.seconds().has("llm")).isTrue();
     }
 
     @Test
@@ -115,14 +116,14 @@ class TopicsRebuildServiceNightTest {
                 "verify_naming", Mono.error(failure),
                 "naming_new", Mono.just(object("{\"step\": 3}"))));
 
-        assertThatThrownBy(() -> service().update(run, state(), window()).block())
+        assertThatThrownBy(() -> service().update(run, stats, state(), window()).block())
                 .isInstanceOfSatisfying(TopicsRunException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_ERROR));
         assertThat(calls).extracting(call -> call.getKey().requestId())
                 .containsExactly(runId + ":naming", runId + ":verify_naming");
         assertThat(answers).containsExactly(Optional.of(object("{\"step\": 1}")));
         assertThat(sum(metricReader, "topics.llm.calls", "call", "verify", "outcome", "error")).isEqualTo(1);
-        assertThat(run.stats().has("night_stat")).isFalse();
+        assertThat(stats.stats().has("night_stat")).isFalse();
     }
 
     @Test
@@ -133,7 +134,7 @@ class TopicsRebuildServiceNightTest {
         when(failure.isOutOfTime()).thenReturn(true);
         answer(Map.of("naming", Mono.error(failure)));
 
-        assertThatThrownBy(() -> service().update(run, state(), window()).block())
+        assertThatThrownBy(() -> service().update(run, stats, state(), window()).block())
                 .isInstanceOfSatisfying(TopicsRunException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
         assertThat(answers).isEmpty();
@@ -184,7 +185,7 @@ class TopicsRebuildServiceNightTest {
         private NightStep<Boolean> ask(LlmCall call, String tag, int maxTokens) {
             var request = LlmRequest.builder().call(call).tag(tag).prompt("prompt " + tag)
                     .schema(InferenceJson.MAPPER.createObjectNode()).maxTokens(maxTokens).build();
-            return new NightStep.Ask<>(request, answer -> {
+            return NightStep.ask(request, answer -> {
                 answers.add(Optional.ofNullable(answer));
                 return NightStep.done(true);
             });

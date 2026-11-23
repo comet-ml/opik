@@ -172,9 +172,9 @@ public class TopicWindowLabelService {
         return label(workspace, projectId, saved, chunk, sliceTraces, done, windowTraces)
                 .flatMap(totals -> totals.stopped()
                         ? Mono.just(PassOutcome.FAILED)
-                        : markComplete(workspace.id(), projectId, saved.runId()).thenReturn(PassOutcome.COMPLETE))
+                        : markComplete(workspace.id(), projectId, saved.runId()))
                 .onErrorResume(exception -> {
-                    log.warn("Topics labelling pass failed, run '{}', project '{}'; a later pass labels the rest",
+                    log.warn("Topics labelling pass failed, a later pass labels the rest, run '{}', project '{}'",
                             saved.runId(), projectId, exception);
                     return Mono.just(PassOutcome.FAILED);
                 })
@@ -272,15 +272,17 @@ public class TopicWindowLabelService {
             return Mono.just(Totals.ZERO);
         }
         if (!page.advanced()) {
-            log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': a page did not "
-                    + "move past trace '{}'", saved.runId(), projectId, page.slice().from(), page.slice().to(),
+            log.warn("Topics labelling pass stopped a slice, a page did not move past its last trace, run '{}', "
+                    + "project '{}', slice from '{}', to '{}', trace '{}'", saved.runId(), projectId,
+                    page.slice().from(), page.slice().to(),
                     page.after());
             return Mono.just(new Totals(0, 0, 0, true));
         }
         boolean capped = page.number() == maxPages && page.rows().size() == chunk;
         if (capped) {
-            log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': more than '{}' "
-                    + "pages", saved.runId(), projectId, page.slice().from(), page.slice().to(), maxPages);
+            log.warn("Topics labelling pass stopped a slice past its page limit, run '{}', project '{}', slice "
+                    + "from '{}', to '{}', max pages '{}'", saved.runId(), projectId, page.slice().from(),
+                    page.slice().to(), maxPages);
         }
         var labels = saved.labeller().label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList());
         var rows = new ArrayList<TraceTopic>(labels.length);
@@ -319,9 +321,9 @@ public class TopicWindowLabelService {
                         backoff.multipliedBy(1L << build.getInsertRetries())))
                 .doOnSuccess(__ -> {
                     metrics.saved(workspace, "trace_topics", rows.size());
-                    metrics.traceTopicsInsert(workspace, "ok");
+                    metrics.traceTopicsInsert(workspace, true);
                 })
-                .doOnError(__ -> metrics.traceTopicsInsert(workspace, "failed"))
+                .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
                 .then();
     }
 
@@ -335,25 +337,25 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * Sets {@code labels_complete} for the run, only while the project still names it. A failed write leaves it unset:
-     * the job calls the pass again, which finds nothing left and marks it.
+     * Sets {@code labels_complete} for the run, only while the project still names it. A failed write leaves it unset
+     * and fails the pass: a later pass finds nothing left and marks it.
      */
-    private Mono<Void> markComplete(String workspaceId, UUID projectId, UUID runId) {
+    private Mono<PassOutcome> markComplete(String workspaceId, UUID projectId, UUID runId) {
         return jdbi(() -> template.inTransaction(WRITE,
                 handle -> handle.attach(TopicProjectDAO.class).markLabelsComplete(workspaceId, projectId, runId)))
                 .doOnNext(updated -> {
                     if (updated == 0) {
-                        log.info("Topics labelling pass complete, but run '{}' is no longer the saved run of project "
-                                + "'{}'; its labels stay as the newer run left them", runId, projectId);
+                        log.info(
+                                "Topics labelling pass complete for a run that is no longer saved, run '{}', project '{}'",
+                                runId, projectId);
                     }
                 })
+                .thenReturn(PassOutcome.COMPLETE)
                 .onErrorResume(exception -> {
-                    log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
-                            + "first-build job runs the pass again", runId, projectId,
-                            TopicsErrors.formatError(exception));
-                    return Mono.empty();
-                })
-                .then();
+                    log.warn("Topics labelling pass could not mark its run complete, a later pass marks it, run '{}', "
+                            + "project '{}', errors '{}'", runId, projectId, TopicsErrors.formatError(exception));
+                    return Mono.just(PassOutcome.FAILED);
+                });
     }
 
     /**

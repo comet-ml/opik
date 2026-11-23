@@ -13,7 +13,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -58,7 +57,8 @@ class TopicsRunReconciler {
         var stale = now.minus(runs.getAbandonGrace().toJavaDuration());
         return switch (run.runStatus()) {
             case QUEUED -> reason.isPresent()
-                    ? store.dropQueued(run, reason.get()).map(dropped -> !dropped)
+                    ? store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason.get())
+                            .map(dropped -> !dropped)
                     : republishIfStale(run, night, now);
             case RUNNING -> {
                 if (run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)) {
@@ -93,7 +93,9 @@ class TopicsRunReconciler {
     /**
      * Publishes a run queued before {@code topics.runs.republishAfter} again. A first build is counted again for
      * {@code night}, as the stream entry carries the window's count; a nightly update for the current night, which
-     * the row does not keep (a night by hand for another date goes again for the current one).
+     * the row does not keep (a night by hand for another date goes again for the current one). A nightly update with no
+     * current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
+     * window past the next scheduled night.
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {
         var queuedBefore = now.minus(config.getRuns().getRepublishAfter().toJavaDuration());
@@ -102,11 +104,14 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
+        var current = TopicsNightPass.current(config.getNightly().getSchedule(), now).map(TopicsNightPass.Night::date);
+        if (run.runMode() == TopicProject.RunMode.NIGHTLY_UPDATE && current.isEmpty()) {
+            return store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE)
+                    .map(dropped -> !dropped);
+        }
         var counted = switch (run.runMode()) {
             case FIRST_BUILD -> night;
-            case NIGHTLY_UPDATE -> TopicsNightPass.current(config.getNightly().getSchedule(), now)
-                    .map(TopicsNightPass.Night::date)
-                    .orElse(LocalDate.ofInstant(now, ZoneOffset.UTC));
+            case NIGHTLY_UPDATE -> current.get();
             case LABELS -> null;
         };
         var ready = counted == null

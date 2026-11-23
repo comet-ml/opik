@@ -6,8 +6,10 @@ import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -19,7 +21,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -75,9 +76,9 @@ public class TopicRunStore {
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int queued = template.inTransaction(WRITE, handle -> {
-                var runDAO = handle.attach(TopicProjectDAO.class);
-                runDAO.ensureRow(workspaceId, projectId);
-                return runDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
+                var projectDAO = handle.attach(TopicProjectDAO.class);
+                projectDAO.ensureRow(workspaceId, projectId);
+                return projectDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
             });
             return queued == 1 ? Optional.of(runId) : Optional.empty();
         });
@@ -106,7 +107,7 @@ public class TopicRunStore {
      * counted in {@code failed_runs}) and is counted as that skip in {@code topics.nightly.decisions}.
      */
     Mono<NightClaim> claimNightly(@NonNull TopicsRunMessage message, @NonNull Instant deadline) {
-        var windowTo = message.night().atStartOfDay(ZoneOffset.UTC).toInstant();
+        var windowTo = TopicsNightPass.Night.windowTo(message.night());
         return jdbi(() -> template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             var now = Instant.now();
@@ -168,12 +169,16 @@ public class TopicRunStore {
         })).doOnNext(code -> code.ifPresent(value -> countFailed(workspaceId, value)));
     }
 
-    /** {@code queued -> failed} with {@code cancelled}, for a queued run whose project or workspace left. */
-    Mono<Boolean> dropQueued(@NonNull InFlightRun run, @NonNull TopicProject.CancelReason reason) {
-        return write(dao -> dao.dropQueued(run.workspaceId(), run.projectId(), run.runId(), reason, Instant.now()))
+    /**
+     * {@code queued -> failed} with {@code cancelled}: its project or workspace left (the reason), or a run by hand was
+     * not published (no reason).
+     */
+    Mono<Boolean> dropQueued(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @Nullable TopicProject.CancelReason reason) {
+        return write(dao -> dao.dropQueued(workspaceId, projectId, runId, reason, Instant.now()))
                 .doOnNext(dropped -> {
                     if (dropped) {
-                        countFailed(run.workspaceId(), RunError.CANCELLED);
+                        countFailed(workspaceId, RunError.CANCELLED);
                     }
                 });
     }
@@ -298,10 +303,11 @@ public class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(saved -> keepIfProjectExists(run));
+                .flatMap(saved -> deleteTopicsIfProjectGone(run));
     }
 
     /** The list a nightly update read: its state, the run that saved it, and the ids of its stored topics. */
+    @Builder(toBuilder = true)
     record SavedList(@NonNull NightState state, @NonNull UUID listRunId, @NonNull Set<UUID> topicIds) {
     }
 
@@ -309,6 +315,7 @@ public class TopicRunStore {
      * What a nightly update writes to MySQL. {@code keep} is false when no topic stayed live: then the list is cleared
      * and every stored topic is in {@code retired}.
      */
+    @Builder(toBuilder = true)
     record NightSave(boolean keep, @NonNull List<Topic> inserted, @NonNull List<Topic> updated,
             @NonNull List<UUID> retired, PrototypeVectors otherVectors) {
     }
@@ -334,8 +341,11 @@ public class TopicRunStore {
                     .night(night)
                     .ids(idGenerator::generateId)
                     .build();
-            return new SavedList(state, project.get().listRunId(),
-                    topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()));
+            return SavedList.builder()
+                    .state(state)
+                    .listRunId(project.get().listRunId())
+                    .topicIds(topics.stream().map(Topic::id).collect(Collectors.toUnmodifiableSet()))
+                    .build();
         }));
     }
 
@@ -396,14 +406,23 @@ public class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(__ -> keepIfProjectExists(run))
+                .flatMap(__ -> deleteTopicsIfProjectGone(run))
                 .map(exists -> exists && save.keep());
     }
 
-    /** False, after deleting the run's topics, when the project was deleted during the run. */
-    private Mono<Boolean> keepIfProjectExists(TopicRun run) {
+    /** Whether the project is still in {@code projects}. */
+    Mono<Boolean> projectExists(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return jdbi(() -> exists(workspaceId, projectId));
+    }
+
+    private boolean exists(String workspaceId, UUID projectId) {
+        return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
+    }
+
+    /** True when the project still exists; when it was deleted during the run, deletes the run's topics and is false. */
+    private Mono<Boolean> deleteTopicsIfProjectGone(TopicRun run) {
         return jdbi(() -> {
-            boolean exists = !projectService.findByIds(run.workspaceId(), Set.of(run.projectId())).isEmpty();
+            boolean exists = exists(run.workspaceId(), run.projectId());
             if (!exists) {
                 int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                         .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
@@ -429,7 +448,7 @@ public class TopicRunStore {
 
     /**
      * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted ok or failed. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
      * the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
@@ -443,11 +462,11 @@ public class TopicRunStore {
                                 signal.totalRetries() + 2, signal.failure())))
                 .map(__ -> {
                     metrics.saved(run.workspace(), "trace_topics", traceTopics.size());
-                    metrics.traceTopicsInsert(run.workspace(), "ok");
+                    metrics.traceTopicsInsert(run.workspace(), true);
                     return true;
                 })
                 .onErrorResume(exception -> {
-                    metrics.traceTopicsInsert(run.workspace(), "failed");
+                    metrics.traceTopicsInsert(run.workspace(), false);
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
                     return Mono.just(false);
