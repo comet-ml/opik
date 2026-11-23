@@ -69,10 +69,10 @@ class TopicRunStore {
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int abandoned = template.inTransaction(WRITE, handle -> {
-                var runDAO = handle.attach(TopicProjectDAO.class);
+                var projectDAO = handle.attach(TopicProjectDAO.class);
                 var now = Instant.now();
-                int recorded = runDAO.recordAbandoned(workspaceId, projectId, abandonedBefore, now);
-                runDAO.startRun(workspaceId, projectId, runId, mode, now);
+                int recorded = projectDAO.recordAbandoned(workspaceId, projectId, abandonedBefore, now);
+                projectDAO.startRun(workspaceId, projectId, runId, mode, now);
                 return recorded;
             });
             if (abandoned > 0) {
@@ -282,7 +282,7 @@ class TopicRunStore {
 
     /**
      * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted ok or failed. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
      * the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
@@ -296,11 +296,11 @@ class TopicRunStore {
                                 signal.totalRetries() + 2, signal.failure())))
                 .map(__ -> {
                     metrics.saved(run.workspace(), "trace_topics", traceTopics.size());
-                    metrics.traceTopicsInsert(run.workspace(), "ok");
+                    metrics.traceTopicsInsert(run.workspace(), true);
                     return true;
                 })
                 .onErrorResume(exception -> {
-                    metrics.traceTopicsInsert(run.workspace(), "failed");
+                    metrics.traceTopicsInsert(run.workspace(), false);
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
                     return Mono.just(false);

@@ -60,19 +60,22 @@ class InferenceConfigTest {
 
     static Stream<Arguments> decidesAndConnections() {
         return Stream.of(
-                arguments("the defaults", true, 48, 4, 1, 64, true),
-                arguments("all callers one below the pool", true, 58, 4, 1, 64, true),
-                arguments("all callers as many as the pool", true, 59, 4, 1, 64, false),
-                arguments("decides alone below the pool, with loads and embeds over it", true, 48, 12, 4, 64, false),
-                arguments("a cap near Integer.MAX_VALUE", true, Integer.MAX_VALUE, 4, 1, 64, false),
-                arguments("guardrails off", false, 256, 64, 8, 64, true));
+                arguments("the defaults", true, 48, 4, 1, 4, 64, true),
+                arguments("all callers one below the pool", true, 54, 4, 1, 4, 64, true),
+                arguments("all callers as many as the pool", true, 55, 4, 1, 4, 64, false),
+                arguments("decides alone below the pool, with loads and embeds over it", true, 48, 12, 4, 4, 64,
+                        false),
+                arguments("generates fill the pool", true, 48, 4, 1, 11, 64, false),
+                arguments("a cap near Integer.MAX_VALUE", true, Integer.MAX_VALUE, 4, 1, 4, 64, false),
+                arguments("guardrails off", false, 256, 64, 8, 64, 64, true));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("decidesAndConnections")
     @DisplayName("calls to opik-inference stay below the shared pool's connections per route")
     void callsStayBelowTheConnectionsPerRoute(String description, boolean guardrailsEnabled, int maxConcurrentDecides,
-            int loadConcurrency, int embedConcurrency, int maxConnectionsPerRoute, boolean valid) {
+            int loadConcurrency, int embedConcurrency, int maxConcurrentGenerates, int maxConnectionsPerRoute,
+            boolean valid) {
         var config = TestConfigUtils.loadConfigTest();
         config.getServiceToggles().setGuardrailsValidationsEnabled(guardrailsEnabled);
         config.getAiLabels().setEnabled(true);
@@ -80,6 +83,7 @@ class InferenceConfigTest {
         config.getInference().setMaxConcurrentDecides(maxConcurrentDecides);
         config.getAiLabels().setLoadConcurrency(loadConcurrency);
         config.getTopics().getVectors().setEmbedConcurrency(embedConcurrency);
+        config.getInference().setMaxConcurrentGenerates(maxConcurrentGenerates);
         config.getJerseyClient().setMaxConnectionsPerRoute(maxConnectionsPerRoute);
 
         assertThat(VALIDATOR.validateProperty(config, "inferenceCallsWithinConnectionPool")).hasSize(valid ? 0 : 1);
@@ -95,17 +99,18 @@ class InferenceConfigTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("featuresOnAndOff")
-    @DisplayName("loads and embeds count against the pool only when their feature is on")
+    @DisplayName("loads, embeds and generates count against the pool only when their feature is on")
     void loadsAndEmbedsCountOnlyWhenTheirFeatureIsOn(String description, boolean aiLabelsEnabled,
             boolean topicsEnabled, boolean valid) {
         var config = TestConfigUtils.loadConfigTest();
         config.getServiceToggles().setGuardrailsValidationsEnabled(true);
         config.getAiLabels().setEnabled(aiLabelsEnabled);
         config.getTopics().setEnabled(topicsEnabled);
-        // Decides alone leave room, with loads and embeds on top they fill the pool.
-        config.getInference().setMaxConcurrentDecides(59);
+        // Decides alone leave room, with loads, embeds and generates on top they fill the pool.
+        config.getInference().setMaxConcurrentDecides(55);
         config.getAiLabels().setLoadConcurrency(4);
         config.getTopics().getVectors().setEmbedConcurrency(4);
+        config.getInference().setMaxConcurrentGenerates(4);
         config.getJerseyClient().setMaxConnectionsPerRoute(64);
 
         assertThat(VALIDATOR.validateProperty(config, "inferenceCallsWithinConnectionPool")).hasSize(valid ? 0 : 1);
