@@ -383,13 +383,23 @@ export class ExperimentsPage {
   /**
    * The expand/collapse control on a group row.
    *
-   * Its accessible name is the group's PREFIX — "Dataset", "Test suite" or
-   * "Item source" — because `ItemSourceGroupCell` renders the prefix as the
-   * button's only text (the chevron beside it is an unlabelled icon). Scoped to
-   * the one row, so the shared name is unambiguous.
+   * Addressed as the group row's ONLY button, not by an accessible name —
+   * because on this page it does not have one. `ItemSourceGroupCell` renders
+   * its prefix ("Dataset" / "Test suite" / "Item source") only when
+   * `hidePrefix` is false, and `useExperimentsTableConfig` sets
+   * `hidePrefix: Boolean(itemSourceLabel)`. Since opik#9611 gave the
+   * Experiments page's tabs an `itemSourceLabel`, the prefix is suppressed here
+   * and the toggle is a bare chevron with no text at all. The prompt detail
+   * tab passes no label and so still renders the prefix — which is exactly why
+   * naming it was addressing a moving target, and why
+   * `ExperimentGroupRows.expandGroup` already addressed it this way.
+   *
+   * The row holds a checkbox, this button and a link, so "its only button" is
+   * unambiguous; the `toHaveCount(1)` in `groupIsExpanded` keeps it honest if
+   * that ever stops being true.
    */
-  groupExpandToggle(groupName: string, prefix = 'Dataset'): Locator {
-    return this.groupRowFor(groupName).getByRole('button', { name: prefix, exact: true });
+  groupExpandToggle(groupName: string): Locator {
+    return this.groupRowFor(groupName).getByRole('button');
   }
 
   /**
@@ -404,16 +414,18 @@ export class ExperimentsPage {
    * identity rather than a position — but the right fix is an `aria-expanded`
    * on that Button, which would also make the control answerable to a screen
    * reader; this POM cannot add it because the QA branch may not touch
-   * `apps/opik-frontend/`.
+   * `apps/opik-frontend/`. Since opik#9611 suppressed the prefix on this page
+   * the chevron is the toggle's only content at all, which makes the point
+   * sharper rather than weaker: there is now nothing else to go by.
    *
    * Asserted to have resolved exactly one chevron before answering: a lookup
    * that found neither state would otherwise return `false` and read as
    * "collapsed", which is a plausible-looking answer that no amount of waiting
    * would correct.
    */
-  async groupIsExpanded(groupName: string, prefix = 'Dataset'): Promise<boolean> {
+  async groupIsExpanded(groupName: string): Promise<boolean> {
     return test.step(`read whether group "${groupName}" is expanded`, async () => {
-      const toggle = this.groupExpandToggle(groupName, prefix);
+      const toggle = this.groupExpandToggle(groupName);
       await expect(toggle, `the expand toggle of group '${groupName}'`).toHaveCount(1);
       const down = toggle.locator('svg.lucide-chevron-down');
       const right = toggle.locator('svg.lucide-chevron-right');
@@ -511,12 +523,12 @@ export class ExperimentsPage {
    * reads the state it then changes, so it cannot also be the thing that
    * asserts it.
    */
-  async ensureGroupExpanded(groupName: string, prefix = 'Dataset'): Promise<void> {
+  async ensureGroupExpanded(groupName: string): Promise<void> {
     return test.step(`ensure group "${groupName}" is expanded`, async () => {
-      if (await this.groupIsExpanded(groupName, prefix)) return;
-      await this.groupExpandToggle(groupName, prefix).click();
+      if (await this.groupIsExpanded(groupName)) return;
+      await this.groupExpandToggle(groupName).click();
       await expect
-        .poll(() => this.groupIsExpanded(groupName, prefix), {
+        .poll(() => this.groupIsExpanded(groupName), {
           message: `group '${groupName}' must be expanded after its toggle is clicked`,
           timeout: 10_000,
         })
@@ -740,6 +752,43 @@ export class ExperimentsPage {
       await this.page.keyboard.press('Escape');
       await expect(menu, 'the Columns picker after Escape').toBeHidden();
       return labels;
+    });
+  }
+
+  /**
+   * Turn a column ON through the Columns picker, if the table is not already
+   * showing it.
+   *
+   * Needed because a tab's DEFAULT column set is not the whole offered set, and
+   * the two diverged at opik#9611: `TAB_CONFIG` gives the Test suites tab
+   * `total_estimated_cost_avg` and Pass rate by default, and the Datasets tab
+   * Feedback Scores instead — so a spec about a cost cell on the Datasets tab
+   * has to ask for the column rather than assume it.
+   *
+   * Idempotent, and by the rendered HEADER rather than by the picker's own tick
+   * state: the question a caller is asking is "is this column in the table",
+   * and clicking an already-selected entry would turn it off. Asserting the
+   * header afterwards is what makes this a precondition rather than a gesture —
+   * a column the tab excludes entirely is not offered in the picker at all
+   * (see `columnPickerLabels`), and this fails loudly on it instead of
+   * continuing to an assertion about a cell that cannot exist.
+   */
+  async enableColumn(label: string): Promise<void> {
+    return test.step(`show the "${label}" column`, async () => {
+      if ((await this.columnHeader(label).count()) > 0) return;
+      await this.columnsButton.click();
+      const menu = this.page.getByRole('menu');
+      const entry = menu.getByRole('button', { name: label, exact: true });
+      await expect(entry, `the "${label}" entry in the Columns picker`).toHaveCount(1);
+      await entry.click();
+      // The menu keeps itself open on select; close it rather than leaving an
+      // overlay across the table the next assertion has to read through.
+      await this.page.keyboard.press('Escape');
+      await expect(menu, 'the Columns picker after Escape').toBeHidden();
+      await expect(
+        this.columnHeader(label),
+        `the "${label}" column header after selecting it`,
+      ).toHaveCount(1);
     });
   }
 

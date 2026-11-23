@@ -39,6 +39,16 @@ import { loadEnvConfig } from '../../config/env.config';
  * flow; the seed is reused from the pass-rate specs because it already builds
  * the one thing this needs, several groups holding evaluation-suite experiments
  * under one project.
+ *
+ * **Pinned to the Test suites tab, since opik#9611.** That PR split this page
+ * into Test suites and Datasets tabs, selected by `evaluation_method`, so the
+ * fixture's four groups no longer appear together on any one page: three hold
+ * evaluation-suite experiments and the fourth holds only a dataset-method one.
+ * Naming the tab is what keeps the counts below CLOSED sets — the alternative,
+ * letting the page resolve its own starting tab, would make every count depend
+ * on a precedence chain that is somebody else's capability and somebody else's
+ * spec. The `mixed` group that every click assertion uses is a suite group, so
+ * the Test suites tab is where this spec's subject lives.
  */
 test.describe(
   'Experiments — grouped name cell',
@@ -122,14 +132,18 @@ test.describe(
         test.setTimeout(180_000);
         const seed = groupedPassRateExperiments;
         const experiments = new ExperimentsPage(page);
-        const rows = seed.groups.flatMap((group) => group.experiments);
+        // This tab's groups, not all four: the dataset-method group lives on the
+        // Datasets tab since opik#9611, so a range over "every seeded
+        // experiment" would be a range over rows this page never renders.
+        const groups = seed.suiteGroups;
+        const rows = groups.flatMap((group) => group.experiments);
 
         let listUrl = '';
-        await test.step('Open the grouped list and expand every group', async () => {
-          await experiments.gotoGrouped(seed.projectId);
+        await test.step('Open the grouped Test suites tab and expand every group', async () => {
+          await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
           await experiments.waitForReady();
-          await experiments.groups.waitForGroupRows(seed.groups.length);
-          for (const group of seed.groups) {
+          await experiments.groups.waitForGroupRows(groups.length);
+          for (const group of groups) {
             await experiments.groups.expandGroup(group.datasetName, group.experiments[0].id);
           }
           // Every seeded experiment has a row, so the range below spans a known
@@ -182,14 +196,24 @@ test.describe(
   },
 );
 
-/** Open the grouped Experiments list with the two-experiment group expanded. */
+/** Open the grouped Test suites tab with the two-experiment group expanded. */
 async function openMixedGroup(
   experiments: ExperimentsPage,
-  seed: { projectId: string; groups: { datasetName: string }[]; mixed: { datasetName: string; experiments: { id: string }[] } },
+  seed: {
+    projectId: string;
+    suiteGroups: { datasetName: string }[];
+    mixed: { datasetName: string; experiments: { id: string }[] };
+  },
 ): Promise<void> {
-  await experiments.gotoGrouped(seed.projectId);
+  // `grouped: true` sends no `groups` param, so the tab arrives on its DEFAULT
+  // grouping — which is the view this spec is about. `gotoGrouped` would land
+  // on whichever tab the page resolves for itself.
+  //
+  // `suiteGroups`, not `groups`: the fixture derives that split from the seeded
+  // evaluation methods, for the reason its own comment gives.
+  await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
   await experiments.waitForReady();
-  await experiments.groups.waitForGroupRows(seed.groups.length);
+  await experiments.groups.waitForGroupRows(seed.suiteGroups.length);
   await experiments.groups.expandGroup(
     seed.mixed.datasetName,
     seed.mixed.experiments[0].id,

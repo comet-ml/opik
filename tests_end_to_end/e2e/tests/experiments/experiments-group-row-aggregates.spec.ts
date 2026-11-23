@@ -51,8 +51,22 @@ import { displayedDuration } from '@e2e/core/duration';
  * would read as coverage of aggregates nobody checked.
  */
 
-/** The default grouping's prefix for a group whose value is a dataset. */
-const GROUP_PREFIX = 'Dataset';
+/**
+ * The grouping cell renders NO item-source prefix on this page.
+ *
+ * It used to read "Dataset <name> N exps". `ItemSourceGroupCell` renders its
+ * prefix only when `hidePrefix` is false, and `useExperimentsTableConfig` sets
+ * `hidePrefix: Boolean(itemSourceLabel)` — so once opik#9611 gave the
+ * Experiments page's tabs an `itemSourceLabel` of their own ("Dataset" /
+ * "Test suite"), the prefix inside the cell became a duplicate of the tab's own
+ * label and was suppressed. The prompt detail page's Experiments tab passes no
+ * label and so still renders it.
+ *
+ * Kept as a named constant with this comment rather than inlined, because
+ * "the cell does not start with 'Dataset'" is a deliberate expectation here and
+ * not an omission someone should helpfully fix.
+ */
+const GROUP_CELL_PREFIX = '';
 
 test.describe('Experiments — the default grouping and its group-row aggregates', {
   tag: ['@t2-cuj', '@area:experiments'],
@@ -91,17 +105,33 @@ test.describe('Experiments — the default grouping and its group-row aggregates
         }
       });
 
-      await test.step('Each group row names its prefix, its dataset and its own count', async () => {
+      await test.step('Each group row names its dataset and its own count', async () => {
         // The counts differ between the two groups on purpose, so "N exps" is
         // a verdict rather than a string that happens to be the same for both.
         for (const group of all) {
           const cell = experiments.groupRowCell(group.datasetName, '$__grouping___dataset_id_');
           await expect(cell, `the grouping cell of '${group.datasetName}'`).toHaveCount(1);
-          const text = (await cell.innerText()).replace(/\s+/g, ' ').trim();
-          expect(text, `group row for '${group.datasetName}'`).toBe(
-            `${GROUP_PREFIX} ${group.datasetName} ${group.experiments.length} ` +
-              `${group.experiments.length === 1 ? 'exp' : 'exps'}`,
-          );
+          // Polled, because the "N exps" half comes from `aggregationMap`,
+          // which `ItemSourceGroupCell` renders only once the
+          // groups/aggregations query has answered — so the cell legitimately
+          // renders the name alone for a render pass or two, and reading it
+          // once races that.
+          //
+          // Still `innerText`, and not `toHaveText`, which would retry on its
+          // own: the name and the count are separate flex children with no
+          // whitespace text node between them, so `textContent` (what
+          // `toHaveText` compares) runs them together as "<name>2 exps".
+          // `innerText` is the rendered text, which is the separation a reader
+          // actually sees — and it is what this assertion is about.
+          await expect
+            .poll(async () => (await cell.innerText()).replace(/\s+/g, ' ').trim(), {
+              message: `group row for '${group.datasetName}'`,
+              timeout: 30_000,
+            })
+            .toBe(
+              `${GROUP_CELL_PREFIX}${group.datasetName} ${group.experiments.length} ` +
+                `${group.experiments.length === 1 ? 'exp' : 'exps'}`,
+            );
         }
       });
     },
@@ -135,6 +165,18 @@ test.describe('Experiments — the default grouping and its group-row aggregates
       await test.step('Open the grouped Experiments page', async () => {
         await experiments.gotoDefaultGrouped(projectId);
         await experiments.waitForGroupedReady();
+      });
+
+      await test.step('Show the Cost per trace (avg.) column, which this tab does not by default', async () => {
+        // Asked for rather than assumed, since opik#9611: `TAB_CONFIG` gives
+        // `total_estimated_cost_avg` to the Test suites tab's default columns
+        // and Feedback Scores to the Datasets tab's, and these experiments are
+        // dataset-method ones, so the page lands on the tab WITHOUT it. The
+        // column is still offered — which `enableColumn` asserts by waiting for
+        // its header — so this is a precondition, not a workaround: a tab that
+        // had dropped the column from its offered set entirely would fail here
+        // rather than in a cell assertion that could never have passed.
+        await experiments.enableColumn('Cost per trace (avg.)');
       });
 
       await test.step('The priced group’s Cost cell names the amount the endpoint reported', async () => {
@@ -171,7 +213,7 @@ test.describe('Experiments — the default grouping and its group-row aggregates
         // them the other way would be telling a reader the opposite thing.
         // `ensureGroupExpanded`, not a click: the page auto-expands the first
         // group, so clicking both toggles would close whichever one that is.
-        await experiments.ensureGroupExpanded(unpriced.datasetName, GROUP_PREFIX);
+        await experiments.ensureGroupExpanded(unpriced.datasetName);
         const unpricedRow = experiments.groupedExperimentRow(unpriced.experiments[0].id);
         await expect(unpricedRow, 'the unpriced group’s experiment row').toHaveCount(1);
         await expect(
@@ -181,7 +223,7 @@ test.describe('Experiments — the default grouping and its group-row aggregates
           ),
         ).toHaveText('-');
 
-        await experiments.ensureGroupExpanded(priced.datasetName, GROUP_PREFIX);
+        await experiments.ensureGroupExpanded(priced.datasetName);
         for (const experiment of priced.experiments) {
           await expect(
             experiments.groupedExperimentRow(experiment.id),
@@ -235,7 +277,7 @@ test.describe('Experiments — the default grouping and its group-row aggregates
         for (const group of all) {
           const expanded = group.datasetName === firstGroupName;
           expect(
-            await experiments.groupIsExpanded(group.datasetName, GROUP_PREFIX),
+            await experiments.groupIsExpanded(group.datasetName),
             `group '${group.datasetName}' on first load`,
           ).toBe(expanded);
           for (const experiment of group.experiments) {
@@ -249,7 +291,7 @@ test.describe('Experiments — the default grouping and its group-row aggregates
 
       await test.step('Expanding a collapsed group reveals its own rows and keeps the other’s', async () => {
         const collapsed = all.find((group) => group.datasetName !== firstGroupName)!;
-        await experiments.groupExpandToggle(collapsed.datasetName, GROUP_PREFIX).click();
+        await experiments.groupExpandToggle(collapsed.datasetName).click();
         for (const group of all) {
           for (const experiment of group.experiments) {
             await expect(

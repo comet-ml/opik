@@ -38,6 +38,16 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  * see the `groupedPassRateExperiments` fixture for why a real `opik.run_tests`
  * run could not stand in, and for the server-side precondition check that
  * refuses a seed these assertions could not fail against.
+ *
+ * **Pinned to a named tab, since opik#9611.** That PR split the Experiments
+ * page into Test suites and Datasets tabs on `evaluation_method`, so the seed's
+ * four groups no longer appear together on one page: the three suite groups are
+ * on Test suites (`seed.suiteGroups`) and `datasetOnly` is on Datasets. Each
+ * test therefore names the tab it needs and counts that tab's groups, which is
+ * what keeps the group-row counts closed sets rather than making them depend on
+ * the page's starting-tab precedence — somebody else's capability and somebody
+ * else's spec. The last test is the one the split changed in substance; see its
+ * own comment.
  */
 test.describe(
   'Test suites — Experiments group pass rate',
@@ -94,9 +104,9 @@ test.describe(
 
         const experiments = new ExperimentsPage(page);
         await test.step('Open the Experiments page on its default grouped view', async () => {
-          await experiments.gotoGrouped(seed.projectId);
+          await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
           await experiments.waitForReady();
-          await experiments.groups.waitForGroupRows(seed.groups.length);
+          await experiments.groups.waitForGroupRows(seed.suiteGroups.length);
         });
 
         await test.step('The mixed group reads 67% — the mean — with a failing dot', async () => {
@@ -119,9 +129,9 @@ test.describe(
         const seed = groupedPassRateExperiments;
 
         const experiments = new ExperimentsPage(page);
-        await experiments.gotoGrouped(seed.projectId);
+        await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
         await experiments.waitForReady();
-        await experiments.groups.waitForGroupRows(seed.groups.length);
+        await experiments.groups.waitForGroupRows(seed.suiteGroups.length);
 
         // Read on two groups whose means and pooled ratios differ by different
         // amounts. One group could be satisfied by wording that restated the
@@ -155,9 +165,9 @@ test.describe(
         const seed = groupedPassRateExperiments;
 
         const experiments = new ExperimentsPage(page);
-        await experiments.gotoGrouped(seed.projectId);
+        await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
         await experiments.waitForReady();
-        await experiments.groups.waitForGroupRows(seed.groups.length);
+        await experiments.groups.waitForGroupRows(seed.suiteGroups.length);
 
         const capped = seed.cap.experiments[0];
 
@@ -195,7 +205,7 @@ test.describe(
     );
 
     test(
-      'a group holding only a dataset-method experiment leaves the pass rate empty, not 0%',
+      'a group holding only a dataset-method experiment is never shown a pass rate to get wrong',
       { tag: ['@cap:test-suites.group-pass-rate-display'] },
       async ({ page, backendClient, groupedPassRateExperiments }) => {
         test.setTimeout(180_000);
@@ -224,15 +234,50 @@ test.describe(
         });
 
         const experiments = new ExperimentsPage(page);
-        await experiments.gotoGrouped(seed.projectId);
-        await experiments.waitForReady();
-        await experiments.groups.waitForGroupRows(seed.groups.length);
 
-        await test.step('And the group row renders an empty Pass rate cell', async () => {
-          await experiments.groups.expectGroupPassRateEmpty(seed.datasetOnly.datasetName);
-          // Beside a group that DOES have one, on the same render: an empty cell
-          // everywhere would be the pre-9646 defect, and would satisfy the
-          // assertion above on its own.
+        // Since opik#9611 this group is on the DATASETS tab, and that tab has no
+        // Pass rate column at all — `TAB_CONFIG` leaves it out of the defaults
+        // and the tab filters it out of the offered column set, so a user cannot
+        // re-enable it either (that exclusion is `experiments.tab-columns`'
+        // own claim, asserted by experiments-tab-columns.spec.ts).
+        //
+        // So the UI half of this test changed shape. It used to be "the cell is
+        // empty rather than 0%" on a page that showed all four groups together.
+        // The page cannot show them together any more, and on the tab where this
+        // group lives there is no cell to be wrong in — which is a stronger
+        // guarantee of the same thing, and is what is asserted below. The
+        // same-render "empty beside a real one" comparison still exists in the
+        // estate, on the one surface that still renders both kinds of group
+        // together: prompt-experiments-tab-group-pass-rate.spec.ts.
+        await test.step('On the Datasets tab, where that group now lives, there is no Pass rate column', async () => {
+          await experiments.gotoTab(seed.projectId, 'datasets', { grouped: true });
+          await experiments.waitForReady();
+          // Its own group row is asserted present FIRST: "no pass rate" must be
+          // a fact about the column, not about a table that rendered nothing.
+          await experiments.groups.waitForGroupRows(
+            seed.groups.length - seed.suiteGroups.length,
+          );
+          await expect(
+            experiments.groupRowFor(seed.datasetOnly.datasetName),
+            `the group row for '${seed.datasetOnly.datasetName}'`,
+          ).toHaveCount(1);
+          await expect(
+            experiments.columnHeader('Pass rate'),
+            'the Datasets tab must offer no Pass rate column for a dataset-method group',
+          ).toHaveCount(0);
+        });
+
+        await test.step('While the Test suites tab still renders one, so the column has not simply vanished', async () => {
+          // The control. Without it, "no Pass rate column" would be satisfied by
+          // a build that had lost the column everywhere — which is the pre-9646
+          // defect wearing a different hat.
+          await experiments.gotoTab(seed.projectId, 'testSuites', { grouped: true });
+          await experiments.waitForReady();
+          await experiments.groups.waitForGroupRows(seed.suiteGroups.length);
+          await expect(
+            experiments.columnHeader('Pass rate'),
+            'the Test suites tab still has its Pass rate column',
+          ).toHaveCount(1);
           await experiments.groups.expectGroupPassRate(seed.green.datasetName, {
             label: '100%',
             dot: 'passed',

@@ -68,8 +68,22 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  */
 const displayedScore = (value: number): string => String(Math.round(value * 100) / 100);
 
-/** The default grouping's prefix for a group whose value is a dataset. */
-const GROUP_PREFIX = 'Dataset';
+/**
+ * The grouping cell renders NO item-source prefix on this page.
+ *
+ * It used to read "Dataset <name> N exps". `ItemSourceGroupCell` renders its
+ * prefix only when `hidePrefix` is false, and `useExperimentsTableConfig` sets
+ * `hidePrefix: Boolean(itemSourceLabel)` — so once opik#9611 gave the
+ * Experiments page's tabs an `itemSourceLabel` of their own ("Dataset" /
+ * "Test suite"), the prefix inside the cell became a duplicate of the tab's own
+ * label and was suppressed. The prompt detail page's Experiments tab passes no
+ * label and so still renders it.
+ *
+ * Kept as a named constant with this comment rather than inlined, because
+ * "the cell does not start with 'Dataset'" is a deliberate expectation here and
+ * not an omission someone should helpfully fix.
+ */
+const GROUP_CELL_PREFIX = '';
 
 test.describe(
   'Experiments — the feedback-score aggregate on a default-grouped group row',
@@ -147,14 +161,28 @@ test.describe(
 
           const cell = experiments.groupRowCell(datasetName, '$__grouping___dataset_id_');
           await expect(cell, `the grouping cell of '${datasetName}'`).toHaveCount(1);
-          const text = (await cell.innerText()).replace(/\s+/g, ' ').trim();
-          expect(text, `group row for '${datasetName}'`).toBe(
-            `${GROUP_PREFIX} ${datasetName} ${all.length} exps`,
-          );
+          // Polled, because the "N exps" half comes from `aggregationMap`,
+          // which `ItemSourceGroupCell` renders only once the
+          // groups/aggregations query has answered — so the cell legitimately
+          // renders the name alone for a render pass or two, and reading it
+          // once races that.
+          //
+          // Still `innerText`, and not `toHaveText`, which would retry on its
+          // own: the name and the count are separate flex children with no
+          // whitespace text node between them, so `textContent` (what
+          // `toHaveText` compares) runs them together as "<name>3 exps".
+          // `innerText` is the rendered text, which is the separation a reader
+          // actually sees — and it is what this assertion is about.
+          await expect
+            .poll(async () => (await cell.innerText()).replace(/\s+/g, ' ').trim(), {
+              message: `group row for '${datasetName}'`,
+              timeout: 30_000,
+            })
+            .toBe(`${GROUP_CELL_PREFIX}${datasetName} ${all.length} exps`);
         });
 
         await test.step('The group expands to exactly the three seeded experiment rows', async () => {
-          await experiments.ensureGroupExpanded(datasetName, GROUP_PREFIX);
+          await experiments.ensureGroupExpanded(datasetName);
           for (const experiment of all) {
             await expect(
               experiments.groupedExperimentRow(experiment.id),
@@ -228,7 +256,7 @@ test.describe(
           // excluded an unscored one.
           // `ensureGroupExpanded`, not a click: the page auto-expands the first
           // group, so clicking its toggle would close it.
-          await experiments.ensureGroupExpanded(datasetName, GROUP_PREFIX);
+          await experiments.ensureGroupExpanded(datasetName);
 
           const unscoredCell = experiments.groupedExperimentCell(unscored.id, 'feedback_scores');
           await expect(

@@ -63,6 +63,24 @@ export interface GroupedPassRateExperimentsRef {
   datasetOnly: PassRateGroupRef;
   /** The four groups in declaration order, for callers that sweep them. */
   groups: PassRateGroupRef[];
+  /**
+   * The groups the project Experiments page's TEST SUITES tab lists — the three
+   * whose experiments are all evaluation-suite runs.
+   *
+   * Here because opik#9611 split that page by `evaluation_method`, so these four
+   * groups no longer appear together on any one page: `datasetOnly` is on the
+   * Datasets tab and these three are on the Test suites tab. A spec asserting a
+   * CLOSED group-row count therefore has to name a tab and count that tab's
+   * groups — `groups.length` would be right for the prompt detail Experiments
+   * tab, which has no such split, and wrong for either Experiments tab.
+   *
+   * Derived from the seeded `evaluationMethod` rather than written down as
+   * three, so the split stays correct if the seed gains or loses a group.
+   * `every`, not `some`: a group mixing the two methods would appear on BOTH
+   * tabs, which is not a shape a closed-set count can describe, so it would
+   * surface as a count mismatch rather than as a silently wrong expectation.
+   */
+  suiteGroups: PassRateGroupRef[];
 }
 
 export interface GroupedPassRateExperimentsFixtures {
@@ -333,6 +351,11 @@ export const test = baseTest.extend<GroupedPassRateExperimentsFixtures>({
         green,
         datasetOnly,
         groups,
+        suiteGroups: groups.filter((group) =>
+          group.experiments.every(
+            (experiment) => experiment.evaluationMethod === 'evaluation_suite',
+          ),
+        ),
       };
 
       await testInfo.attach('opik.groupedPassRateExperiments', {

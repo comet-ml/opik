@@ -101,17 +101,18 @@ const COMPLETION_TOKENS = 1_000_000;
  *   openrouter/poolside/laguna-s-2.1                     no row            -> nothing
  *   openrouter/nousresearch/hermes-3-llama-3.1-405b      no row            -> nothing
  *   openrouter/meta-llama/llama-3.1-70b-instruct         $0.72/M in + out  -> $1.44
- *   openrouter/qwen/qwen3.8-27b                          $0.06/M + $2.20/M -> $2.26
+ *   openrouter/qwen/qwen3.8-27b                        $0.035/M + $1.50/M -> $1.535
  *
  * **These amounts track a GENERATED artifact and are expected to need
  * updating.** `model_prices_openrouter.json` is regenerated from OpenRouter's
  * own model list by `scripts/update_openrouter_model_prices.py`, so a row's
- * rates can move in any release — `qwen3.8-27b` has now moved four times
+ * rates can move in any release — `qwen3.8-27b` has now moved five times
  * ($0.20/M + $2.50/M for 2.2.120, $0.039/M + $1.25/M for 2.2.130, $0.15/M +
- * $1.875/M for 2.2.139, these rates for 2.2.146), and `llama-3.1-70b-instruct`
- * moved for 2.2.146 too ($0.40/M both ways through 2.2.145, $0.72/M both ways
- * now). The 2.2.146 regen — opik#9585 — moved BOTH priced rows, which is why
- * each vector names the release its rates came from.
+ * $1.875/M for 2.2.139, $0.06/M + $2.20/M for 2.2.146, these rates for
+ * 2.2.154), and `llama-3.1-70b-instruct` moved for 2.2.146 ($0.40/M both ways
+ * through 2.2.145, $0.72/M both ways since). The 2.2.146 regen — opik#9585 —
+ * moved BOTH priced rows; the 2.2.154 one — opik#9697 — moved only qwen, which
+ * is why each vector names the release its rates came from.
  * That is neither a defect nor flake; it is the cost of pinning
  * absolute amounts, which is also the only thing that pins the lookup to the
  * SHIPPED table rather than to itself. When this fails, read the row out of
@@ -190,12 +191,13 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRemovedRowSeed, 'name'>> = [
     key: 'qwen-priced',
     model: 'openrouter/qwen/qwen3.8-27b',
     catalogId: 'qwen/qwen3.8-27b',
-    expectedCost: 2.26,
+    expectedCost: 1.535,
     catalogLabelled: true,
     workings:
-      '1.0M x $0.06/M in + 1.0M x $2.20/M out — re-priced by opik#9585 for 2.2.146 in the same ' +
-      'regen that moved llama above ($0.15/M + $1.875/M through 2.2.145); check ' +
-      'model_prices_openrouter.json before calling a changed amount a defect',
+      '1.0M x $0.035/M in + 1.0M x $1.50/M out — re-priced AGAIN by opik#9697 for 2.2.154 ' +
+      '($0.06/M + $2.20/M for 2.2.146 through 2.2.153, which is what this pin held before). ' +
+      'Fifth move; llama above was NOT touched by that regen, which is why only this one ' +
+      'changed. Check model_prices_openrouter.json before calling a changed amount a defect',
   },
 ];
 
