@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailModel;
 import com.comet.opik.api.GuardrailModel.GuardrailModelPage;
+import com.comet.opik.api.GuardrailTrainingRun;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -26,10 +27,12 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -99,9 +102,10 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     public GuardrailModel get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(GuardrailModelDAO.class)
+        var model = template.inTransaction(READ_ONLY, handle -> handle.attach(GuardrailModelDAO.class)
                 .findById(id, workspaceId)
                 .orElseThrow(() -> new NotFoundException(MODEL_NOT_FOUND)));
+        return withRuns(List.of(model)).getFirst();
     }
 
     @Override
@@ -122,7 +126,7 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
                     ? Map.of()
                     : dao.findByIds(pageIds, workspaceId).stream()
                             .collect(Collectors.toMap(GuardrailModel::id, Function.identity()));
-            var models = pageIds.stream().map(byId::get).toList();
+            var models = withRuns(pageIds.stream().map(byId::get).toList());
             return GuardrailModelPage.builder()
                     .content(models)
                     .page(page)
@@ -188,5 +192,22 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
             return null;
         });
         log.info("Deleted guardrail model, id '{}', workspaceId '{}'", id, workspaceId);
+    }
+
+    /** The models with their serving and latest runs, read in one query. */
+    private List<GuardrailModel> withRuns(List<GuardrailModel> models) {
+        var runIds = models.stream()
+                .flatMap(model -> Stream.of(model.servingRunId(), model.latestRunId()))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        var runsById = trainingService.findByIds(runIds).stream()
+                .collect(Collectors.toMap(GuardrailTrainingRun::id, Function.identity()));
+        return models.stream()
+                .map(model -> model.toBuilder()
+                        .servingRun(runsById.get(model.servingRunId()))
+                        .latestRun(runsById.get(model.latestRunId()))
+                        .build())
+                .toList();
     }
 }
