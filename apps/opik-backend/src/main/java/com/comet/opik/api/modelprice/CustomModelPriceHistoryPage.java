@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.NonNull;
 
+import javax.annotation.Nullable;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -24,8 +26,8 @@ public record CustomModelPriceHistoryPage(int page, int size, long total, @NonNu
             @NonNull UUID rowId,
             @Schema(allowableValues = {
                     "created", "updated", "deleted"}) @NonNull String action,
-            @Schema(description = "The row before the change, in the shape the list returns; absent for a created row") CustomModelPriceRow before,
-            @Schema(description = "The row after the change, in the shape the list returns; absent for a deleted row") CustomModelPriceRow after,
+            @Schema(description = "The row before the change, in the shape the list returns; absent for a created row") @Nullable CustomModelPriceRow before,
+            @Schema(description = "The row after the change, in the shape the list returns; absent for a deleted row") @Nullable CustomModelPriceRow after,
             @NonNull Instant createdAt,
             @NonNull String createdBy) {
     }

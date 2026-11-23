@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS model_prices_history
     created_by      VARCHAR(100)                         NOT NULL DEFAULT 'admin',
 
     CONSTRAINT model_prices_history_pk PRIMARY KEY (id),
-    INDEX model_prices_history_org_version_idx (organization_id, list_version),
-    INDEX model_prices_history_org_row_idx (organization_id, row_kind, row_id, list_version)
+    -- The history page and its count: one organization's changes, newest list version first.
+    INDEX model_prices_history_org_version_idx (organization_id, list_version)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -80,3 +80,4 @@ CREATE TABLE IF NOT EXISTS model_prices_history
 --rollback DROP TABLE IF EXISTS model_prices_history;
 --rollback DROP TABLE IF EXISTS model_prices;
 --rollback DROP TABLE IF EXISTS model_price_lists;
+
