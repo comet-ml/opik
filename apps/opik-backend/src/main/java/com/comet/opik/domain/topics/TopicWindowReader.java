@@ -2,6 +2,8 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -31,8 +33,9 @@ class TopicWindowReader {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicWindowDAO windowDAO;
 
-    /** The window as the build reads it: per trace, in time order, its text and vector. */
-    record Window(String[] texts, float[] vectors, List<WindowTrace> traces, TreeMap<Integer, Integer> versions) {
+    /** The window as the build reads it: per trace, in time order, its text and vector, plus the read's stats. */
+    record Window(String[] texts, float[] vectors, List<WindowTrace> traces, TreeMap<Integer, Integer> versions,
+            ObjectNode stats) {
 
         TopicWindow topicWindow() {
             return TopicWindow.builder().texts(texts).vectors(vectors).build();
@@ -61,7 +64,7 @@ class TopicWindowReader {
             return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
                     readTimeout.toSeconds())
                     .doOnNext(builder::add)
-                    .then(Mono.fromCallable(() -> builder.build(run, windowTraces)));
+                    .then(Mono.fromCallable(() -> builder.build(windowTraces)));
         })
                 .timeout(readTimeout)
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
@@ -110,14 +113,15 @@ class TopicWindowReader {
             size++;
         }
 
-        Window build(TopicRun run, long windowTraces) {
-            var stats = run.stats();
+        Window build(long windowTraces) {
+            var stats = JsonUtils.createObjectNode();
             stats.put("window_traces", windowTraces);
             stats.put("sample_traces", read);
             stats.put("window_rows", read);
             stats.put("skipped_rows", skipped);
             if (size == 0) {
-                throw new TopicsRunException(RunError.WINDOW_READ, "the window has no usable vector");
+                throw new TopicsRunException(RunError.WINDOW_READ,
+                        "the window has no usable vector, rows '%s', skipped '%s'".formatted(read, skipped));
             }
             if (size < texts.length) {
                 resize(size);
@@ -134,7 +138,7 @@ class TopicWindowReader {
                 traces.add(new WindowTrace(traceIds[order[i]], createdAt[order[i]]));
             }
             permuteRows(vectors, order);
-            return new Window(sortedTexts, vectors, traces, versions);
+            return new Window(sortedTexts, vectors, traces, versions, stats);
         }
 
         private void resize(int capacity) {

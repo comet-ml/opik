@@ -4,7 +4,9 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -23,10 +25,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /**
  * One project's first build, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -75,6 +78,43 @@ public class TopicsRebuildService {
             JsonNode stats) {
     }
 
+    /**
+     * The stats a run logs and returns, built here from what each phase returns, and its seconds per phase. Only the
+     * run's own flow writes it.
+     */
+    record RunStats(ObjectNode stats, ObjectNode seconds) {
+
+        static RunStats of(TopicRun run) {
+            var stats = JsonUtils.createObjectNode();
+            stats.put("window_from", run.from().toString());
+            stats.put("window_until", run.to().toString());
+            return new RunStats(stats, JsonUtils.createObjectNode());
+        }
+
+        void add(ObjectNode phase) {
+            stats.setAll(phase);
+        }
+
+        /** Adds a call's counts to the run's: a nightly update makes several calls. */
+        void sum(ObjectNode call) {
+            call.properties().forEach(field -> {
+                if (field.getValue().isNumber()) {
+                    stats.put(field.getKey(), stats.path(field.getKey()).asLong(0) + field.getValue().asLong());
+                } else {
+                    stats.set(field.getKey(), field.getValue());
+                }
+            });
+        }
+
+        void time(String phase, Duration duration) {
+            seconds.put(phase, seconds.path(phase).asDouble(0) + duration.toMillis() / 1000.0);
+        }
+
+        ObjectNode json() {
+            return stats.deepCopy().set("seconds", seconds.deepCopy());
+        }
+    }
+
     /** What a nightly update saves, and the counts its metrics carry after the commit. */
     private record Night(TopicRunStore.SavedList saved, TopicRunStore.NightSave save, List<NightTopic> retired,
             List<TraceTopic> traceTopics, int born, int live, TopicChurn.Churn churn) {
@@ -103,8 +143,7 @@ public class TopicsRebuildService {
      */
     Mono<Outcome> firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night, long windowTraces) {
-        return workspaceName(workspaceId).flatMap(workspaceName -> run(TopicRun.of(runId, workspaceId,
-                workspaceName, projectId, night, config.getBuild().getWindowDays()), windowTraces));
+        return start(runId, workspaceId, projectId, night, run -> run(run, windowTraces));
     }
 
     /**
@@ -118,27 +157,36 @@ public class TopicsRebuildService {
      */
     Mono<Outcome> nightlyUpdate(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night, long windowTraces) {
-        return workspaceName(workspaceId).flatMap(workspaceName -> nightly(TopicRun.of(runId, workspaceId,
-                workspaceName, projectId, night, config.getBuild().getWindowDays()), night, windowTraces));
+        return start(runId, workspaceId, projectId, night, run -> nightly(run, night, windowTraces));
     }
 
     /**
-     * The name is a Redis read, or an HTTP call on a miss: once per run, off the reactive threads. It falls back to the
-     * id, so the run goes on.
+     * Resolves the workspace name, then does the run's {@code work}. The name is a Redis read, or an HTTP call on a
+     * miss: once per run, off the reactive threads. It falls back to the id, so the run goes on. A cancel during the
+     * lookup fails the started attempt too: the run's metrics then carry the id as the name.
      */
-    private Mono<String> workspaceName(String workspaceId) {
+    private Mono<Outcome> start(UUID runId, String workspaceId, UUID projectId, LocalDate night,
+            Function<TopicRun, Mono<Outcome>> work) {
+        var workspace = new AtomicReference<>(new TopicsMetrics.Workspace(workspaceId, workspaceId));
         return Mono.fromCallable(() -> workspaceNames.nameOrId(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
-                .onErrorReturn(workspaceId);
+                .onErrorReturn(workspaceId)
+                .flatMap(workspaceName -> {
+                    var run = TopicRun.of(runId, workspaceId, workspaceName, projectId, night,
+                            config.getBuild().getWindowDays());
+                    workspace.set(run.workspace());
+                    return work.apply(run);
+                })
+                .doOnCancel(() -> cancelled(runId, workspace.get(), projectId));
     }
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
-        return withProjectTimeout(build(run, windowTraces)
-                .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
+        var stats = RunStats.of(run);
+        return withProjectTimeout(build(run, stats, windowTraces)
+                .flatMap(built -> timed(run, stats, "save", store.save(run, built.topics(), built.otherVectors()))
                         .map(kept -> kept ? built : built.discarded())))
-                .flatMap(built -> saved(run, built))
-                .onErrorResume(error -> failed(run, error))
-                .doOnCancel(() -> cancelled(run));
+                .flatMap(built -> saved(run, stats, built))
+                .onErrorResume(error -> failed(run, stats, error));
     }
 
     /** A run's work up to its save, failed with {@code timeout} once it outlasts topics.build.projectTimeout. */
@@ -148,78 +196,86 @@ public class TopicsRebuildService {
                 "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))));
     }
 
-    private Mono<Built> build(TopicRun run, long windowTraces) {
-        return timed(run, "window", reader.read(run, windowTraces)).flatMap(window -> {
-            int n = window.texts().length;
-            var stats = run.stats();
-            var versionShares = stats.putObject("task_version_shares");
-            window.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
-                    (double) count / n));
-            stats.put("vectors", n);
-            stats.put("provisional", n < config.getAlgorithm().getProvisionalBelow());
+    private Mono<Built> build(TopicRun run, RunStats stats, long windowTraces) {
+        return timed(run, stats, "window", reader.read(run, windowTraces)).flatMap(window -> {
+            stats.add(window.stats());
+            stats.add(windowStats(window));
             var traces = window.traces();
-            return timed(run, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
+            return timed(run, stats, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
                     config.getAlgorithm().getMaxTopics())))
-                    .doOnNext(clustering -> stats.setAll(clustering.stats()))
-                    .flatMap(clustering -> timed(run, "llm", llm.generate(run, clustering.author(),
+                    .doOnNext(clustering -> stats.add(clustering.stats()))
+                    .flatMap(clustering -> timed(run, stats, "llm", llm.generate(run, clustering.author(),
                             AuthorAnswer::parse))
-                            .flatMap(answer -> timed(run, "assign", cpu(() -> clustering.finish(answer)))))
-                    .map(built -> built(run, traces, built));
+                            .doOnNext(answer -> stats.add(answer.stats()))
+                            .flatMap(answer -> timed(run, stats, "assign",
+                                    cpu(() -> clustering.finish(answer.value())))))
+                    .map(built -> built(run, stats, traces, built));
         });
+    }
+
+    private ObjectNode windowStats(TopicWindowReader.Window window) {
+        int n = window.texts().length;
+        var stats = JsonUtils.createObjectNode();
+        var versionShares = stats.putObject("task_version_shares");
+        window.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
+                (double) count / n));
+        stats.put("vectors", n);
+        stats.put("provisional", n < config.getAlgorithm().getProvisionalBelow());
+        return stats;
     }
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's pure steps on the CPU
      * scheduler, and each LLM call they ask for through {@link TopicsLlm}, with that call's deadline. An answer that is
      * not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a failed call errors with its
-     * code and ends the night. The night's stats go to the run's.
+     * code and ends the night. The night's stats and its calls' go to {@code stats}.
      */
-    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
+    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull RunStats stats, @NonNull NightState state,
+            @NonNull NightWindow window) {
         return cpu(() -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
-                .flatMap(step -> night(run, step))
-                .doOnNext(update -> run.stats().setAll(update.stats()));
+                .flatMap(step -> night(run, stats, step))
+                .doOnNext(update -> stats.add(update.stats()));
     }
 
     private Mono<Outcome> nightly(TopicRun run, LocalDate night, long windowTraces) {
-        run.stats().put("mode", TopicProject.RunMode.NIGHTLY_UPDATE.getValue());
-        return withProjectTimeout(timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> timed(run, "state", store.readList(run, night))
-                        .flatMap(saved -> updated(run, window, saved)))
-                .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.saved(), updated.save()))
+        var stats = RunStats.of(run);
+        stats.stats().put("mode", TopicProject.RunMode.NIGHTLY_UPDATE.getValue());
+        return withProjectTimeout(timed(run, stats, "window", reader.read(run, windowTraces))
+                .flatMap(window -> timed(run, stats, "state", store.readList(run, night))
+                        .flatMap(saved -> updated(run, stats, window, saved)))
+                .flatMap(updated -> timed(run, stats, "save", store.saveUpdate(run, updated.saved(), updated.save()))
                         .map(kept -> kept ? updated : updated.discarded())))
-                .flatMap(updated -> savedNight(run, updated))
-                .onErrorResume(error -> failed(run, error))
-                .doOnCancel(() -> cancelled(run));
+                .flatMap(updated -> savedNight(run, stats, updated))
+                .onErrorResume(error -> failed(run, stats, error));
     }
 
     /** Runs the night's steps over the window and turns the changed list into the rows the save writes. */
-    private Mono<Night> updated(TopicRun run, TopicWindowReader.Window read, TopicRunStore.SavedList saved) {
+    private Mono<Night> updated(TopicRun run, RunStats stats, TopicWindowReader.Window read,
+            TopicRunStore.SavedList saved) {
         int n = read.texts().length;
-        var stats = run.stats();
-        var versionShares = stats.putObject("task_version_shares");
-        read.versions().forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
-        stats.put("vectors", n);
+        stats.add(read.stats());
+        stats.add(windowStats(read));
         var state = saved.state();
-        stats.put("saved_runs_before", state.getRebuilds());
-        stats.put("topics_before", state.liveCount());
+        stats.stats().put("saved_runs_before", state.getRebuilds());
+        stats.stats().put("topics_before", state.liveCount());
         var createdAt = new Instant[n];
         for (int i = 0; i < n; i++) {
             createdAt[i] = read.traces().get(i).traceCreatedAt();
         }
         var window = NightWindow.builder().texts(read.texts()).vectors(read.vectors()).createdAt(createdAt)
                 .from(run.from()).night(run.to()).dimensions(TopicEmbedding.DIMENSIONS).build();
-        return timed(run, "update", update(run, state, window))
+        return timed(run, stats, "update", update(run, stats, state, window))
                 .map(result -> {
                     NightInvariants.check(state, TopicEmbedding.DIMENSIONS);
-                    return night(run, read.traces(), saved, result);
+                    return night(run, stats, read.traces(), saved, result);
                 });
     }
 
     /** The night's rows and the counts its log line and metrics carry. */
-    private Night night(TopicRun run, List<TopicWindowReader.WindowTrace> traces, TopicRunStore.SavedList saved,
-            TopicUpdate result) {
+    private Night night(TopicRun run, RunStats runStats, List<TopicWindowReader.WindowTrace> traces,
+            TopicRunStore.SavedList saved, TopicUpdate result) {
         var state = saved.state();
-        var stats = run.stats();
+        var stats = runStats.stats();
         int n = traces.size();
         boolean keep = state.liveCount() > 0;
         int other = 0;
@@ -275,11 +331,10 @@ public class TopicsRebuildService {
         stats.put("other_prototypes", state.getOtherPrototypes().size());
         stats.put("churn", churn.churn());
         stats.put("churn_any", churn.churnAny());
-        stats.set("seconds", run.seconds());
         log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', born '{}', retired '{}', "
                 + "topics '{}', Other share '{}', churn '{}', seconds '{}'", run.runId(), run.projectId(), run.from(),
                 run.to(), n, born, retiredStats, state.liveCount(), TopicText.fixed((double) other / n, 3), churn,
-                run.seconds());
+                runStats.seconds());
         var otherVectors = !keep || state.getOtherPrototypes().isEmpty()
                 ? null
                 : new PrototypeVectors(state.getOtherPrototypes());
@@ -297,7 +352,7 @@ public class TopicsRebuildService {
      * After the commit: the night's metrics, a log line and {@code topics.retired} per retired topic, then the
      * {@code trace_topics} insert, unless the list was cleared or the project is gone.
      */
-    private Mono<Outcome> savedNight(TopicRun run, Night night) {
+    private Mono<Outcome> savedNight(TopicRun run, RunStats stats, Night night) {
         metrics.topics(run.workspace(), night.live(), night.born());
         for (var topic : night.retired()) {
             // Ids only: a name and definition come from trace text and must not reach the logs.
@@ -305,12 +360,12 @@ public class TopicsRebuildService {
                     topic.getId(), run.projectId(), topic.getRetiredReason().getValue(), topic.getSize());
             metrics.retired(run.workspace(), topic.getRetiredReason());
         }
-        metrics.otherShare(run.workspace(), run.stats().path("other_share").asDouble());
+        metrics.otherShare(run.workspace(), stats.stats().path("other_share").asDouble());
         metrics.churn(run.workspace(), night.churn());
         if (!night.save().keep()) {
             log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
                     + "cleared, so the first-build job builds it again", run.runId(), run.projectId());
-            return Mono.just(outcome(run, TopicProject.RunStatus.SAVED, null));
+            return Mono.just(outcome(run, stats, TopicProject.RunStatus.SAVED, null));
         }
         var insert = night.traceTopics().isEmpty()
                 ? Mono.just(false)
@@ -319,28 +374,26 @@ public class TopicsRebuildService {
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated '{}', "
                     + "deleted '{}', stats '{}'", run.runId(), run.projectId(),
                     inserted ? night.traceTopics().size() : 0, night.save().inserted().size(),
-                    night.save().updated().size(), night.retired().size(), run.stats());
-            return outcome(run, TopicProject.RunStatus.SAVED, null);
+                    night.save().updated().size(), night.retired().size(), stats.json());
+            return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
         });
     }
 
     /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
-    private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step) {
+    private Mono<TopicUpdate> night(TopicRun run, RunStats stats, NightStep<TopicUpdate> step) {
         return switch (step) {
             case NightStep.Done<TopicUpdate> done -> Mono.just(done.result());
             case NightStep.Ask<TopicUpdate> ask ->
-                timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .map(Optional::of)
-                        .defaultIfEmpty(Optional.empty())
-                        .flatMap(answer -> cpu(() -> ask.next().apply(answer.orElse(null))))
-                        .flatMap(next -> night(run, next));
+                timed(run, stats, "llm", llm.generate(run, ask.request(), NightJson::object))
+                        .doOnNext(answer -> stats.sum(answer.stats()))
+                        .flatMap(answer -> cpu(() -> ask.next().apply(answer.value())))
+                        .flatMap(next -> night(run, stats, next));
         };
     }
 
     /** Checks the list and turns it into the rows the save writes. */
-    private Built built(TopicRun run, List<TopicWindowReader.WindowTrace> traces, FirstBuild built) {
-        var stats = run.stats();
-        stats.setAll(built.stats());
+    private Built built(TopicRun run, RunStats runStats, List<TopicWindowReader.WindowTrace> traces,
+            FirstBuild built) {
         checkPrototypes(built);
         var topics = topics(run, built);
         var otherVectors = built.otherPrototypes().isEmpty() ? null : new PrototypeVectors(built.otherPrototypes());
@@ -349,14 +402,16 @@ public class TopicsRebuildService {
         for (int label : built.labels()) {
             other += label == TopicAlgorithm.OTHER ? 1 : 0;
         }
+        var stats = built.stats().deepCopy();
         stats.put("topics", topics.size());
         stats.put("other_share", (double) other / n);
         stats.put("prototypes", topics.stream().mapToInt(topic -> topic.vectors().size()).sum()
                 + built.otherPrototypes().size());
-        stats.set("seconds", run.seconds());
+        runStats.add(stats);
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}', seconds '{}'", run.runId(), run.projectId(), run.from(), run.to(), n,
-                topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3), run.seconds());
+                topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3),
+                runStats.seconds());
         var traceTopics = new ArrayList<TraceTopic>(traces.size());
         for (int i = 0; i < traces.size(); i++) {
             int label = built.labels()[i];
@@ -415,15 +470,15 @@ public class TopicsRebuildService {
         }
     }
 
-    private Mono<Outcome> saved(TopicRun run, Built built) {
-        metrics.otherShare(run.workspace(), run.stats().path("other_share").asDouble());
+    private Mono<Outcome> saved(TopicRun run, RunStats stats, Built built) {
+        metrics.otherShare(run.workspace(), stats.stats().path("other_share").asDouble());
         var insert = built.traceTopics().isEmpty()
                 ? Mono.just(false)
                 : store.insertTraceTopics(run, built.traceTopics());
         return insert.map(inserted -> {
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", run.runId(),
-                    run.projectId(), inserted ? built.traceTopics().size() : 0, run.stats());
-            return outcome(run, TopicProject.RunStatus.SAVED, null);
+                    run.projectId(), inserted ? built.traceTopics().size() : 0, stats.json());
+            return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
         });
     }
 
@@ -431,9 +486,8 @@ public class TopicsRebuildService {
      * Marks the run failed. When it had ended already, a timeout raced its commit: the run is saved, without its
      * trace_topics, which the labelling pass gives.
      */
-    private Mono<Outcome> failed(TopicRun run, Throwable error) {
+    private Mono<Outcome> failed(TopicRun run, RunStats stats, Throwable error) {
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
-        run.stats().set("seconds", run.seconds());
         return store.fail(run.runId(), run.workspace(), run.projectId(), code)
                 .flatMap(marked -> marked ? Mono.just(false) : store.isSaved(run))
                 .onErrorResume(markError -> {
@@ -445,37 +499,37 @@ public class TopicsRebuildService {
                     if (saved) {
                         log.warn("Topics run '{}' saved, project '{}', but stopped before its trace_topics insert, "
                                 + "code '{}'", run.runId(), run.projectId(), code.getValue());
-                        return outcome(run, TopicProject.RunStatus.SAVED, null);
+                        return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
                     }
-                    logFailure(run, code, error);
-                    return outcome(run, TopicProject.RunStatus.FAILED, code.getValue());
+                    logFailure(run, stats, code, error);
+                    return outcome(run, stats, TopicProject.RunStatus.FAILED, code.getValue());
                 });
     }
 
-    private void cancelled(TopicRun run) {
-        log.warn("Topics run '{}' cancelled, project '{}'", run.runId(), run.projectId());
-        store.fail(run.runId(), run.workspace(), run.projectId(), RunError.TIMEOUT).subscribe(
+    private void cancelled(UUID runId, TopicsMetrics.Workspace workspace, UUID projectId) {
+        log.warn("Topics run '{}' cancelled, project '{}'", runId, projectId);
+        store.fail(runId, workspace, projectId, RunError.TIMEOUT).subscribe(
                 __ -> {
                 },
-                error -> log.error("Topics run '{}' could not be marked failed, project '{}'", run.runId(),
-                        run.projectId(), error));
+                error -> log.error("Topics run '{}' could not be marked failed, project '{}'", runId, projectId,
+                        error));
     }
 
-    private void logFailure(TopicRun run, RunError code, Throwable error) {
+    private void logFailure(TopicRun run, RunStats stats, RunError code, Throwable error) {
         if (TEXT_CODES.contains(code)) {
             // The answer's length and SHA-256 are logged when it arrives.
             log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}', stats '{}'", run.runId(),
                     run.projectId(), code.getValue(), ExceptionUtils.getThrowableList(error).stream()
                             .map(TopicsErrors::formatError).toList(),
-                    run.stats());
+                    stats.json());
         } else {
             log.warn("Topics run '{}' failed, project '{}', code '{}', stats '{}'", run.runId(), run.projectId(),
-                    code.getValue(), run.stats(), error);
+                    code.getValue(), stats.json(), error);
         }
     }
 
-    private static Outcome outcome(TopicRun run, TopicProject.RunStatus status, String errorCode) {
-        return Outcome.builder().runId(run.runId()).status(status).errorCode(errorCode).stats(run.stats()).build();
+    private static Outcome outcome(TopicRun run, RunStats stats, TopicProject.RunStatus status, String errorCode) {
+        return Outcome.builder().runId(run.runId()).status(status).errorCode(errorCode).stats(stats.json()).build();
     }
 
     private <T> Mono<T> cpu(Callable<T> step) {
@@ -483,12 +537,12 @@ public class TopicsRebuildService {
     }
 
     /** A phase timed more than once adds up in the stats. */
-    private <T> Mono<T> timed(TopicRun run, String phase, Mono<T> action) {
+    private <T> Mono<T> timed(TopicRun run, RunStats stats, String phase, Mono<T> action) {
         return Mono.defer(() -> {
             long started = System.nanoTime();
             return action.doFinally(signal -> {
                 var duration = Duration.ofNanos(System.nanoTime() - started);
-                run.seconds().put(phase, run.seconds().path(phase).asDouble(0) + duration.toMillis() / 1000.0);
+                stats.time(phase, duration);
                 metrics.phase(run.workspace(), phase, duration);
             });
         });

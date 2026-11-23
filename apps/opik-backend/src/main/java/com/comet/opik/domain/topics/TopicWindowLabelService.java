@@ -321,9 +321,9 @@ public class TopicWindowLabelService {
                         backoff.multipliedBy(1L << build.getInsertRetries())))
                 .doOnSuccess(__ -> {
                     metrics.saved(workspace, "trace_topics", rows.size());
-                    metrics.traceTopicsInsert(workspace, "ok");
+                    metrics.traceTopicsInsert(workspace, true);
                 })
-                .doOnError(__ -> metrics.traceTopicsInsert(workspace, "failed"))
+                .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
                 .then();
     }
 
