@@ -235,11 +235,7 @@ public class TopicsConfig {
      * would keep an empty list for the life of the process.
      */
     public Set<String> enabledWorkspaceIds() {
-        return workspaceIds(enabledWorkspaces);
-    }
-
-    private static Set<String> workspaceIds(String commaSeparated) {
-        return Arrays.stream(Objects.toString(commaSeparated, "").split(","))
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
@@ -281,19 +277,6 @@ public class TopicsConfig {
         /** The wait after a project's first, second, ... failed first build; the last applies to every later one. */
         @NotNull @JsonProperty
         @Size(min = 1, max = 10) private List<@NotNull Duration> retryDelays;
-
-        /**
-         * The workspaces the planner queues first builds for, comma-separated. Empty means every workspace that runs
-         * Topics; a listed workspace that does not run Topics is ignored. No getter: read it via {@link #workspaceIds()}.
-         */
-        @JsonProperty
-        @Getter(AccessLevel.NONE)
-        private String workspaces;
-
-        /** The parsed set of {@code workspaces}, parsed on every call like {@link TopicsConfig#enabledWorkspaceIds()}. */
-        public Set<String> workspaceIds() {
-            return TopicsConfig.workspaceIds(workspaces);
-        }
     }
 
     /**
