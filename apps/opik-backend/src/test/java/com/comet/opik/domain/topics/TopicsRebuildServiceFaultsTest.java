@@ -39,6 +39,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -83,12 +85,13 @@ class TopicsRebuildServiceFaultsTest {
     private final LocalDate night = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
 
     private InMemoryMetricReader metricReader;
-    private TopicProjectDAO runDAO;
+    private TopicProjectDAO projectDAO;
     private TopicDAO topicDAO;
     private ProjectService projectService;
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
     private TopicWindowDAO windowDAO;
+    private WorkspaceNameService workspaceNames;
     private TopicRunStore store;
     private TopicsRebuildService service;
     private Function<TopicAlgorithm, TopicsRebuildService> serviceWith;
@@ -96,12 +99,12 @@ class TopicsRebuildServiceFaultsTest {
     @BeforeEach
     void setUp() throws Exception {
         metricReader = InMemoryMetricReader.create();
-        runDAO = mock(TopicProjectDAO.class);
+        projectDAO = mock(TopicProjectDAO.class);
         topicDAO = mock(TopicDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         client = mock(InferenceClient.class);
         var handle = mock(Handle.class);
-        when(handle.attach(TopicProjectDAO.class)).thenReturn(runDAO);
+        when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         projectService = mock(ProjectService.class);
         when(projectService.findByIds(workspaceId, Set.of(projectId)))
@@ -112,13 +115,13 @@ class TopicsRebuildServiceFaultsTest {
         windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
-        when(runDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
-        when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
+        when(projectDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(projectDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> IDS.generate());
         var metrics = TopicsMetricsReader.metrics(metricReader);
-        var workspaceNames = mock(WorkspaceNameService.class);
+        workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(workspaceId)).thenReturn(workspaceName);
         var config = TestConfigUtils.loadConfigTest().getTopics();
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
@@ -133,7 +136,7 @@ class TopicsRebuildServiceFaultsTest {
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
             + "counts it once, with its workspace")
     void markThatThrowsCountsNothing() {
-        when(runDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any()))
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
@@ -151,9 +154,34 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before Qwen and the save")
+    @DisplayName("a run cancelled while it looks up its workspace name fails its attempt with timeout, under the id")
+    void cancelDuringNameLookup() throws Exception {
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
+        var lookupStarted = new CountDownLatch(1);
+        var lookupReleased = new CountDownLatch(1);
+        when(workspaceNames.nameOrId(workspaceId)).thenAnswer(invocation -> {
+            lookupStarted.countDown();
+            lookupReleased.await(5, TimeUnit.SECONDS);
+            return workspaceName;
+        });
+
+        var subscription = service.firstBuild(runId, workspaceId, projectId, night, TRACES).subscribe();
+        assertThat(lookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        subscription.dispose();
+        lookupReleased.countDown();
+
+        Awaitility.await().untilAsserted(() -> verify(projectDAO).markFailed(eq(workspaceId), eq(projectId),
+                eq(runId), any(), eq(TopicProject.RunError.TIMEOUT)));
+        assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "timeout", "workspace_name",
+                workspaceId)).isEqualTo(1);
+        verify(windowDAO, never()).readWindow(any(), any(), any(), any(), anyInt(), anyLong());
+    }
+
+    @Test
+    @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before the LLM call and "
+            + "the save")
     void windowReadGuardHit() {
-        when(runDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.error(new IllegalStateException(
                         "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
@@ -162,7 +190,7 @@ class TopicsRebuildServiceFaultsTest {
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("window_read");
-        verify(runDAO).markFailed(eq(workspaceId), eq(projectId), eq(runId), any(),
+        verify(projectDAO).markFailed(eq(workspaceId), eq(projectId), eq(runId), any(),
                 eq(TopicProject.RunError.WINDOW_READ));
         verify(client, never()).generate(any(), any());
         verify(topicDAO, never()).insertTopics(any());
@@ -173,8 +201,8 @@ class TopicsRebuildServiceFaultsTest {
     @Test
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
-        when(runDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        when(runDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
+        when(projectDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
@@ -201,8 +229,8 @@ class TopicsRebuildServiceFaultsTest {
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
-        var order = inOrder(runDAO, traceTopicsDAO);
-        order.verify(runDAO).markSaved(eq(workspaceId), eq(projectId), eq(runId), any());
+        var order = inOrder(projectDAO, traceTopicsDAO);
+        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(runId), any());
         order.verify(traceTopicsDAO).insert(any());
         assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
@@ -222,12 +250,12 @@ class TopicsRebuildServiceFaultsTest {
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
-        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
+        verify(projectDAO, never()).markFailed(any(), any(), any(), any(), any());
         assertThat(points(metricReader, "topics.runs")).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
         assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isZero();
         assertThat(sum(metricReader, "topics.save.rows", "table", "topics")).isPositive();
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "error")).isEqualTo(1);
     }
 
     @Test
@@ -244,8 +272,8 @@ class TopicsRebuildServiceFaultsTest {
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "failed")).isEqualTo(1);
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "ok")).isZero();
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "error")).isEqualTo(1);
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isZero();
     }
 
     @Test
@@ -281,10 +309,10 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout, cancels the Qwen call "
+    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout, cancels the LLM call "
             + "in flight and saves nothing")
     void runTimeoutCancelsTheCallInFlight() throws Exception {
-        when(runDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         var cancelled = new AtomicInteger();
         when(client.generate(any(), any()))
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
@@ -357,7 +385,7 @@ class TopicsRebuildServiceFaultsTest {
         ArgumentCaptor<List<Topic>> savedTopics = ArgumentCaptor.forClass(List.class);
         verify(topicDAO).insertTopics(savedTopics.capture());
         var savedOther = ArgumentCaptor.forClass(PrototypeVectors.class);
-        verify(runDAO).saveList(any(), any(), any(), any(), any(), any(), savedOther.capture(), any());
+        verify(projectDAO).saveList(any(), any(), any(), any(), any(), any(), savedOther.capture(), any());
         var topicRows = savedTopics.getValue().stream().flatMap(topic -> topic.vectors().vectors().stream())
                 .toList();
         var otherRows = savedOther.getValue().vectors();
@@ -455,7 +483,7 @@ class TopicsRebuildServiceFaultsTest {
         var saved = topics.getValue();
         assertThat(saved).usingRecursiveFieldByFieldElementComparatorIgnoringFields("id").containsExactly(
                 topic("First", "one", first), topic("Second", "two", second));
-        verify(runDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(), any(),
+        verify(projectDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(), any(),
                 eq(new PrototypeVectors(List.of(other))), eq(TopicEmbedding.MODEL));
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TraceTopic>> traceTopics = ArgumentCaptor.forClass(List.class);

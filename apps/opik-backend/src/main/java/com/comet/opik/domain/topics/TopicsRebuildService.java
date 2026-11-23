@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One project's first build, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -86,11 +87,18 @@ public class TopicsRebuildService {
             @NonNull LocalDate night, long windowTraces) {
         // The name is a Redis read, or an HTTP call on a miss: once per run, off the reactive threads. It falls back
         // to the id, so the run goes on.
+        // A cancel during the lookup fails the started attempt too: the run's metrics then carry the id as the name.
+        var workspace = new AtomicReference<>(new TopicsMetrics.Workspace(workspaceId, workspaceId));
         return Mono.fromCallable(() -> workspaceNames.nameOrId(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorReturn(workspaceId)
-                .flatMap(workspaceName -> run(TopicRun.of(runId, workspaceId, workspaceName, projectId, night,
-                        config.getBuild().getWindowDays()), windowTraces));
+                .flatMap(workspaceName -> {
+                    var run = TopicRun.of(runId, workspaceId, workspaceName, projectId, night,
+                            config.getBuild().getWindowDays());
+                    workspace.set(run.workspace());
+                    return run(run, windowTraces);
+                })
+                .doOnCancel(() -> cancelled(runId, workspace.get(), projectId));
     }
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
@@ -101,8 +109,7 @@ public class TopicsRebuildService {
                 .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
                         "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
                 .flatMap(built -> saved(run, built))
-                .onErrorResume(error -> failed(run, error))
-                .doOnCancel(() -> cancelled(run));
+                .onErrorResume(error -> failed(run, error));
     }
 
     private Mono<Built> build(TopicRun run, long windowTraces) {
@@ -240,13 +247,13 @@ public class TopicsRebuildService {
                 });
     }
 
-    private void cancelled(TopicRun run) {
-        log.warn("Topics run '{}' cancelled, project '{}'", run.runId(), run.projectId());
-        store.fail(run.runId(), run.workspace(), run.projectId(), RunError.TIMEOUT).subscribe(
+    private void cancelled(UUID runId, TopicsMetrics.Workspace workspace, UUID projectId) {
+        log.warn("Topics run '{}' cancelled, project '{}'", runId, projectId);
+        store.fail(runId, workspace, projectId, RunError.TIMEOUT).subscribe(
                 __ -> {
                 },
-                error -> log.error("Topics run '{}' could not be marked failed, project '{}'", run.runId(),
-                        run.projectId(), error));
+                error -> log.error("Topics run '{}' could not be marked failed, project '{}'", runId, projectId,
+                        error));
     }
 
     private void logFailure(TopicRun run, RunError code, Throwable error) {

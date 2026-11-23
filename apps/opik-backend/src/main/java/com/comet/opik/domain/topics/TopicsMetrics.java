@@ -31,6 +31,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
     private static final AttributeKey<String> PHASE = stringKey("phase");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
+    private static final AttributeKey<String> RESULT = stringKey("result");
     private static final AttributeKey<String> CALL = stringKey("call");
     private static final AttributeKey<String> TABLE = stringKey("table");
 
@@ -60,7 +61,7 @@ public class TopicsMetrics {
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
         this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
-                .setDescription("A saved run's trace_topics insert after its commit, by outcome: ok, failed (after "
+                .setDescription("A saved run's trace_topics insert after its commit, by result: success, error (after "
                         + "its retries; the labelling pass gives the traces their topics)")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
@@ -90,8 +91,8 @@ public class TopicsMetrics {
         saveRows.add(rows, attributes(workspace).put(TABLE, table).build());
     }
 
-    void traceTopicsInsert(@NonNull Workspace workspace, @NonNull String outcome) {
-        traceTopicsInserts.add(1, attributes(workspace).put(OUTCOME, outcome).build());
+    void traceTopicsInsert(@NonNull Workspace workspace, boolean success) {
+        traceTopicsInserts.add(1, attributes(workspace).put(RESULT, success ? "success" : "error").build());
     }
 
     void otherShare(@NonNull Workspace workspace, double share) {

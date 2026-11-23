@@ -194,7 +194,7 @@ class TopicsRebuildServiceTest {
         assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(1);
         assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(FIXTURE.size());
         assertThat(sum(metricReader, "topics.save.rows", "table", "topics")).isEqualTo(topics.size());
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "ok")).isEqualTo(1);
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isEqualTo(1);
         assertThat(points(metricReader, "topics.run.other_share")).singleElement()
                 .satisfies(point -> assertThat(point.value()).isEqualTo(outcome.stats().get("other_share")
                         .asDouble()));
@@ -267,7 +267,7 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "outcome", "ok")).isZero();
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isZero();
     }
 
     @Test
