@@ -109,11 +109,12 @@ const useRuleEditorHistory = (
   );
 
   const runSilently = useCallback((change: () => void) => {
+    const wasSilent = isSilentRef.current;
     isSilentRef.current = true;
     try {
       change();
     } finally {
-      isSilentRef.current = false;
+      isSilentRef.current = wasSilent;
     }
   }, []);
 

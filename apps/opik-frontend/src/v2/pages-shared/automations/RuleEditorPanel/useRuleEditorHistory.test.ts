@@ -78,6 +78,25 @@ describe("useRuleEditorHistory", () => {
     expect(ruleName()).toBe("");
   });
 
+  it("keeps an action as one step when a silent update runs inside it", () => {
+    const { result, type, ruleName } = renderHistory();
+
+    type("My rule ");
+    act(() =>
+      result.current.history.recordAction(() => {
+        result.current.history.withoutHistory(() =>
+          result.current.form.setValue("llmJudgeDetails.schema.0.name", "x"),
+        );
+        result.current.form.setValue("ruleName", "Hallucination");
+      }),
+    );
+
+    press("z");
+    expect(ruleName()).toBe("My rule ");
+    press("z");
+    expect(ruleName()).toBe("");
+  });
+
   it("undoes typing and actions in order, and redoes them", () => {
     const { result, type, ruleName } = renderHistory();
 
