@@ -177,7 +177,7 @@ class TopicsDaoStorageTest {
         // As a first-build run reads: the count of its projects under 60 s, a run's window under 120 s.
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60)
                 .collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
+                .containsExactly(count(projectId, BUILT));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 120).collectList().block())
                 .hasSize(BUILT);
 
@@ -205,7 +205,7 @@ class TopicsDaoStorageTest {
                 .block();
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - deleted.size()));
+                .containsExactly(count(projectId, BUILT - deleted.size()));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(deleted.size(), BUILT));
@@ -225,7 +225,7 @@ class TopicsDaoStorageTest {
         data.insertVectorTombstones(workspaceId, projectId, revived, -3_600);
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - tombstoned.size()));
+                .containsExactly(count(projectId, BUILT - tombstoned.size()));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(tombstoned.size(), BUILT));
@@ -243,7 +243,7 @@ class TopicsDaoStorageTest {
             data.insertTiedVectorTombstones(workspaceId, projectId, tied);
 
             assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
-                    .block()).containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
+                    .block()).containsExactly(count(projectId, BUILT));
             assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
                     .extracting(TopicWindowDAO.WindowRow::traceId).containsAll(tied).hasSize(BUILT);
             assertThat(windowDAO.readUnlabelled(workspaceId, projectId, newId(), from(), to(), "", BUILT,
@@ -318,12 +318,12 @@ class TopicsDaoStorageTest {
         assertThat(windowDAO.countByProject(workspaceId, Set.of(below, at, above, gone, mixed), from(), to(), 60)
                 .collectList().block())
                 .containsExactlyInAnyOrder(
-                        new TopicWindowDAO.ProjectCount(below, MIN_VECTORS - 1),
-                        new TopicWindowDAO.ProjectCount(at, MIN_VECTORS),
-                        new TopicWindowDAO.ProjectCount(above, MIN_VECTORS + 1),
-                        new TopicWindowDAO.ProjectCount(mixed, 12 - 3));
+                        count(below, MIN_VECTORS - 1),
+                        count(at, MIN_VECTORS),
+                        count(above, MIN_VECTORS + 1),
+                        count(mixed, 12 - 3));
         assertThat(windowDAO.countByProject(workspaceId, Set.of(below, gone), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(below, MIN_VECTORS - 1));
+                .containsExactly(count(below, MIN_VECTORS - 1));
     }
 
     @Test
@@ -714,14 +714,14 @@ class TopicsDaoStorageTest {
         var leftStart = NIGHT.plus(Duration.ofHours(1));
         var savedRun = newId();
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
-            runDAO.startRun(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
-            assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            projectDAO.startRun(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
+            assertThat(projectDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
                     TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
-            assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
+            assertThat(projectDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
-            runDAO.startRun(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
-            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
+            projectDAO.startRun(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
+            assertThat(projectDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
             return null;
         });
 
@@ -732,8 +732,8 @@ class TopicsDaoStorageTest {
 
         var abandonedAt = leftStart.plus(Duration.ofHours(1));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
-            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart.plusSeconds(1), abandonedAt))
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            assertThat(projectDAO.recordAbandoned(workspaceId, projectId, leftStart.plusSeconds(1), abandonedAt))
                     .isEqualTo(1);
             return null;
         });
@@ -743,9 +743,9 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(projectId)).isEqualTo(abandoned);
 
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
-            runDAO.startRun(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
-            assertThat(runDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            projectDAO.startRun(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
+            assertThat(projectDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
                     .isEqualTo(1);
             return null;
         });
@@ -831,5 +831,9 @@ class TopicsDaoStorageTest {
 
     private static Instant to() {
         return NIGHT;
+    }
+
+    private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {
+        return TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(traces).build();
     }
 }
