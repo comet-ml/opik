@@ -602,7 +602,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.6"` |  |
+| zookeeper.image.tag | string | `"3.9.7"` |  |
 | zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |

@@ -1379,7 +1379,7 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.6"
+    tag: "3.9.7"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:
