@@ -42,6 +42,25 @@ public class PartitionMetricsConfig {
     @NotNull @JsonProperty
     private String lwdTables;
 
+    /**
+     * Also publish the tiered-storage gauges: reads and failed reads of tables on a cold-tier storage policy, from
+     * {@code system.query_log}, and failed part moves, from {@code system.part_log}. Off by default: both logs are
+     * per node, so the poll fans out with {@code clusterAllReplicas('{cluster}', ...)}, which needs the {@code cluster}
+     * macro and the user's {@code REMOTE} grant.
+     */
+    @JsonProperty
+    private boolean tieredStorageEnabled;
+
+    /**
+     * How far behind now the tiered-storage window ends, so rows still buffered for {@code system.query_log} and
+     * {@code system.part_log} (7.5 s flush by default) land in the next window instead of being skipped. Whole
+     * seconds, as the logs' {@code event_time} is; capped at 5 min so the gauges don't trail reality by more.
+     */
+    @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration tieredStorageLogFlushLag;
+
     /** Derived: the parsed, stripped, blank-free list of LWD tables, deduplicated so no table is scanned twice. */
     public List<String> getLwdTables() {
         return Arrays.stream(lwdTables.split(","))

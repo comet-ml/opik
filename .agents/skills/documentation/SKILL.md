@@ -58,16 +58,19 @@ Pick the shape that fits the change — do not force one:
 When documenting a feature, cover:
 
 **User Impact**
+
 - What capability does this add?
 - How do users access it?
 
 **Technical Changes**
+
 - API changes (endpoints, params)
 - SDK changes (new methods)
 - Database migrations
 - Config changes
 
 **Breaking Changes** (if any)
+
 - What breaks
 - Migration steps
 
