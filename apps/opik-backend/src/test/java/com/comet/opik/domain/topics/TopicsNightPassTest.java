@@ -295,4 +295,42 @@ class TopicsNightPassTest {
         assertThat(queued).hasSize(1);
         verify(nightDAO, never()).markLooked(anyString(), any(), any());
     }
+
+    @Test
+    @DisplayName("an empty topics.nightly.workspaces covers every workspace topics run for")
+    void emptyNightlyWorkspaces() {
+        config.getNightly().setWorkspaces("");
+        var projectId = listed(500L);
+
+        assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
+        assertThat(pass.byHand(WORKSPACE_ID, projectId, NIGHT, queue).block()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a set topics.nightly.workspaces limits the night and the night by hand to the listed workspaces")
+    void nightlyWorkspacesSubset() {
+        config.getNightly().setWorkspaces("other-workspace");
+        var projectId = listed(500L);
+
+        assertThat(plan(IN_BUDGET, 2)).isZero();
+        assertThatThrownBy(() -> pass.byHand(WORKSPACE_ID, projectId, NIGHT, queue).block())
+                .isInstanceOf(ConflictException.class);
+        assertThat(queued).isEmpty();
+
+        config.getNightly().setWorkspaces(" other-workspace , " + WORKSPACE_ID);
+        assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a listed workspace that topics do not run for gets no nightly update")
+    void nightlyWorkspaceOutsideEnabledWorkspaces() {
+        config.getNightly().setWorkspaces(WORKSPACE_ID + ",not-enabled");
+        var projectId = listed(500L);
+
+        assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
+        assertThat(queued).extracting(TopicsRunPlanner.Planned::workspaceId).containsExactly(WORKSPACE_ID);
+        assertThatThrownBy(() -> pass.byHand("not-enabled", projectId, NIGHT, queue).block())
+                .isInstanceOf(ConflictException.class);
+        assertThat(queued).hasSize(1);
+    }
 }
