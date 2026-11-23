@@ -145,19 +145,23 @@ class InferenceConfigTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("topicsLlmDeadlines")
     @DisplayName("Topics LLM deadlines stay within inference.limits.maxGenerateBatchDeadline")
-    void topicsLlmDeadlinesStayWithinTheLimit(String description, Duration naming, boolean valid) {
+    void topicsLlmDeadlinesStayWithinTheLimit(String description, String over) {
         var config = TestConfigUtils.loadConfigTest();
         var max = config.getInference().getLimits().getMaxGenerateBatchDeadline();
-        config.getTopics().getBuild().setLlmDeadline(max);
-        config.getTopics().getBuild().setVerifyDeadline(max);
-        config.getTopics().getBuild().setNamingDeadline(naming);
+        var aboveMax = Duration.milliseconds(max.toMilliseconds() + 1);
+        var build = config.getTopics().getBuild();
+        build.setLlmDeadline("llmDeadline".equals(over) ? aboveMax : max);
+        build.setNamingDeadline("namingDeadline".equals(over) ? aboveMax : max);
+        build.setVerifyDeadline("verifyDeadline".equals(over) ? aboveMax : max);
 
-        assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlinesWithinLimits")).hasSize(valid ? 0 : 1);
+        assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlinesWithinLimits")).hasSize(over == null ? 0 : 1);
     }
 
     static Stream<Arguments> topicsLlmDeadlines() {
         return Stream.of(
-                arguments("every deadline at the limit", Duration.seconds(300), true),
-                arguments("a naming deadline over the limit", Duration.milliseconds(300_001), false));
+                arguments("every deadline at the limit", null),
+                arguments("llmDeadline over the limit", "llmDeadline"),
+                arguments("namingDeadline over the limit", "namingDeadline"),
+                arguments("verifyDeadline over the limit", "verifyDeadline"));
     }
 }
