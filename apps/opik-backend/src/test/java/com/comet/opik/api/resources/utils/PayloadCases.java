@@ -4,7 +4,6 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.slim.SlimJson;
-import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -27,9 +26,11 @@ import java.util.stream.Stream;
 public class PayloadCases {
 
     /**
-     * The levels a batch request puts above a payload: the request object, its items array and the item object.
+     * Deep enough to nest raw JSON well inside the row, shallow enough for the recursive comparison in the span and
+     * trace assertions, which recurses per level and overflows the test thread's stack near the 1000-level limit.
+     * {@code JsonRowValuesTest} covers that limit itself.
      */
-    private static final int BATCH_ENVELOPE_DEPTH = 3;
+    private static final int NESTED_ARRAYS_DEPTH = 100;
 
     public static Stream<JsonNode> payloads() {
         int max = SlimJson.MAX_STRING_LENGTH;
@@ -49,7 +50,7 @@ public class PayloadCases {
                 TextNode.valueOf(randomText(max + 1)),
                 IntNode.valueOf(RandomUtils.secure().randomInt()),
                 NullNode.getInstance(),
-                nestedArrays(StreamReadConstraints.DEFAULT_MAX_DEPTH - BATCH_ENVELOPE_DEPTH));
+                nestedArrays(NESTED_ARRAYS_DEPTH));
     }
 
     /** A payload with strings past the slim limit, and its slim copy: each such string cut to the limit, then marked. */
