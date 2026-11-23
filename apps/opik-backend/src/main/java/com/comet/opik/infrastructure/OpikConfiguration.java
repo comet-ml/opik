@@ -14,7 +14,6 @@ import lombok.Setter;
 import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Objects;
 import java.util.stream.Stream;
 
 @Getter
@@ -313,12 +312,8 @@ public class OpikConfiguration extends JobConfiguration {
     @AssertTrue(message = "topics.build.llmDeadline, namingDeadline and verifyDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlinesWithinLimits() {
         var build = topics.getBuild();
         var limits = inference.getLimits();
-        if (build == null || limits == null || limits.getMaxGenerateBatchDeadline() == null) {
-            return true;
-        }
-        long max = limits.getMaxGenerateBatchDeadline().toMilliseconds();
-        return Stream.of(build.getLlmDeadline(), build.getNamingDeadline(), build.getVerifyDeadline())
-                .filter(Objects::nonNull)
-                .allMatch(deadline -> deadline.toMilliseconds() <= max);
+        return build == null || limits == null
+                || Stream.of(build.getLlmDeadline(), build.getNamingDeadline(), build.getVerifyDeadline())
+                        .allMatch(deadline -> notAbove(deadline, limits.getMaxGenerateBatchDeadline()));
     }
 }
