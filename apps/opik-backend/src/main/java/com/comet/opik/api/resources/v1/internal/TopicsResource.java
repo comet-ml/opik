@@ -77,6 +77,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "202", description = "The run is queued"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The nightly update is off, the workspace is not opted in, the project has no list or its list already covers the night, the window is too small, or a run is in flight"),
+            @ApiResponse(responseCode = "503", description = "The run could not be started; nothing is queued, try again"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProjectNight(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
