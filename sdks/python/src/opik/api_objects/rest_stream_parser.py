@@ -99,10 +99,18 @@ def read_and_parse_full_stream(
         cursor_before_page = cursor
         if page_last_id["id"] is not None:
             cursor = page_last_id["id"]
-        elif len(result) > 0:
+        elif parsed_items:
             # No line on this page decoded to an object with an id; fall back to
-            # the last record that parsed so the read still advances.
-            cursor = result[-1].id  # type: ignore
+            # this page's last parsed record so the read still advances. Never to
+            # an earlier page's, which would move the cursor backwards, and never
+            # to None, which would restart the stream. Otherwise the cursor stays
+            # where it was, which ends the read below.
+            last_item = parsed_items[-1]
+            fallback_cursor = (
+                last_item.get("id") if isinstance(last_item, dict) else last_item.id  # type: ignore[attr-defined]
+            )
+            if fallback_cursor is not None:
+                cursor = fallback_cursor
 
         # Records the backend sent but that failed to parse were still part of
         # this page, so they count towards it being full. Leaving them out makes
@@ -147,6 +155,19 @@ def read_and_parse_full_stream(
                 dropped_records["count"],
                 parsed_item_class.__name__,
             )
+
+        if (
+            records_received >= current_batch_size
+            and parsed_items
+            and cursor == cursor_before_page
+        ):
+            # A full page that didn't move the cursor would be served again; stop,
+            # as the TypeScript SDK's readAllStreamPages does.
+            LOGGER.warning(
+                "Stream read stopped early: no record of the current page carried "
+                "an id, so pagination could not advance."
+            )
+            break
 
         if current_batch_size > records_received:
             break

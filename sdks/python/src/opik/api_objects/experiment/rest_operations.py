@@ -1,7 +1,7 @@
 import json
 import math
 from concurrent import futures
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
@@ -141,6 +141,73 @@ def find_experiment_items_for_dataset(
             _collect_page(page, collected_items, max_results)
 
     return collected_items
+
+
+def stream_experiment_items_for_dataset(
+    rest_client: rest_api.OpikApi,
+    dataset_id: str,
+    dataset_versions: Optional[List[str]],
+    max_results: int,
+    truncate: bool,
+    filter_expression: Optional[str] = None,
+) -> List[experiment_item.ExperimentItemContent]:
+    """Every regular experiment's items on a dataset, read from the cursor stream.
+
+    Results are grouped by dataset item, so one item's history across experiments
+    is contiguous.
+    """
+    if max_results <= 0:
+        return []
+
+    def read_page(batch_size: int, last_retrieved_id: Optional[str]) -> Iterable[bytes]:
+        return rest_client.datasets.stream_dataset_experiment_items(
+            dataset_id=dataset_id,
+            dataset_versions=dataset_versions,
+            filters=filter_expression,
+            limit=batch_size,
+            last_retrieved_id=last_retrieved_id,
+            truncate=truncate,
+        )
+
+    try:
+        rows = rest_stream_parser.read_and_parse_full_stream(
+            read_source=read_page,
+            parsed_item_class=dict,
+            max_results=max_results,
+        )
+    except ApiError as e:
+        # A 404 is also what a dataset deleted since it was resolved returns, so
+        # only the backend's own version message maps to the typed exception.
+        message = _error_message(e.body)
+        if e.status_code == 404 and message.startswith(_VERSION_NOT_FOUND_PREFIX):
+            raise exceptions.DatasetVersionNotFound(message) from e
+        raise
+
+    for row in rows:
+        # A failure after the stream has started arrives as a final error line
+        # (e.g. a timeout) on the 200 response, not as an HTTP error.
+        if "id" not in row and "message" in row:
+            raise ApiError(status_code=row.get("code"), headers={}, body=row)
+
+    items = [
+        experiment_item.ExperimentItemContent.from_compare_dict(row) for row in rows
+    ]
+    items.sort(key=lambda item: item.dataset_item_id)
+    return items
+
+
+_VERSION_NOT_FOUND_PREFIX = "Version not found"
+
+
+def _error_message(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ""
+    if isinstance(body.get("message"), str):
+        return body["message"]
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors and isinstance(errors[0], str):
+        return errors[0]
+    return ""
 
 
 def http_client(rest_client: rest_api.OpikApi) -> Any:
