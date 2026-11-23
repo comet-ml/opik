@@ -27,17 +27,6 @@ public class CostService {
     private static final AttributeKey<String> WARNING_TYPE_KEY = AttributeKey.stringKey("type");
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
 
-    public enum CostSource {
-        ORGANIZATION,
-        BUILT_IN,
-        METADATA,
-        NONE
-    }
-
-    @Builder(toBuilder = true)
-    public record PricedCost(@NonNull BigDecimal cost, @NonNull CostSource source) {
-    }
-
     @Builder(toBuilder = true)
     private record Estimate(@NonNull BigDecimal cost, boolean fromOrganization) {
     }
