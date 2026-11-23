@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { UseFormReturn } from "react-hook-form";
 
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
@@ -12,7 +11,11 @@ import type useRuleEditorForm from "@/v2/pages-shared/automations/RuleEditorPane
 
 export type RuleTemplateActions = Pick<
   ReturnType<typeof useRuleEditorForm>,
-  "applyTemplate" | "startBlank"
+  | "applyTemplate"
+  | "startBlank"
+  | "isPickingTemplate"
+  | "openTemplates"
+  | "openContent"
 >;
 
 const useRuleTemplatePicker = (
@@ -28,22 +31,26 @@ const useRuleTemplatePicker = (
   const hasContent = messages.length > 0;
   const isBlank =
     hasContent && isBlankContent({ messages, schema }, uiType, scope);
-  const [isPicking, setIsPicking] = useState(!hasContent);
   const selectedOption = hasContent
     ? findSelectedTemplate({ messages, schema }, options, uiType)
     : undefined;
+  const showTemplates = !hasContent || actions.isPickingTemplate;
 
   const pick = (action: () => void) => {
     action();
-    setIsPicking(false);
     window.setTimeout(() => focusContent?.());
   };
 
   return {
-    showTemplates: !hasContent || isPicking,
-    openTemplates: () => setIsPicking(true),
-    openContent: () =>
-      hasContent ? setIsPicking(false) : pick(actions.startBlank),
+    showTemplates,
+    openTemplates: () => {
+      if (!showTemplates) actions.openTemplates();
+    },
+    openContent: () => {
+      if (!showTemplates) return;
+      if (hasContent) actions.openContent();
+      else pick(actions.startBlank);
+    },
     gridProps: {
       options,
       selectedOption,

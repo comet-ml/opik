@@ -61,6 +61,9 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     changeScope,
     applyTemplate,
     startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -122,7 +125,13 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     onClose,
   ]);
 
-  const templateActions = { applyTemplate, startBlank };
+  const templateActions = {
+    applyTemplate,
+    startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
+  };
 
   const isLLMJudge = ruleType === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const isDecisionModelRule =

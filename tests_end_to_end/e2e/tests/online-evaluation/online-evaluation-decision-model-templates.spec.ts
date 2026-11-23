@@ -248,12 +248,14 @@ test.describe(
           );
         });
 
-        await test.step('Undo gives it back, and drops the name the template set', async () => {
+        await test.step('Undo steps back through the template pick, then the tab switch', async () => {
+          await page.keyboard.press('ControlOrMeta+z');
+          await expect(rules.startCards, 'the first undo returns to the Templates tab').toHaveCount(1);
+          await expect(rules.nameInput, 'the rule is unnamed again').toHaveValue('');
           await page.keyboard.press('ControlOrMeta+z');
           await expect
             .poll(() => rules.readQuestions(), { message: 'only the author\'s own question' })
             .toEqual([OWN_QUESTION]);
-          await expect(rules.nameInput, 'the rule is unnamed again').toHaveValue('');
           await rules.cancelPanel();
         });
       },

@@ -216,15 +216,16 @@ type ScopeDraft = {
   [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
 } & { autoName: string };
 
-type ContentSnapshot = {
+type EditorSnapshot = {
   llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
   ruleName: string;
   autoName: string;
+  isPickingTemplate: boolean;
 };
 
-type ContentChange = { before: ContentSnapshot; after: ContentSnapshot };
+type EditorAction = { before: EditorSnapshot; after: EditorSnapshot };
 
-const isSameContent = (a: ContentSnapshot, b: ContentSnapshot) =>
+const isSameContent = (a: EditorSnapshot, b: EditorSnapshot) =>
   a.ruleName === b.ruleName &&
   isEqual(a.llmJudgeDetails.messages, b.llmJudgeDetails.messages) &&
   isEqual(a.llmJudgeDetails.schema, b.llmJudgeDetails.schema);
@@ -305,7 +306,14 @@ const useRuleEditorForm = ({
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
   const autoNameRef = useRef("");
-  const contentChangesRef = useRef<ContentChange[]>([]);
+  const actionsRef = useRef<EditorAction[]>([]);
+  const isPickingTemplateRef = useRef(false);
+  const [isPickingTemplate, setIsPickingTemplateState] = useState(false);
+
+  const setIsPickingTemplate = useCallback((isPicking: boolean) => {
+    isPickingTemplateRef.current = isPicking;
+    setIsPickingTemplateState(isPicking);
+  }, []);
 
   const isDefaultName = useCallback(() => {
     const name = form.getValues("ruleName").trim();
@@ -332,7 +340,7 @@ const useRuleEditorForm = ({
         autoName: autoNameRef.current,
       });
       const draft = scopeDraftsRef.current[scope];
-      contentChangesRef.current = [];
+      actionsRef.current = [];
 
       if (isDefaultName()) setAutoName(draft?.autoName ?? "");
 
@@ -358,61 +366,75 @@ const useRuleEditorForm = ({
   );
 
   const takeSnapshot = useCallback(
-    (): ContentSnapshot =>
+    (): EditorSnapshot =>
       cloneDeep({
         llmJudgeDetails: form.getValues("llmJudgeDetails"),
         ruleName: form.getValues("ruleName"),
         autoName: autoNameRef.current,
+        isPickingTemplate: isPickingTemplateRef.current,
       }),
     [form],
   );
 
-  const recordContentChange = useCallback(
-    (change: () => void) => {
+  const recordAction = useCallback(
+    (action: () => void) => {
       const before = takeSnapshot();
-      change();
-      contentChangesRef.current.push({ before, after: takeSnapshot() });
+      action();
+      actionsRef.current.push({ before, after: takeSnapshot() });
     },
     [takeSnapshot],
   );
 
-  const undoContentChange = useCallback(() => {
-    const lastChange = contentChangesRef.current.at(-1);
-    if (!lastChange || !isSameContent(takeSnapshot(), lastChange.after)) {
+  const undoAction = useCallback(() => {
+    const lastAction = actionsRef.current.at(-1);
+    if (!lastAction || !isSameContent(takeSnapshot(), lastAction.after)) {
       return false;
     }
-    contentChangesRef.current.pop();
-    const { llmJudgeDetails, ruleName, autoName } = lastChange.before;
-    const current = form.getValues("llmJudgeDetails");
-    autoNameRef.current = autoName;
-    form.setValue("ruleName", ruleName, { shouldDirty: true });
-    form.setValue(
-      "llmJudgeDetails",
-      {
-        ...llmJudgeDetails,
-        model: current.model,
-        config: current.config,
-        maxCostUsd: current.maxCostUsd,
-      },
-      { shouldDirty: true },
-    );
-    form.clearErrors("llmJudgeDetails");
+    actionsRef.current.pop();
+    const { before, after } = lastAction;
+    if (!isSameContent(before, after)) {
+      const current = form.getValues("llmJudgeDetails");
+      autoNameRef.current = before.autoName;
+      form.setValue("ruleName", before.ruleName, { shouldDirty: true });
+      form.setValue(
+        "llmJudgeDetails",
+        {
+          ...before.llmJudgeDetails,
+          model: current.model,
+          config: current.config,
+          maxCostUsd: current.maxCostUsd,
+        },
+        { shouldDirty: true },
+      );
+      form.clearErrors("llmJudgeDetails");
+    }
+    setIsPickingTemplate(before.isPickingTemplate);
     return true;
-  }, [form, takeSnapshot]);
+  }, [form, takeSnapshot, setIsPickingTemplate]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isUndoShortcut(event) || !undoContentChange()) return;
+      if (!isUndoShortcut(event) || !undoAction()) return;
       event.preventDefault();
       event.stopPropagation();
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [undoContentChange]);
+  }, [undoAction]);
+
+  const openTemplates = useCallback(
+    () => recordAction(() => setIsPickingTemplate(true)),
+    [recordAction, setIsPickingTemplate],
+  );
+
+  const openContent = useCallback(
+    () => recordAction(() => setIsPickingTemplate(false)),
+    [recordAction, setIsPickingTemplate],
+  );
 
   const applyTemplate = useCallback(
     (template: LLMPromptTemplate, label: string) =>
-      recordContentChange(() => {
+      recordAction(() => {
         const current = form.getValues("llmJudgeDetails");
         const [templateMainScore, ...templateScores] = cloneDeep(
           template.schema,
@@ -436,13 +458,21 @@ const useRuleEditorForm = ({
         );
         form.clearErrors("llmJudgeDetails");
         if (!isEdit && isDefaultName()) setAutoName(label);
+        setIsPickingTemplate(false);
       }),
-    [form, isEdit, isDefaultName, setAutoName, recordContentChange],
+    [
+      form,
+      isEdit,
+      isDefaultName,
+      setAutoName,
+      recordAction,
+      setIsPickingTemplate,
+    ],
   );
 
   const startBlank = useCallback(
     () =>
-      recordContentChange(() => {
+      recordAction(() => {
         const uiType = form.getValues("uiType");
         const current = form.getValues("llmJudgeDetails");
         const blank = cloneDeep(
@@ -466,8 +496,16 @@ const useRuleEditorForm = ({
         );
         form.clearErrors("llmJudgeDetails");
         if (!isEdit && isDefaultName()) setAutoName("");
+        setIsPickingTemplate(false);
       }),
-    [form, isEdit, isDefaultName, setAutoName, recordContentChange],
+    [
+      form,
+      isEdit,
+      isDefaultName,
+      setAutoName,
+      recordAction,
+      setIsPickingTemplate,
+    ],
   );
 
   const prepareForSubmit = useCallback(() => {
@@ -604,6 +642,9 @@ const useRuleEditorForm = ({
     changeScope,
     applyTemplate,
     startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
