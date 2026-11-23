@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opik-genui"
+dynamic = ["version"]
+description = "Opik generative UI authoring guidance and HTML contract version for Python authors"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Comet ML Inc.", email = "support@comet.com" }]
+keywords = ["opik", "comet", "generative-ui", "mcp-apps"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/comet-ml/opik/tree/main/sdks/genui"
+Source = "https://github.com/comet-ml/opik"
+Issues = "https://github.com/comet-ml/opik/issues"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.hatch.metadata.hooks.custom]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/opik_genui", "hatch_build.py", "README.md", "LICENSE"]
+artifacts = ["src/opik_genui/data/*"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../js/package.json" = "package.json"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opik_genui"]
+artifacts = ["src/opik_genui/data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

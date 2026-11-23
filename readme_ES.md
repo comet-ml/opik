@@ -46,6 +46,7 @@
 [![Captura de pantalla de la plataforma Opik (miniatura)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
 <a id="-what-is-opik"></a>
+
 ## 🚀 ¿Qué es Opik?
 
 Opik cubre todo el ciclo de vida de las aplicaciones de LLM, desde la primera traza en desarrollo hasta el monitoreo en producción, para equipos que construyen aplicaciones de LLM y agentes de IA. Sus principales ofertas incluyen:
@@ -88,6 +89,7 @@ Sus capacidades principales incluyen:
 <br>
 
 <a id="-quick-start"></a>
+
 ## ⚡ Inicio rápido
 
 Instala el SDK de Python y configúralo:
@@ -125,6 +127,7 @@ Las insignias y el comando alternativo `add-mcp` apuntan a Opik Cloud; el comand
 <br>
 
 <a id="-how-opik-compares"></a>
+
 ## 📊 ¿Cómo se compara Opik?
 
 Opik compite en la categoría de **observabilidad de LLM / evaluación de agentes de IA** junto a **LangSmith, Arize (Phoenix y Arize AX), Weights & Biases (Weave), Langfuse y Braintrust**.
@@ -144,26 +147,33 @@ Opik compite en la categoría de **observabilidad de LLM / evaluación de agente
 <br>
 
 <a id="-frequently-asked-questions"></a>
+
 ## ❓ Preguntas frecuentes
 
 #### ¿Es Opik de código abierto?
+
 Opik está licenciado bajo Apache 2.0. Su servidor, aplicación web y capacidades básicas de observabilidad y evaluación pueden autoalojarse sin una licencia comercial.
 
 #### ¿Puedo autoalojar Opik?
+
 Sí. Opik puede desplegarse localmente o en tu propia infraestructura utilizando las opciones de autoalojamiento documentadas.
 
 #### ¿Opik admite la trazabilidad de agentes de IA?
+
 Sí. Opik captura trazas multipaso que contienen llamadas a LLM, ejecuciones de herramientas, pasos de recuperación y otra actividad de agentes.
 
 #### ¿Opik admite la evaluación de LLM?
+
 Sí. Opik admite conjuntos de datos, experimentos, métricas basadas en código, evaluación con LLM como juez y evaluación en línea.
 
 #### ¿Opik está ligado a un framework de agentes específico?
+
 No. Opik es independiente del framework y admite su SDK, OpenTelemetry e integraciones específicas de frameworks.
 
 <br>
 
 <a id="%EF%B8%8F-opik-server-installation"></a>
+
 ## 🛠️ Instalación del servidor Opik
 
 Pon en marcha tu servidor Opik en minutos. Elige la opción que mejor se adapte a tus necesidades:
@@ -252,6 +262,7 @@ Para despliegues autoalojados en producción o a mayor escala, Opik puede instal
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
 <a id="-opik-client-sdk"></a>
+
 ## 💻 SDK cliente de Opik
 
 Opik proporciona un conjunto de bibliotecas cliente y una API REST para interactuar con el servidor Opik. Esto incluye SDK para Python y TypeScript, además de compatibilidad nativa con [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik): cualquier lenguaje con un SDK de OpenTelemetry — incluidos [Java](https://www.comet.com/docs/opik/integrations/spring-ai?from=llm&utm_source=opik&utm_medium=github&utm_content=java_link&utm_campaign=opik), [Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) y .NET — puede enviar trazas a Opik. Para consultar referencias detalladas de la API y el SDK, consulta la [Documentación de referencia del cliente de Opik](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
@@ -282,6 +293,7 @@ opik configure
 Ya estás listo para empezar a registrar trazas usando el [SDK de Python](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik).
 
 <a id="-logging-traces-with-integrations"></a>
+
 ### 📝 Registro de trazas con integraciones
 
 La forma más sencilla de registrar trazas es usar una de nuestras integraciones directas. Opik admite una amplia variedad de frameworks, incluidas incorporaciones recientes como **Google ADK**, **Autogen**, **AG2** y **Flowise AI**:
@@ -373,6 +385,7 @@ def my_llm_function(user_question: str) -> str:
 > El decorador track puede usarse junto con cualquiera de nuestras integraciones y también puede utilizarse para rastrear llamadas a funciones anidadas.
 
 <a id="-llm-as-a-judge-metrics"></a>
+
 ### 🧑‍⚖️ Métricas de LLM como juez
 
 El SDK de Python de Opik incluye una serie de métricas de LLM como juez para ayudarte a evaluar tu aplicación de LLM. Obtén más información al respecto en la [documentación de métricas](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik).
@@ -394,11 +407,13 @@ print(score)
 Opik también incluye una serie de métricas heurísticas prediseñadas, así como la capacidad de crear las tuyas propias. Obtén más información al respecto en la [documentación de métricas](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik).
 
 <a id="-evaluating-your-llm-application"></a>
+
 ### 🔍 Evaluación de tus aplicaciones de LLM
 
 Opik te permite evaluar tu aplicación de LLM durante el desarrollo a través de [Conjuntos de datos](https://www.comet.com/docs/opik/evaluation/advanced/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) y [Experimentos](https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik). El Panel de Opik ofrece gráficos mejorados para experimentos y un mejor manejo de trazas grandes. También puedes ejecutar evaluaciones como parte de tu canalización de CI/CD usando nuestra [integración con PyTest](https://www.comet.com/docs/opik/evaluation/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik).
 
 <a id="-star-us-on-github"></a>
+
 ## ⭐ Danos una estrella en GitHub
 
 Si Opik te resulta útil, ¡considera darnos una estrella! Tu apoyo nos ayuda a hacer crecer nuestra comunidad y a seguir mejorando el producto.
@@ -411,6 +426,7 @@ Si Opik te resulta útil, ¡considera darnos una estrella! Tu apoyo nos ayuda a 
 </a>
 
 <a id="-contributing"></a>
+
 ## 🤝 Contribuir
 
 Hay muchas formas de contribuir a Opik:

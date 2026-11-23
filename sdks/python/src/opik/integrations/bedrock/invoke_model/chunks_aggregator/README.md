@@ -107,7 +107,7 @@ _DETECTORS["yourformat"] = _is_yourformat_format
 _AGGREGATORS["yourformat"] = yourformat.YourFormatAggregator()
 ```
 
-### Step 3: Done!
+### Step 3: Done
 
 Your new format is now automatically supported:
 
