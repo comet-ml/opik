@@ -1,11 +1,11 @@
-import { TOKEN_NAMES } from "./tokens";
+import { TOKEN_NAMES } from "./tokens.js";
 import {
   MAX_FRAME_HEIGHT,
   MAX_HTML_LENGTH,
   RECOMMENDED_HTML_KB,
   type Area,
   type Library,
-} from "./view";
+} from "./view.js";
 
 const AREA_TARGETS: Record<Area, string> = {
   widget:
