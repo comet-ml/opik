@@ -75,7 +75,7 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: zookeeper:3.9.4
+    image: zookeeper:3.9.7
     pull_policy: always
     hostname: zookeeper
     user: root

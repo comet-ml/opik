@@ -1373,7 +1373,9 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.6"
+    # 3.9.7 as rebuilt on 2026-11-20 on Temurin 17.0.21.1+2 (Java4Shell, CVE-2026-114938).
+    # The tag was first published on an unpatched JRE, so the digest is pinned with it.
+    tag: "3.9.7@sha256:23f7fe549a6be53e39f9bf90cfa82542b4c7df8e8a19374ce4f3625cd11fa86b"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:
