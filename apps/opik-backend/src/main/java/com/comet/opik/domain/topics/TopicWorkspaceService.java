@@ -22,6 +22,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * </ul>
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
+ * {@link #reaches} also checks the workspace's {@link TopicsStage} from the list.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -47,5 +48,11 @@ public class TopicWorkspaceService {
                 && template.inTransaction(READ_ONLY,
                         handle -> handle.attach(AiLabelWorkspaceDAO.class).enabled(workspaceId))
                         .orElse(false);
+    }
+
+    /** True when the workspace {@link #isEnabled} and its listed stage is {@code stage} or a later one. */
+    public boolean reaches(@NonNull String workspaceId, @NonNull TopicsStage stage) {
+        var listed = config.enabledWorkspaceStages().get(workspaceId);
+        return listed != null && listed.includes(stage) && isEnabled(workspaceId);
     }
 }

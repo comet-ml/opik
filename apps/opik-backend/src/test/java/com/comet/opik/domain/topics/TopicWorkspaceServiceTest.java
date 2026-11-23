@@ -77,23 +77,52 @@ class TopicWorkspaceServiceTest {
     @DisplayName("on: the listed workspaces that are enabled in ai_label_workspaces")
     void listedAndEnabledForAiLabels() {
         var listedAndEnabled = UUID.randomUUID().toString();
-        var listedTwiceAndEnabled = UUID.randomUUID().toString();
+        var listedAtAStageAndEnabled = UUID.randomUUID().toString();
         var notListed = UUID.randomUUID().toString();
         var notInTheTable = UUID.randomUUID().toString();
         var disabledInTheTable = UUID.randomUUID().toString();
         upsert(listedAndEnabled, true);
-        upsert(listedTwiceAndEnabled, true);
+        upsert(listedAtAStageAndEnabled, true);
         upsert(notListed, true);
         upsert(disabledInTheTable, false);
         config.setEnabled(true);
-        config.setEnabledWorkspaces(" %s, %s,, %s , %s,%s ".formatted(listedTwiceAndEnabled, notInTheTable,
-                listedAndEnabled, disabledInTheTable, listedTwiceAndEnabled));
+        config.setEnabledWorkspaces(" %s:vectors, %s,, %s , %s ".formatted(listedAtAStageAndEnabled, notInTheTable,
+                listedAndEnabled, disabledInTheTable));
 
-        assertThat(service.enabledWorkspaceIds()).containsExactlyInAnyOrder(listedAndEnabled, listedTwiceAndEnabled);
+        assertThat(service.enabledWorkspaceIds()).containsExactlyInAnyOrder(listedAndEnabled,
+                listedAtAStageAndEnabled);
         assertThat(service.isEnabled(listedAndEnabled)).isTrue();
+        assertThat(service.isEnabled(listedAtAStageAndEnabled)).isTrue();
         assertThat(service.isEnabled(notListed)).isFalse();
         assertThat(service.isEnabled(notInTheTable)).isFalse();
         assertThat(service.isEnabled(disabledInTheTable)).isFalse();
+    }
+
+    @Test
+    @DisplayName("reaches: an eligible workspace reaches its listed stage and every earlier one")
+    void reachesListedStageAndEarlier() {
+        var atBuild = UUID.randomUUID().toString();
+        var noSuffix = UUID.randomUUID().toString();
+        var atUiButDisabled = UUID.randomUUID().toString();
+        var notListed = UUID.randomUUID().toString();
+        upsert(atBuild, true);
+        upsert(noSuffix, true);
+        upsert(atUiButDisabled, false);
+        upsert(notListed, true);
+        config.setEnabled(true);
+        config.setEnabledWorkspaces("%s:build,%s,%s:ui".formatted(atBuild, noSuffix, atUiButDisabled));
+
+        assertThat(service.reaches(atBuild, TopicsStage.VECTORS)).isTrue();
+        assertThat(service.reaches(atBuild, TopicsStage.BUILD)).isTrue();
+        assertThat(service.reaches(atBuild, TopicsStage.ARRIVAL)).isFalse();
+        assertThat(service.reaches(atBuild, TopicsStage.UI)).isFalse();
+        assertThat(Stream.of(TopicsStage.values()).allMatch(stage -> service.reaches(noSuffix, stage))).isTrue();
+        assertThat(service.reaches(atUiButDisabled, TopicsStage.VECTORS)).isFalse();
+        assertThat(service.reaches(notListed, TopicsStage.VECTORS)).isFalse();
+
+        config.setEnabled(false);
+
+        assertThat(service.reaches(atBuild, TopicsStage.VECTORS)).isFalse();
     }
 
     static Stream<Arguments> noWorkspace() {

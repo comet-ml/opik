@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.domain.topics.TopicsStage;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -16,11 +17,11 @@ import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
 
-import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Topics settings; config.yml describes each key and its default. Deliberately not a service toggle. Needs ai-labels
@@ -125,7 +126,8 @@ public class TopicsConfig {
 
     /**
      * A String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to a
-     * collection. Null and blank both mean none. No getter: read it via {@link #enabledWorkspaceIds()}.
+     * collection. Null and blank both mean none. Entries are {@code id} or {@code id:stage}; see {@link TopicsStage}.
+     * No getter: read it via {@link #enabledWorkspaceStages()} or {@link #enabledWorkspaceIds()}.
      */
     @JsonProperty
     @Getter(AccessLevel.NONE)
@@ -135,15 +137,48 @@ public class TopicsConfig {
     private VectorsConfig vectors;
 
     /**
-     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
-     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
-     * would keep an empty list for the life of the process.
+     * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
+     * {@link TopicsStage#ALL}. Throws on an unknown stage or a repeated id, which {@link #isEnabledWorkspacesValid()}
+     * rejects at startup. Deliberately neither cached nor named as a bean getter: Lombok's toString/equals/hashCode and
+     * Jackson call getters, and a parse cached before the field was bound would keep an empty map for the life of the
+     * process.
      */
+    public Map<String, TopicsStage> enabledWorkspaceStages() {
+        var stages = new HashMap<String, TopicsStage>();
+        for (var entry : Objects.toString(enabledWorkspaces, "").split(",")) {
+            var parts = entry.split(":", -1);
+            var workspaceId = parts[0].strip();
+            if (parts.length == 1 && workspaceId.isEmpty()) {
+                continue;
+            }
+            if (workspaceId.isEmpty() || parts.length > 2) {
+                throw new IllegalArgumentException("topics.enabledWorkspaces: malformed entry '%s'".formatted(entry));
+            }
+            var stage = parts.length == 1
+                    ? TopicsStage.ALL
+                    : TopicsStage.fromConfigName(parts[1].strip()).orElseThrow(() -> new IllegalArgumentException(
+                            "topics.enabledWorkspaces: unknown stage in '%s'".formatted(entry)));
+            if (stages.putIfAbsent(workspaceId, stage) != null) {
+                throw new IllegalArgumentException(
+                        "topics.enabledWorkspaces: workspace '%s' is listed more than once".formatted(workspaceId));
+            }
+        }
+        return Map.copyOf(stages);
+    }
+
+    /** The listed workspace ids, whatever their stage. */
     public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
+        return enabledWorkspaceStages().keySet();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.enabledWorkspaces must list each workspace id once, as id or id:stage, with stage one of vectors, build, arrival, nightly, ui") public boolean isEnabledWorkspacesValid() {
+        try {
+            enabledWorkspaceStages();
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     @Data
