@@ -19,6 +19,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
+import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.junit.jupiter.api.BeforeAll;
@@ -201,8 +202,9 @@ class GuardrailModelServiceTest {
         assertThat(firstRetrained.await(30, TimeUnit.SECONDS)).isTrue();
         var second = CompletableFuture.supplyAsync(() -> service.retrain(id));
 
-        Thread.sleep(500);
-        assertThat(second).as("the second retrain waits on the model row's lock").isNotDone();
+        Awaitility.await().during(500, TimeUnit.MILLISECONDS).atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(second).as("the second retrain waits on the model row's lock")
+                        .isNotDone());
         firstMayCommit.countDown();
 
         var runId = first.get(30, TimeUnit.SECONDS);
