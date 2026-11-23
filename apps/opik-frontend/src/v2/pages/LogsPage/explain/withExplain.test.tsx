@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { JSX } from "react";
 import { render, screen } from "@testing-library/react";
 import { CellContext } from "@tanstack/react-table";
 import { BaseTraceData } from "@/types/traces";

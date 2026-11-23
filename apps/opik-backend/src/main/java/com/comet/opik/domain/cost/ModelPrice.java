@@ -94,6 +94,11 @@ public record ModelPrice(
                 .orElse(cacheCreationInputTokenPrice);
     }
 
+    public boolean hasTokenPrices() {
+        return inputPrice.signum() > 0 || outputPrice.signum() > 0 || cacheCreationInputTokenPrice.signum() > 0
+                || cacheReadInputTokenPrice.signum() > 0;
+    }
+
     public BigDecimal effectiveCacheReadInputTokenPrice(int totalPromptTokens) {
         return applicableTier(totalPromptTokens, PromptTier::cacheReadInputTokenPrice)
                 .orElse(cacheReadInputTokenPrice);

@@ -24,7 +24,7 @@ interface UseAudioPlayerReturn {
   isLoading: boolean;
   hasError: boolean;
   errorMessage: string | null;
-  audioRef: RefObject<AudioPlayer>;
+  audioRef: RefObject<AudioPlayer | null>;
   formatTime: (seconds: number) => string;
 }
 

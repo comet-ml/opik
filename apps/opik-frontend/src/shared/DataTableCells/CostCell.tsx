@@ -85,10 +85,11 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = "";
 
   if (isNumber(rawValue)) {
-    value = dataFormatter(rawValue, {});
+    // formatCost reads a zero cost as "no value" and would print its "-" default
+    value = dataFormatter(rawValue, { noValue: "" });
   }
 
   return (
@@ -96,7 +97,7 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {isNumber(rawValue) ? (
+      {isNumber(rawValue) && value ? (
         <TooltipWrapper content={formatCost(rawValue, { modifier: "full" })}>
           <span className="truncate text-light-slate">{value}</span>
         </TooltipWrapper>

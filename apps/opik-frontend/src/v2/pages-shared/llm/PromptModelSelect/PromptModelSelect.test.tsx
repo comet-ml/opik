@@ -123,11 +123,29 @@ describe("PromptModelSelect", () => {
     const { onChange } = renderPicker();
 
     fireEvent.mouseEnter(screen.getByText("Anthropic"));
-    fireEvent.pointerUp(
-      within(screen.getByRole("dialog")).getByRole("option", {
-        name: "Claude Opus 4.1",
-      }),
+    const option = within(screen.getByRole("dialog")).getByRole("option", {
+      name: "Claude Opus 4.1",
+    });
+    // Radix Select picks on pointerup only for a mouse press; touch and pen pick on click.
+    fireEvent.pointerDown(option, { pointerType: "mouse" });
+    fireEvent.pointerUp(option, { pointerType: "mouse" });
+
+    expect(onChange).toHaveBeenCalledWith(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      PROVIDER_TYPE.ANTHROPIC,
     );
+  });
+
+  it("names the picked model's own provider when a search hid the hovered row", () => {
+    const { onChange } = renderPicker();
+
+    fireEvent.mouseEnter(screen.getByText("OpenAI"));
+    fireEvent.change(screen.getByPlaceholderText("Search model"), {
+      target: { value: "Opus" },
+    });
+    const option = screen.getByRole("option", { name: "Claude Opus 4.1" });
+    fireEvent.pointerDown(option, { pointerType: "mouse" });
+    fireEvent.pointerUp(option, { pointerType: "mouse" });
 
     expect(onChange).toHaveBeenCalledWith(
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,

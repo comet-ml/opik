@@ -8,7 +8,6 @@ export interface DashboardPublic {
     /** Project ID. Takes precedence over project_name when both are provided. */
     projectId?: string;
     name: string;
-    slug?: string;
     type?: OpikApi.DashboardPublicType;
     scope?: OpikApi.DashboardPublicScope;
     description?: string;

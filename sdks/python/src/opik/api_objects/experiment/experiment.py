@@ -172,7 +172,7 @@ class Experiment:
     @functools.cached_property
     def dataset_id(self) -> str:
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._dataset_name
+            dataset_name=self._dataset_name, project_name=self._project_name
         ).id
 
     @property

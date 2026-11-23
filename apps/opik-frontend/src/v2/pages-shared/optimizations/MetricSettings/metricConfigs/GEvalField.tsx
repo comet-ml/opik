@@ -1,5 +1,5 @@
 import React from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 
 import { cn } from "@/lib/utils";

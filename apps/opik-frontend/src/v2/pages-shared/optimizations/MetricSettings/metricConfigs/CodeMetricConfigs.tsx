@@ -3,7 +3,7 @@ import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import { Tag } from "@/ui/tag";
 import { CodeMetricParameters } from "@/types/optimizations";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { python } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
 import { Extension } from "@codemirror/state";

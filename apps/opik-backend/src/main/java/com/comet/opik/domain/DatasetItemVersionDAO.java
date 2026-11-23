@@ -3004,6 +3004,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         LIMIT 1 BY div.id
                     ) div_dedup
                 ) dibv ON dibv.dataset_item_id = ei.stable_dataset_item_id
+                WHERE ei.workspace_id = :workspace_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT

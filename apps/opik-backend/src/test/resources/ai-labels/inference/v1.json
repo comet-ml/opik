@@ -2,7 +2,7 @@
   "x-vendored-from": {
     "repository": "comet-ml/opik-inference",
     "path": "api/v1.json",
-    "commit": "755e72eceee81c149fed594e03852724c180ec02",
+    "commit": "7809af91115a321af8404b52f434ff43665b97ee",
     "note": "Copied verbatim except for this key. Refresh it from opik-inference when the v1 contract changes."
   },
   "auth": {
@@ -2143,6 +2143,152 @@
       },
       "status": 200
     },
+    "POST /v1/embed": {
+      "request": {
+        "additionalProperties": false,
+        "description": "Realtime only, so no lane. Vectors are large and a text is rarely embedded twice, so the response\ncache is opt-in here.",
+        "properties": {
+          "cache": {
+            "default": false,
+            "title": "Cache",
+            "type": "boolean"
+          },
+          "deadline_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline Ms"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Inputs",
+            "type": "array"
+          },
+          "org_id": {
+            "minLength": 1,
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "org_id",
+          "inputs"
+        ],
+        "title": "EmbedRequest",
+        "type": "object"
+      },
+      "response": {
+        "$defs": {
+          "EmbedResult": {
+            "properties": {
+              "dimensions": {
+                "title": "Dimensions",
+                "type": "integer"
+              },
+              "embeddings": {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "title": "Embeddings",
+                "type": "array"
+              }
+            },
+            "required": [
+              "embeddings",
+              "dimensions"
+            ],
+            "title": "EmbedResult",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/EmbedResult"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "required": [
+          "request_id",
+          "usage",
+          "cache_hit",
+          "latency_ms",
+          "result"
+        ],
+        "title": "EmbedResponse",
+        "type": "object"
+      },
+      "status": 200
+    },
     "POST /v1/generate": {
       "request": {
         "$defs": {
@@ -2462,6 +2608,14 @@
     "decision_realtime_max_state_chars": {
       "kind": "max",
       "value": 16384
+    },
+    "embed_deadline_ms": {
+      "kind": "default",
+      "value": 10000
+    },
+    "embed_max_deadline_ms": {
+      "kind": "max",
+      "value": 60000
     },
     "generate_realtime_deadline_ms": {
       "kind": "default",
