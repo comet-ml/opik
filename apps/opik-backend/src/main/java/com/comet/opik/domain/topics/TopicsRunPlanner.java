@@ -138,12 +138,14 @@ public class TopicsRunPlanner {
      * Queues the project's nightly update for {@code night} now, by hand, and returns its run id
      * ({@link TopicsNightPass#byHand}).
      *
-     * @throws ConflictException when the nightly job is off, the workspace is not opted in, the project is gone or has
-     *                           no list, its list already covers the night, its window has too few vectors, or it has
-     *                           a run in flight
+     * @throws ConflictException           when the nightly job is off, the workspace is not opted in, the project is
+     *                                     gone or has no list, its list already covers the night, its window has too
+     *                                     few vectors, or it has a run in flight
+     * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
+     *                                     again
      */
     public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return nightPass.byHand(workspaceId, projectId, night, this::queueOne);
+        return nightPass.byHand(workspaceId, projectId, night, this::queueByHand);
     }
 
     /**
