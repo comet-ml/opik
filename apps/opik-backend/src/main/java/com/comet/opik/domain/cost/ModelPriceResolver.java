@@ -50,7 +50,8 @@ class ModelPriceResolver {
             @Nullable CustomModelPrice customRow) {
     }
 
-    private record CustomMatch(CustomModelPrice row, String provider, NameForm nameForm) {
+    @Builder(toBuilder = true)
+    private record CustomMatch(@NonNull CustomModelPrice row, @NonNull String provider, @NonNull NameForm nameForm) {
     }
 
     Optional<PriceMatch> resolve(@Nullable String modelName, @Nullable String provider) {
@@ -176,7 +177,11 @@ class ModelPriceResolver {
         for (Map.Entry<String, NameForm> spelling : spellings.entrySet()) {
             CustomModelPrice row = layers.find(spelling.getKey(), provider);
             if (row != null && (followAliases || row.kind() == CustomModelPrice.Kind.FIXED)) {
-                return Optional.of(new CustomMatch(row, provider, spelling.getValue()));
+                return Optional.of(CustomMatch.builder()
+                        .row(row)
+                        .provider(provider)
+                        .nameForm(spelling.getValue())
+                        .build());
             }
         }
         return Optional.empty();

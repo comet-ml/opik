@@ -51,7 +51,7 @@ class ModelPriceMerger {
                     .build());
         }
         ModelPrice price = merged.promptTiers(tiers).build();
-        return base.calculator() == SpanCostCalculator.DEFAULT_COST_CALCULATOR && hasTokenPrices(price)
+        return base.calculator() == SpanCostCalculator.DEFAULT_COST_CALCULATOR && price.hasTokenPrices()
                 ? price.toBuilder().calculator(SpanCostCalculator::textGenerationCost).build()
                 : price;
     }
@@ -63,14 +63,5 @@ class ModelPriceMerger {
     private List<ModelPrice.PromptTier> withEachTier(List<ModelPrice.PromptTier> tiers,
             UnaryOperator<ModelPrice.PromptTier> change) {
         return tiers.isEmpty() ? tiers : tiers.stream().map(change).toList();
-    }
-
-    private boolean hasTokenPrices(ModelPrice price) {
-        return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
-                || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
-    }
-
-    private boolean isPositive(BigDecimal value) {
-        return value.compareTo(BigDecimal.ZERO) > 0;
     }
 }
