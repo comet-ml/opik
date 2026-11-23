@@ -228,6 +228,42 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("a function alias missing from the AST denylist is rejected by its resolved name")
+    void resolvedFunctionAliasIsRejected() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("Function unexpectedAlias")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, function_name: currentUser, result_type: String")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a failed resolved-tree preflight withholds execution in audit mode")
+    void resolvedTreeFailureBlocksExecution() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("tree unavailable")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(WebApplicationException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getStatus()).isEqualTo(503);
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("a query returning more than the single result column is a clean 400")
     void nonSingleResultColumnIsRejected() {
         givenClickHouseReturnsOneRow();
@@ -414,8 +450,6 @@ class FreeFormSqlQueryServiceTest {
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         when(dao.explainPlan(any(), anyString(), anyString(), anyString()))
                 .thenThrow(new IllegalStateException("thrown before any future"));
-        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
-                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
 
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
@@ -423,38 +457,37 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
-    @DisplayName("audit: a query tree that cannot be explained still leaves the log and plan checked")
-    void auditChecksDespiteTreeFailure() {
+    @DisplayName("audit: a query tree that cannot be explained blocks execution")
+    void auditRejectsTreeFailureBeforeCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
 
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
-        verify(dao).explainPlan(any(), anyString(), anyString(), anyString());
-        verify(queryLogReader).entries(anyString(), eq(STANDARD_USER));
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().isInstanceOf(WebApplicationException.class);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+        verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("audit: a returned tree that cannot be classified fails the check rather than counting as unavailable")
-    void auditClassifierFailureFailsTheCheck() {
+    @DisplayName("audit: a malformed resolved tree blocks execution")
+    void auditRejectsMalformedTreeBeforeCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         // A null line makes the parser throw on a tree ClickHouse did return.
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(Stream.of("QUERY id: 0", (String) null).toList()));
 
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().isInstanceOf(WebApplicationException.class);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());
     }
 
     @Test
-    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs; its tree is explained after")
+    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs")
     void auditRunsScalarReads() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
@@ -464,8 +497,8 @@ class FreeFormSqlQueryServiceTest {
 
         assertThat(response.results()).isEqualTo(chRows);
         var order = inOrder(dao);
-        order.verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
         order.verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
+        order.verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -478,7 +511,7 @@ class FreeFormSqlQueryServiceTest {
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
         assertThat(response.results()).isEqualTo(chRows);
-        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());
     }

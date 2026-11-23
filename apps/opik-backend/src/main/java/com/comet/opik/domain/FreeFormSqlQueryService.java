@@ -50,11 +50,11 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
  * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, tables in the {@code system} and
- * {@code information_schema} catalogs, and listed environment or identity functions before execution. A bare
- * identifier with the name of a listed function may instead be a column or alias; {@code EXPLAIN QUERY TREE} resolves
- * it, and the service rejects it only if ClickHouse resolves it as a function. Execution never runs on a validation
- * failure. The workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row
- * policies, never concatenated into the SQL.
+ * {@code information_schema} catalogs, and listed environment or identity functions before execution. Every query is
+ * also pre-flighted through {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree catches aliases whose
+ * AST spelling is not listed, while allowing columns or aliases with a metadata-function name. The same tree is reused
+ * for the scalar-subquery check. Execution never runs on a validation failure. The workspace/project bounds are pushed
+ * as ClickHouse server settings consumed by the restrictive row policies, never concatenated into the SQL.
  *
  * <p>On top of the row policies, a post-run check verifies from the query's {@code system.query_log} entries and its
  * plan that every table it read was read under a row policy ({@link FreeFormSqlPolicyCheck}). A scalar subquery
@@ -231,7 +231,6 @@ public class FreeFormSqlQueryService {
         VIOLATION("violation"),
         LOG_MISSING("log_missing"),
         CHECK_FAILED("check_failed"),
-        QUERY_TREE_FAILED("query_tree_failed"),
         SCALAR_READ("scalar_read");
 
         private final String tag;
@@ -254,74 +253,45 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> resolvedMetadataCheck(account, workspaceId, projectScope, query,
-                        nodeLabels, startMillis))
-                .thenCompose(queryTree -> subqueryReads(account, workspaceId, projectScope, query, queryTree,
-                        startMillis))
-                .thenCompose(subqueryReads -> runQuery(account, workspaceId, projectScope, query, subqueryReads,
-                        startMillis));
+                .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
+                .thenCompose(queryTree -> {
+                    var reads = mode == FreeFormSqlPostRunCheckConfig.Mode.ENFORCE
+                            ? rejectScalarReads(account, queryTree, startMillis)
+                            : FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
+                    return runQuery(account, workspaceId, projectScope, query, reads, queryTree, startMillis);
+                });
     }
 
-    /** An AST Identifier can resolve to either a metadata function or a legitimate column/alias. */
+    /** Resolve every function call to its canonical name before running the query. */
     private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, List<String> nodeLabels, long startMillis) {
-        if (!containsForbiddenMetadataIdentifierNode(nodeLabels)) {
-            return CompletableFuture.completedFuture(null);
-        }
+            String projectScope, String query, long startMillis) {
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
                 .handle((queryTree, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
                     }
-                    if (containsForbiddenResolvedMetadataFunction(queryTree)) {
-                        throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                    try {
+                        if (containsForbiddenResolvedMetadataFunction(queryTree)) {
+                            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                        }
+                    } catch (WebApplicationException e) {
+                        throw e;
+                    } catch (RuntimeException e) {
+                        throw mapExecutionError(e, startMillis);
                     }
                     return queryTree;
                 });
     }
 
-    /** Where the query's subqueries read, for the check; unknown when it is off or could not tell in audit. */
-    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> subqueryReads(FreeFormSqlAccount account,
-            String workspaceId,
-            String projectScope, String query, @Nullable List<String> resolvedTree, long startMillis) {
-        if (mode != FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
-            // Off: nothing to check. Audit: the tree is explained after the response, with the rest of the check.
-            return CompletableFuture.completedFuture(FreeFormSqlSubqueries.SubqueryReads.UNKNOWN);
+    /** Audit the already-resolved tree after the response; no second EXPLAIN is needed. */
+    private FreeFormSqlSubqueries.SubqueryReads auditSubqueryReads(FreeFormSqlAccount account, List<String> tree) {
+        var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
+        if (reads.hasScalar()) {
+            log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), "
+                    + "account '{}'", describe(reads), account);
+            count(CheckOutcome.SCALAR_READ, account);
         }
-        if (resolvedTree != null) {
-            return CompletableFuture.completedFuture(rejectScalarReads(account, resolvedTree, null, startMillis));
-        }
-        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
-                .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
-    }
-
-    /**
-     * Audit: the query's subquery reads, reporting a scalar one instead of rejecting it. When the tree cannot be
-     * explained, that is counted on its own and the check still runs on the log and the plan, with the subquery reads
-     * unknown: a read only an IN or EXISTS subquery shows is then reported rather than accepted.
-     */
-    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> auditSubqueryReads(FreeFormSqlAccount account,
-            String workspaceId, String projectScope, String query) {
-        // Only the DAO call recovers: a failure classifying a tree that was returned stays a failed check.
-        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
-                .exceptionally(error -> {
-                    log.warn("Free-form SQL query tree could not be explained for the audit, account '{}'", account,
-                            error);
-                    count(CheckOutcome.QUERY_TREE_FAILED, account);
-                    return null;
-                })
-                .thenApply(tree -> {
-                    if (tree == null) {
-                        return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
-                    }
-                    var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
-                    if (reads.hasScalar()) {
-                        log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), "
-                                + "account '{}'", describe(reads), account);
-                        count(CheckOutcome.SCALAR_READ, account);
-                    }
-                    return reads;
-                });
+        return reads;
     }
 
     /**
@@ -329,13 +299,7 @@ public class FreeFormSqlQueryService {
      * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
      */
     private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, List<String> queryTree,
-            Throwable error,
             long startMillis) {
-        if (error != null) {
-            throw findCause(error, WebApplicationException.class) != null
-                    ? findCause(error, WebApplicationException.class)
-                    : mapExecutionError(error, startMillis);
-        }
         var subqueryReads = FreeFormSqlSubqueries.subqueryReads(queryTree, database);
         if (subqueryReads.hasScalar()) {
             count(CheckOutcome.SCALAR_READ, account);
@@ -381,7 +345,8 @@ public class FreeFormSqlQueryService {
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads, long startMillis) {
+            String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads,
+            List<String> queryTree, long startMillis) {
         String queryId = UUID.randomUUID().toString();
         return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query, queryId)
                 .handle((result, error) -> {
@@ -394,7 +359,7 @@ public class FreeFormSqlQueryService {
                     case OFF -> CompletableFuture.completedFuture(result);
                     case AUDIT -> {
                         // After the response, off its path: nothing the check finds or fails on reaches the caller.
-                        audit(account, workspaceId, projectScope, query, queryId);
+                        audit(account, workspaceId, projectScope, query, queryId, queryTree);
                         yield CompletableFuture.completedFuture(result);
                     }
                     case ENFORCE -> verifyPolicies(account, workspaceId, projectScope, query, queryId, subqueryReads,
@@ -426,10 +391,10 @@ public class FreeFormSqlQueryService {
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
     private void audit(FreeFormSqlAccount account, String workspaceId, String projectScope, String query,
-            String queryId) {
+            String queryId, List<String> queryTree) {
         try {
-            auditSubqueryReads(account, workspaceId, projectScope, query)
-                    .thenCompose(reads -> check(account, workspaceId, projectScope, query, queryId, reads))
+            var reads = auditSubqueryReads(account, queryTree);
+            check(account, workspaceId, projectScope, query, queryId, reads)
                     .whenComplete((outcome, error) -> {
                         if (error != null) {
                             log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,

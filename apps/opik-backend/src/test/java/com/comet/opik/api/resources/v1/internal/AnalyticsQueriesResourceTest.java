@@ -216,7 +216,7 @@ class AnalyticsQueriesResourceTest {
                 arguments("write statement (read-only profile)",
                         "INSERT INTO traces (id, workspace_id, project_id, name) VALUES ('%s', '%s', '%s', 'x')"
                                 .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA),
-                        ACCESS_DENIED_MESSAGE),
+                        EXECUTION_FAILED_MESSAGE),
                 arguments("non-granted table",
                         "SELECT toJSONString(map('n', toString(count()))) AS result FROM span_weeks",
                         ACCESS_DENIED_MESSAGE),
