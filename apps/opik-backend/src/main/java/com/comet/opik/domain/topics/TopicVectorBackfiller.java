@@ -305,9 +305,11 @@ class TopicVectorBackfiller {
      * write at the end; a failed write only means the projects are read again next tick.
      *
      * @param window the backfill window's bounds and the workspace
+     * @param arrival the tick's arrival steps
      */
     Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<TopicBackfill> projects,
-            @NonNull TopicVectorsFind window, @NonNull TickBudget budget) {
+            @NonNull TopicVectorsFind window, @NonNull TickBudget budget,
+            @NonNull TopicsArrivalService.Tick arrival) {
         if (projects.isEmpty()) {
             return Mono.just(TickResult.EMPTY);
         }
@@ -318,7 +320,7 @@ class TopicVectorBackfiller {
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(workspace, project, window, budget, run.settled).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, run.settled, arrival).doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
@@ -368,7 +370,7 @@ class TopicVectorBackfiller {
      * only those writes nothing and ends the project's turns.
      */
     private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, TopicBackfill project, TopicVectorsFind window,
-            TickBudget budget, Set<VectorKey> settledBefore) {
+            TickBudget budget, Set<VectorKey> settledBefore, TopicsArrivalService.Tick arrival) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
         // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
@@ -382,7 +384,7 @@ class TopicVectorBackfiller {
                     var candidates = read.candidates().stream()
                             .filter(candidate -> !settledBefore.contains(VectorKey.of(candidate)))
                             .toList();
-                    return writer.embedAndWrite(workspace, candidates, budget, null)
+                    return writer.embedAndWrite(workspace, candidates, budget, null, arrival)
                             .map(written -> {
                                 var result = written.result();
                                 boolean cut = written.leftForLater(candidates);

@@ -51,6 +51,9 @@ public class TopicsConfig {
     private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
+
+    @Valid @NotNull @JsonProperty
     private FilterConfig filter;
 
     @Valid @NotNull @JsonProperty
@@ -168,6 +171,24 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. Off: the tick reads no list and writes no rows. */
+        @JsonProperty
+        private boolean enabled;
+
+        /**
+         * The arrival steps of one workspace in one vectors tick (the saved lists read and the insert after each vectors
+         * insert) end within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
+    }
 
     /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
     @Data
@@ -525,15 +546,15 @@ public class TopicsConfig {
         }
     }
 
-    /** The nightly job: updates the topic list of each project that has one. */
+    /** The nightly update of the topic list of each project that has one: a pass of each plan of the runs. */
     @Data
     public static class NightlyConfig {
 
-        /** Runs only when {@code topics.enabled} is on too. */
+        /** Runs only when {@code topics.enabled} and {@code topics.firstBuild.enabled}, whose job plans, are on too. */
         @JsonProperty
         private boolean enabled;
 
-        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        /** Quartz cron, UTC. The night is the UTC date it fires on, and starts at its first fire that day. */
         @NotBlank @JsonProperty
         private String schedule;
 

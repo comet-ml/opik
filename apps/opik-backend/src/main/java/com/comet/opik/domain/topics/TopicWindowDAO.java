@@ -253,7 +253,7 @@ public class TopicWindowDAO {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
-        withGuards(template, maxExecutionSeconds);
+        withGuards(template, config.getBuild().getRead(), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)

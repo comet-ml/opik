@@ -53,13 +53,14 @@ public class TopicsCounts {
         return project == null ? null : project.lastSuccessAt();
     }
 
-    /** The project's current or last attempt, when it is running or failed. */
+    /** The project's current or last attempt, when it is in flight or failed. */
     public static ProjectTopics.Attempt attempt(@Nullable TopicProject project) {
         if (project == null || project.runStatus() == null) {
             return null;
         }
         var status = switch (project.runStatus()) {
-            case RUNNING -> ProjectTopics.Attempt.Status.RUNNING;
+            // A run in flight across pods: queued and cancelling show as running.
+            case QUEUED, RUNNING, CANCELLING -> ProjectTopics.Attempt.Status.RUNNING;
             case FAILED -> ProjectTopics.Attempt.Status.FAILED;
             case SAVED -> null;
         };

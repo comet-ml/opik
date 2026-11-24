@@ -73,6 +73,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.saveRun;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.startRun;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -587,7 +588,7 @@ class TopicsReadResourceTest {
         var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicProjectDAO.class);
-            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, startedAt);
+            startRun(runDAO, workspaceId, projectId, runId, startedAt);
             if (status == TopicProject.RunStatus.FAILED) {
                 runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
                         TopicProject.RunError.ABANDONED);

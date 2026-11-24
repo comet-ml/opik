@@ -100,8 +100,8 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 ## Topics first builds
 
 A first build makes the topic list of a project that has none yet, from the project's topic vectors. A project with
-a saved list is not built again: updating a list is the nightly update's work, which is not shipped yet. First builds
-read the same workspaces as ai-labels, and run only with `TOPICS_ENABLED=true`.
+a saved list is not built again: updating a list is the nightly update's work (see "Topics nightly updates"). First
+builds read the same workspaces as ai-labels, and run only with `TOPICS_ENABLED=true`.
 
 A first build reads the project's window: the 30 whole UTC days before the window's end. The planner's window ends at
 tomorrow's start (UTC), so it holds today's traces so far. A window of more than 100,000 traces is sampled: the build
@@ -147,8 +147,9 @@ flowchart TD
     (less up to 1s for trigger jitter) after the plan started, so a pod that fires sooner skips.
   - `topics:first_build:sweep` works the same way for `TOPICS_FIRST_BUILD_SWEEP_INTERVAL`.
 - A plan first reconciles the runs in flight (see "Stuck runs"). Then it fills the free slots: `TOPICS_RUNS_MAX_IN_FLIGHT`
-  minus the runs `queued`, `running` or `cancelling` across the cluster. It takes one unfinished labelling pass, then
-  one first build, in turn.
+  minus the runs `queued`, `running` or `cancelling` across the cluster. During a night it takes the night's nightly
+  updates first (see "Topics nightly updates"). Then it takes one unfinished labelling pass, then one first build, in
+  turn.
 - First build candidates: one MySQL read finds the projects of the opted-in workspaces with no list, no run in flight,
   and a `last_updated_trace_at` in the window. The retry wait (see "Retries") and the backfill gate (see "First builds
   and the vectors backfill") filter them. Then ClickHouse counts each workspace's vectors in the window, one query per
@@ -489,6 +490,295 @@ both. Deleting a project:
 When that fails, the next plan cancels its runs, the job's sweep (every `TOPICS_FIRST_BUILD_SWEEP_INTERVAL`) deletes
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
+
+When a trace is deleted while the vectors tick embeds it, its arrival row (see "Topic on arrival") can be written after
+the delete cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that
+exist), and retention removes it.
+
+## Topics nightly updates
+
+A nightly update changes the saved list of a project once a night: it births topics, retires topics and labels the
+window's traces again. A project with a topic list is the night's. A project without one is the first build's.
+
+There is no nightly job of its own. The night is a pass of each plan of the first-build job (see "How runs work"):
+the leader queues the night's nightly updates as runs of `run_mode = 'nightly_update'` on the same queue, and any pod
+runs them from the `topics-runs` stream. Nightly updates and first builds share `TOPICS_RUNS_MAX_IN_FLIGHT`.
+
+### Settings
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_NIGHTLY_ENABLED` | `true` | The plans queue nightly updates. Needs `TOPICS_ENABLED=true` and `TOPICS_FIRST_BUILD_ENABLED=true`: the first-build job plans. |
+| `TOPICS_NIGHTLY_SCHEDULE` | `0 0 2 * * ?` | Quartz cron, UTC. It only marks the night's start: the night is the UTC date it fires on, and starts at its first fire that day. No job runs on it. |
+| `TOPICS_NIGHTLY_BUDGET` | `2h` | No nightly update is queued after this much of the night, from its start. The rest run the next night, first. At most `20h`. |
+| `TOPICS_BUILD_NAMING_DEADLINE` | `30s` | The deadline of a nightly update's naming calls. At most `300s`, under the project timeout. |
+| `TOPICS_BUILD_VERIFY_DEADLINE` | `60s` | The deadline of a nightly update's verify call. At most `300s`, under the project timeout. |
+
+The other `TOPICS_BUILD_*` settings apply to a nightly update as to a first build: the project timeout, the minimum and
+maximum vectors, the window days. A nightly update's deadline is the project timeout plus its `trace_topics` insert
+bound, as for a first build.
+
+To turn nightly updates off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay and freeze at their last
+saved night. This is the rollback of the nightly update. First builds go on. Pods still run the nightly updates already
+queued.
+
+To stop them for one workspace, opt the workspace out (see "Opting workspaces in and out"). The next plan skips it and
+cancels its runs in flight.
+
+### How a night runs
+
+```mermaid
+flowchart TD
+    A["Plan at time T (leader only)"] --> B{"Did the schedule fire today,<br/>or yesterday, at or before T?"}
+    B -->|no| Z["No night: first builds only"]
+    B -->|yes| C{"T before the night's start + budget?"}
+    C -->|no| N["Record not_reached for the projects<br/>with a list the night did not look at; night ended"]
+    C -->|yes| D["MySQL: projects with a topic,<br/>last_night before the night, no run in flight"]
+    D --> E["Skip: deleted, no_list, already_saved, paused"]
+    D --> F["The rest, stalest first"]
+    F --> G{"Free slot, plan budget left?"}
+    G -->|no| H["A later plan goes on"]
+    G -->|yes| I["ClickHouse: count the project's vectors in the window"]
+    I -->|fails| I1["count_failed: the project runs the next night"]
+    I -->|under minVectors| I2["Skip: small"]
+    I -->|ok| Q["Queue nightly_update on topic_projects,<br/>publish it on topics-runs"]
+    Q --> G
+    Q -.-> P["Any pod claims it: re-checks the list,<br/>runs the update, then a labels run"]
+```
+
+- The night is the UTC date of the schedule's fire, today or yesterday, that is at or before the plan's time. It
+  starts at that day's first fire. The night's window ends at the night's start date (00:00 UTC), so it holds the 30
+  whole days before it.
+- From the night's start until `TOPICS_NIGHTLY_BUDGET` after it, each plan decides on the projects with a topic in the
+  opted-in workspaces that the night has not looked at yet (`last_night` before the night) and that have no run in
+  flight. A project with a run in flight waits for a later plan.
+- The plan first writes the skips that need no count: `deleted` (the project row is gone; the sweep deletes its
+  topics), `no_list`, `already_saved` (its list's `window_until` is at or after the night's start), and `paused`. A
+  project is paused when `failed_runs` is 3 or more and its last attempt started in the 7 nights before the night. So
+  a project that keeps failing does not take the budget every night. A saved run sets `failed_runs` back to 0.
+- Then, while slots are free, it counts the rest one by one, stalest first: the oldest `window_until`, then the project
+  id. A project under `TOPICS_BUILD_MIN_VECTORS` is skipped (`small`). A count that fails is `count_failed`: the
+  project runs the next night, and the other projects are not affected. The others are queued with their count. A plan
+  stops counting after `TOPICS_RUNS_PLAN_BUDGET`, and no plan counts past the night's budget.
+- The night's nightly updates take the free slots before the first builds and the labelling passes.
+- The first plan after the budget records every project with a list that the night did not look at as `not_reached`.
+  Its `not_reached_nights` grows by one, once per night, however many plans run. A project that a night does not reach
+  has the oldest `window_until`, so it goes first the next night.
+- A leader that takes over during the night goes on with it: the night's state is on the project rows. Only the night
+  counter and the night's end line come from the leader that saw the end.
+
+Each decision writes the project's night fields on `topic_projects`: any decision but `not_reached` sets `last_night`
+to the night and `not_reached_nights` to 0, so later plans of the night leave the project alone. A write that fails
+logs a WARN (`could not write its decision`) for the first of the night, DEBUG for the rest, and a WARN with their count
+at the night's end; the night goes on.
+
+### The claim re-check
+
+A pod claims a nightly update with a compare-and-set on the row (`queued` to `running`) that also checks the project
+still has a list that does not cover the night. When it does not, the run ends `failed` with `run_error_code =
+'cancelled'`, which does not count in `failed_runs`. It is counted as a skip in `topics.nightly.decisions`, with reason
+`no_list` or `already_saved`, and logs `Topics run '<run_id>' skipped at its claim` with the reason. This covers a list
+that changed between the queue and the claim, for example a nightly update run by hand meanwhile.
+
+### Nightly update
+
+A project with topics keeps its list and updates it. A topic's prototypes never move: a topic keeps the group centres
+it was born with and the ones a night's decision adds, while they take traces (step 7), so its meaning does not drift
+from its name. The run reads the window (or its sample, as a first build does) and the saved list (the topics with
+their prototype vectors, the project's known-Other prototypes, `saved_runs`), then:
+
+1. Every trace it read goes to its nearest prototype at cosine 0.75 (with the 0.95 gate on known Other, as in the first
+   build): a topic, known Other, or unassigned.
+2. The Other traces (known Other and unassigned together) are grouped by k-means when they number 20 or more. A group
+   of 20 or more traces is a candidate; a candidate is big when its share of the window is 2% or more.
+3. `naming` (`naming_group.md`): one LLM call per night for every candidate tight enough (0.80). A loose candidate is
+   known Other without a call, and a night without a candidate makes no call. The LLM sees the topics and may give a
+   candidate to one of them, put same-kind candidates into one new topic, or send a candidate to Other. A candidate
+   given to a topic is checked by one batched verify call (`verify_naming`, `verify_batch.md`); a rejected one goes to
+   a second call (`naming_new`, `naming_group_new.md`) that offers a new topic or Other only. A new name equal to a
+   topic's (case and spaces ignored) joins that topic, and equal new names are one topic. A new topic is born only when
+   its candidates' share of the window is 2% or more; below that its candidates stay in Other. On a full list a new
+   topic replaces the topic (not born tonight) with the lowest share of the window, if that share is below the new
+   topic's. A full list with no such topic, a catch-all or blank name, or a candidate the answers leave out goes to
+   known Other, and the run goes on. So does an answer that is not a JSON object: it counts as `bad_answer` in
+   `topics.llm.calls`, the run logs a WARN (`answer could not be read`), and the candidates it covers stay in Other.
+   A naming or verify call that fails or runs out of its deadline fails the run.
+4. The centre of each candidate given to a topic becomes one more prototype of that topic. The known-Other memory keeps
+   its prototypes whose traces mostly stayed in Other, then the centre of each candidate left in Other (not a loose
+   one), unless one kept is within cosine 0.95 of it.
+5. Every trace it read is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
+6. Lifecycle, then a reassignment when a topic was retired:
+   - A topic that holds no trace is retired the same night (`low_share`).
+   - Otherwise `low_nights` counts saved nights in a row under 0.5% of the window; at 3 the topic is retired
+     (`low_share`). A topic born after the first build is measured as any other.
+   - A birth on a full list replaces a topic, so the list never grows past 10.
+   - A retired topic does not come back. When its theme returns, the naming sees it as new traffic, and it is born as
+     a new topic with a new id.
+7. A known-Other prototype that held none of the traces in the final assignment is dropped. Then a topic's prototype
+   that took none of them is dropped; a topic keeps at least its first prototype.
+
+A retired topic's row is deleted. The save logs one line per retired topic, `Topics run '<run_id>' retired topic
+'<topic_id>'`, with the project, the reason and the size, and counts it in `topics.retired`. The reason is
+`low_share` or `replaced` (replaced by a new topic on a full list). The line holds ids only: a name and definition
+come from trace text and are never logged. This line is the only record of a retired topic, so its name and definition
+are gone with its row. A new topic's `born` is the night, or the day of the run if that is earlier.
+
+Most nights make no LLM call. A night with a candidate makes one to three: the naming, the verify of its assigns, and
+the second naming for the rejected ones.
+
+The save works as a first build's (see "Saving and labelling"): one MySQL transaction (the retired topics deleted, the
+kept topics' `low_nights`, size and prototype vectors updated, the new topics inserted, the list columns of the
+project's row with `saved_runs` + 1 and `labels_complete = false`, the run `saved`), then the `trace_topics` insert of
+the traces the run read. The transaction checks that `list_run_id` is still the one the run read; if another run saved
+the project meanwhile, the run fails with `save` and writes nothing. A saved nightly update queues its labelling pass
+as a `labels` run, as a first build does, and the row then shows that run.
+
+A night can retire every topic. The save then deletes all the project's topics, clears the list columns of its row
+(`list_run_id`, `window_until`, `other_vectors`), and writes no `trace_topics` rows: the traces keep their last topics.
+The project has no list now, so the next plans build it again as a first build, with new topic ids.
+
+The run's stats hold the churn, computed in memory over every trace it read: the trace's label by the list saved
+before tonight against tonight's label.
+
+- `churn_any` is the share whose label changed, Other included.
+- `churn` is the same over the traces in a topic both before and after: a trace that moved from one topic to another.
+
+A trace that moved to or from Other counts in `churn_any` only. A trace now in a topic born tonight has changed. No
+alert reads the churn yet: a threshold will be chosen from live values.
+
+A nightly update's `run_error_code` values are the first build's (see "Run states"). `llm_timeout`, `llm_error` and
+`llm_bad_answer` name the naming or verify call in the run's `failed` line.
+
+### A night's runs
+
+`topic_projects` keeps each project's last run only. After a saved nightly update the row shows its `labels` run, and
+`list_run_id` is the nightly update's run. The runs before are in the logs.
+
+```sql
+-- MySQL: the projects a night looked at (any decision but not_reached), with their current run
+SELECT workspace_id, project_id, last_night, list_run_id, window_until, saved_runs, last_success_at,
+       run_id, run_mode, run_status, run_error_code, failed_runs
+FROM topic_projects
+WHERE last_night = '<yyyy-MM-dd>'
+ORDER BY workspace_id, project_id;
+
+-- MySQL: the nightly updates queued since midnight UTC that are in flight or failed, newest first
+SELECT workspace_id, project_id, run_id, run_status, run_error_code, cancel_reason, run_queued_at, run_started_at,
+       deadline_at, run_finished_at, failed_runs
+FROM topic_projects
+WHERE run_mode = 'nightly_update' AND run_queued_at >= UTC_DATE()
+ORDER BY run_queued_at DESC;
+
+-- MySQL: projects with a list the night has not looked at yet, the stalest first
+SELECT workspace_id, project_id, window_until, last_night, not_reached_nights, run_mode, run_status
+FROM topic_projects
+WHERE list_run_id IS NOT NULL AND (last_night IS NULL OR last_night < '<yyyy-MM-dd>')
+ORDER BY window_until, project_id;
+```
+
+A nightly update's `saved` or `failed` log line holds its `stats`. Besides `vectors`, `topics`, `other_share`,
+`window_traces`, `sample_traces` and `seconds`:
+
+| Key | Meaning |
+|---|---|
+| `mode` | `nightly_update`. |
+| `saved_runs_before`, `topics_before` | `saved_runs` and the topics the run started from. |
+| `unassigned`, `candidates`, `big` | Other traces before the night's decisions (known Other included); candidate groups; the ones with 2% of the window. `candidates` 0 means no LLM call. |
+| `forced` | Candidates by outcome: `born`, `assigned` (given to a topic and verified), `same_name`, `other_loose`, `other_small` (named new, under 2%), `other_full`, `other_name`. |
+| `born`, `retired` | The number of tonight's new topics; tonight's retirements by reason. |
+| `other_prototypes` | Known-Other prototypes after the night. |
+| `churn`, `churn_any` | See "Nightly update". |
+| `llm_calls`, `llm_input_tokens`, `llm_output_tokens` | The number of LLM calls, and their tokens summed. |
+
+Prompts and the LLM's answers hold users' trace text, so no log level prints them. The run logs each naming and verify
+prompt and each answer at INFO as its length and SHA-256, with `call '<call>'`: `naming`, `naming_new` or
+`verify_naming`. The call's request id is `<run_id>:<call>`, so the call can be found in opik-inference's logs. In
+`topics.llm.calls`, `call` is `naming` (both namings) or `verify`. Topic names and definitions are never logged; read a
+live topic's from `topics`. Search the logs for `Topics run '<run_id>'`, and for the night's lines, `Topics night
+'<yyyy-MM-dd>'` (`queued run`, `decided`, `plan done`, `ended`, `pass failed`).
+
+### Running by hand
+
+An internal endpoint queues one project's nightly update now instead of waiting for the night. Call it from inside the
+cluster. It works while `TOPICS_ENABLED` is on, also with the first-build job off, and answers `501` otherwise.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/night?workspace_id=<workspace_id>&night=<yyyy-MM-dd>"
+```
+
+`night` is today (UTC) by default, at most tomorrow, and at least 365 days ago; the window ends at its start. The rules:
+`TOPICS_NIGHTLY_ENABLED` is on, the workspace is opted in to topics, the project has a list whose `window_until` is
+before the night's start, its window holds at least `TOPICS_BUILD_MIN_VECTORS` vectors, and it has no run in flight.
+`TOPICS_RUNS_MAX_IN_FLIGHT` and the night's budget do not apply. It is one project's run, not a night: it writes no
+decision and leaves `last_night` as it is. When the night's own pass reaches the project later, it skips it as
+`already_saved`.
+
+| Answer | Meaning |
+|---|---|
+| `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
+| `409` | The nightly update is off, the workspace is not opted in, the project has no list, its list already covers the night, the window has too few vectors, or a run is in flight. The body's message says which. |
+| `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
+
+There is no endpoint for a whole night. A night that a pod restart or a short budget cut off goes on at the next
+plan while the budget lasts; after it, the projects left run the next night, first.
+
+### What to watch
+
+The metrics carry `workspace_id` and `workspace_name`, except the two whole-night ones. Each night sets every
+`topics.nightly.nights` outcome and, for each opted-in workspace, every `topics.nightly.decisions` series to 0 before
+it decides anything, so `increase()` sees the night's first event.
+
+| Metric | Meaning |
+|---|---|
+| `topics.nightly.nights` by `outcome` | Nights (no workspace): `finished` at the first plan after the budget, or `failed` for a plan whose night pass failed (the ERROR `Topics night '<night>' pass failed` has the error; the next plan goes on). |
+| `topics.nightly.decisions` by `decision`, `reason` | Projects per decision: `nightly_update` (queued), `not_reached` (the budget ran out; above zero means the budget is too short or `TOPICS_RUNS_MAX_IN_FLIGHT` too low), `count_failed` (the window count failed; the WARN `Topics night count read failed` has the project and the error), or `skip` with a `reason`: `small`, `deleted`, `paused`, `already_saved`, `no_list`. The claim re-check counts its skips here too. |
+| `topics.nightly.budget_used_seconds` | From the night's start to its last queued nightly update, or the whole budget when a project was `not_reached` (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+| `topics.topics.live` | Topics of a project after each saved nightly update. |
+| `topics.topics.born` | Topics born by saved nightly updates. A few a week per project is normal; many every night means the list does not settle. |
+| `topics.retired` by `reason` | `low_share`, `replaced`. |
+| `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see "Nightly update". No alert. |
+
+`topics.runs`, `topics.run.duration_seconds` (nightly phases `window`, `state`, `update`, `llm` within `update`,
+`save`), `topics.llm.calls`, `topics.save.rows`, `topics.label.passes` and `topics.run.other_share` count nightly
+updates as they count first builds (see the first builds' "What to watch").
+
+The state gauges come from `topic_projects`. Each pod reads it once a minute and keeps the result; a scrape reads no
+table. Every pod publishes the same values: read them with `max`, never `sum`. They are published only while
+`TOPICS_ENABLED` and `TOPICS_NIGHTLY_ENABLED` are on, except the heartbeat `state_age_seconds`, only after the pod's
+first read. A workspace counts only while it is opted in to both topics and ai-labels; each such workspace has a
+series, 0 when it has no such project.
+
+| Gauge | Value |
+|---|---|
+| `topics.nightly.state_age_seconds` | Seconds since this pod last read `topic_projects`; before its first good read, since it started trying. Above a few minutes, every other state gauge is stale. |
+| `topics.nightly.state_refresh_failures` | A counter: failed reads (WARN `Topics nightly gauges could not read topic_projects`). |
+| `topics.nightly.last_night_age_seconds` | Seconds since the start (00:00 UTC) of the latest night that looked at a project. Not published before the first. |
+| `topics.nightly.stale_projects` by workspace | Projects with a list whose last 3 attempts or more failed in a row (`failed_runs >= 3`, first builds and abandoned runs included). A saved run sets `failed_runs` back to 0. |
+| `topics.nightly.starved_projects` by workspace | Projects `not_reached` on the last 2 nights or more in a row (`not_reached_nights >= 2`). |
+
+The Prometheus names replace the dots with underscores, for example `topics_nightly_stale_projects`; the counters end
+in `_total`.
+
+```sql
+-- MySQL: stale projects: a list, and the last 3 attempts or more failed
+SELECT workspace_id, project_id, failed_runs, first_failed_at, run_id, run_mode, run_status, run_error_code,
+       run_started_at, last_success_at
+FROM topic_projects
+WHERE list_run_id IS NOT NULL AND failed_runs >= 3
+ORDER BY workspace_id, run_started_at;
+
+-- MySQL: starved projects: not reached on the last 2 nights or more
+SELECT workspace_id, project_id, not_reached_nights, last_night, window_until
+FROM topic_projects
+WHERE not_reached_nights >= 2
+ORDER BY not_reached_nights DESC, window_until;
+```
+
+For a stale project, read `run_error_code` and search the logs for its `run_id`: `llm_*` points at opik-inference,
+`window_read` and `save` at ClickHouse or MySQL, `abandoned` at pod restarts. For starved projects, raise
+`TOPICS_NIGHTLY_BUDGET` or `TOPICS_RUNS_MAX_IN_FLIGHT`. When no night looks at any project (`last_night_age_seconds`
+above a day), check that a leader plans (see "Stuck runs", step 1): no plan, no night.
+
 ## Reading topics
 
 `GET /v1/private/topics?project_id=<project_id>` returns a project's live topics and their trace counts over the
@@ -722,3 +1012,78 @@ cache runs no query. No alert reads these metrics.
 
 The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
 stay.
+
+## Topic on arrival
+
+A new trace gets a topic within about a minute, before the next run of its project. Right after the vectors tick
+inserts a chunk of vectors, each trace of the chunk gets the topic of the nearest saved prototype of its project. The
+rule is the algorithm's labeller (`TopicAlgorithm.labeller`), the same rule the labelling pass uses. Code:
+`TopicsArrivalService`, called from `TopicVectorWriter` after each insert, in the fresh phase and in the backfill
+phase.
+
+### What it writes
+
+- One `trace_topics` row per trace: `source = 'arrival'`, `run_id` null, the topic's id or the all-zeros id for Other.
+- The list comes from MySQL, in one read-only transaction for the chunk's projects, once per project per tick: the
+  projects' `topics` rows (their `vectors`) and `topic_projects.other_vectors`. There is no cache.
+- A project with no saved list (`list_run_id` null), or a list with no topic, has no labeller. Its traces get no row
+  and wait for the project's next run.
+
+### Why a run's row wins
+
+Readers take the latest row per trace by `last_updated_at`. A run writes its rows with `source = 'run'` and its run
+id, later than the arrival row, so the run's row wins. On an equal `last_updated_at`, the run's row still wins:
+readers then take the row with `source = 'run'`.
+
+One race is left. A tick that read the old list just before a run saves can insert a few rows after the run's rows.
+These rows hold the old list's topic until the next run of the project.
+
+### Turning it off
+
+- `TOPICS_ARRIVAL_ENABLED` (`topics.arrival.enabled`, default `true`). Off: the tick reads no list and writes no
+  `trace_topics` row. It needs `topics.enabled`: without the vectors tick there is no arrival.
+- `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). The arrival steps of one
+  workspace in one tick take this in total.
+
+### Failures
+
+- Arrival is best effort. A failure is logged and counted. The tick writes and counts its vectors as without arrival.
+- Any failure stops arrival for the rest of the tick: the read, the insert, or anything else in a step. The traces of
+  the later chunks count as `after_failure`. The next run labels them.
+- A shutdown is not a failure. It cancels the tick, its arrival steps included.
+- The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
+  before the tick's deadline.
+  A step that would start with less than 1s left does not start: its traces count as `over_budget`. A step that has
+  built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A read or
+  insert that runs out of time fails with `error_type = TimeoutException`.
+
+### What to watch
+
+| Metric | Labels | What it says |
+|---|---|---|
+| `topics.arrival.labelled` | `outcome`, `workspace_id`, `workspace_name` | Traces per outcome: `topic`, `other` (a row written), `no_prototypes` (the project has no saved list, or one with no topic), `over_budget` (no time left), `after_failure` (arrival stopped earlier in the tick). |
+| `topics.arrival.failures` | `phase`, `error_type`, `workspace_id`, `workspace_name` | Failed steps per phase: `read` (the saved lists read), `insert` (the `trace_topics` insert), `assign` (any other failure of a step). |
+| `topics.arrival.duration_seconds` | `workspace_id`, `workspace_name` | Wall time of each step that started. |
+
+There is no alert. A rise of `after_failure` or of `failures` says arrival stops early in the tick; a rise of
+`over_budget` says the steps need more than `topics.arrival.timeout`.
+
+### Checking a project's arrival rows
+
+```sql
+-- ClickHouse: the project's traces whose current topic came from arrival, newest first
+SELECT trace_id, trace_created_at, topic_id, last_updated_at
+FROM (
+    SELECT trace_id, trace_created_at, topic_id, source, is_deleted, last_updated_at
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>'
+      AND project_id = '<project_id>'
+    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+    LIMIT 1 BY workspace_id, project_id, trace_id
+)
+WHERE source = 'arrival' AND is_deleted = 0
+ORDER BY trace_created_at DESC
+LIMIT 100;
+```
+
+The all-zeros `topic_id` is Other. The other ids are `topics.id` in MySQL.

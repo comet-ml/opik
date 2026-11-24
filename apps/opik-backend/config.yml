@@ -2973,8 +2973,8 @@ topics:
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
   nightly:
     #  Default: true
-    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
-    #  topics.enabled
+    #  Description: Each plan of topics.runs queues the nightly update of each project that has a topic list. Needs
+    #  topics.enabled, and topics.firstBuild.enabled, whose job plans
     enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
     #  Default: 0 0 2 * * ? (02:00 UTC)
     #  Description: Quartz cron in UTC. The night is the UTC date it fires on and starts at its first fire that day;
@@ -3030,6 +3030,17 @@ topics:
   #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
   #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
   enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
+  arrival:
+    #  Default: true
+    #  Description: After each vectors insert, gives every trace of a project with a saved topic list the topic of its
+    #  nearest saved prototype (trace_topics, source arrival, no run_id). The next run's row for the trace wins.
+    #  Needs topics.enabled. Off: no read, no write
+    enabled: ${TOPICS_ARRIVAL_ENABLED:-true}
+    #  Default: 5s
+    #  Description: The arrival steps of one workspace in one vectors tick (the saved lists read and the trace_topics
+    #  insert after each vectors insert) take this in total, and each ends before the tick's budget ends. A step that would start with less than 1s left is skipped (over_budget). Any
+    #  failure stops arrival for the rest of the tick
+    timeout: ${TOPICS_ARRIVAL_TIMEOUT:-5s}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each

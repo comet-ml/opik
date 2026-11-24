@@ -137,11 +137,19 @@ public class TopicsReadTestUtils {
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         var runDAO = handle.attach(TopicProjectDAO.class);
-        runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
-                savedAt.minus(Duration.ofMinutes(5)));
+        startRun(runDAO, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
         runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
         runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+    }
+
+    /** Puts first build {@code runId} on the project's row, running since {@code at}, as a queue and a claim do. */
+    public static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId, Instant at) {
+        runDAO.ensureRow(workspaceId, projectId);
+        if (runDAO.queue(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, at) != 1
+                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
     }
 
     private static float[] unit() {
