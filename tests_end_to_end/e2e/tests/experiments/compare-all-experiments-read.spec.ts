@@ -209,30 +209,23 @@ test.describe(
       'dataset_versions scopes the all-experiments read, and is rejected for an unknown version or alongside experiment_ids',
       { tag: ['@cap:experiments.compare-side-by-side'] },
       async ({ allDatasetExperiments, backendClient }) => {
-        // QA: failing on staging for 2.2.155, and NOT a product fault — the
-        // parameter this test is about has not been deployed there yet.
-        // `dataset_versions` reached
-        // GET /v1/private/datasets/{id}/items/experiments/items in opik#9448
-        // ([OPIK-9113], commit 26cbd1ae66), which landed AFTER the 2.2.155
-        // version bump (8829435d67), so this branch's product code is ahead of
-        // the environment it is run against. Staging ignores the parameter
-        // outright: probed directly there, `dataset_versions` alongside
-        // `experiment_ids` answers 200 instead of the 400 the resource now
-        // returns, and `dataset_versions=[]` answers 200 instead of
-        // "dataset_versions cannot be empty" — every validation on it is
-        // absent, not merely lenient.
+        // QA: was test.fail() for the 2.2.155 release pass, because
+        // `dataset_versions` reached this endpoint in opik#9448 ([OPIK-9113],
+        // commit 26cbd1ae66) AFTER the 2.2.155 version bump (8829435d67) — so
+        // the branch's product code was ahead of the staging it ran against and
+        // the parameter was discarded there. Settled green on staging for the
+        // 2.3.0 pass, which serves 9448: the marker is removed rather than kept,
+        // since Playwright fails an expected-to-fail test that passes.
         //
-        // The whole test is marked rather than the one red step, and that is
-        // the honest scope: a parameter the backend discards makes the two
-        // positive steps above pass VACUOUSLY as well, since an ignored scope
-        // returns the same full row set a correctly-scoped one would. Marking
-        // only the 404 step would leave two assertions reading as coverage
-        // while asserting nothing.
-        //
-        // Remove test.fail() once 2.2.156 is deployed; Playwright reports this
-        // test as unexpectedly passing the moment it is.
-        test.fail();
-
+        // What this test can and cannot discriminate is unchanged by that, and
+        // is the reason `compare-dataset-versions-scope.spec.ts` exists beside
+        // it: `allDatasetExperiments` cuts exactly ONE version, so `latest` and
+        // the only hash name the same thing and both resolve to every
+        // experiment on the dataset. The two positive steps below would
+        // therefore pass just as well on a build that ignored the parameter
+        // again; only the unknown-version 404 and the experiment_ids rejection
+        // would catch that. The two-version seed that CAN tell a scoped read
+        // from an ignored one lives in the sibling spec.
         const { datasetId, itemIds, versionHash, regular } = allDatasetExperiments;
         const regularIds = regular.map((e) => e.id).sort();
 
