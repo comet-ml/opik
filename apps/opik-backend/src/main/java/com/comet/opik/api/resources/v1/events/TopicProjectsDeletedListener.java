@@ -10,15 +10,15 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 /**
- * Deletes the {@code topic_vector_backfills} rows of deleted projects, within the event's workspace. Their vectors
- * follow through the TracesDeleted cascade of each trace delete. Runs with topics off too. A row this misses, from a
- * failed delete or a tick that wrote it again before the project's traces were gone, is removed by the tick's next
- * discovery of the workspace's projects ({@link TopicVectorBackfillService#discovered}).
+ * Deletes the {@code topic_projects} rows of deleted projects, within the event's workspace: a deleted project has no
+ * topics state left. Their vectors follow through the TracesDeleted cascade of each trace delete. Runs with topics off
+ * too. A row this misses, from a failed delete or a tick that wrote it again before the project's traces were gone, is
+ * removed by the tick's next discovery of the workspace's projects ({@link TopicVectorBackfillService#discovered}).
  */
 @EagerSingleton
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class TopicVectorBackfillsProjectDeletedListener {
+public class TopicProjectsDeletedListener {
 
     private final @NonNull TopicVectorBackfillService backfillService;
 
@@ -27,11 +27,11 @@ public class TopicVectorBackfillsProjectDeletedListener {
         try {
             int deleted = backfillService.deleteByProjects(event.workspaceId(), event.projectIds());
             if (deleted > 0) {
-                log.info("Deleted the topic vectors backfill rows of deleted projects, workspace '{}', rows '{}'",
+                log.info("Deleted the topic_projects rows of deleted projects, workspace '{}', rows '{}'",
                         event.workspaceId(), deleted);
             }
         } catch (RuntimeException exception) {
-            log.error("Failed to delete the topic vectors backfill rows of deleted projects, workspace '{}', "
+            log.error("Failed to delete the topic_projects rows of deleted projects, workspace '{}', "
                     + "project count '{}'", event.workspaceId(), event.projectIds().size(), exception);
         }
     }

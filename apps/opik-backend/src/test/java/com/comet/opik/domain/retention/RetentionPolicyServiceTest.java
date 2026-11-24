@@ -901,10 +901,23 @@ class RetentionPolicyServiceTest {
                 .text("summary")
                 .vector(new float[]{0.6f, 0.8f})
                 .build())).block();
+        // TopicVectorStatus is package-private to the topics domain, so the row goes in as SQL.
+        templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vector_status (workspace_id, project_id, task, trace_id, trace_created_at,
+                    task_version, reason)
+                VALUES (:workspace_id, :project_id, :task, :trace_id, now64(6), 1, 'invalid_vector')
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("task", TopicEmbedding.SUMMARY_TASK)
+                .bind("trace_id", traceId.toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
     }
 
     private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
-        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors")) {
+        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "topic_vector_status")) {
             var actual = templateAsync.nonTransaction(connection -> Mono
                     .from(connection.createStatement(
                             "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"

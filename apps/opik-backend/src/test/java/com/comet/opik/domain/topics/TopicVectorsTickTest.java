@@ -910,6 +910,50 @@ class TopicVectorsTickTest {
         assertThat(partitionScopedDeletes(workspaceId)).isPositive();
     }
 
+    @Test
+    @DisplayName("a trace deleted while its embed call is in flight, after the cascade found no vector, has no vector "
+            + "after the tick; the other trace of the chunk keeps its own")
+    void traceDeletedDuringEmbed() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
+        var deleted = traceIds.getFirst();
+        // The call waits for the cascade, so it gets the time for that.
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(20));
+        embedStub.beforeAnswer = () -> {
+            eventBus.post(new TracesDeleted(Set.of(deleted), projectId, workspaceId, "user"));
+            // The topics part of the cascade ends with the status table's delete: by then it found no vector.
+            Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                    .until(() -> finishedDeletes(workspaceId, "topic_vector_status") > 0);
+        };
+
+        try {
+            tick();
+        } finally {
+            embedStub.beforeAnswer = null;
+        }
+
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId,
+                List.of(traceIds.getLast()), 1));
+    }
+
+    private long finishedDeletes(String workspaceId, String table) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS cnt
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish'
+                        AND log_comment LIKE concat('topics:delete_by_trace_ids_', :table, ':', :workspace_id, ':%')
+                        """)
+                        .bind("table", table)
+                        .bind("workspace_id", workspaceId)
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                .block();
+    }
+
     private long partitionScopedDeletes(String workspaceId) {
         return templateAsync.nonTransaction(connection -> Mono
                 .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
