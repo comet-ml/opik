@@ -2846,14 +2846,14 @@ topics:
     #  Description: The labelling pass's count of its run's window, with its slice bounds, stops after this (or the
     #  pass's deadline, when sooner). At most 30m
     countTimeout: ${TOPICS_RUN_COUNT_TIMEOUT:-60s}
-    #  Default: 10000
+    #  Default: 25000
     #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
     #  Between 1 and 100000
-    labelPageTraces: ${TOPICS_RUN_LABEL_PAGE_TRACES:-10000}
-    #  Default: 10000
+    labelPageTraces: ${TOPICS_RUN_LABEL_PAGE_TRACES:-25000}
+    #  Default: 25000
     #  Description: Traces per slice of the window the labelling pass reads in pages; a page's read costs about one
     #  slice of keys, so a slice the size of a page reads only its own keys. Between 1 and 1000000
-    labelSliceTraces: ${TOPICS_RUN_LABEL_SLICE_TRACES:-10000}
+    labelSliceTraces: ${TOPICS_RUN_LABEL_SLICE_TRACES:-25000}
     #  Default: 3
     #  Description: Retries of the trace_topics insert after the save's commit. At most 10
     insertRetries: ${TOPICS_RUN_INSERT_RETRIES:-3}
@@ -2876,10 +2876,10 @@ topics:
       #  Description: ClickHouse priority of the window count and the unlabelled read; a higher number yields to
       #  lower ones, 0 is none. From 0 to 1000
       priority: ${TOPICS_RUN_READ_PRIORITY:-100}
-      #  Default: 8192
-      #  Description: Rows per block of the window count; its in-flight per-trace arrays grow with it. From 1024 to
-      #  1048576
-      maxBlockSize: ${TOPICS_RUN_READ_MAX_BLOCK_SIZE:-8192}
+      #  Default: 1024
+      #  Description: Rows per block of the run's reads: the window count's in-flight per-trace arrays and the window
+      #  and page reads' vector column grow with it. From 1024 to 1048576
+      maxBlockSize: ${TOPICS_RUN_READ_MAX_BLOCK_SIZE:-1024}
       #  Default: 1d
       #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
       #  a query's memory follows the slice and not the window. From 1h to 7d

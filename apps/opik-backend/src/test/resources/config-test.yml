@@ -1123,7 +1123,7 @@ topics:
       maxMemoryUsage: 1073741824
       maxThreads: 2
       priority: 100
-      maxBlockSize: 8192
+      maxBlockSize: 1024
       countSlice: 1d
   algorithm:
     minGroups: 30

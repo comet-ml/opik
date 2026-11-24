@@ -17,8 +17,8 @@ import java.util.UUID;
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
- * It owns the run's time limit and its cancel. Its CPU steps run off the ClickHouse driver's thread: the window read
- * hands its result to {@code boundedElastic}.
+ * It owns the run's time limit and its cancel. Its CPU steps, clustering and assignment, run on the scheduler the
+ * caller put in the Reactor context ({@link TopicsCpu}).
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -74,11 +74,11 @@ public class TopicsRunService {
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
                 .flatMap(window -> timed(run, "cluster",
-                        Mono.fromCallable(() -> algorithm.cluster(window.topicWindow(), maxTopics)))
+                        TopicsCpu.step(() -> algorithm.cluster(window.topicWindow(), maxTopics)))
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
                                 .flatMap(answer -> timed(run, "assign",
-                                        Mono.fromCallable(() -> assign(run, window, clustering, answer))))
+                                        TopicsCpu.step(() -> assign(run, window, clustering, answer))))
                                 .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))

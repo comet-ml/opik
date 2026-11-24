@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -33,8 +32,8 @@ import java.util.UUID;
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
  * in pages of at most {@code topics.run.labelPageTraces} traces, each read, assigned and inserted before the next, so
  * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
- * pass ends at the caller's deadline. Each page is handed off the ClickHouse driver's thread, to {@code boundedElastic},
- * before its prototype assignment, the pass's CPU step.
+ * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on the scheduler the
+ * caller put in the Reactor context ({@link TopicsCpu}).
  *
  * <p>A trace whose vector lands behind the cursor while the pass runs is not on any later page. So before a pass marks
  * the labels complete, it reads the whole window once more for a trace left: if there is one, the pass ends cut, and
@@ -71,6 +70,11 @@ public class TopicWindowLabelService {
 
         boolean advanced() {
             return !rows.isEmpty() && last().compareTo(after) > 0;
+        }
+
+        /** A full page that moved on: the slice may have more after it. */
+        boolean hasNext(int chunk) {
+            return rows.size() == chunk && advanced();
         }
     }
 
@@ -156,6 +160,12 @@ public class TopicWindowLabelService {
                 .takeUntilOther(Mono.delay(budget))
                 .reduce(Totals.ZERO, Totals::plus)
                 .flatMap(totals -> finish(workspace.id(), projectId, saved, totals)
+                        // The check and the mark end at the deadline too: the pass is then cut, and a later one marks.
+                        .timeout(left(deadline), Mono.fromSupplier(() -> {
+                            log.info("Topics labelling pass cut by its deadline before it marked its run complete, "
+                                    + "run '{}', project '{}'", saved.runId(), projectId);
+                            return LabelPassOutcome.CUT;
+                        }))
                         .doOnNext(outcome -> ended(workspace, projectId, saved, trigger, outcome, totals, started)))
                 .doOnCancel(() -> {
                     log.info("Topics labelling pass cut by its caller, run '{}', project '{}'", saved.runId(),
@@ -210,7 +220,7 @@ public class TopicWindowLabelService {
         int chunk = config.getRun().getLabelPageTraces();
         var window = new Slice(saved.from(), saved.to());
         return page(workspaceId, projectId, saved, window, 1, "", chunk)
-                .expand(page -> page.rows().size() == chunk && page.advanced()
+                .expand(page -> page.hasNext(chunk)
                         ? page(workspaceId, projectId, saved, window, page.number() + 1, page.last(), chunk)
                         : Mono.empty())
                 .any(page -> page.rows().stream().anyMatch(row -> TopicEmbedding.usable(row.vector())));
@@ -243,13 +253,18 @@ public class TopicWindowLabelService {
                         .concatMap(slice -> step(workspace, projectId, saved, slice, 1, "", chunk, maxPages)
                                 .expand(step -> {
                                     var page = step.page();
-                                    return page.rows().size() == chunk && page.advanced() && page.number() < maxPages
+                                    return page.hasNext(chunk) && page.number() < maxPages
                                             ? step(workspace, projectId, saved, slice, page.number() + 1, page.last(),
                                                     chunk, maxPages)
                                             : Mono.empty();
                                 })
                                 .map(Step::totals))
                         .startWith(Totals.window(window.traces())));
+    }
+
+    private static Duration left(Instant deadline) {
+        var left = Duration.between(Instant.now(), deadline);
+        return left.isNegative() ? Duration.ZERO : left;
     }
 
     /** The window's slices: its bounds in order, without the empty ones that ties on a bound make. */
@@ -280,8 +295,6 @@ public class TopicWindowLabelService {
         return windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
                 readTimeout.toSeconds())
                 .collectList()
-                // Off the driver's thread, which the API's reads share: the caller labels the page next.
-                .publishOn(Schedulers.boundedElastic())
                 .timeout(readTimeout)
                 .map(rows -> new Page(slice, number, after, rows));
     }
@@ -308,10 +321,13 @@ public class TopicWindowLabelService {
                     page.slice().to(), maxPages);
         }
         var traces = page.rows().stream().map(row -> new WindowTrace(row.traceId(), row.traceCreatedAt())).toList();
-        var labels = saved.labeller().label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList());
-        var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
-        long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-        var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
-        return store.insertTraceTopics(workspace, rows).thenReturn(totals);
+        return TopicsCpu.step(() -> saved.labeller()
+                .label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList()))
+                .flatMap(labels -> {
+                    var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
+                    long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+                    var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
+                    return store.insertTraceTopics(workspace, rows).thenReturn(totals);
+                });
     }
 }

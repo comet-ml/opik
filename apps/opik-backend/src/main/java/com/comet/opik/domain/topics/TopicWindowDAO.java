@@ -74,29 +74,37 @@ public class TopicWindowDAO {
      * One project's live traces in the window, counted as in {@link #COUNT_BY_PROJECT} and by the same in-order scan,
      * plus the slice bounds of the labelling pass: every {@code :slice_traces}-th creation time of those traces, in
      * order. Slices cut at these bounds hold {@code :slice_traces} traces each, however the traffic is spread in time.
-     * The extra state is one creation time per live trace, about 200 MiB in all at 3 million traces.
+     *
+     * <p>The bounds come from numbering the live traces in creation order, not from an array of all their times: the
+     * sort spills to disk past {@code max_bytes_before_external_sort}, an eighth of the memory guard, and the frame of
+     * one row lets the numbering drop each block once it is read. So the memory follows the guard, not the window: at
+     * 30 million traces 84 MiB, where sorting an array of every time took 1.5 GiB. The ratio setting is off, as it
+     * would override the byte limit.
      */
     private static final String COUNT_AND_BOUNDS = """
-            SELECT count() AS traces,
-                arrayMap(t -> toUnixTimestamp64Micro(t),
-                    arrayFilter((t, i) -> i % :slice_traces = 0,
-                        arraySort(groupArray(created)) AS sorted, arrayEnumerate(sorted))) AS bounds
+            SELECT max(n) AS traces,
+                arrayMap(t -> toUnixTimestamp64Micro(t), arraySort(groupArrayIf(created, n % :slice_traces = 0))) AS bounds
             FROM (
-                SELECT trace_id, min(trace_created_at) AS created,
-                    arrayExists(x -> x % 2 = 1, (maxMap([task_version],
-                        [toUInt64(toUnixTimestamp64Micro(last_updated_at)) * 2 + (is_deleted = 0)])).2) AS live
-                FROM topic_vectors
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND task = :task
-                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
-                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
-                GROUP BY trace_id
+                SELECT created, row_number() OVER (ORDER BY created ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS n
+                FROM (
+                    SELECT trace_id, min(trace_created_at) AS created,
+                        arrayExists(x -> x % 2 = 1, (maxMap([task_version],
+                            [toUInt64(toUnixTimestamp64Micro(last_updated_at)) * 2 + (is_deleted = 0)])).2) AS live
+                    FROM topic_vectors
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND task = :task
+                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
+                    GROUP BY trace_id
+                )
+                WHERE live
             )
-            WHERE live
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>,
                 max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>, priority = <priority>,
-                optimize_aggregation_in_order = 1, max_block_size = <max_block_size>, log_comment = '<log_comment>'
+                optimize_aggregation_in_order = 1, max_block_size = <max_block_size>,
+                max_bytes_before_external_sort = <external_sort_bytes>, max_bytes_ratio_before_external_sort = 0,
+                min_external_sort_block_bytes = <external_sort_block_bytes>, log_comment = '<log_comment>'
             """;
 
     /**
@@ -157,7 +165,8 @@ public class TopicWindowDAO {
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, log_comment = '<log_comment>'
+                max_memory_usage = <max_memory_usage>, max_block_size = <max_block_size>, optimize_read_in_order = 0,
+                log_comment = '<log_comment>'
             """;
 
     /**
@@ -212,7 +221,8 @@ public class TopicWindowDAO {
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, priority = <priority>, log_comment = '<log_comment>'
+                max_memory_usage = <max_memory_usage>, priority = <priority>, max_block_size = <max_block_size>,
+                optimize_read_in_order = 0, log_comment = '<log_comment>'
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -254,7 +264,11 @@ public class TopicWindowDAO {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
-        withGuards(template, config.getRun().getRead(), maxExecutionSeconds);
+        var guards = config.getRun().getRead();
+        withGuards(template, guards, maxExecutionSeconds);
+        long externalSortBytes = guards.getMaxMemoryUsage() / 8;
+        template.add("external_sort_bytes", externalSortBytes)
+                .add("external_sort_block_bytes", externalSortBytes / 4);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)

@@ -251,7 +251,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(0) @Max(1000) private int priority;
 
-        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        /** Rows per block of the run's reads: the count's per-trace arrays and the reads' vectors grow with it. */
         @JsonProperty
         @Min(1024) @Max(1_048_576) private int maxBlockSize;
 

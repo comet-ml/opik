@@ -14,9 +14,11 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.redis.testcontainers.RedisContainer;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -119,6 +121,7 @@ class TopicsLabellingPassTest {
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
     private TopicWindowDAO windowDAO;
+    private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData spreadData;
 
@@ -128,7 +131,8 @@ class TopicsLabellingPassTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicWindowLabelService labelService,
-            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm) {
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm, ConnectionFactory connectionFactory) {
+        this.connectionFactory = connectionFactory;
         this.algorithm = algorithm;
         this.opikConfig = opikConfig;
         this.template = template;
@@ -201,6 +205,11 @@ class TopicsLabellingPassTest {
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
+        // A page's memory is mostly the vector column, read in blocks of this size.
+        assertThat(data.queryLogSettings("topics:read_unlabelled", workspaceId, "optimize_read_in_order",
+                "max_block_size"))
+                .containsExactly(List.of("0",
+                        String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxBlockSize())));
     }
 
     @Test
@@ -224,6 +233,55 @@ class TopicsLabellingPassTest {
         assertThat(data.queryGuards("topics:count_and_bounds", workspaceId))
                 .containsExactly(List.of(String.valueOf(read.getMaxThreads()), String.valueOf(read.getMaxRowsToRead()),
                         String.valueOf(read.getPriority()), "60"));
+    }
+
+    @Test
+    @DisplayName("the slice bounds of a large window come out exact under a memory guard that a sort of every "
+            + "creation time in memory would trip: a million traces under 32 MiB, where sorting an array of their "
+            + "times took 57 MiB")
+    void sliceBoundsOfALargeWindowStayUnderTheGuard() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        int traces = 1_000_000;
+        int sliceTraces = 25_000;
+        // Three traces per second from the window's start, in random trace id order.
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
+                    embed_model, embed_dimensions, text, vector)
+                SELECT :workspace_id, :project_id, :task, toString(generateUUIDv7(number)),
+                    parseDateTime64BestEffort(:window_from, 6, 'UTC') + toIntervalSecond(intDiv(number, 3)), 1, '', 0,
+                    '', []
+                FROM numbers(:traces)
+                SETTINGS log_comment = 'topics_test:many_keys'
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("task", TopicEmbedding.SUMMARY_TASK)
+                .bind("window_from", from().toString())
+                .bind("traces", traces)
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+        var base = opikConfig.getTopics().getRun().getRead();
+        var read = new TopicsConfig.RunReadConfig();
+        read.setMaxRowsToRead(base.getMaxRowsToRead());
+        read.setMaxMemoryUsage(32L * 1024 * 1024);
+        read.setMaxThreads(base.getMaxThreads());
+        read.setPriority(base.getPriority());
+        read.setMaxBlockSize(base.getMaxBlockSize());
+        read.setCountSlice(base.getCountSlice());
+        var run = spy(opikConfig.getTopics().getRun());
+        doReturn(read).when(run).getRead();
+        var topics = spy(opikConfig.getTopics());
+        doReturn(run).when(topics).getRun();
+
+        var window = new TopicWindowDAO(connectionFactory, topics)
+                .countAndBounds(workspaceId, projectId, from(), to(), sliceTraces, 60).block();
+
+        // The k-th trace in creation order, from 1, was created (k - 1) / 3 seconds after the window's start.
+        assertThat(window.traces()).isEqualTo(traces);
+        assertThat(window.bounds()).isEqualTo(IntStream.rangeClosed(1, traces / sliceTraces)
+                .mapToObj(j -> from().plusSeconds((j * sliceTraces - 1) / 3)).toList());
     }
 
     @Test

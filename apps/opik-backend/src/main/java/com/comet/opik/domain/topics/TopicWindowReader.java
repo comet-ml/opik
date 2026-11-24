@@ -7,7 +7,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -15,8 +14,7 @@ import java.time.Duration;
 /**
  * Reads a run's window: all of it, or an even sample of {@code topics.run.maxVectors} traces when it is larger. Rows
  * with no text after stripping, or a vector of the wrong size, are skipped. Any failure is {@code window_read}. The
- * caller counts the window: the discovery job counts it to pick the project. The window is handed off the ClickHouse
- * driver's thread, to {@code boundedElastic}, so the caller's CPU steps don't run on the thread the API's reads share.
+ * caller counts the window: the discovery job counts it to pick the project.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -43,7 +41,6 @@ class TopicWindowReader {
         return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
                 readTimeout.toSeconds())
                 .collect(() -> new TopicWindowBuilder(capacity), TopicWindowBuilder::add)
-                .publishOn(Schedulers.boundedElastic())
                 .map(builder -> builder.build(windowTraces, config.getAlgorithm().getProvisionalBelow()))
                 .timeout(readTimeout)
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
