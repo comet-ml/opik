@@ -11,6 +11,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Clock;
@@ -23,8 +24,7 @@ import java.util.concurrent.Callable;
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
  * It also drives a nightly update's steps ({@link #update}). It owns the run's time limit and its cancel; the scheduler
- * a discovery run's CPU steps and timers run on is the caller's, and a nightly update's steps run on the context's
- * scheduler ({@link TopicsCpu}).
+ * a discovery run's CPU steps and timers run on is the caller's, and a nightly update's steps run on {@code parallel()}.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -121,13 +121,11 @@ public class TopicsRunService {
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
-     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on the context's scheduler
-     * ({@link TopicsCpu}). An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
      * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
      */
     Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
-        return timed(run, "update",
-                TopicsCpu.step(() -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics())))
+        return cpu(run, "update", () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
                 .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
     }
 
@@ -141,8 +139,7 @@ public class TopicsRunService {
             }
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .flatMap(answer -> timed(run, "update",
-                                TopicsCpu.step(() -> ask.next().apply(answer.value())))
+                        .flatMap(answer -> cpu(run, "update", () -> ask.next().apply(answer.value()))
                                 .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
         };
     }
@@ -179,6 +176,11 @@ public class TopicsRunService {
     /** A CPU step on {@code compute}, timed from when it starts there. */
     private <T> Mono<T> compute(TopicRun run, String phase, Scheduler compute, Callable<T> step) {
         return timed(run, phase, Mono.fromCallable(step)).subscribeOn(compute);
+    }
+
+    /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
+    private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
+        return timed(run, phase, Mono.fromCallable(step).subscribeOn(Schedulers.parallel()));
     }
 
     /** Records the phase's duration, from its subscription to its end, whatever the end. */
