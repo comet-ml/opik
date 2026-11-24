@@ -1,9 +1,12 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.ailabels.AiLabelTask;
+import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.topics.TopicVectorWriter.ChunkWrite;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Slice;
+import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
@@ -17,13 +20,16 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -247,6 +253,49 @@ class TopicVectorBackfillerTest {
         verify(setup.backfills).record(List.of());
     }
 
+    @Test
+    @DisplayName("on a pass tick, a workspace over MAX_EXCLUDED_PROJECTS is not read by the workspace read, and does "
+            + "not hold the long-window pass")
+    void overExcludedWorkspaceOnAPassTick() {
+        var setup = new Setup();
+        var vectors = setup.config.getVectors();
+        vectors.setTickInterval(Duration.minutes(1));
+        vectors.setTickBudget(Duration.seconds(50));
+        vectors.setWindow(Duration.days(1));
+        vectors.setWatermarkOverlap(Duration.minutes(15));
+        vectors.setLongWindow(Duration.days(7));
+        vectors.setBackfillWindow(Duration.days(0));
+        vectors.setEmbedConcurrency(1);
+        vectors.getFind().setCreatedAtSlack(Duration.days(1));
+        vectors.getFind().setSliceSize(Duration.days(1));
+        var start = Instant.now();
+        var undrained = IntStream.range(0, TopicVectorBackfiller.MAX_EXCLUDED_PROJECTS + 1)
+                .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
+        when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
+        when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
+        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(ChunkWrite.EMPTY));
+        var workspaces = mock(TopicWorkspaceService.class);
+        when(workspaces.enabledWorkspaceIds()).thenReturn(List.of(setup.workspaceId));
+        when(workspaces.vectorsWatermarks(any())).thenReturn(Map.of());
+        when(workspaces.vectorsLongWindowReads(any())).thenReturn(Map.of());
+        var registry = mock(AiLabelTaskRegistry.class);
+        var task = mock(AiLabelTask.class);
+        when(task.versions()).thenReturn(List.of(new AiLabelTask.Version(1, start.minus(30, ChronoUnit.DAYS))));
+        when(registry.find(TopicEmbedding.SUMMARY_TASK)).thenReturn(Optional.of(task));
+        var pass = mock(LongWindowPass.class);
+        when(pass.startIfDue()).thenReturn(Mono.just(true));
+        when(pass.finish(any(), anyBoolean())).thenReturn(Mono.empty());
+        when(setup.metrics.workspace(any()))
+                .thenAnswer(invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
+        var tick = new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
+                setup.writer, setup.backfiller, pass, setup.metrics);
+
+        tick.tick(start).block();
+
+        verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
+        verify(pass).finish(start, true);
+    }
+
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */
     private final class Setup {
 
@@ -256,6 +305,7 @@ class TopicVectorBackfillerTest {
         private final TopicVectorsMetrics metrics = mock(TopicVectorsMetrics.class);
         private final TopicsTestClock clock = new TopicsTestClock(now);
         private final String workspaceId = UUID.randomUUID().toString();
+        private final TopicsConfig config = new TopicsConfig();
         private final TopicVectorBackfiller backfiller;
         private java.time.Duration readTime = java.time.Duration.ZERO;
 
@@ -267,7 +317,6 @@ class TopicVectorBackfillerTest {
             vectors.setEmbedTimeout(Duration.seconds(1));
             vectors.setLongWindowInterval(Duration.days(1));
             vectors.setMaxTracesPerTick(10);
-            var config = new TopicsConfig();
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
             when(dao.findBackfillProjects(any(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
