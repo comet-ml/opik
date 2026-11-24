@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.ProjectTopics.TopicStats;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -27,7 +26,6 @@ import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicProjectDAO;
-import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.domain.topics.TraceTopic;
@@ -381,48 +379,51 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("400 with the too-large message when the counts read hits its rows limit (max_rows_to_read): the real "
+    @DisplayName("too_large without Retry-After when the counts read hits its rows limit (max_rows_to_read): the real "
             + "driver's error, not a mock")
-    void clickHouseRowsLimitIs400() {
+    void clickHouseRowsLimitIsTooLarge() {
         var caller = topics.caller();
         var projectId = readyProject(caller);
-        var find = opikConfig.getTopics().getVectors().getFind();
-        var maxRowsToRead = find.getMaxRowsToRead();
-        find.setMaxRowsToRead(1);
+        var read = opikConfig.getTopics().getRead();
+        var maxRowsToRead = read.getMaxRowsToRead();
+        read.setMaxRowsToRead(1);
 
         try (var response = topics.request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
-            assertThat(response.readEntity(ErrorMessage.class).errors())
-                    .containsExactly(TopicReadService.TOO_LARGE_MESSAGE);
+            assertThat(response.readEntity(JsonNode.class).get("status").asText()).isEqualTo("too_large");
             // The driver's own error is the v1 client's ClickHouseException, not the v2 client's ServerException.
             var today = LocalDate.now(ZoneOffset.UTC);
             var from = today.minusDays(29).atStartOfDay().toInstant(ZoneOffset.UTC);
             var to = today.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
             assertThatThrownBy(() -> traceTopicsDAO
-                    .countByTopicAndDay(caller.workspaceId(), projectId, from, to, 10).collectList().block())
+                    .countByTopicAndDay(caller.workspaceId(), projectId, from, to).collectList().block())
                     .satisfies(error -> assertThat(Throwables.getCausalChain(error))
                             .anyMatch(cause -> cause instanceof com.clickhouse.client.ClickHouseException)
                             .noneMatch(cause -> cause instanceof com.clickhouse.client.api.ServerException));
         } finally {
-            find.setMaxRowsToRead(maxRowsToRead);
+            read.setMaxRowsToRead(maxRowsToRead);
         }
     }
 
     @Test
-    @DisplayName("503 with Retry-After when the counts read hits its memory limit (max_memory_usage): a retry can pass")
-    void clickHouseMemoryLimitIs503() {
+    @DisplayName("too_large without Retry-After when the collecting count hits its memory limit (max_memory_usage): "
+            + "a retry fails the same way")
+    void clickHouseMemoryLimitIsTooLarge() {
         var caller = topics.caller();
-        var projectId = readyProject(caller);
-        var find = opikConfig.getTopics().getVectors().getFind();
-        var maxMemoryUsage = find.getMaxMemoryUsage();
-        find.setMaxMemoryUsage(1);
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
+        vectorsDAO.insert(List.of(vector(caller.workspaceId(), projectId, LocalDate.now(ZoneOffset.UTC)))).block();
+        var read = opikConfig.getTopics().getRead();
+        var maxMemoryUsage = read.getMaxMemoryUsage();
+        read.setMaxMemoryUsage(1);
 
         try (var response = topics.request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(503);
-            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("5");
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
+            assertThat(response.readEntity(JsonNode.class).get("status").asText()).isEqualTo("too_large");
         } finally {
-            find.setMaxMemoryUsage(maxMemoryUsage);
+            read.setMaxMemoryUsage(maxMemoryUsage);
         }
     }
 

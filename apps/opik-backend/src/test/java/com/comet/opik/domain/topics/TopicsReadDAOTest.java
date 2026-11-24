@@ -251,7 +251,7 @@ class TopicsReadDAOTest {
     }
 
     private List<TopicDayCount> count(String workspaceId, UUID projectId) {
-        return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, FROM, TO, MAX_EXECUTION_SECONDS)
+        return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, FROM, TO)
                 .collectList().block();
     }
 

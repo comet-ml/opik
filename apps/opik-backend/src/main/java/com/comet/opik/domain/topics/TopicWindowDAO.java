@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsConfig.ReadGuards;
 import com.google.common.base.Preconditions;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
@@ -222,10 +223,16 @@ public class TopicWindowDAO {
      */
     public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
+        return countByProject(workspaceId, projectIds, from, to, config.getBuild().getRead(), maxExecutionSeconds);
+    }
+
+    /** {@link #countByProject} under the given guards, for a caller that is not the build (the read API). */
+    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+            @NonNull Instant from, @NonNull Instant to, @NonNull ReadGuards guards, long maxExecutionSeconds) {
         Preconditions.checkArgument(!projectIds.isEmpty(), "a window count takes at least one project");
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
                 "projects=%d, from=%s, to=%s".formatted(projectIds.size(), from, to));
-        withGuards(template, maxExecutionSeconds);
+        withGuards(template, guards, maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -246,7 +253,7 @@ public class TopicWindowDAO {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
-        withGuards(template, maxExecutionSeconds);
+        withGuards(template, config.getBuild().getRead(), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -278,7 +285,7 @@ public class TopicWindowDAO {
             @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit));
-        withGuards(template, maxExecutionSeconds);
+        withGuards(template, config.getBuild().getRead(), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -299,7 +306,7 @@ public class TopicWindowDAO {
             long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_UNLABELLED, "topics:read_unlabelled", workspaceId, null,
                 "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit));
-        withGuards(template, maxExecutionSeconds);
+        withGuards(template, config.getBuild().getRead(), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -318,14 +325,13 @@ public class TopicWindowDAO {
                         .build()));
     }
 
-    /** The build's read guards ({@code topics.build.read}): validated config numbers, never input. */
-    private void withGuards(ST template, long maxExecutionSeconds) {
-        var read = config.getBuild().getRead();
-        template.add("max_rows_to_read", read.getMaxRowsToRead())
-                .add("max_memory_usage", read.getMaxMemoryUsage())
-                .add("max_threads", read.getMaxThreads())
-                .add("priority", read.getPriority())
-                .add("max_block_size", read.getMaxBlockSize())
+    /** Validated config numbers, never input: {@code topics.build.read} for the build, {@code topics.read} for the API. */
+    private static void withGuards(ST template, ReadGuards guards, long maxExecutionSeconds) {
+        template.add("max_rows_to_read", guards.getMaxRowsToRead())
+                .add("max_memory_usage", guards.getMaxMemoryUsage())
+                .add("max_threads", guards.getMaxThreads())
+                .add("priority", guards.getPriority())
+                .add("max_block_size", guards.getMaxBlockSize())
                 .add("max_execution_time", maxExecutionSeconds);
     }
 

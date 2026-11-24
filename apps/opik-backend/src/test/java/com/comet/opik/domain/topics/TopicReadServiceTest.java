@@ -12,7 +12,6 @@ import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -120,10 +119,9 @@ class TopicReadServiceTest {
     void ready() {
         var topic = topic();
         saved(List.of(topic));
-        when(traceTopicsDAO.countByTopicAndDay(WORKSPACE_ID, projectId, FROM, TO,
-                TopicReadService.MAX_EXECUTION_SECONDS)).thenReturn(Flux.just(
-                        TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
-                        TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
+        when(traceTopicsDAO.countByTopicAndDay(WORKSPACE_ID, projectId, FROM, TO)).thenReturn(Flux.just(
+                TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
+                TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
 
         var body = service.get(WORKSPACE_ID, projectId);
 
@@ -152,49 +150,58 @@ class TopicReadServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
 
-    static Stream<Arguments> busyErrors() {
-        return Stream.of(
-                arguments("a time limit (159)", new RuntimeException(new ServerException(159, "time limit", 500,
-                        "query-id"))),
-                arguments("a memory limit (241)", new RuntimeException(new ServerException(241, "memory limit", 500,
-                        "query-id"))),
-                arguments("the client timeout", new TimeoutException("Did not observe any item")));
-    }
-
-    @ParameterizedTest(name = "{0} is a 503 with Retry-After, status error: a retry can pass")
-    @MethodSource("busyErrors")
-    void busyIs503(String name, Throwable error) {
-        readyWithCounts(Flux.error(error));
-
-        assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
-                        exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
-                        .isEqualTo(TopicsReadErrors.RETRY_AFTER_SECONDS));
-        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
-                .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
-    }
-
-    static Stream<Arguments> tooLargeErrors() {
+    static Stream<Arguments> guardTrips() {
         return Stream.of(
                 arguments("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158)",
                         new com.clickhouse.client.ClickHouseException(158, "Limit for rows (controlled by "
                                 + "'max_rows_to_read' setting) exceeded", null)),
+                arguments("a time limit (159)", new RuntimeException(new ServerException(159, "time limit", 500,
+                        "query-id"))),
+                arguments("a memory limit (241)", new RuntimeException(new ServerException(241, "memory limit", 500,
+                        "query-id"))),
                 arguments("a bytes limit (307)", new RuntimeException(new ServerException(307, "Limit exceeded", 500,
                         "query-id"))),
                 arguments("a rows-or-bytes limit (396)", new RuntimeException(new ServerException(396,
                         "Limit exceeded", 500, "query-id"))));
     }
 
-    @ParameterizedTest(name = "{0} is a 400 with the too-large message, status error")
-    @MethodSource("tooLargeErrors")
-    void tooLargeIs400(String name, Throwable error) {
+    @ParameterizedTest(name = "{0} of the ready counts is status too_large: a retry fails the same way")
+    @MethodSource("guardTrips")
+    void readyGuardTripIsTooLarge(String name, Throwable error) {
         readyWithCounts(Flux.error(error));
 
+        var body = service.get(WORKSPACE_ID, projectId);
+
+        assertThat(body.status()).isEqualTo(ProjectTopics.Status.TOO_LARGE);
+        assertThat(body.today()).isEqualTo(TODAY);
+        assertThat(body.topics()).isEmpty();
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
+                .satisfies(point -> assertThat(point.get("status")).isEqualTo("too_large"));
+    }
+
+    @Test
+    @DisplayName("a guard trip of the collecting count is status too_large, without the collecting fields")
+    void collectingGuardTripIsTooLarge() {
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new RuntimeException(new ServerException(241, "memory limit", 500,
+                        "query-id"))));
+
+        var body = service.get(WORKSPACE_ID, projectId);
+
+        assertThat(body.status()).isEqualTo(ProjectTopics.Status.TOO_LARGE);
+        assertThat(body.vectorsInWindow()).isNull();
+    }
+
+    @Test
+    @DisplayName("the client timeout is a 503 without Retry-After, status error")
+    void clientTimeoutIs503WithoutRetryAfter() {
+        readyWithCounts(Flux.error(new TimeoutException("Did not observe any item")));
+
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOfSatisfying(BadRequestException.class, exception -> {
+                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> {
                     assertThat(exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
                     assertThat(exception.getResponse().getEntity()).isEqualTo(
-                            new ErrorMessage(List.of(TopicReadService.TOO_LARGE_MESSAGE)));
+                            new ErrorMessage(List.of(TopicReadService.UNAVAILABLE_MESSAGE)));
                 });
         assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
@@ -220,7 +227,7 @@ class TopicReadServiceTest {
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOf(NotFoundException.class);
         verifyNoInteractions(workspaces, topicDAO, traceTopicsDAO);
-        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
+        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), any(), anyLong());
         assertThat(TopicsMetricsReader.points(metricReader, DURATION)).isEmpty();
     }
 
@@ -245,7 +252,7 @@ class TopicReadServiceTest {
 
     private void readyWithCounts(Flux<TopicDayCount> counts) {
         saved(List.of(topic()));
-        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any()))
                 .thenReturn(counts);
     }
 

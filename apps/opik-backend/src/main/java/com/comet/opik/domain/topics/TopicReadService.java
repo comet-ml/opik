@@ -10,10 +10,11 @@ import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.google.common.base.Throwables;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -31,21 +32,26 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
  * The topics read API: a project's topics over the window, the last {@code topics.build.windowDays} UTC days, today
- * included, in one of three states.
+ * included, in one of four states.
  * <ul>
  * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
  * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
- * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has and
- * how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
+ * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has
+ * ({@link #vectorCounts}, cached) and how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
  * failed.</li>
  * <li>{@code ready}: eligible with a saved list; {@link TopicsCounts} folds the counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}, cached by {@link #dayCounts}.</li>
+ * <li>{@code too_large}: a ClickHouse read of the collecting or ready state tripped a {@code topics.read} guard. A
+ * retry fails the same way, so it is a state of the project, not an error, and it carries no {@code Retry-After}.</li>
  * </ul>
+ * The reads run under {@code topics.read}: its guards, and its budget for the request's ClickHouse time. The client
+ * timeout is the budget and two seconds, so only a hang reaches it, answered 503 without {@code Retry-After}.
  * MySQL is read first, in one transaction: the project's {@code topic_projects} row and its topics. Then ClickHouse. There is no lock: a run that saves in between makes some of the request's rows count
  * as Other.
  */
@@ -53,10 +59,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @Singleton
 public class TopicReadService {
 
-    static final long MAX_EXECUTION_SECONDS = 10;
-    static final Duration CLIENT_TIMEOUT = Duration.ofSeconds(MAX_EXECUTION_SECONDS + 1);
     static final String DAY_COUNTS_CACHE = "topics_day_counts";
-    public static final String TOO_LARGE_MESSAGE = "This project is too large for topics";
+    static final String VECTOR_COUNTS_CACHE = "topics_vector_counts";
+    static final String UNAVAILABLE_MESSAGE = "Topics are unavailable; try again later";
+    private static final Duration CLIENT_TIMEOUT_MARGIN = Duration.ofSeconds(2);
 
     private final TopicsConfig config;
     private final TransactionTemplate template;
@@ -112,9 +118,27 @@ public class TopicReadService {
     @Cacheable(name = DAY_COUNTS_CACHE, key = "$workspaceId + '-' + $projectId + '-' + $listRunId + '-' + $from", returnType = TopicDayCount.class, wrapperType = List.class)
     public Mono<List<TopicDayCount>> dayCounts(@NonNull String workspaceId, @NonNull UUID projectId, UUID listRunId,
             @NonNull Instant from, @NonNull Instant to) {
-        return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, from, to, MAX_EXECUTION_SECONDS)
+        return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, from, to)
                 .collectList()
-                .timeout(CLIENT_TIMEOUT);
+                .timeout(clientTimeout());
+    }
+
+    /**
+     * The traces with a vector in the window of a collecting project, cached for
+     * {@code cacheManager.caches.topics_vector_counts}: only the vectors tick writes vectors, once a
+     * {@code topics.vectors.tickInterval}, so a page that polls progress reads ClickHouse at most that often. The key
+     * holds the window's first instant, so the entry changes at UTC midnight. An error is not cached. Not private: Guice
+     * intercepts the call from {@link #get}.
+     */
+    @Cacheable(name = VECTOR_COUNTS_CACHE, key = "$workspaceId + '-' + $projectId + '-' + $from", returnType = Long.class)
+    public Mono<Long> vectorCounts(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
+            @NonNull Instant to) {
+        var read = config.getRead();
+        return windowDAO.countByProject(workspaceId, Set.of(projectId), from, to, read, read.getBudget().toSeconds())
+                .next()
+                .map(TopicWindowDAO.ProjectCount::traces)
+                .defaultIfEmpty(0L)
+                .timeout(clientTimeout());
     }
 
     /**
@@ -162,22 +186,27 @@ public class TopicReadService {
         var from = startOf(TopicsCounts.windowFrom(today, windowDays));
         var to = startOf(today.plusDays(1));
         if (live.isEmpty()) {
-            long vectors = blockWithLimits(workspaceId, projectId, windowDAO
-                    .countByProject(workspaceId, Set.of(projectId), from, to, MAX_EXECUTION_SECONDS)
-                    .next()
-                    .map(TopicWindowDAO.ProjectCount::traces)
-                    .defaultIfEmpty(0L)
-                    .timeout(CLIENT_TIMEOUT));
-            return TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.COLLECTING)
-                    .lastRunAt(TopicsCounts.lastRunAt(project))
-                    .attempt(TopicsCounts.attempt(project))
-                    .vectorsInWindow(vectors)
-                    .minVectors((long) config.getBuild().getMinVectors())
-                    .build();
+            return blockUnlessTooLarge(workspaceId, projectId, vectorCounts(workspaceId, projectId, from, to))
+                    .map(vectors -> TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.COLLECTING)
+                            .lastRunAt(TopicsCounts.lastRunAt(project))
+                            .attempt(TopicsCounts.attempt(project))
+                            .vectorsInWindow(vectors)
+                            .minVectors((long) config.getBuild().getMinVectors())
+                            .build())
+                    .orElseGet(() -> tooLarge(today, windowDays));
         }
-        var rows = blockWithLimits(workspaceId, projectId,
-                dayCounts(workspaceId, projectId, project.listRunId(), from, to));
-        return TopicsCounts.ready(today, windowDays, live, project, rows);
+        return blockUnlessTooLarge(workspaceId, projectId,
+                dayCounts(workspaceId, projectId, project.listRunId(), from, to))
+                .map(rows -> TopicsCounts.ready(today, windowDays, live, project, rows))
+                .orElseGet(() -> tooLarge(today, windowDays));
+    }
+
+    private static ProjectTopics tooLarge(LocalDate today, int windowDays) {
+        return TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.TOO_LARGE).build();
+    }
+
+    private Duration clientTimeout() {
+        return config.getRead().getBudget().toJavaDuration().plus(CLIENT_TIMEOUT_MARGIN);
     }
 
     /** Empty when the workspace is not eligible for topics. */
@@ -196,24 +225,26 @@ public class TopicReadService {
         }));
     }
 
-    /** Maps the ClickHouse limits to a 400 or a 503, see {@link TopicsReadErrors}. */
-    private <T> T blockWithLimits(String workspaceId, UUID projectId, Mono<T> read) {
+    /**
+     * Empty on a guard trip ({@link TopicsReadErrors#isGuardTrip}). The client timeout is a 503 without
+     * {@code Retry-After}; any other error stays as it is.
+     */
+    private <T> Optional<T> blockUnlessTooLarge(String workspaceId, UUID projectId, Mono<T> read) {
         try {
-            return read.block();
+            return Optional.ofNullable(read.block());
         } catch (RuntimeException exception) {
-            if (TopicsReadErrors.isTooLarge(exception)) {
+            if (TopicsReadErrors.isGuardTrip(exception)) {
                 log.warn("Topics read is too large, workspace_id '{}', project_id '{}'", workspaceId, projectId,
                         exception);
-                throw new BadRequestException(Response.status(Response.Status.BAD_REQUEST)
-                        .entity(new ErrorMessage(List.of(TOO_LARGE_MESSAGE)))
-                        .build());
+                return Optional.empty();
             }
-            if (!TopicsReadErrors.isLimit(exception)) {
+            if (Throwables.getCausalChain(exception).stream().noneMatch(TimeoutException.class::isInstance)) {
                 throw exception;
             }
-            log.warn("Topics read hit a ClickHouse limit, workspace_id '{}', project_id '{}'", workspaceId, projectId,
-                    exception);
-            throw TopicsReadErrors.busy();
+            log.warn("Topics read timed out, workspace_id '{}', project_id '{}'", workspaceId, projectId, exception);
+            throw new ServiceUnavailableException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(new ErrorMessage(List.of(UNAVAILABLE_MESSAGE)))
+                    .build());
         }
     }
 
