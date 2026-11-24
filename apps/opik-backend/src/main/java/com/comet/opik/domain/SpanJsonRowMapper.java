@@ -84,13 +84,17 @@ class SpanJsonRowMapper {
         }
 
         // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise escaped
-        // strings, with their slim copies added after last_updated_by below.
+        // strings, each slim copy reparsed from its full string.
         if (streamPayloads) {
             JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
             JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
         } else {
-            node.put("input", TruncationUtils.toJsonString(span.input()));
-            node.put("output", TruncationUtils.toJsonString(span.output()));
+            String inputValue = TruncationUtils.toJsonString(span.input());
+            String outputValue = TruncationUtils.toJsonString(span.output());
+            node.put("input", inputValue);
+            node.put("output", outputValue);
+            node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+            node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
         }
         // toString(), not toJsonString() -- see the class javadoc. Matches the binder.
         node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
@@ -116,10 +120,6 @@ class SpanJsonRowMapper {
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);
-        if (!streamPayloads) {
-            node.put("input_slim", TruncationUtils.createSlimJsonString(node.get("input").textValue()));
-            node.put("output_slim", TruncationUtils.createSlimJsonString(node.get("output").textValue()));
-        }
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
