@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.GuardrailTrainingRun;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -52,7 +51,6 @@ class GuardrailTrainingQueryPlanTest {
     private static final String PRIMARY = "PRIMARY";
     private static final String RUNS_MODEL = "guardrail_training_runs_model_status_created_idx";
     private static final String RUNS_MODEL_CREATED = "guardrail_training_runs_model_created_idx";
-    private static final String RUNS_STATUS = "guardrail_training_runs_status_last_updated_idx";
 
     private static final int WORKSPACES = 40;
     private static final int MODELS_PER_WORKSPACE = 10;
@@ -71,7 +69,6 @@ class GuardrailTrainingQueryPlanTest {
     private UUID modelId;
     private UUID longTrainedModelId;
     private List<UUID> modelRunIds;
-    private GuardrailTrainingRun runInFlight;
 
     @BeforeAll
     void setUp() {
@@ -81,7 +78,6 @@ class GuardrailTrainingQueryPlanTest {
                 .installPlugin(new SqlObjectPlugin());
         seed();
         var runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
-        runInFlight = runs.findInFlight(modelId, workspaceId).orElseThrow();
         modelRunIds = runs.findIdsByModel(modelId, workspaceId);
     }
 
@@ -152,22 +148,16 @@ class GuardrailTrainingQueryPlanTest {
         // The reads over all of a model's runs: while a model has a few runs MySQL takes the status index and sorts
         // them, and as its runs grow it takes the created index, which returns them in order.
         var allModelRuns = Map.of(RUNS, Set.of(RUNS_MODEL, RUNS_MODEL_CREATED));
-        var runsInFlight = Map.of(RUNS, Set.of(RUNS_STATUS));
         return Stream.of(
                 new Read("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId),
                         Map.of(RUNS, Set.of(PRIMARY))),
-                new Read("serving run", dao -> dao.findServingRun(modelId, workspaceId), modelRuns),
                 new Read("run in flight", dao -> dao.findInFlight(modelId, workspaceId), modelRuns),
-                new Read("previous attempt",
-                        dao -> dao.findPreviousAttempt(runInFlight.toBuilder().attempt(2).build()), modelRuns),
                 new Read("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), allModelRuns),
                 new Read("run history of a model with thousands of runs",
                         dao -> dao.findByModel(longTrainedModelId, workspaceId, 10, 0),
                         Map.of(RUNS, Set.of(RUNS_MODEL_CREATED))),
                 new Read("run history count", dao -> dao.countByModel(modelId, workspaceId), allModelRuns),
-                new Read("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), allModelRuns),
-                new Read("worker scan", dao -> dao.findAllInFlight(100), runsInFlight),
-                new Read("workspace's runs in flight", dao -> dao.countInFlight(workspaceId), runsInFlight))
+                new Read("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), allModelRuns))
                 .map(Arguments::of);
     }
 

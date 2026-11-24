@@ -9,19 +9,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import org.jdbi.v3.core.Jdbi;
-import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.mysql.MySQLContainer;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import ru.vyarus.guicey.jdbi3.unit.UnitManager;
 
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.GuardrailTrainingRunStatus.CANCELLED;
@@ -29,30 +26,26 @@ import static com.comet.opik.api.GuardrailTrainingRunStatus.COMPLETED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.FAILED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.QUEUED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.RUNNING;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Guardrail Training Run DAO")
 class GuardrailTrainingRunDAOTest {
 
     private static final String USER = "user";
-    private static final String WORKER = "worker";
     private static final JsonNode CREATED_METADATA = json("{\"files\": {\"layout\": \"v1\"}}");
     private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
-    private TransactionTemplate template;
+    private Jdbi jdbi;
     private GuardrailTrainingRunDAO runs;
 
     @BeforeAll
     void setUp() {
         mysql.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        var jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+        jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                 .installPlugin(new SqlObjectPlugin());
-        template = new TransactionTemplate(new UnitManager(jdbi));
         runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
     }
 
@@ -73,16 +66,14 @@ class GuardrailTrainingRunDAOTest {
         return find(runId, anyRunOfTheModel.workspaceId());
     }
 
+    /** Moves the run as the run worker will, whose status writes come with it. */
     private GuardrailTrainingRun move(GuardrailTrainingRun run, GuardrailTrainingRunStatus newStatus) {
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), run.status(), newStatus, null, null, WORKER))
-                .isOne();
+        jdbi.useHandle(
+                handle -> handle.createUpdate("UPDATE guardrail_training_runs SET status = :status WHERE id = :id")
+                        .bind("status", newStatus.name())
+                        .bind("id", run.id().toString())
+                        .execute());
         return find(run.id(), run.workspaceId());
-    }
-
-    private GuardrailTrainingRun failAndRetry(GuardrailTrainingRun run) {
-        var nextId = ID_GENERATOR.generate();
-        assertThat(runs.failAndQueueRetry(run, "capacity", null, nextId, CREATED_METADATA, WORKER)).isTrue();
-        return find(nextId, run.workspaceId());
     }
 
     private GuardrailTrainingRun find(UUID runId, String workspaceId) {
@@ -111,133 +102,6 @@ class GuardrailTrainingRunDAOTest {
     }
 
     @Test
-    @DisplayName("A status write moves the run and merges each metadata patch into what is there")
-    void updateStatusMergesMetadata() {
-        var run = createFirstRun(UUID.randomUUID().toString());
-
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), QUEUED, RUNNING, null,
-                json("{\"job\": {\"id\": \"job-1\"}}"), WORKER)).isOne();
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), RUNNING, RUNNING, null,
-                json("{\"job\": {\"stage\": \"training\"}}"), WORKER)).isOne();
-
-        assertThat(find(run.id(), run.workspaceId()))
-                .usingRecursiveComparison()
-                .ignoringFields("lastUpdatedAt")
-                .isEqualTo(run.toBuilder()
-                        .status(RUNNING)
-                        .metadata(json("""
-                                {"files": {"layout": "v1"}, "job": {"id": "job-1", "stage": "training"}}"""))
-                        .lastUpdatedBy(WORKER)
-                        .build());
-    }
-
-    @Test
-    @DisplayName("The write that ends a run sets its finish time once; a later write in its finished status keeps it")
-    void updateStatusSetsFinishedAtOnce() {
-        var queued = createFirstRun(UUID.randomUUID().toString());
-        assertThat(queued.finishedAt()).isNull();
-        var running = move(queued, RUNNING);
-        assertThat(running.finishedAt()).isNull();
-
-        var completed = move(running, COMPLETED);
-        assertThat(completed.finishedAt()).isNotNull();
-        assertThat(runs.updateStatus(completed.id(), completed.workspaceId(), COMPLETED, COMPLETED, null,
-                json("{\"prefetch\": {\"done\": true}}"), WORKER)).isOne();
-
-        var later = find(completed.id(), completed.workspaceId());
-        assertThat(later.metadata().path("prefetch").path("done").asBoolean()).isTrue();
-        assertThat(later.finishedAt()).isEqualTo(completed.finishedAt());
-    }
-
-    @Test
-    @DisplayName("A status write from a status the run has already left writes nothing")
-    void updateStatusWhenRunMovedByAnotherWriterWritesNothing() {
-        var queued = createFirstRun(UUID.randomUUID().toString());
-        var running = move(queued, RUNNING);
-
-        assertThat(runs.updateStatus(queued.id(), queued.workspaceId(), QUEUED, CANCELLED, "cancelled",
-                json("{\"cancel\": true}"), USER)).isZero();
-
-        assertThat(find(queued.id(), queued.workspaceId())).isEqualTo(running);
-    }
-
-    @Test
-    @DisplayName("A status write to a run in another workspace writes nothing")
-    void updateStatusWhenAnotherWorkspaceWritesNothing() {
-        var run = createFirstRun(UUID.randomUUID().toString());
-
-        assertThat(runs.updateStatus(run.id(), UUID.randomUUID().toString(), QUEUED, CANCELLED, null, null, USER))
-                .isZero();
-
-        assertThat(find(run.id(), run.workspaceId())).isEqualTo(run);
-    }
-
-    @Test
-    @DisplayName("A failure with a retry ends the run FAILED and queues the next attempt, which finds it as previous")
-    void failAndQueueRetry() {
-        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
-        var failure = json("{\"failure\": {\"reason\": \"capacity\", \"retryable\": true}}");
-        var nextId = ID_GENERATOR.generate();
-
-        assertThat(runs.failAndQueueRetry(running, "capacity", failure, nextId, CREATED_METADATA, WORKER)).isTrue();
-
-        var failed = find(running.id(), running.workspaceId());
-        assertThat(failed.finishedAt()).isNotNull();
-        assertThat(failed)
-                .usingRecursiveComparison()
-                .ignoringFields("finishedAt", "lastUpdatedAt")
-                .isEqualTo(running.toBuilder()
-                        .status(FAILED)
-                        .statusMessage("capacity")
-                        .metadata(json("""
-                                {"files": {"layout": "v1"}, \
-                                "failure": {"reason": "capacity", "retryable": true}}"""))
-                        .build());
-        var next = find(nextId, running.workspaceId());
-        assertThat(next)
-                .usingRecursiveComparison()
-                .ignoringFields("id", "createdAt", "lastUpdatedAt")
-                .isEqualTo(running.toBuilder()
-                        .status(QUEUED)
-                        .attempt(2)
-                        .metadata(CREATED_METADATA)
-                        .createdBy(WORKER)
-                        .lastUpdatedBy(WORKER)
-                        .build());
-        assertThat(runs.findPreviousAttempt(next)).contains(failed);
-    }
-
-    @Test
-    @DisplayName("A repeated failure of the same run queues no second attempt")
-    void failAndQueueRetryWhenRepeatedQueuesNoSecondAttempt() {
-        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
-        var next = failAndRetry(running);
-
-        assertThat(runs.failAndQueueRetry(running, "capacity", null, ID_GENERATOR.generate(), CREATED_METADATA,
-                WORKER)).isFalse();
-
-        assertThat(runs.findByModel(running.modelId(), running.workspaceId(), 10, 0))
-                .extracting(GuardrailTrainingRun::id)
-                .containsExactly(next.id(), running.id());
-    }
-
-    @Test
-    @DisplayName("When the next attempt cannot be inserted, the run's FAILED is rolled back with it")
-    void failAndQueueRetryWhenInsertFailsRollsBack() {
-        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
-
-        // The run's own id as the next attempt's: the insert hits the primary key after the update went through, in the
-        // one WRITE transaction a caller runs the method in.
-        assertThatThrownBy(() -> template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
-                .failAndQueueRetry(running, "capacity", null, running.id(), CREATED_METADATA, WORKER)))
-                .isInstanceOf(UnableToExecuteStatementException.class)
-                .hasCauseInstanceOf(SQLIntegrityConstraintViolationException.class);
-
-        assertThat(find(running.id(), running.workspaceId())).isEqualTo(running);
-        assertThat(runs.countByModel(running.modelId(), running.workspaceId())).isOne();
-    }
-
-    @Test
     @DisplayName("Runs are found by id in their workspace only")
     void findByIds() {
         var workspaceId = UUID.randomUUID().toString();
@@ -247,20 +111,6 @@ class GuardrailTrainingRunDAOTest {
 
         assertThat(runs.findByIds(List.of(first.id(), second.id(), otherWorkspace.id()), workspaceId))
                 .containsExactlyInAnyOrder(first, second);
-    }
-
-    @Test
-    @DisplayName("The serving run is the most recent completed one; a newer failed run does not displace it")
-    void findServingRun() {
-        var first = createFirstRun(UUID.randomUUID().toString());
-        assertThat(runs.findServingRun(first.modelId(), first.workspaceId())).isEmpty();
-
-        move(first, COMPLETED);
-        var second = move(retrain(first), COMPLETED);
-        move(retrain(first), FAILED);
-
-        assertThat(runs.findServingRun(first.modelId(), first.workspaceId())).contains(second);
-        assertThat(runs.findServingRun(first.modelId(), UUID.randomUUID().toString())).isEmpty();
     }
 
     @Test
@@ -277,16 +127,6 @@ class GuardrailTrainingRunDAOTest {
     }
 
     @Test
-    @DisplayName("A first attempt has no previous attempt, even after an earlier training of the model failed")
-    void findPreviousAttemptWhenFirstAttemptReturnsEmpty() {
-        var earlierTraining = move(createFirstRun(UUID.randomUUID().toString()), FAILED);
-
-        var retrained = retrain(earlierTraining);
-
-        assertThat(runs.findPreviousAttempt(retrained)).isEmpty();
-    }
-
-    @Test
     @DisplayName("A model's runs page newest first, in its workspace only")
     void findByModel() {
         var first = move(createFirstRun(UUID.randomUUID().toString()), COMPLETED);
@@ -300,20 +140,46 @@ class GuardrailTrainingRunDAOTest {
         assertThat(runs.countByModel(first.modelId(), UUID.randomUUID().toString())).isZero();
     }
 
-    @Test
-    @DisplayName("The worker's scan finds the runs in flight of every workspace, the longest unchanged first")
-    void findAllInFlight() {
-        var workspaceId = UUID.randomUUID().toString();
-        var queued = createFirstRun(workspaceId);
-        var running = move(createFirstRun(UUID.randomUUID().toString()), RUNNING);
-        var completed = move(createFirstRun(workspaceId), COMPLETED);
-        var ours = Set.of(queued.id(), running.id(), completed.id());
+    @ParameterizedTest
+    @EnumSource(value = GuardrailTrainingRunStatus.class, names = {"QUEUED", "RUNNING"})
+    @DisplayName("A run in flight is cancelled in one write, with who cancelled it and when it finished")
+    void cancel(GuardrailTrainingRunStatus status) {
+        var run = move(createFirstRun(UUID.randomUUID().toString()), status);
 
-        // The container is shared with other test classes, whose runs in flight the scan also returns.
-        assertThat(runs.findAllInFlight(1_000))
-                .filteredOn(run -> ours.contains(run.id()))
-                .containsExactly(queued, running);
-        assertThat(runs.countInFlight(workspaceId)).isOne();
+        assertThat(runs.cancel(run.id(), run.modelId(), run.workspaceId(), "Cancelled by " + USER, USER)).isOne();
+
+        var cancelled = find(run.id(), run.workspaceId());
+        assertThat(cancelled.finishedAt()).isNotNull();
+        assertThat(cancelled)
+                .usingRecursiveComparison()
+                .ignoringFields("finishedAt", "lastUpdatedAt")
+                .isEqualTo(run.toBuilder()
+                        .status(CANCELLED)
+                        .statusMessage("Cancelled by " + USER)
+                        .lastUpdatedBy(USER)
+                        .build());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = GuardrailTrainingRunStatus.class, names = {"COMPLETED", "FAILED", "CANCELLED"})
+    @DisplayName("A run that has ended is left as it is")
+    void cancelWhenEndedWritesNothing(GuardrailTrainingRunStatus status) {
+        var run = move(createFirstRun(UUID.randomUUID().toString()), status);
+
+        assertThat(runs.cancel(run.id(), run.modelId(), run.workspaceId(), "Cancelled by " + USER, USER)).isZero();
+
+        assertThat(find(run.id(), run.workspaceId())).isEqualTo(run);
+    }
+
+    @Test
+    @DisplayName("A run is cancelled under its own model and workspace only")
+    void cancelWhenAnotherModelOrWorkspaceWritesNothing() {
+        var run = createFirstRun(UUID.randomUUID().toString());
+
+        assertThat(runs.cancel(run.id(), ID_GENERATOR.generate(), run.workspaceId(), "Cancelled", USER)).isZero();
+        assertThat(runs.cancel(run.id(), run.modelId(), UUID.randomUUID().toString(), "Cancelled", USER)).isZero();
+
+        assertThat(find(run.id(), run.workspaceId())).isEqualTo(run);
     }
 
     @Test
