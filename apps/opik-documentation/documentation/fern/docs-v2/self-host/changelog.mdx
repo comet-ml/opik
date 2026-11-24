@@ -13,6 +13,22 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+## Release 2.3.2, 2026-11-24
+
+### Security Change
+
+The Python backend container now runs in privileged mode only with the `docker` code executor strategy, whose
+in-container Docker daemon needs it. With the default `process` strategy it runs unprivileged.
+
+- **Helm:** no change needed. The chart adds `privileged: true` when `component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY`
+  is `docker`. If you set the strategy through `envFrom` or `secretRefs` instead, set
+  `component.python-backend.securityContext.privileged: true`.
+- **Docker Compose with the `docker` strategy:** set `PYTHON_BACKEND_PRIVILEGED=true` along with
+  `PYTHON_CODE_EXECUTOR_STRATEGY=docker`. Without it the Python backend exits at startup, logging that the Docker daemon
+  did not start and that it needs privileged mode.
+
+The Python backend also logs a warning at startup naming the strategy in use and its trade-off.
+
 ## Release 2.3.0, 2026-11-23
 
 ### Security Change

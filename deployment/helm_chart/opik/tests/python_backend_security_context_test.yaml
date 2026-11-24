@@ -1,0 +1,102 @@
+suite: python-backend securityContext follows the executor strategy
+
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: runs unprivileged with the default process strategy
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value: {}
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value: {}
+
+  - it: runs privileged with the docker strategy
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: docker
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            privileged: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            privileged: true
+
+  - it: keeps the other securityContext settings alongside privileged with the docker strategy
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: docker
+      component.python-backend.securityContext:
+        runAsUser: 0
+        seccompProfile:
+          type: RuntimeDefault
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            privileged: true
+            runAsUser: 0
+            seccompProfile:
+              type: RuntimeDefault
+
+  - it: keeps an explicit privileged false with the docker strategy
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: docker
+      component.python-backend.securityContext.privileged: false
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            privileged: false
+
+  - it: keeps an explicit privileged true with the process strategy
+    set:
+      component.python-backend.securityContext.privileged: true
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            privileged: true
+
+  - it: renders other settings unchanged with the process strategy
+    set:
+      component.python-backend.securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            seccompProfile:
+              type: RuntimeDefault
+
+  - it: leaves the other components' securityContext untouched by the docker strategy
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: docker
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.privileged

@@ -500,7 +500,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.readinessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
-| component.python-backend.securityContext.privileged | bool | `true` |  |
+| component.python-backend.securityContext | object | `{}` | securityContext of the python-backend containers. With `env.PYTHON_CODE_EXECUTOR_STRATEGY: "docker"` the chart adds `privileged: true`, which the Docker daemon inside the container needs; the default process strategy runs unprivileged. If the strategy comes from `envFrom` or `secretRefs` instead, set `privileged: true` here yourself. |
 | component.python-backend.service.ports[0].name | string | `"http"` |  |
 | component.python-backend.service.ports[0].port | int | `8000` |  |
 | component.python-backend.service.ports[0].protocol | string | `"TCP"` |  |
