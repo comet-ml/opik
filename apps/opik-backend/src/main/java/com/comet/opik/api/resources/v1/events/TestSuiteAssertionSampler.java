@@ -20,6 +20,7 @@ import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -150,7 +151,9 @@ public class TestSuiteAssertionSampler {
                         return Mono.empty();
                     }
                     log.info("Enqueuing '{}' test suite assertion messages", messages.size());
-                    return onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE)
+                    return new OrganizationIdStamper(tracesBatch.organizationId()).stampAll(messages)
+                            .flatMap(stamped -> onlineScorePublisher.enqueueMessage(stamped,
+                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE))
                             .onErrorResume(error -> {
                                 log.error("Error enqueueing '{}' test suite assertion messages into redis",
                                         messages.size(), error);

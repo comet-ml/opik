@@ -22,12 +22,14 @@ import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import dev.langchain4j.data.message.ChatMessageType;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -141,15 +144,11 @@ class TestSuiteAssertionSamplerTest {
             verify(datasetVersionService).resolveVersionId(workspaceId, datasetId, versionHash);
         }
 
-        @Test
-        @DisplayName("includes item-level evaluators in scoring messages")
-        void includesItemLevelEvaluators() {
+        private Trace traceWithOneItemEvaluator(String workspaceId) {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             UUID versionId = Generators.timeBasedEpochGenerator().generate();
             UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
             UUID ruleId = Generators.timeBasedEpochGenerator().generate();
-            String workspaceId = "test-workspace";
-            String userName = "test-user";
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
@@ -203,6 +202,15 @@ class TestSuiteAssertionSamplerTest {
                     .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
                     .metadata(metadata)
                     .build();
+            return trace;
+        }
+
+        @Test
+        @DisplayName("includes item-level evaluators in scoring messages")
+        void includesItemLevelEvaluators() {
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            var trace = traceWithOneItemEvaluator(workspaceId);
 
             var event = new TracesCreated(List.of(trace), workspaceId, userName);
             sampler.onTracesCreated(event);
@@ -233,6 +241,56 @@ class TestSuiteAssertionSamplerTest {
 
             // Verify score name mapping: assertion_1 → original name ("check")
             assertThat(message.scoreNameMapping()).containsEntry("assertion_1", "check");
+        }
+
+        @Test
+        @DisplayName("judge messages carry the organization of the traces' event, and nothing else changes")
+        void judgeMessagesCarryTheEventsOrganization() {
+            var workspaceId = UUID.randomUUID().toString();
+            var userName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var organizationId = UUID.randomUUID().toString();
+            var resolver = FixedOrganizationResolver.of(organizationId);
+            var trace = traceWithOneItemEvaluator(workspaceId);
+            var event = TracesCreated.builder().traces(List.of(trace)).workspaceId(workspaceId).userName(userName);
+
+            sampler.onTracesCreated(event.build());
+            sampler.onTracesCreated(event.organizationId(resolver.organizationId()).build());
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher, times(2))
+                    .enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            var withoutOrganization = captor.getAllValues().getFirst();
+            var withOrganization = captor.getAllValues().getLast();
+            assertThat(withOrganization).containsExactly(
+                    withoutOrganization.getFirst().toBuilder().organizationId(organizationId).build());
+            assertThat(withoutOrganization).containsExactly(
+                    withOrganization.getFirst().toBuilder().organizationId(null).build());
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        @DisplayName("looks the organization up only when there is a judge message to enqueue")
+        void noLookupWithoutAJudgeMessage() {
+            var workspaceId = UUID.randomUUID().toString();
+            var resolver = FixedOrganizationResolver.of(UUID.randomUUID().toString());
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .build();
+
+            sampler.onTracesCreated(TracesCreated.builder()
+                    .traces(List.of(trace))
+                    .workspaceId(workspaceId)
+                    .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .organizationId(resolver.organizationId())
+                    .build());
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
         }
 
         @Test

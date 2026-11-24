@@ -10,7 +10,9 @@ import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -96,16 +98,19 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OrganizationResolver organizationResolver;
     private final LongCounter enqueueCounter;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull OrganizationResolver organizationResolver) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.organizationResolver = organizationResolver;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
@@ -139,6 +144,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
+            var organizationIdStamper = new OrganizationIdStamper(organizationResolver.organizationId());
             return Flux.fromIterable(messages)
                     // Stamp the workspace name resolved from the reactive context onto messages that don't
                     // already carry one, so async consumers and their per-workspace metrics get a real name.
@@ -149,6 +155,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
                                     : message)
+                    .concatMap(organizationIdStamper::stamp)
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {

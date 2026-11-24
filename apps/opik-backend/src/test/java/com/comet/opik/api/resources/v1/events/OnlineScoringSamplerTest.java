@@ -4,8 +4,11 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
@@ -22,6 +25,7 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -55,6 +59,7 @@ import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtil
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -692,6 +697,188 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+    }
+
+    @Nested
+    class OrganizationTests {
+
+        private final String organizationId = UUID.randomUUID().toString();
+        private final FixedOrganizationResolver resolver = FixedOrganizationResolver.of(organizationId);
+
+        @Test
+        void judgeMessageCarriesTheOrganizationOfTheCreatedTraces() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(trace));
+
+            verify(onlineScorePublisher).enqueueMessage(
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void judgeMessageCarriesTheOrganizationOfTheUpdatedTraces() {
+            var trace = createTrace(Source.SDK);
+            var event = TracesUpdated.builder()
+                    .projectIds(Set.of(projectId))
+                    .traceIds(Set.of(trace.id()))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .traceUpdate(TraceUpdate.builder().endTime(Instant.now()).build())
+                    .organizationId(resolver.organizationId())
+                    .build();
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesUpdated(event);
+
+            verify(onlineScorePublisher).enqueueMessage(
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void noLookupWhenTheProjectHasNoRules() {
+            whenFindAllLlmEvaluators();
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupWhenNoTraceIsSampled() {
+            whenFindAllLlmEvaluators(createLlmEvaluator(false, 1.0f, List.of()));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupForPythonMetricMessages() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var trace = createTrace(Source.SDK);
+            var evaluator = createPythonEvaluator(1.0f);
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(trace));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void threadJudgeRuleLooksTheOrganizationUpForCreatedThreadTraces() {
+            whenFindAllReturns(createThreadLlmEvaluator(true));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createThreadTrace()));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void threadJudgeRuleLooksTheOrganizationUpForUpdatedThreadTraces() {
+            var trace = createThreadTrace();
+            var event = TracesUpdated.builder()
+                    .projectIds(Set.of(projectId))
+                    .traceIds(Set.of(trace.id()))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .traceUpdate(TraceUpdate.builder().endTime(Instant.now()).build())
+                    .organizationId(resolver.organizationId())
+                    .build();
+            when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
+            whenFindAllReturns(createThreadLlmEvaluator(true));
+
+            onlineScoringSampler.onTracesUpdated(event);
+
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void traceAndThreadJudgesShareOneLookup() {
+            var trace = createThreadTrace();
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllReturns(evaluator, createThreadLlmEvaluator(true));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(trace).toBuilder()
+                    .organizationId(resolver.organizationId().cache())
+                    .build());
+
+            verify(onlineScorePublisher).enqueueMessage(
+                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void noLookupWhenTheThreadJudgeRuleIsDisabled() {
+            whenFindAllReturns(createThreadLlmEvaluator(false));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createThreadTrace()));
+
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupForThreadPythonMetricRules() {
+            whenFindAllReturns(podamFactory.manufacturePojo(
+                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class).toBuilder()
+                    .projects(toProjects(Set.of(projectId)))
+                    .enabled(true)
+                    .build());
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createThreadTrace()));
+
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupForTracesOutsideAThread() {
+            whenFindAllReturns(createThreadLlmEvaluator(true));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createThreadTrace().toBuilder()
+                    .threadId(null)
+                    .build()));
+
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        private TracesCreated tracesCreated(Trace trace) {
+            return TracesCreated.builder()
+                    .traces(List.of(trace))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .organizationId(resolver.organizationId())
+                    .build();
+        }
+
+        private Trace createThreadTrace() {
+            return createTrace(Source.SDK).toBuilder()
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .build();
+        }
+
+        private AutomationRuleEvaluatorTraceThreadLlmAsJudge createThreadLlmEvaluator(boolean enabled) {
+            return podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
+                    .projects(toProjects(Set.of(projectId)))
+                    .enabled(enabled)
+                    .build();
+        }
+
+        private void whenFindAllReturns(AutomationRuleEvaluator<?, ?>... evaluators) {
+            doReturn(List.of(evaluators)).when(ruleEvaluatorService).findAll(projectId, workspaceId);
         }
     }
 

@@ -3,9 +3,11 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -24,7 +26,19 @@ class OnlineScoringSamplerSupport {
      */
     static void publishSampled(OnlineScorePublisher publisher, Logger log, List<?> messages,
             AutomationRuleEvaluatorType type, String workspaceId, String workspaceName) {
-        publisher.enqueueMessage(messages, type)
+        publish(publisher.enqueueMessage(messages, type), log, messages, type, workspaceId, workspaceName);
+    }
+
+    static void publishSampled(OnlineScorePublisher publisher, Logger log, List<?> messages,
+            AutomationRuleEvaluatorType type, String workspaceId, String workspaceName, Mono<String> organizationId) {
+        publish(new OrganizationIdStamper(organizationId).stampAll(messages)
+                .flatMap(stamped -> publisher.enqueueMessage(stamped, type)),
+                log, messages, type, workspaceId, workspaceName);
+    }
+
+    private static void publish(Mono<Void> enqueue, Logger log, List<?> messages, AutomationRuleEvaluatorType type,
+            String workspaceId, String workspaceName) {
+        enqueue
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.WORKSPACE_NAME, StringUtils.defaultIfBlank(workspaceName, workspaceId)))
