@@ -127,21 +127,6 @@ public class FreeFormSqlQueryService {
                     "trace_threads", "experiments", "experiment_items", "dataset_items", "dataset_item_versions"));
 
     private static final String FUNCTION_AST_PREFIX = "Function ";
-    /**
-     * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
-     * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
-     * identity out of both the result and the error surface. Names are compared in lowercase so case variants of
-     * case-insensitive functions match.
-     * ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such as
-     * {@code current_user} and {@code database} parse as identifiers, so they are caught on the resolved query tree,
-     * where ClickHouse has turned them into function calls.
-     */
-    private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
-            "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
-            "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
-            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
-            "displayname", "enabledroles", "defaultroles", "getoskernelversion", "tcpport", "authenticateduser",
-            "enabledprofiles", "defaultprofiles");
     public static final String PARSE_ERROR_MESSAGE = "Query rejected: could not be parsed";
     public static final String SETTINGS_CLAUSE_MESSAGE = "Query rejected: SETTINGS/SET clauses are not allowed";
     public static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
@@ -510,7 +495,7 @@ public class FreeFormSqlQueryService {
         return nodeLabels.stream().map(String::stripLeading)
                 .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
                 .map(label -> firstTokenAfterPrefix(label, FUNCTION_AST_PREFIX).toLowerCase(Locale.ROOT))
-                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
+                .anyMatch(FreeFormSqlForbiddenFunctions.ALL::contains);
     }
 
     /** A FUNCTION node whose name cannot be read counts as forbidden, so a tree format change fails closed. */
@@ -518,7 +503,7 @@ public class FreeFormSqlQueryService {
         return queryTree.stream()
                 .filter(FreeFormSqlSubqueries::isFunctionNode)
                 .anyMatch(line -> FreeFormSqlSubqueries.resolvedFunctionName(line)
-                        .map(name -> FORBIDDEN_FUNCTIONS.contains(name.toLowerCase(Locale.ROOT)))
+                        .map(name -> FreeFormSqlForbiddenFunctions.ALL.contains(name.toLowerCase(Locale.ROOT)))
                         .orElse(true));
     }
 

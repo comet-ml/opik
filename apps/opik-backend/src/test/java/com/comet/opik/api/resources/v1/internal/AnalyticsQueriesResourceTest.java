@@ -286,7 +286,22 @@ class AnalyticsQueriesResourceTest {
                 "tcpPort()", "TCPPORT()", "authenticatedUser()", "enabledProfiles()", "defaultProfiles()",
                 "current_database", "database", "schema", "user", "currentDatabase", "currentUser",
                 // ClickHouse aliases of listed functions whose own names are not listed: caught by canonical name.
-                "authUser()", "current_schemas(true)", "fullHostName()")
+                "authUser()", "current_schemas(true)", "fullHostName()", "connection_id()",
+                // Server configuration, schema probes and runtime state, with valid arguments.
+                "getServerSetting('max_server_memory_usage')", "getMergeTreeSetting('index_granularity')",
+                "getSetting('max_threads')", "getSettingOrDefault('max_threads', 0)",
+                "globalVariable('max_allowed_packet')", "getClientHTTPHeader('Authorization')", "showCertificate()",
+                "getMaxTableNameLengthForDatabase('system')", "hasColumnInTable('system', 'one', 'dummy')",
+                "revision()", "shardNum()", "shardCount()", "zookeeperSessionUptime()", "filesystemAvailable()",
+                "filesystemCapacity()", "filesystemUnreserved()", "connectionId()", "hasThreadFuzzer()",
+                "transactionID()", "transactionLatestSnapshot()", "transactionOldestSnapshot()", "tid()",
+                // Side effects, server files, introspection, and reads outside the row policies; one representative
+                // per dictionary family, the rest of which the function inventory test keeps denied.
+                "generateSerialID('free_form_sql')", "logTrace('free_form_sql')", "file('/etc/hostname')",
+                "catboostEvaluate('/tmp/model.bin', 1.0)", "sleep(0)", "sleepEachRow(0)",
+                "addressToLine(toUInt64(0))", "addressToLineWithInlines(toUInt64(0))", "addressToSymbol(toUInt64(0))",
+                "demangle('_Z1fv')", "joinGet('opik.traces', 'name', 'x')", "joinGetOrNull('opik.traces', 'name', 'x')",
+                "dictGetString('opik.any_dict', 'value', toUInt64(1))", "dictHas('opik.any_dict', toUInt64(1))")
                 .map(expression -> arguments("metadata expression %s".formatted(expression),
                         "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression)));
         var nested = Stream.of(
