@@ -206,7 +206,8 @@ public class PayloadCases {
         return text.substring(0, TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH) + TruncationUtils.TRUNCATION_SUFFIX;
     }
 
-    private static JsonNode nestedArrays(int depth) {
+    /** {@code depth} arrays, each holding the next, around one short string. */
+    public static JsonNode nestedArrays(int depth) {
         JsonNode node = JsonNodeFactory.instance.arrayNode().add(randomAlphanumeric(10));
         for (int level = 1; level < depth; level++) {
             node = JsonNodeFactory.instance.arrayNode().add(node);

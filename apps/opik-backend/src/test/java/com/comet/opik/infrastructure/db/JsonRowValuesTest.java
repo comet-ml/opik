@@ -13,7 +13,6 @@ import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.jackson.Jackson;
 import org.apache.commons.lang3.RandomUtils;
@@ -169,19 +168,11 @@ class JsonRowValuesTest {
                 .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(columns.json(), columns.slim()));
     }
 
-    private static JsonNode nestedArrays(int depth) {
-        JsonNode node = JsonNodeFactory.instance.arrayNode().add(PayloadCases.randomAlphanumeric(10));
-        for (int level = 1; level < depth; level++) {
-            node = JsonNodeFactory.instance.arrayNode().add(node);
-        }
-        return node;
-    }
-
     static Stream<JsonNode> deepPayloads() {
         return Stream.of(
-                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1),
+                PayloadCases.nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1),
                 // As deep as node.toString() can serialize: the row around it goes one level past the default limit.
-                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH));
+                PayloadCases.nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH));
     }
 
     @ParameterizedTest
