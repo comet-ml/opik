@@ -9,9 +9,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
-import useModelsUsed from "@/api/model-prices/useModelsUsed";
 import { useModelPricesAccess } from "@/contexts/ModelPricesAccessContext";
-import { useActiveWorkspaceName } from "@/store/AppStore";
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
@@ -24,7 +22,6 @@ import {
   CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
-  ModelUsed,
   buildCatalog,
   filterCatalog,
   groupHistory,
@@ -36,7 +33,6 @@ import CostCenterHeader from "./CostCenterHeader";
 import CatalogTable from "./CatalogTable";
 import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
-import NoPriceBanner from "./NoPriceBanner";
 import QuickAccess from "./QuickAccess";
 import useBuiltInPrices from "./useBuiltInPrices";
 import { MAX_QUICK_ACCESS } from "./format";
@@ -56,17 +52,11 @@ const IS_LABEL = { "=": "is" } as const;
 const identityKey = (model: string, provider: string) =>
   identityOf({ model, provider, kind: "fixed" });
 
-const byMostUsed = (left: ModelUsed, right: ModelUsed) =>
-  right.days_used - left.days_used ||
-  right.last_seen.localeCompare(left.last_seen);
-
 const CostCenterTab: React.FC = () => {
   const access = useModelPricesAccess();
   const canEdit = access.canEdit && !access.isPending;
-  const workspaceName = useActiveWorkspaceName();
   const { data: list, isPending, isError } = useModelPrices();
   const { data: builtIns, isPending: isBuiltInPending } = useBuiltInPrices();
-  const { data: modelsUsed } = useModelsUsed();
   const { data: historyPage } = useModelPriceHistory(HISTORY_PAGE);
   const history = useMemo(
     () => groupHistory(historyPage?.content ?? []),
@@ -212,18 +202,6 @@ const CostCenterTab: React.FC = () => {
     [visible, page, size],
   );
 
-  const unpriced = useMemo(() => {
-    const all = (modelsUsed?.content ?? []).filter(
-      (model) => model.price_source === "none",
-    );
-    const inWorkspace = all.filter((model) =>
-      model.workspaces.some((workspace) => workspace.name === workspaceName),
-    );
-    return inWorkspace.length
-      ? { models: inWorkspace, scope: "workspace" as const }
-      : { models: all, scope: "organization" as const };
-  }, [modelsUsed, workspaceName]);
-
   const [pinned = [], setPinned] = useLocalStorageState<string[]>(
     PINNED_STORAGE_KEY,
     { defaultValue: [] },
@@ -271,35 +249,21 @@ const CostCenterTab: React.FC = () => {
   const canPin = pinnedEntries.length < MAX_QUICK_ACCESS;
 
   const quickAccess = useMemo(() => {
-    const used = [...(modelsUsed?.content ?? [])]
-      .filter((model) => model.price_source !== "none")
-      .sort(byMostUsed)
-      .map((model) => byIdentity.get(identityKey(model.model, model.provider)))
-      .filter((entry): entry is CatalogEntry => Boolean(entry));
     const defaults = QUICK_ACCESS_DEFAULTS.map((item) =>
       byIdentity.get(identityKey(item.model, item.provider)),
     ).filter((entry): entry is CatalogEntry => Boolean(entry));
     const seen = new Set<string>();
     const limit = Math.min(Math.max(4, pinnedEntries.length), MAX_QUICK_ACCESS);
-    return [...pinnedEntries, ...used, ...defaults]
+    return [...pinnedEntries, ...defaults]
       .filter((entry) => !seen.has(entry.key) && seen.add(entry.key))
       .slice(0, limit);
-  }, [pinnedEntries, modelsUsed, byIdentity]);
+  }, [pinnedEntries, byIdentity]);
 
   const drawerEntry = drawerTarget?.entry;
   const openDrawer = (target: DrawerTarget) => {
     rememberFocus();
     drawerKey.current += 1;
     setDrawerTarget(target);
-  };
-
-  const openUnpriced = (model: ModelUsed) => {
-    const existing = byIdentity.get(identityKey(model.model, model.provider));
-    openDrawer(
-      existing
-        ? { entry: existing }
-        : { prefill: { model: model.model, provider: model.provider } },
-    );
   };
 
   const resetPage =
@@ -332,13 +296,6 @@ const CostCenterTab: React.FC = () => {
         history={history}
         isHistoryOpen={isHistoryOpen}
         onToggleHistory={() => setIsHistoryOpen((open) => !open)}
-      />
-
-      <NoPriceBanner
-        models={unpriced.models}
-        scope={unpriced.scope}
-        canEdit={canEdit}
-        onAddPrices={openUnpriced}
       />
 
       <QuickAccess

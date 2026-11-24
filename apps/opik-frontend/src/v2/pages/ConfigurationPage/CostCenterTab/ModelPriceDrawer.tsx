@@ -49,7 +49,6 @@ import useSaveModelPrices from "./useSaveModelPrices";
 
 export type DrawerTarget = {
   entry?: CatalogEntry;
-  prefill?: { model: string; provider: string };
 };
 
 type Line = { id: number; field: PriceField; value: string; locked: boolean };
@@ -111,15 +110,13 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   canPin = true,
   onTogglePin,
 }) => {
-  const { entry, prefill } = target;
+  const { entry } = target;
   const isNew = !entry;
   const { send, isSaving } = useSaveModelPrices();
   const nextId = useRef(10);
 
-  const [model, setModel] = useState(prefill?.model ?? entry?.model ?? "");
-  const [provider, setProvider] = useState(
-    prefill?.provider ?? entry?.provider ?? "",
-  );
+  const [model, setModel] = useState(entry?.model ?? "");
+  const [provider, setProvider] = useState(entry?.provider ?? "");
   const [kind, setKind] = useState<ModelPriceRow["kind"]>(
     entry?.row?.kind ?? "fixed",
   );

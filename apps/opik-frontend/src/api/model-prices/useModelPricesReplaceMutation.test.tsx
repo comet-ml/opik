@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import useModelPricesReplaceMutation from "./useModelPricesReplaceMutation";
-import {
-  MODEL_PRICE_HISTORY_KEY,
-  MODEL_PRICES_KEY,
-  MODELS_USED_KEY,
-} from "@/api/api";
+import { MODEL_PRICE_HISTORY_KEY, MODEL_PRICES_KEY } from "@/api/api";
 
 const { put } = vi.hoisted(() => ({ put: vi.fn() }));
 
@@ -38,7 +34,7 @@ const invalidatedKeys = (invalidate: { mock: { calls: unknown[][] } }) =>
   );
 
 describe("useModelPricesReplaceMutation", () => {
-  it("refreshes the list, the history and the models used after a save", async () => {
+  it("refreshes the list and the history after a save", async () => {
     put.mockResolvedValueOnce({ data: { saved: true, version: 3 } });
     const { result, invalidate } = setup();
 
@@ -47,7 +43,6 @@ describe("useModelPricesReplaceMutation", () => {
     expect(invalidatedKeys(invalidate)).toEqual([
       MODEL_PRICES_KEY,
       MODEL_PRICE_HISTORY_KEY,
-      MODELS_USED_KEY,
     ]);
   });
 

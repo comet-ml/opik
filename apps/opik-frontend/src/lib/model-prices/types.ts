@@ -13,7 +13,6 @@ export const PRICE_FIELDS: PriceField[] = [
   "cache_write_price",
 ];
 
-export type PriceSource = "organization" | "built_in" | "none";
 
 export interface ModelPriceAliasOf {
   model: string;
@@ -91,24 +90,4 @@ export interface ModelPriceHistoryPage {
   size: number;
   total: number;
   content: ModelPriceHistoryEntry[];
-}
-
-export interface ModelUsedWorkspace {
-  id: string;
-  name: string;
-}
-
-export interface ModelUsed {
-  model: string;
-  provider: string;
-  last_seen: string;
-  days_used: number;
-  workspaces: ModelUsedWorkspace[];
-  price_source: PriceSource;
-}
-
-export interface ModelsUsed {
-  days: number;
-  truncated: boolean;
-  content: ModelUsed[];
 }
