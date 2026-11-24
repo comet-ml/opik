@@ -26,7 +26,7 @@ public record ExperimentItemToProcess(
         List<OpikPromptEntry> opikPrompts,
         Boolean testSuite,
         List<UUID> selectedRuleIds,
-        String organizationId) implements RedisSubscriberMessage {
+        String organizationId) implements OrganizationScopedMessage {
 
     /**
      * Null on messages published before regular datasets could run server-side, when every run was a test
@@ -37,7 +37,7 @@ public record ExperimentItemToProcess(
     }
 
     @Override
-    public RedisSubscriberMessage withOrganizationId(String organizationId) {
+    public OrganizationScopedMessage withOrganizationId(String organizationId) {
         return toBuilder().organizationId(organizationId).build();
     }
 }

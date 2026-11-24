@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,6 +21,7 @@ import reactor.util.context.ContextView;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,14 +33,17 @@ class OnlineScoringBaseScorerOrganizationTest {
     private static final PodamFactory PODAM_FACTORY = PodamFactoryUtils.newPodamFactory();
 
     private final ContextCapturingScorer scorer = new ContextCapturingScorer();
+    private final String workspaceId = UUID.randomUUID().toString();
 
     @Test
     @DisplayName("A message's organization is put in the context, next to its workspace")
     void restoresTheOrganization() {
-        scorer.processEvent(message("organization-1")).block();
+        var organizationId = UUID.randomUUID().toString();
 
-        assertThat(scorer.context().<String>getOrEmpty(RequestContext.ORGANIZATION_ID)).contains("organization-1");
-        assertThat(scorer.context().<String>get(RequestContext.WORKSPACE_ID)).isEqualTo("workspace");
+        scorer.processEvent(message(organizationId)).block();
+
+        assertThat(scorer.context().<String>getOrEmpty(RequestContext.ORGANIZATION_ID)).contains(organizationId);
+        assertThat(scorer.context().<String>get(RequestContext.WORKSPACE_ID)).isEqualTo(workspaceId);
     }
 
     @ParameterizedTest
@@ -49,12 +54,12 @@ class OnlineScoringBaseScorerOrganizationTest {
         scorer.processEvent(message(organizationId)).block();
 
         assertThat(scorer.context().hasKey(RequestContext.ORGANIZATION_ID)).isFalse();
-        assertThat(scorer.context().<String>get(RequestContext.WORKSPACE_ID)).isEqualTo("workspace");
+        assertThat(scorer.context().<String>get(RequestContext.WORKSPACE_ID)).isEqualTo(workspaceId);
     }
 
-    private static TraceThreadToScoreLlmAsJudge message(String organizationId) {
+    private TraceThreadToScoreLlmAsJudge message(String organizationId) {
         return PODAM_FACTORY.manufacturePojo(TraceThreadToScoreLlmAsJudge.class).toBuilder()
-                .workspaceId("workspace")
+                .workspaceId(workspaceId)
                 .organizationId(organizationId)
                 .build();
     }
@@ -65,10 +70,10 @@ class OnlineScoringBaseScorerOrganizationTest {
 
         ContextCapturingScorer() {
             super(OnlineScoringConfig.builder()
-                    .consumerGroupName("test")
+                    .consumerGroupName(RandomStringUtils.secure().nextAlphanumeric(10))
                     .streams(List.of(OnlineScoringConfig.StreamConfiguration.builder()
                             .scorer(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE.getType())
-                            .streamName("test-stream")
+                            .streamName(RandomStringUtils.secure().nextAlphanumeric(10))
                             .codec(RedisStreamCodec.JAVA.getName())
                             .build()))
                     .build(),

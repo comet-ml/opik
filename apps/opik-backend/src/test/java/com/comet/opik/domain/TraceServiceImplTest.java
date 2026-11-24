@@ -1,12 +1,16 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.InvalidUUIDException;
+import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
@@ -16,6 +20,7 @@ import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -37,7 +42,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.context.Context;
+import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
 
@@ -47,7 +52,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -106,6 +110,7 @@ class TraceServiceImplTest {
             .build();
 
     private final PodamFactory factory = new PodamFactoryImpl();
+    private FixedOrganizationResolver organizationResolver = FixedOrganizationResolver.none();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
     @BeforeEach
@@ -132,7 +137,8 @@ class TraceServiceImplTest {
                 attachmentStripperService,
                 attachmentService,
                 attachmentReinjectorService,
-                opikConfiguration);
+                opikConfiguration,
+                organizationResolver);
     }
 
     @Nested
@@ -554,30 +560,107 @@ class TraceServiceImplTest {
     @Nested
     class TraceEventOrganization {
 
-        @Test
-        void batchUpdate__whenContextHasOrganization__thenTracesUpdatedCarriesIt() {
-            var updated = batchUpdateUnder(ctx -> ctx.put(RequestContext.ORGANIZATION_ID, "organization-1"));
+        private final String workspaceId = UUID.randomUUID().toString();
+        private final String userName = RandomStringUtils.secure().nextAlphanumeric(10);
+        private final String organizationId = UUID.randomUUID().toString();
 
-            assertThat(updated.organizationId()).isEqualTo("organization-1");
+        @BeforeEach
+        void setUp() {
+            // Knows the organization only inside the request's context, like the resolver with a cold cache.
+            organizationResolver = new FixedOrganizationResolver(Mono.deferContextual(
+                    ctx -> workspaceId.equals(ctx.getOrDefault(RequestContext.WORKSPACE_ID, null))
+                            ? Mono.just(organizationId)
+                            : Mono.empty()));
+            traceService = newTraceService(databaseAnalyticsDataModelConfig);
         }
 
         @Test
-        void batchUpdate__whenContextHasNoOrganization__thenTracesUpdatedHasNone() {
-            var updated = batchUpdateUnder(ctx -> ctx);
+        void batchCreate__thenTracesCreatedLooksTheOrganizationUpWithTheRequestsContext() {
+            var project = Project.builder().id(ID_GENERATOR.generateId())
+                    .name(RandomStringUtils.secure().nextAlphanumeric(10)).build();
+            var trace = Trace.builder().id(ID_GENERATOR.generateId()).projectName(project.name())
+                    .startTime(Instant.now()).build();
+            when(attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(0L));
+            when(projectService.getOrCreate(project.name())).thenReturn(Mono.just(project));
+            when(attachmentStripperService.stripAttachments(any(Trace.class), eq(workspaceId), eq(userName),
+                    eq(project.name()))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+            when(traceDao.batchInsert(any())).thenReturn(Mono.just(1L));
 
-            assertThat(updated.organizationId()).isNull();
+            traceService.create(TraceBatch.builder().traces(List.of(trace)).build())
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var events = ArgumentCaptor.forClass(TracesCreated.class);
+            verify(eventBus).post(events.capture());
+            var created = events.getValue();
+            assertThat(created).usingRecursiveComparison()
+                    .ignoringFields("traceId", "createdAt", "organizationId")
+                    .isEqualTo(TracesCreated.builder()
+                            .traces(List.of(trace.toBuilder().projectId(project.id()).build()))
+                            .workspaceId(workspaceId)
+                            .userName(userName)
+                            .workspaceName("")
+                            .cipxDeviceId("")
+                            .build());
+            assertThat(organizationResolver.lookups()).isZero();
+            StepVerifier.create(created.organizationId()).expectNext(organizationId).verifyComplete();
         }
 
-        private TracesUpdated batchUpdateUnder(Function<Context, Context> organization) {
+        @Test
+        void batchUpdate__thenTracesUpdatedLooksTheOrganizationUpWithTheRequestsContext() {
             var traceId = ID_GENERATOR.generateId();
             var projectId = ID_GENERATOR.generateId();
-            var update = TraceUpdate.builder().projectName("project").build();
+            var update = TraceUpdate.builder().projectName(RandomStringUtils.secure().nextAlphanumeric(10)).build();
+
+            var updated = batchUpdate(traceId, projectId, update, workspaceId);
+
+            assertThat(updated).usingRecursiveComparison()
+                    .ignoringFields("traceId", "createdAt", "organizationId")
+                    .isEqualTo(TracesUpdated.builder()
+                            .projectIds(Set.of(projectId))
+                            .traceIds(Set.of(traceId))
+                            .workspaceId(workspaceId)
+                            .userName(userName)
+                            .traceUpdate(update)
+                            .workspaceName("")
+                            .traceIdToProjectId(Map.of(traceId, projectId))
+                            .build());
+            assertThat(organizationResolver.lookups()).isZero();
+            StepVerifier.create(updated.organizationId()).expectNext(organizationId).verifyComplete();
+        }
+
+        @Test
+        void batchUpdate__whenTheOrganizationIsUnknown__thenTheLookupIsEmpty() {
+            var traceId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var update = TraceUpdate.builder().projectName(RandomStringUtils.secure().nextAlphanumeric(10)).build();
+
+            var updated = batchUpdate(traceId, projectId, update, UUID.randomUUID().toString());
+
+            StepVerifier.create(updated.organizationId()).verifyComplete();
+        }
+
+        @Test
+        void batchUpdate__thenListenersShareOneLookup() {
+            var traceId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var update = TraceUpdate.builder().projectName(RandomStringUtils.secure().nextAlphanumeric(10)).build();
+
+            var lookup = batchUpdate(traceId, projectId, update, workspaceId).organizationId();
+
+            assertThat(List.of(lookup.block(), lookup.block())).containsExactly(organizationId, organizationId);
+            assertThat(organizationResolver.lookups()).isOne();
+        }
+
+        private TracesUpdated batchUpdate(UUID traceId, UUID projectId, TraceUpdate update, String requestWorkspaceId) {
             when(traceDao.getProjectIdsByTraceIds(List.of(traceId))).thenReturn(Mono.just(Map.of(traceId, projectId)));
             when(traceDao.bulkUpdate(Set.of(traceId), update, false)).thenReturn(Mono.empty());
 
             traceService.batchUpdate(TraceBatchUpdate.builder().ids(Set.of(traceId)).update(update).build())
-                    .contextWrite(ctx -> organization.apply(ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, "workspace")))
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, requestWorkspaceId))
                     .block();
 
             var events = ArgumentCaptor.forClass(Object.class);
