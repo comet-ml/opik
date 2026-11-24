@@ -62,8 +62,8 @@ public class TopicsRebuildService implements Managed {
     private final @NonNull TopicAlgorithm algorithm;
     /**
      * The k-means and assign steps: CPU work, {@code topics.build.cpuThreads} at a time, at most
-     * {@code topics.build.cpuQueue} waiting. Reactor caps the queue of each thread, so each gets its share. Disposed
-     * when the application stops.
+     * about {@code topics.build.cpuQueue} waiting. Reactor caps the queue of each thread, so each gets its share,
+     * rounded up. Disposed when the application stops.
      */
     private final @NonNull Scheduler cpu;
 
@@ -81,7 +81,7 @@ public class TopicsRebuildService implements Managed {
         this.workspaceNames = workspaceNames;
         this.algorithm = algorithm;
         var build = config.getBuild();
-        int queuePerThread = Math.max(1, build.getCpuQueue() / build.getCpuThreads());
+        int queuePerThread = Math.ceilDiv(build.getCpuQueue(), build.getCpuThreads());
         this.cpu = Schedulers.newBoundedElastic(build.getCpuThreads(), queuePerThread, "topics-cpu", 60, true);
     }
 
