@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -36,7 +37,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -386,16 +386,19 @@ class FreeFormSqlQueryServiceTest {
         verify(queryLogReader).entries(queryId.getValue(), STANDARD_USER);
     }
 
-    @Test
-    @DisplayName("enforce: a scalar subquery reading a table is rejected before running, with the rewrite")
-    void enforceRejectsScalarReads() {
+    @ParameterizedTest
+    @EnumSource(FreeFormSqlPostRunCheckConfig.Mode.class)
+    @DisplayName("a scalar subquery reading a table is rejected before execution in every mode")
+    void rejectsScalarReadsBeforeExecution(FreeFormSqlPostRunCheckConfig.Mode mode) {
         givenClickHouseReturnsOneRow();
+        inMode(mode);
         givenScalarReadOfSpans();
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().isExactlyInstanceOf(BadRequestException.class)
-                .satisfies(error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse()
-                        .getEntity())).contains("this one reads spans"));
+                .satisfies(error -> assertThat(((WebApplicationException) error).getResponse().getEntity())
+                        .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.SCALAR_SUBQUERY_MESSAGE
+                                .formatted("spans")))));
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
@@ -457,26 +460,10 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
-    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs")
-    void auditRunsScalarReads() {
-        givenClickHouseReturnsOneRow();
-        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
-        givenScalarReadOfSpans();
-
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
-        var order = inOrder(dao);
-        order.verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
-        order.verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("off: neither the scalar subquery gate nor the post-run check runs")
+    @DisplayName("off: a valid query runs without the post-run check")
     void offRunsNoCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.OFF);
-        givenScalarReadOfSpans();
 
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 

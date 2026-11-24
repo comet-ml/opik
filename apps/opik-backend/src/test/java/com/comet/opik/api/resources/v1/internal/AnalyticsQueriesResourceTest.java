@@ -312,6 +312,14 @@ class AnalyticsQueriesResourceTest {
     private Stream<Arguments> allowedQueries() {
         return Stream.of(
                 arguments("plain FROM-less query", "SELECT toJSONString(map('n', '1')) AS result"),
+                arguments("ARRAY JOIN over a literal array", """
+                        SELECT toJSONString(map('n', toString(x))) AS result
+                        FROM (SELECT [1] AS a) ARRAY JOIN a AS x
+                        """),
+                arguments("ARRAY JOIN over a table column", """
+                        SELECT toJSONString(map('n', '1')) AS result
+                        FROM (SELECT count() AS c FROM traces ARRAY JOIN tags AS tag)
+                        """),
                 arguments("metadata-named column currentUser", """
                         SELECT toJSONString(map('n', toString(currentUser))) AS result
                         FROM (SELECT 1 AS currentUser)

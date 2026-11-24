@@ -40,7 +40,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -54,19 +53,16 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * and listed environment or identity functions before execution. Every query is also pre-flighted through
  * {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree restricts table reads to the account's tables
  * and catches function aliases whose AST spelling is not listed, while allowing columns or aliases with a
- * metadata-function name. The same tree is reused for the scalar-subquery check. Execution never runs on a validation
- * failure. The workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row
- * policies, never concatenated into the SQL.
+ * metadata-function name. The tree also rejects scalar subqueries that read tables in every mode. The workspace and
+ * project bounds are sent as ClickHouse server settings consumed by the restrictive row policies.
  *
- * <p>On top of the row policies, a post-run check verifies from the query's {@code system.query_log} entries and its
- * plan that every table it read was read under a row policy ({@link FreeFormSqlPolicyCheck}). A scalar subquery
- * reading a table cannot be shown either way. What both do depends on {@link FreeFormSqlPostRunCheckConfig.Mode}:
+ * <p>The post-run check verifies from the query's {@code system.query_log} entries and plan that every table it read
+ * was read under a row policy ({@link FreeFormSqlPolicyCheck}). Its behavior depends on the configured mode:
  * <ul>
- * <li>{@code off}: neither runs.</li>
- * <li>{@code audit}: a scalar read is reported and the query runs; the check runs after the response is returned and
- * only reports. Nothing either finds, and no failure of either, affects the request.</li>
- * <li>{@code enforce}: a scalar read is rejected before running, with a rewrite the caller can apply; results are
- * returned only once the check passes, and are withheld on a violation, a missing log entry or a failure.</li>
+ * <li>{@code off}: the post-run check is skipped.</li>
+ * <li>{@code audit}: the check reports its findings without withholding results.</li>
+ * <li>{@code enforce}: results are returned only once the check passes, and are withheld on a violation,
+ * a missing log entry or a failure.</li>
  * </ul>
  * Every outcome is counted in {@code opik.free_form_sql.post_run_check}, tagged by mode and outcome.
  */
@@ -125,9 +121,6 @@ public class FreeFormSqlQueryService {
      * table references are rejected in the app even if those grants change.
      */
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
-    private static final String TABLE_QUERY_TREE_PREFIX = "TABLE ";
-    private static final String TABLE_FUNCTION_QUERY_TREE_PREFIX = "TABLE_FUNCTION ";
-    private static final Pattern RESOLVED_TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
     /** Logical tables exposed to each account. Keep in sync with the read-only grants and row policies. */
     private static final Map<FreeFormSqlAccount, Set<String>> ALLOWED_TABLES = Map.of(
             FreeFormSqlAccount.STANDARD, Set.of("spans", "traces", "authored_feedback_scores"),
@@ -135,14 +128,14 @@ public class FreeFormSqlQueryService {
                     "trace_threads", "experiments", "experiment_items", "dataset_items", "dataset_item_versions"));
 
     private static final String FUNCTION_AST_PREFIX = "Function ";
-    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
     /**
      * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
      * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
      * identity out of both the result and the error surface. Names are compared in lowercase so case variants of
      * case-insensitive functions match.
-     * ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such
-     * as {@code current_user} and {@code database} are Identifier nodes, not Function nodes, in EXPLAIN AST.
+     * ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such as
+     * {@code current_user} and {@code database} parse as identifiers, so they are caught on the resolved query tree,
+     * where ClickHouse has turned them into function calls.
      */
     private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
             "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
@@ -266,10 +259,8 @@ public class FreeFormSqlQueryService {
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
                 .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
                 .thenCompose(queryTree -> {
-                    var reads = mode == FreeFormSqlPostRunCheckConfig.Mode.ENFORCE
-                            ? rejectScalarReads(account, queryTree, startMillis)
-                            : FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
-                    return runQuery(account, workspaceId, projectScope, query, reads, queryTree, startMillis);
+                    var reads = rejectScalarReads(account, queryTree, startMillis);
+                    return runQuery(account, workspaceId, projectScope, query, reads, startMillis);
                 });
     }
 
@@ -295,17 +286,6 @@ public class FreeFormSqlQueryService {
                     }
                     return queryTree;
                 });
-    }
-
-    /** Audit the already-resolved tree after the response; no second EXPLAIN is needed. */
-    private FreeFormSqlSubqueries.SubqueryReads auditSubqueryReads(FreeFormSqlAccount account, List<String> tree) {
-        var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
-        if (reads.hasScalar()) {
-            log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), "
-                    + "account '{}'", describe(reads), account);
-            count(CheckOutcome.SCALAR_READ, account);
-        }
-        return reads;
     }
 
     /**
@@ -360,7 +340,7 @@ public class FreeFormSqlQueryService {
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
             String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads,
-            List<String> queryTree, long startMillis) {
+            long startMillis) {
         String queryId = UUID.randomUUID().toString();
         return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query, queryId)
                 .handle((result, error) -> {
@@ -372,8 +352,7 @@ public class FreeFormSqlQueryService {
                 .thenCompose(result -> switch (mode) {
                     case OFF -> CompletableFuture.completedFuture(result);
                     case AUDIT -> {
-                        // After the response, off its path: nothing the check finds or fails on reaches the caller.
-                        audit(account, workspaceId, projectScope, query, queryId, queryTree);
+                        audit(account, workspaceId, projectScope, query, queryId, subqueryReads);
                         yield CompletableFuture.completedFuture(result);
                     }
                     case ENFORCE -> verifyPolicies(account, workspaceId, projectScope, query, queryId, subqueryReads,
@@ -405,10 +384,9 @@ public class FreeFormSqlQueryService {
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
     private void audit(FreeFormSqlAccount account, String workspaceId, String projectScope, String query,
-            String queryId, List<String> queryTree) {
+            String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         try {
-            var reads = auditSubqueryReads(account, queryTree);
-            check(account, workspaceId, projectScope, query, queryId, reads)
+            check(account, workspaceId, projectScope, query, queryId, subqueryReads)
                     .whenComplete((outcome, error) -> {
                         if (error != null) {
                             log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,
@@ -517,38 +495,22 @@ public class FreeFormSqlQueryService {
 
     /** The resolved tree includes implicit system.one for a FROM-less SELECT; explicit reads fail the AST check. */
     private boolean containsForbiddenResolvedTable(FreeFormSqlAccount account, List<String> queryTree) {
-        return queryTree.stream().map(String::stripLeading)
-                .filter(line -> line.startsWith(TABLE_QUERY_TREE_PREFIX)
-                        || line.startsWith(TABLE_FUNCTION_QUERY_TREE_PREFIX))
-                .anyMatch(line -> {
-                    if (line.startsWith(TABLE_FUNCTION_QUERY_TREE_PREFIX)) {
-                        return true;
-                    }
-                    var matcher = RESOLVED_TABLE_NAME.matcher(line);
-                    if (!matcher.find()) {
-                        return true;
-                    }
-                    String table = matcher.group(1);
-                    if (table.equals("system.one")) {
-                        return false;
-                    }
-                    String prefix = database + ".";
-                    return !table.startsWith(prefix)
-                            || !ALLOWED_TABLES.get(account).contains(table.substring(prefix.length()));
-                });
+        return queryTree.stream()
+                .anyMatch(line -> FreeFormSqlSubqueries.isTableFunctionNode(line)
+                        || FreeFormSqlSubqueries.isTableNode(line) && FreeFormSqlSubqueries.tableName(line)
+                                .filter(table -> isAllowedTable(account, table)).isEmpty());
+    }
+
+    private boolean isAllowedTable(FreeFormSqlAccount account, String table) {
+        String prefix = database + ".";
+        return table.equals("system.one")
+                || table.startsWith(prefix) && ALLOWED_TABLES.get(account).contains(table.substring(prefix.length()));
     }
 
     private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
         return nodeLabels.stream().map(String::stripLeading)
                 .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
                 .map(label -> firstTokenAfterPrefix(label, FUNCTION_AST_PREFIX).toLowerCase(Locale.ROOT))
-                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
-    }
-
-    private static boolean containsForbiddenMetadataIdentifierNode(List<String> nodeLabels) {
-        return nodeLabels.stream().map(String::stripLeading)
-                .filter(label -> label.startsWith(IDENTIFIER_AST_PREFIX))
-                .map(label -> firstTokenAfterPrefix(label, IDENTIFIER_AST_PREFIX).toLowerCase(Locale.ROOT))
                 .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 

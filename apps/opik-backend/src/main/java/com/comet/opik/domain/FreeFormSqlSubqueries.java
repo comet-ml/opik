@@ -39,6 +39,8 @@ class FreeFormSqlSubqueries {
     private static final Set<String> SOURCE_PARENTS = Set.of("JOIN TREE", "LEFT TABLE EXPRESSION",
             "RIGHT TABLE EXPRESSION", "TABLE EXPRESSION");
     private static final String STORED_SCALAR = "__getScalar";
+    private static final Pattern TABLE_NODE = Pattern.compile("^TABLE id: \\d+(?:, |$)");
+    private static final Pattern TABLE_FUNCTION_NODE = Pattern.compile("^TABLE_FUNCTION id: \\d+(?:, |$)");
     private static final Pattern TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
     private static final Pattern FUNCTION_NAME = Pattern
             .compile("^FUNCTION id: \\d+(?=, ).*?, function_name: ([^,]+)");
@@ -46,6 +48,20 @@ class FreeFormSqlSubqueries {
 
     static Optional<String> resolvedFunctionName(String line) {
         var matcher = FUNCTION_NAME.matcher(line.stripLeading());
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    /** A table read, not a section label such as the {@code TABLE EXPRESSION} an ARRAY JOIN prints. */
+    static boolean isTableNode(String line) {
+        return TABLE_NODE.matcher(line.stripLeading()).find();
+    }
+
+    static boolean isTableFunctionNode(String line) {
+        return TABLE_FUNCTION_NODE.matcher(line.stripLeading()).find();
+    }
+
+    static Optional<String> tableName(String line) {
+        var matcher = TABLE_NAME.matcher(line.stripLeading());
         return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 

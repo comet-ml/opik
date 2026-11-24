@@ -20,7 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Free-form SQL ClickHouse function inventory")
 class FreeFormSqlFunctionInventoryTest {
 
-    // Update only after reviewing the function and alias differences reported by this test.
+    // Bump only after reviewing the functions and aliases this test reports for a new newClickHouseContainer()
+    // version: add any that expose identity or infrastructure to FORBIDDEN_FUNCTIONS in FreeFormSqlQueryService. A
+    // new alias of a listed function needs no entry, since the resolved query tree reports its canonical name.
     private static final String REVIEWED_CLICKHOUSE_VERSION = "26.3.62.3";
     private static final String REVIEWED_CI_IMAGE = "clickhouse/clickhouse-server:" + REVIEWED_CLICKHOUSE_VERSION
             + "-alpine";
