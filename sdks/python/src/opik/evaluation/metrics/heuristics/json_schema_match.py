@@ -117,37 +117,47 @@ def _format_path(path: Any) -> str:
     return result
 
 
-# Formats defined by the JSON Schema drafts. ``jsonschema`` checks some of them
-# only when an optional package is installed (for example ``date-time`` needs
-# ``rfc3339-validator``) and otherwise skips them without a word. Formats outside
-# this set are custom annotations, which the specification says to ignore.
-_STANDARD_FORMATS = frozenset(
+# Formats each draft defines, keyed by the name of its validator class.
+# ``jsonschema`` checks some of them only when an optional package is installed
+# (for example ``date-time`` needs ``rfc3339-validator``) and otherwise skips
+# them without a word. Any other format, including one that only another draft
+# defines (``color`` under Draft 2020-12, ``uuid`` under Draft 4), is a custom
+# annotation for that draft, which the specification says to ignore.
+_DRAFT3_FORMATS = frozenset(
     {
         "date-time",
         "date",
         "time",
-        "duration",
-        "email",
-        "idn-email",
-        "hostname",
-        "idn-hostname",
-        "ipv4",
-        "ipv6",
-        "uri",
-        "uri-reference",
-        "iri",
-        "iri-reference",
-        "uuid",
-        "uri-template",
-        "json-pointer",
-        "relative-json-pointer",
         "regex",
-        # Draft 3
-        "host-name",
-        "ip-address",
         "color",
+        "uri",
+        "email",
+        "ip-address",
+        "ipv6",
+        "host-name",
     }
 )
+_DRAFT4_FORMATS = frozenset({"date-time", "email", "hostname", "ipv4", "ipv6", "uri"})
+_DRAFT6_FORMATS = _DRAFT4_FORMATS | {"uri-reference", "uri-template", "json-pointer"}
+_DRAFT7_FORMATS = _DRAFT6_FORMATS | {
+    "date",
+    "time",
+    "idn-email",
+    "idn-hostname",
+    "iri",
+    "iri-reference",
+    "relative-json-pointer",
+    "regex",
+}
+_DRAFT2019_FORMATS = _DRAFT7_FORMATS | {"duration", "uuid"}
+_STANDARD_FORMATS_BY_DRAFT: Dict[str, FrozenSet[str]] = {
+    "Draft3Validator": _DRAFT3_FORMATS,
+    "Draft4Validator": _DRAFT4_FORMATS,
+    "Draft6Validator": _DRAFT6_FORMATS,
+    "Draft7Validator": _DRAFT7_FORMATS,
+    "Draft201909Validator": _DRAFT2019_FORMATS,
+    "Draft202012Validator": _DRAFT2019_FORMATS,
+}
 # Keywords whose values are data, not subschemas, so a "format" inside them is
 # not a format assertion.
 _DATA_KEYWORDS = frozenset({"const", "enum", "default", "examples"})
@@ -216,10 +226,10 @@ class JsonSchemaMatch(base_metric.BaseMetric):
             ``date-time``, ...). Defaults to False, matching the JSON Schema
             specification, where ``format`` is an annotation by default. Some
             formats need optional packages (``pip install
-            "jsonschema[format-nongpl]"``); if the schema uses a standard format
-            that cannot be checked, ``MetricComputationError`` is raised instead
-            of skipping it. Custom formats are ignored, as the specification
-            requires.
+            "jsonschema[format-nongpl]"``); if the schema uses a format that its
+            draft defines but that cannot be checked, ``MetricComputationError``
+            is raised instead of skipping it. Other formats are custom
+            annotations and are ignored, as the specification requires.
         name: The name of the metric. Defaults to "json_schema_match_metric".
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases
@@ -271,15 +281,17 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 f"{exception.message}"
             ) from exception
         if self._check_formats:
-            checkable = _format_checker_for(validator_class).checkers
-            unchecked = sorted(
-                (_formats_used(schema) & _STANDARD_FORMATS) - set(checkable)
+            standard = _STANDARD_FORMATS_BY_DRAFT.get(
+                validator_class.__name__, frozenset()
             )
+            checkable = _format_checker_for(validator_class).checkers
+            unchecked = sorted((_formats_used(schema) & standard) - set(checkable))
             if unchecked:
                 raise MetricComputationError(
                     "JsonSchemaMatch: check_formats=True, but these formats "
                     f"cannot be checked: {', '.join(unchecked)}. Install the "
-                    'optional packages with `pip install "jsonschema[format-nongpl]"`.'
+                    'optional packages with `pip install "jsonschema[format-nongpl]"` '
+                    "(some formats also need a recent jsonschema)."
                 )
 
     def score(

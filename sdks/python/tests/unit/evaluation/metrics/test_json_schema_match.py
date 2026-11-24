@@ -314,6 +314,57 @@ def test_json_schema_match__standard_format_that_cannot_be_checked__raises(
     assert _metric(schema=schema).score(output='{"at": "yesterday"}').value == 1.0
 
 
+@pytest.mark.parametrize(
+    "dialect,fmt",
+    [
+        ("https://json-schema.org/draft/2020-12/schema", "color"),
+        ("https://json-schema.org/draft/2020-12/schema", "host-name"),
+        ("https://json-schema.org/draft/2020-12/schema", "ip-address"),
+        ("http://json-schema.org/draft-04/schema#", "uuid"),
+        ("http://json-schema.org/draft-07/schema#", "duration"),
+    ],
+)
+def test_json_schema_match__format_from_another_draft__is_ignored(
+    monkeypatch, dialect, fmt
+) -> None:
+    # Even with no format checkable at all, a format the schema's draft does not
+    # define is a custom annotation, so it neither raises nor fails the output.
+    monkeypatch.setattr(
+        json_schema_match,
+        "_format_checker_for",
+        lambda validator_class: json_schema_match.jsonschema.FormatChecker(formats=[]),
+    )
+    schema = {"$schema": dialect, "type": "string", "format": fmt}
+
+    metric = _metric(schema=schema, check_formats=True)
+
+    assert metric.score(output='"anything"').value == 1.0
+    assert _metric(check_formats=True).score(output='"x"', schema=schema).value == 1.0
+
+
+@pytest.mark.parametrize(
+    "dialect,fmt",
+    [
+        ("http://json-schema.org/draft-03/schema#", "color"),
+        ("http://json-schema.org/draft-04/schema#", "hostname"),
+        ("https://json-schema.org/draft/2019-09/schema", "duration"),
+        ("https://json-schema.org/draft/2020-12/schema", "uuid"),
+    ],
+)
+def test_json_schema_match__format_of_the_schema_draft_that_cannot_be_checked__raises(
+    monkeypatch, dialect, fmt
+) -> None:
+    monkeypatch.setattr(
+        json_schema_match,
+        "_format_checker_for",
+        lambda validator_class: json_schema_match.jsonschema.FormatChecker(formats=[]),
+    )
+    schema = {"$schema": dialect, "type": "string", "format": fmt}
+
+    with pytest.raises(MetricComputationError, match=f"cannot be checked: {fmt}"):
+        _metric(schema=schema, check_formats=True)
+
+
 def test_json_schema_match__custom_format_and_format_in_data__are_ignored() -> None:
     schema = {
         "type": "object",
