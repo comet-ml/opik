@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000121_add_long_window_read_at_to_topic_vector_watermarks
+--changeset yaroslavb:000122_add_long_window_read_at_to_topic_vector_watermarks
 --comment: topic_vector_watermarks.long_window_read_at: the daily long-window pass's progress per workspace (OPIK-8981)
 
 -- long_window_read_at: the start of the tick whose long-window pass last read the workspace completely, so a pass that

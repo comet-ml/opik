@@ -767,6 +767,16 @@ from .value_entry_source import ValueEntrySource
 from .video_url import VideoUrl
 from .video_url_public import VideoUrlPublic
 from .video_url_write import VideoUrlWrite
+from .view import View
+from .view_area import ViewArea
+from .view_input import ViewInput
+from .view_input_kind import ViewInputKind
+from .view_version import ViewVersion
+from .view_version_author import ViewVersionAuthor
+from .view_version_page import ViewVersionPage
+from .view_version_summary import ViewVersionSummary
+from .view_version_summary_author import ViewVersionSummaryAuthor
+from .view_version_type import ViewVersionType
 from .webhook import Webhook
 from .webhook_examples import WebhookExamples
 from .webhook_public import WebhookPublic
@@ -1506,6 +1516,16 @@ __all__ = [
     "VideoUrl",
     "VideoUrlPublic",
     "VideoUrlWrite",
+    "View",
+    "ViewArea",
+    "ViewInput",
+    "ViewInputKind",
+    "ViewVersion",
+    "ViewVersionAuthor",
+    "ViewVersionPage",
+    "ViewVersionSummary",
+    "ViewVersionSummaryAuthor",
+    "ViewVersionType",
     "Webhook",
     "WebhookExamples",
     "WebhookPublic",
