@@ -27,7 +27,7 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 | Work | Call | Runs on |
 |---|---|---|
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
-| CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel` |
+| CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel`, or the entry point's pool |
 | Per-item blocking or CPU in a `Flux` | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
 | Light work (map one row, build a DTO) | nothing | wherever it lands |
 
@@ -88,6 +88,14 @@ return reader.readWindow(workspaceId, projectId)
 
 - `parallel` is for short CPU work. Long CPU work (seconds) must also be bounded by a concurrency cap, because
   `parallel` has one thread per core and also runs every timer.
+- An entry point whose CPU work needs its own pool (a job or subscriber with a bounded workers scheduler) routes it
+  there once, and every `Offload.cpu` step upstream follows. Callers that set nothing, such as an API, use `parallel`:
+
+```java
+// ✅ GOOD - the subscriber picks the pool once; the services stay scheduler-free
+return topicsRunService.discover(run)
+        .contextWrite(context -> Offload.cpuOn(context, workersScheduler));
+```
 - Never use `boundedElastic` for long CPU work to make it fit. Never `publishOn` mid-chain to move one step: it moves
   every step after it.
 
@@ -116,9 +124,10 @@ source there, so a source that blocks at subscription (`Mono.create`, `fromCalla
 
 ## Rule 6: Services Don't Create Schedulers
 
-Use `Offload`, which uses the shared schedulers: `boundedElastic()` for blocking, `parallel()` for CPU. Pools sized for a purpose
-(subscriber consumer and workers, inference pools) live in infrastructure, are bounded, and are named so thread dumps
-show them. A service never creates, sizes or passes a scheduler.
+Use `Offload`, which uses the shared schedulers: `boundedElastic()` for blocking, `parallel()` for CPU. Pools sized for
+a purpose (subscriber consumer and workers, inference pools) live in infrastructure, are bounded, and are named so
+thread dumps show them. Only an entry point picks a special pool, through `Offload.cpuOn`. A service never creates,
+sizes or passes a scheduler.
 
 ## Review Checklist
 
