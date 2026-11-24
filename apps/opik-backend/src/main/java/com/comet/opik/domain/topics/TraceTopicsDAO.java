@@ -63,17 +63,19 @@ public class TraceTopicsDAO {
      * filters apply before dedup), so a topic's count is what the list shows for it. Routing reads the latest row
      * instead ({@code TraceDAO.getLoggingSourceIds}). Every topic row counts, run rows and arrival rows.
      *
-     * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join, so the query streams by
-     * trace id instead of holding a state per trace. Its memory still grows with the traces it covers, so
+     * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join on that whole key, so the
+     * join reuses the order instead of sorting either side again, and the query streams by trace id instead of holding
+     * a state per trace. Both sides hold one workspace and project, so only the trace id tells rows apart; the other
+     * two keys are in the join for the order. Its memory still grows with the traces it covers, so
      * {@link #countByTopic} runs it once per {@code topics.build.read.countSlice} of the window, and
      * {@link #countByTopicAndDay} once per UTC day.
      */
     private static final String COUNT_BY_TOPIC = """
             SELECT t.topic_id AS topic_id, count() AS traces
             FROM (
-                SELECT trace_id, topic_id
+                SELECT workspace_id, project_id, trace_id, topic_id
                 FROM (
-                    SELECT trace_id, topic_id, is_deleted
+                    SELECT workspace_id, project_id, trace_id, topic_id, is_deleted
                     FROM trace_topics
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -85,7 +87,7 @@ public class TraceTopicsDAO {
                 WHERE is_deleted = 0
             ) AS t
             INNER JOIN (
-                SELECT id
+                SELECT workspace_id, project_id, id
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -95,7 +97,7 @@ public class TraceTopicsDAO {
                 AND visibility_mode = :logs_visibility_mode
                 ORDER BY workspace_id, project_id, id
                 LIMIT 1 BY workspace_id, project_id, id
-            ) AS tr ON t.trace_id = tr.id
+            ) AS tr ON t.workspace_id = tr.workspace_id AND t.project_id = tr.project_id AND t.trace_id = tr.id
             GROUP BY topic_id
             SETTINGS join_algorithm = 'full_sorting_merge', max_threads = <max_threads>,
                 max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
