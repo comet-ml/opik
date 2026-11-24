@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -131,9 +132,6 @@ public class TopicsRebuildService implements Managed {
     }
 
     /** A failed step, with the run's stats up to and including it, so the failed outcome logs them. */
-    /** The context key of the run's stats when a step is cancelled, for the timeout's failure. */
-    private static final String IN_FLIGHT = "topics-run-stats";
-
     private static final class StepFailure extends RuntimeException {
 
         private final transient RunStats stats;
@@ -179,32 +177,29 @@ public class TopicsRebuildService implements Managed {
     }
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
-        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-        var latest = new AtomicReference<>(RunStats.of(run));
-        return build(run, latest.get(), windowTraces)
-                .flatMap(buildStep -> timed(run, buildStep.stats(), "save",
+        // topics.build.projectTimeout bounds the steps up to the save; each step gets what is left of it.
+        long deadline = Schedulers.parallel().now(TimeUnit.MILLISECONDS)
+                + config.getBuild().getProjectTimeout().toMilliseconds();
+        return build(run, deadline, RunStats.of(run), windowTraces)
+                .flatMap(buildStep -> timed(run, deadline, buildStep.stats(), "save",
                         store.save(run, buildStep.value().topics(), buildStep.value().otherVectors()))
                         .map(kept -> new Step<>(kept.value() ? buildStep.value() : buildStep.value().discarded(),
                                 kept.stats())))
-                .contextWrite(context -> context.put(IN_FLIGHT, latest))
-                // The timeout cancels the step in flight first, which leaves its stats in latest.
-                .timeout(timeout, Mono.error(() -> new StepFailure(latest.get(), new TopicsRunException(
-                        RunError.TIMEOUT, "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout)))))
                 .flatMap(saveStep -> saved(run, saveStep.stats(), saveStep.value()))
                 .onErrorResume(error -> failed(run, error));
     }
 
-    private Mono<Step<Built>> build(TopicRun run, RunStats start, long windowTraces) {
-        return timed(run, start, "window", reader.read(run, windowTraces)).flatMap(read -> {
+    private Mono<Step<Built>> build(TopicRun run, long deadline, RunStats start, long windowTraces) {
+        return timed(run, deadline, start, "window", reader.read(run, windowTraces)).flatMap(read -> {
             var window = read.value();
             var windowed = read.stats().with(window.stats()).with(windowStats(window));
-            return timed(run, windowed, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
+            return timed(run, deadline, windowed, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
                     config.getAlgorithm().getMaxTopics())))
                     .flatMap(clustered -> {
                         var clustering = clustered.value();
-                        return timed(run, clustered.stats().with(clustering.stats()), "llm",
+                        return timed(run, deadline, clustered.stats().with(clustering.stats()), "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .flatMap(answered -> timed(run,
+                                .flatMap(answered -> timed(run, deadline,
                                         answered.stats().with(answered.value().stats()), "assign",
                                         cpu(() -> clustering.finish(answered.value().value()))));
                     })
@@ -320,7 +315,7 @@ public class TopicsRebuildService implements Managed {
      * trace_topics, which the labelling pass gives.
      */
     private Mono<Outcome> failed(TopicRun run, Throwable failure) {
-        // A step's failure and the timeout carry the stats up to them; a cancel comes from outside the steps.
+        // A step's failure, the timeout included, carries the stats up to it; a cancel comes from outside the steps.
         var stats = failure instanceof StepFailure step ? step.stats : RunStats.of(run);
         var error = failure instanceof StepFailure ? failure.getCause() : failure;
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
@@ -373,20 +368,26 @@ public class TopicsRebuildService implements Managed {
     }
 
     /** The phase's value with {@code stats} plus its duration; a failure carries them too. */
-    private <T> Mono<Step<T>> timed(TopicRun run, RunStats stats, String phase, Mono<T> action) {
-        return Mono.deferContextual(context -> {
+    /** Fails with {@code timeout} when {@code deadline}, in the scheduler's milliseconds, passes first. */
+    private <T> Mono<Step<T>> timed(TopicRun run, long deadline, RunStats stats, String phase, Mono<T> action) {
+        return Mono.defer(() -> {
             long started = System.nanoTime();
-            return failingWith(stats, action)
+            var left = Duration.ofMillis(deadline - Schedulers.parallel().now(TimeUnit.MILLISECONDS));
+            var bounded = left.isPositive()
+                    ? action.timeout(left, Mono.error(this::timedOut))
+                    : Mono.<T>error(timedOut());
+            return failingWith(stats, bounded)
                     .map(value -> new Step<>(value, stats.timed(phase, record(run, phase, started))))
                     .onErrorMap(StepFailure.class,
                             error -> new StepFailure(error.stats.timed(phase, record(run, phase, started)),
                                     error.getCause()))
-                    .doOnCancel(() -> {
-                        var cancelledAt = stats.timed(phase, record(run, phase, started));
-                        context.<AtomicReference<RunStats>>getOrEmpty(IN_FLIGHT)
-                                .ifPresent(latest -> latest.set(cancelledAt));
-                    });
+                    .doOnCancel(() -> record(run, phase, started));
         });
+    }
+
+    private TopicsRunException timedOut() {
+        return new TopicsRunException(RunError.TIMEOUT, "the run outlasted topics.build.projectTimeout '%s'"
+                .formatted(config.getBuild().getProjectTimeout()));
     }
 
     private Duration record(TopicRun run, String phase, long started) {
