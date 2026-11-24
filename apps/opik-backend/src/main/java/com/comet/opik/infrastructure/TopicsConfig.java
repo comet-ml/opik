@@ -7,6 +7,8 @@ import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +28,97 @@ import java.util.stream.Collectors;
  */
 @Data
 public class TopicsConfig {
+
+    @Valid @NotNull @JsonProperty
+    private AlgorithmConfig algorithm;
+
+    /**
+     * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
+     * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
+     */
+    @Data
+    public static class AlgorithmConfig {
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int minGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int maxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int textsPerGroup;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int kmeansMaxIterations;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int kmeansRestarts;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int authorFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int authorBudget;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMinExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMaxExamples;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double assignMinCosine;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int nightlyMinCandidate;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMinGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMaxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyTextsPerGroup;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int nightlyFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyExamples;
+
+        @JsonProperty
+        @Min(1) @Max(365) private int recentDays;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double retireShare;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int retireNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
+            return nightlyMinGroups <= nightlyMaxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
+            return nightlyFrequent <= nightlyExamples;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
+            return minGroups <= maxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.authorMinExamples must not be above authorMaxExamples") public boolean isAuthorExamplesOrdered() {
+            return authorMinExamples <= authorMaxExamples;
+        }
+    }
 
     @JsonProperty
     private boolean enabled;
@@ -72,6 +165,16 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
+
+        /**
+         * How far before its watermark a workspace's read starts: covers a done status that becomes visible after a
+         * later status was read, such as one written to a lagging replica or before its output row. A status later than
+         * this is left to the daily pass. At most {@code window}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration watermarkOverlap;
 
         /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
@@ -121,14 +224,22 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
+        @AssertTrue(message = "topics.vectors.watermarkOverlap must not be longer than topics.vectors.window") public boolean isWatermarkOverlapValid() {
+            return watermarkOverlap == null || window == null
+                    || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
+        }
+
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
+        // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
+        // shorter budget would read nothing.
         @JsonIgnore
-        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+        @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
-                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+                    || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
         }
 
         @JsonIgnore
@@ -154,7 +265,11 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
+        /** ClickHouse threads per read, so the tick stays a small share of the server. */
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** Cut to the time left in the tick. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;
@@ -170,5 +285,14 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration sliceSize;
+
+        /**
+         * The backfill's discovery and vector count read in slices of this much creation time. Their memory stays
+         * small, so wide slices: each slice re-reads the granules across its edges.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration discoverySliceSize;
     }
 }

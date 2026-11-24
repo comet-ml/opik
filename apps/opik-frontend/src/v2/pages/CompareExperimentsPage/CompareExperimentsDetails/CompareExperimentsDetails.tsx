@@ -13,7 +13,10 @@ import DateTag from "@/shared/DateTag/DateTag";
 import NavigationTag from "@/shared/NavigationTag";
 import ExperimentTag from "@/shared/ExperimentTag/ExperimentTag";
 import FeedbackScoresList from "@/v2/pages-shared/FeedbackScoresList/FeedbackScoresList";
-import { formatPassRate } from "@/shared/DataTableCells/PassRateCell";
+import {
+  formatPassRate,
+  formatPassRatePercent,
+} from "@/shared/DataTableCells/PassRateCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import {
   FeedbackScoreDisplay,
@@ -22,6 +25,7 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { isTestSuiteExperiment } from "@/lib/experiments";
+import { EXPERIMENTS_PAGE_TAB } from "@/constants/experiments";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
 import ExperimentIdButton from "@/v2/pages/CompareExperimentsPage/ExperimentIdButton";
 
@@ -95,6 +99,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <div className="flex min-w-0 items-center gap-2">
           <BackButton
             to="/$workspaceName/projects/$projectId/experiments"
+            search={
+              experiment
+                ? {
+                    tab: isTestSuiteExperiment(experiment)
+                      ? EXPERIMENTS_PAGE_TAB.TEST_SUITES
+                      : EXPERIMENTS_PAGE_TAB.DATASETS,
+                  }
+                : undefined
+            }
             tooltip="Back to experiments"
           />
           <h1 className="comet-body-accented truncate break-words">{title}</h1>
@@ -181,7 +194,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
                   }`}
                 />
                 <div className="comet-body-s-accented truncate text-muted-slate">
-                  {Math.round(experiment.pass_rate * 100)}% pass rate
+                  {formatPassRatePercent(experiment.pass_rate)} pass rate
                 </div>
               </Tag>
             </TooltipWrapper>

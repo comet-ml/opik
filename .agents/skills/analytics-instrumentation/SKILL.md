@@ -14,6 +14,7 @@ Examples: `opik_onboarding_agent_name_submitted`, `opik_eval_suite_created`, `op
 ## Frontend Events
 
 ### Files
+
 - **Tracking utility**: `apps/opik-frontend/src/lib/analytics/tracking.ts` (mode-agnostic; safe to import from any project code)
 - **Segment init**: `apps/opik-frontend/src/plugins/comet/analytics/index.ts` (comet-only)
 - **Plugin init**: `apps/opik-frontend/src/plugins/comet/init.tsx` (comet-only)
@@ -21,6 +22,7 @@ Examples: `opik_onboarding_agent_name_submitted`, `opik_eval_suite_created`, `op
 ### Adding a new event
 
 1. Add the event name to the `OpikEvent` const in `tracking.ts`:
+
 ```typescript
 export const OpikEvent = {
   ONBOARDING_AGENT_NAME_SUBMITTED: "opik_onboarding_agent_name_submitted",
@@ -28,6 +30,7 @@ export const OpikEvent = {
 ```
 
 2. Call `trackEvent` from the component or hook where the action happens:
+
 ```typescript
 import { trackEvent, OpikEvent } from "@/lib/analytics/tracking";
 
@@ -37,6 +40,7 @@ trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
 ```
 
 ### How it works
+
 - `trackEvent()` safely no-ops when Segment isn't loaded (OSS mode)
 - `opik_` prefix is enforced at runtime as a safety net
 - `OPIK_ANALYTICS_ENVIRONMENT` is injected into event properties automatically by `trackEvent()`
@@ -46,11 +50,13 @@ trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
 ## Backend Events
 
 ### Files
+
 - **Service**: `apps/opik-backend/src/main/java/com/comet/opik/infrastructure/bi/AnalyticsService.java`
 - **Config**: `apps/opik-backend/src/main/java/com/comet/opik/infrastructure/AnalyticsConfig.java`
 - **YAML config**: `apps/opik-backend/config.yml` (under `analytics:`)
 
 ### API
+
 `AnalyticsService` exposes two overloads:
 
 ```java
@@ -62,6 +68,7 @@ void trackEvent(String eventType, Map<String, String> properties, String identit
 - 3-arg takes an explicit identity — use it any time the call executes outside a request scope (reactive schedulers, background threads, event listeners).
 
 ### How it works
+
 - `trackEvent()` no-ops when `OPIK_ANALYTICS_ENABLED` is `false` (default).
 - `opik_` prefix is auto-prepended if missing — but keep the prefix in code for grep-ability.
 - `environment` property is auto-injected from `OPIK_ANALYTICS_ENVIRONMENT`.
@@ -119,6 +126,7 @@ If you already depend on a `Schedulers.boundedElastic().schedule(() -> { ... })`
 ## Python SDK Events
 
 ### Files
+
 `sdks/python/src/opik/analytics/` — `api.py` (public surface), `rules.py` (when
 reporting is allowed), `worker.py` (background thread), `comet_stats.py` (the HTTP
 call). Config lives in `sdks/python/src/opik/config.py`, prefixed `analytics_`.
@@ -236,6 +244,7 @@ arguments; adding one never changes the API.
    to appear in the adoption tiles, which group on the name.
 
 ### How it works
+
 - `track_event()` never raises, never blocks on I/O, and no-ops when reporting is off.
 - **Calls Opik makes into its own API are not reported.** `evaluate_threads` calls
   `search_threads`, `get_or_create_dataset` calls `get_dataset`, the CLI calls both —
