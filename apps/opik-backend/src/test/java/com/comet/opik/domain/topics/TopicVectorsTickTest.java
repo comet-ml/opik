@@ -354,6 +354,49 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a long-window pass that takes two ticks reads each workspace's long window once: the second tick "
+            + "reads only the workspace the first left at the cap, and drains the pass")
+    void longWindowAcrossTicks() {
+        config().setMaxTracesPerTick(2);
+        var capped = enabledWorkspace();
+        var cappedProject = ID_GENERATOR.generateId();
+        var read = enabledWorkspace();
+        var readProject = ID_GENERATOR.generateId();
+        // Drained projects: their old statuses are the long-window pass's, not the backfill's.
+        markDrained(capped, cappedProject);
+        markDrained(read, readProject);
+        var cappedTraces = oldStatuses(capped, cappedProject, 3);
+        var readTraces = oldStatuses(read, readProject, 1);
+
+        makeLongWindowPassDue();
+        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
+        assertThat(tick()).isEqualTo(passTick.written(3).build());
+
+        // Found only by a long read of the workspace the first tick already read in full.
+        var lateTraces = oldStatuses(read, readProject, 1);
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(passTick.written(1).build());
+        // Drained: not due again for longWindowInterval.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+
+        assertVectors(tables.vectors(capped, cappedTraces), expectedVectors(capped, cappedProject, cappedTraces, 1));
+        assertVectors(tables.vectors(read, readTraces), expectedVectors(read, readProject, readTraces, 1));
+        assertThat(tables.vectors(read, lateTraces)).isEmpty();
+    }
+
+    /** {@code count} traces with output rows and done statuses written two days ago, older than the short window. */
+    private List<UUID> oldStatuses(String workspaceId, UUID projectId, int count) {
+        var traceIds = IntStream.range(0, count).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1)).toList())
+                .block();
+        for (int i = 0; i < count; i++) {
+            tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
+                    Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
+        }
+        return traceIds;
+    }
+
+    @Test
     @DisplayName("a workspace's old traces are embedded project by project in one tick, and each project is marked "
             + "drained with its counts; a new trace of a drained project is the next tick's workspace read's")
     void backfillByProject() {

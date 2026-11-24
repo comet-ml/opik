@@ -11,10 +11,13 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
 
-/** The vectors tick's per-workspace watermark, {@code topic_vector_watermarks}. */
+/** The vectors tick's per-workspace watermark and long-window pass progress, {@code topic_vector_watermarks}. */
 interface TopicVectorWatermarkDAO {
 
-    @SqlQuery("SELECT workspace_id, watermark FROM topic_vector_watermarks WHERE workspace_id IN (<workspaceIds>)")
+    @SqlQuery("""
+            SELECT workspace_id, watermark FROM topic_vector_watermarks
+            WHERE workspace_id IN (<workspaceIds>) AND watermark IS NOT NULL
+            """)
     @KeyColumn("workspace_id")
     @ValueColumn("watermark")
     Map<String, Instant> watermarks(@BindList("workspaceIds") Collection<String> workspaceIds);
@@ -24,4 +27,18 @@ interface TopicVectorWatermarkDAO {
             ON DUPLICATE KEY UPDATE watermark = :watermark
             """)
     void set(@Bind("workspaceId") String workspaceId, @Bind("watermark") Instant watermark);
+
+    @SqlQuery("""
+            SELECT workspace_id, long_window_read_at FROM topic_vector_watermarks
+            WHERE workspace_id IN (<workspaceIds>) AND long_window_read_at IS NOT NULL
+            """)
+    @KeyColumn("workspace_id")
+    @ValueColumn("long_window_read_at")
+    Map<String, Instant> longWindowReads(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    @SqlUpdate("""
+            INSERT INTO topic_vector_watermarks (workspace_id, long_window_read_at) VALUES (:workspaceId, :readAt)
+            ON DUPLICATE KEY UPDATE long_window_read_at = :readAt
+            """)
+    void setLongWindowRead(@Bind("workspaceId") String workspaceId, @Bind("readAt") Instant readAt);
 }
