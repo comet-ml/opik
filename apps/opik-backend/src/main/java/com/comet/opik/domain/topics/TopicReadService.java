@@ -32,12 +32,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * The topics read API: a project's topics over the window, the last {@code topics.build.windowDays} UTC days, today
- * included, in one of three states.
+ * included, in one of four states.
  * <ul>
  * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
  * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
- * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has and
- * how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
+ * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has
+ * ({@link #vectorCounts}, cached) and how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
  * failed.</li>
  * <li>{@code ready}: eligible with a saved list; {@link TopicsCounts} folds the counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}, cached by {@link #dayCounts}.</li>
@@ -54,6 +54,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 public class TopicReadService {
 
     static final String DAY_COUNTS_CACHE = "topics_day_counts";
+    static final String VECTOR_COUNTS_CACHE = "topics_vector_counts";
     static final String UNAVAILABLE_MESSAGE = "Topics are unavailable; try again later";
     private static final Duration CLIENT_TIMEOUT_MARGIN = Duration.ofSeconds(2);
 
@@ -116,6 +117,24 @@ public class TopicReadService {
                 .timeout(clientTimeout());
     }
 
+    /**
+     * The traces with a vector in the window of a collecting project, cached for
+     * {@code cacheManager.caches.topics_vector_counts}: only the vectors tick writes vectors, once a
+     * {@code topics.vectors.tickInterval}, so a page that polls progress reads ClickHouse at most that often. The key
+     * holds the window's first instant, so the entry changes at UTC midnight. An error is not cached. Not private: Guice
+     * intercepts the call from {@link #get}.
+     */
+    @Cacheable(name = VECTOR_COUNTS_CACHE, key = "$workspaceId + '-' + $projectId + '-' + $from", returnType = Long.class)
+    public Mono<Long> vectorCounts(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
+            @NonNull Instant to) {
+        var read = config.getRead();
+        return windowDAO.countByProject(workspaceId, Set.of(projectId), from, to, read, read.getBudget().toSeconds())
+                .next()
+                .map(TopicWindowDAO.ProjectCount::traces)
+                .defaultIfEmpty(0L)
+                .timeout(clientTimeout());
+    }
+
     private ProjectTopics read(String workspaceId, UUID projectId) {
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, ZoneOffset.UTC);
@@ -130,14 +149,7 @@ public class TopicReadService {
         var from = startOf(TopicsCounts.windowFrom(today, windowDays));
         var to = startOf(today.plusDays(1));
         if (live.isEmpty()) {
-            var read = config.getRead();
-            return blockUnlessTooLarge(workspaceId, projectId, windowDAO
-                    .countByProject(workspaceId, Set.of(projectId), from, to, read,
-                            read.getBudget().toSeconds())
-                    .next()
-                    .map(TopicWindowDAO.ProjectCount::traces)
-                    .defaultIfEmpty(0L)
-                    .timeout(clientTimeout()))
+            return blockUnlessTooLarge(workspaceId, projectId, vectorCounts(workspaceId, projectId, from, to))
                     .map(vectors -> TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.COLLECTING)
                             .lastRunAt(TopicsCounts.lastRunAt(project))
                             .attempt(TopicsCounts.attempt(project))

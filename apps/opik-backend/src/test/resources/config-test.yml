@@ -953,6 +953,7 @@ cacheManager:
     # survive a single read.
     experiment_compare_target_projects: PT10S
     topics_day_counts: PT5M
+    topics_vector_counts: PT1M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:

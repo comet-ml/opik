@@ -47,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -58,7 +59,7 @@ import static org.mockito.Mockito.when;
  * {@code cacheManager} section of the shipped config.yml, and a cache that keeps JSON as Redis does. The read goes
  * through {@link TopicReadService#get}, so the test also proves that Guice intercepts the service's own call.
  */
-@DisplayName("topics day counts cache")
+@DisplayName("topics read caches")
 class TopicDayCountsCacheTest {
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -70,6 +71,7 @@ class TopicDayCountsCacheTest {
     private TopicDAO topicDAO;
     private TopicProjectDAO projectDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private TopicWindowDAO windowDAO;
     private Topic topic;
     private TopicReadService service;
 
@@ -79,6 +81,7 @@ class TopicDayCountsCacheTest {
         topicDAO = mock(TopicDAO.class);
         projectDAO = mock(TopicProjectDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
+        windowDAO = mock(TopicWindowDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
@@ -106,7 +109,7 @@ class TopicDayCountsCacheTest {
                 bind(TransactionTemplate.class).toInstance(template);
                 bind(TopicWorkspaceService.class).toInstance(workspaces);
                 bind(ProjectService.class).toInstance(mock(ProjectService.class));
-                bind(TopicWindowDAO.class).toInstance(mock(TopicWindowDAO.class));
+                bind(TopicWindowDAO.class).toInstance(windowDAO);
                 bind(TraceTopicsDAO.class).toInstance(traceTopicsDAO);
                 bind(TopicsMetrics.class).toInstance(TopicsMetricsReader.metrics(InMemoryMetricReader.create()));
                 bind(CacheManager.class).toInstance(cache);
@@ -153,6 +156,22 @@ class TopicDayCountsCacheTest {
         assertThat(service.get(WORKSPACE_ID, projectId).totalTraces()).isEqualTo(4L);
 
         verify(traceTopicsDAO, times(2)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any());
+    }
+
+    @Test
+    @DisplayName("two reads of a collecting project count its vectors once, cached for one vectors tick")
+    void collectingCountIsCached() {
+        when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.just(TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(7).build()));
+
+        var first = service.get(WORKSPACE_ID, projectId);
+        var second = service.get(WORKSPACE_ID, projectId);
+
+        verify(windowDAO, times(1)).countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong());
+        assertThat(second).isEqualTo(first);
+        assertThat(second.vectorsInWindow()).isEqualTo(7L);
+        assertThat(cache.ttls.values()).containsExactly(Duration.ofMinutes(1));
     }
 
     @SafeVarargs
@@ -208,7 +227,7 @@ class TopicDayCountsCacheTest {
 
         @Override
         public <T> Mono<T> get(@NonNull String key, @NonNull Class<T> clazz) {
-            throw new UnsupportedOperationException();
+            return Mono.justOrEmpty(values.get(key)).map(json -> JsonUtils.readValue(json, clazz));
         }
 
         @Override

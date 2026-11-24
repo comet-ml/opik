@@ -156,8 +156,9 @@ row as it is.
   labelled yet (a new opt-in), not that there was no traffic.
 - **Cache.** The counts of a `ready` project are kept in Redis for `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION`
   (default 5 minutes), so they can be up to that old: a trace labelled on arrival shows in the counts after at most
-  that time. A saved run, or a new UTC day, starts a new entry at once. The MySQL reads, the `collecting` vector count,
-  `too_large` and errors are not cached.
+  that time. A saved run, or a new UTC day, starts a new entry at once. The `collecting` vector count is kept for
+  `CACHE_MANAGER_TOPICS_VECTOR_COUNTS_DURATION` (default 1 minute, one vectors tick). The MySQL reads, `too_large` and
+  errors are not cached.
 
 ### Reading a project by hand
 

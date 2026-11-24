@@ -1837,6 +1837,10 @@ cacheManager:
     # Description: Cache TTL for the topics read API's counts per topic and day of a ready project. A saved run starts
     # a new entry, so the TTL is how old the counts of traces labelled since can be
     topics_day_counts: ${CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION:-PT5M}
+    # Default: PT1M
+    # Description: Cache TTL for the topics read API's vector count of a collecting project. Only the vectors tick
+    # writes vectors, once a topics.vectors.tickInterval, so keep it at that interval
+    topics_vector_counts: ${CACHE_MANAGER_TOPICS_VECTOR_COUNTS_DURATION:-PT1M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
