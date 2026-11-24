@@ -1,9 +1,9 @@
 package com.comet.opik.domain.topics;
 
+import com.clickhouse.client.ClickHouseException;
 import com.clickhouse.client.api.ServerException;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ProjectTopics;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -147,16 +147,14 @@ class TopicReadServiceTest {
     static Stream<Arguments> guardTrips() {
         return Stream.of(
                 arguments("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158)",
-                        new com.clickhouse.client.ClickHouseException(158, "Limit for rows (controlled by "
+                        new ClickHouseException(158, "Limit for rows (controlled by "
                                 + "'max_rows_to_read' setting) exceeded", null)),
-                arguments("a time limit (159)", new RuntimeException(new ServerException(159, "time limit", 500,
-                        "query-id"))),
-                arguments("a memory limit (241)", new RuntimeException(new ServerException(241, "memory limit", 500,
-                        "query-id"))),
-                arguments("a bytes limit (307)", new RuntimeException(new ServerException(307, "Limit exceeded", 500,
-                        "query-id"))),
-                arguments("a rows-or-bytes limit (396)", new RuntimeException(new ServerException(396,
-                        "Limit exceeded", 500, "query-id"))));
+                arguments("a memory limit (241)",
+                        new RuntimeException(new ClickHouseException(241, "memory limit", null))),
+                arguments("a bytes limit (307)",
+                        new RuntimeException(new ClickHouseException(307, "Limit exceeded", null))),
+                arguments("a rows-or-bytes limit (396)",
+                        new RuntimeException(new ClickHouseException(396, "Limit exceeded", null))));
     }
 
     @ParameterizedTest(name = "{0} of the ready counts is status too_large: a retry fails the same way")
@@ -177,8 +175,7 @@ class TopicReadServiceTest {
     @DisplayName("a guard trip of the collecting count is status too_large, without the collecting fields")
     void collectingGuardTripIsTooLarge() {
         when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
-                .thenReturn(Flux.error(new RuntimeException(new ServerException(241, "memory limit", 500,
-                        "query-id"))));
+                .thenReturn(Flux.error(new RuntimeException(new ClickHouseException(241, "memory limit", null))));
 
         var body = service.get(WORKSPACE_ID, projectId);
 
@@ -186,17 +183,23 @@ class TopicReadServiceTest {
         assertThat(body.vectorsInWindow()).isNull();
     }
 
-    @Test
-    @DisplayName("the client timeout is a 503 without Retry-After, status error")
-    void clientTimeoutIs503WithoutRetryAfter() {
-        readyWithCounts(Flux.error(new TimeoutException("Did not observe any item")));
+    static Stream<Arguments> busy() {
+        return Stream.of(
+                arguments("a time limit (159)", new RuntimeException(
+                        new ClickHouseException(159, "time limit", null))),
+                arguments("the spent budget", new TopicsReadErrors.BudgetExceededException("spent")),
+                arguments("the client timeout", new TimeoutException("Did not observe any item")));
+    }
+
+    @ParameterizedTest(name = "{0} is a 503 with Retry-After, status error")
+    @MethodSource("busy")
+    void busyIs503WithRetryAfter(String name, Throwable error) {
+        readyWithCounts(Flux.error(error));
 
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> {
-                    assertThat(exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
-                    assertThat(exception.getResponse().getEntity()).isEqualTo(
-                            new ErrorMessage(List.of(TopicReadService.UNAVAILABLE_MESSAGE)));
-                });
+                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
+                        exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
+                        .isEqualTo(TopicsReadErrors.RETRY_AFTER_SECONDS));
         assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }

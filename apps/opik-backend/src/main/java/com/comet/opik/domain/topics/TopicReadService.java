@@ -1,16 +1,12 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.cache.Cacheable;
-import com.google.common.base.Throwables;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.ServiceUnavailableException;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -26,7 +22,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -41,11 +36,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * failed.</li>
  * <li>{@code ready}: eligible with a saved list; {@link TopicsCounts} folds the counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}, cached by {@link #dayCounts}.</li>
- * <li>{@code too_large}: a ClickHouse read of the collecting or ready state tripped a {@code topics.read} guard. A
- * retry fails the same way, so it is a state of the project, not an error, and it carries no {@code Retry-After}.</li>
+ * <li>{@code too_large}: a ClickHouse read of the collecting or ready state tripped a {@code topics.read} rows, bytes
+ * or memory guard. A retry fails the same way, so it is a state of the project, not an error.</li>
  * </ul>
- * The reads run under {@code topics.read}: its guards, and its budget for the request's ClickHouse time. The client
- * timeout is the budget and two seconds, so only a hang reaches it, answered 503 without {@code Retry-After}.
+ * The reads run under {@code topics.read}: its guards, and its budget for the request's ClickHouse time. A time trip,
+ * the spent budget or the client timeout (the budget and two seconds) answers 503 with {@code Retry-After}.
  * MySQL is read first, in one transaction: the project's {@code topic_projects} row and its topics. Then ClickHouse. There is no lock: a run that saves in between makes some of the request's rows count
  * as Other.
  */
@@ -55,7 +50,6 @@ public class TopicReadService {
 
     static final String DAY_COUNTS_CACHE = "topics_day_counts";
     static final String VECTOR_COUNTS_CACHE = "topics_vector_counts";
-    static final String UNAVAILABLE_MESSAGE = "Topics are unavailable; try again later";
     private static final Duration CLIENT_TIMEOUT_MARGIN = Duration.ofSeconds(2);
 
     private final TopicsConfig config;
@@ -189,25 +183,23 @@ public class TopicReadService {
     }
 
     /**
-     * Empty on a guard trip ({@link TopicsReadErrors#isGuardTrip}). The client timeout is a 503 without
-     * {@code Retry-After}; any other error stays as it is.
+     * Empty on a size guard trip ({@link TopicsReadErrors#isTooLarge}). A time trip, the spent budget or the client
+     * timeout is {@link TopicsReadErrors#busy}; any other error stays as it is.
      */
     private <T> Optional<T> blockUnlessTooLarge(String workspaceId, UUID projectId, Mono<T> read) {
         try {
             return Optional.ofNullable(read.block());
         } catch (RuntimeException exception) {
-            if (TopicsReadErrors.isGuardTrip(exception)) {
+            if (TopicsReadErrors.isTooLarge(exception)) {
                 log.warn("Topics read is too large, workspace_id '{}', project_id '{}'", workspaceId, projectId,
                         exception);
                 return Optional.empty();
             }
-            if (Throwables.getCausalChain(exception).stream().noneMatch(TimeoutException.class::isInstance)) {
+            if (!TopicsReadErrors.isBusy(exception)) {
                 throw exception;
             }
-            log.warn("Topics read timed out, workspace_id '{}', project_id '{}'", workspaceId, projectId, exception);
-            throw new ServiceUnavailableException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                    .entity(new ErrorMessage(List.of(UNAVAILABLE_MESSAGE)))
-                    .build());
+            log.warn("Topics read is busy, workspace_id '{}', project_id '{}'", workspaceId, projectId, exception);
+            throw TopicsReadErrors.busy();
         }
     }
 
