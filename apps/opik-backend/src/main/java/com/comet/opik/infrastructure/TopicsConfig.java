@@ -35,6 +35,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
 
+    @Valid @NotNull @JsonProperty
+    private StorageConfig storage;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -254,6 +257,18 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration countSlice;
+    }
+
+    /** The topics state's MySQL writes. */
+    @Data
+    public static class StorageConfig {
+
+        /**
+         * Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays bounded
+         * however many projects went at once.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int deleteBatchSize;
     }
 
     /**
