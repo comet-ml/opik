@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -82,24 +83,24 @@ class TopicVectorBackfillerTest {
         var newer = new Slice(now.minus(7, ChronoUnit.DAYS), null);
         var older = new Slice(now.minus(14, ChronoUnit.DAYS), now.minus(7, ChronoUnit.DAYS));
         when(dao.slices(any())).thenReturn(List.of(newer, older));
-        // Every read takes 5s of the tick.
+        // Every read takes 6s of the tick.
         when(dao.findBackfillProjects(eq(workspaceId), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
-            clock.advance(java.time.Duration.ofSeconds(5));
+            clock.advance(java.time.Duration.ofSeconds(6));
             return Flux.just(new BackfillProject(projectId, 2, now));
         });
         when(dao.countTracesWithVectorsByProject(eq(workspaceId), any(), any(), any(), anyLong()))
                 .thenAnswer(invocation -> {
-                    clock.advance(java.time.Duration.ofSeconds(5));
+                    clock.advance(java.time.Duration.ofSeconds(6));
                     return Mono.just(Map.of(projectId, 1L));
                 });
         var lowerBound = now.minus(7, ChronoUnit.DAYS);
-        // A read starts with at least 1s plus the 1s embed timeout left: 11s fit two reads.
-        var tickBudget = java.time.Duration.ofSeconds(11);
+        // A read starts with half the budget (11s) plus 1s left and ends by the half: 22s fit two reads, of 11s and 5s.
+        var tickBudget = java.time.Duration.ofSeconds(22);
         var first = TickBudget.of(now, tickBudget, clock);
 
         backfiller.discover(List.of(workspaceId), lowerBound, older.from(), first).block();
 
-        verify(dao).findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, newer, 10);
+        verify(dao).findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, newer, 11);
         verify(dao).findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, older, 5);
         verify(dao, never()).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
         verify(backfills, never()).discovered(any(), any(), any(), any());
@@ -122,10 +123,13 @@ class TopicVectorBackfillerTest {
         setup.slices(4);
         setup.readsTake(java.time.Duration.ofSeconds(5));
 
-        // 20s: reads start at 20s, 15s and 10s left; at 5s less than half is left.
+        // 20s: a read starts with half (10s) plus 1s left, and is cut to end at the half: reads start at 20s and 15s
+        // left, given 10s and 5s; at 10s left none starts.
         setup.backfiller.discover(List.of(setup.workspaceId), now, now, setup.budget(20)).block();
 
-        verify(setup.dao, times(3)).findBackfillProjects(any(), any(), any(), any(), anyLong());
+        verify(setup.dao).findBackfillProjects(any(), any(), any(), any(), eq(10L));
+        verify(setup.dao).findBackfillProjects(any(), any(), any(), any(), eq(5L));
+        verify(setup.dao, times(2)).findBackfillProjects(any(), any(), any(), any(), anyLong());
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
     }
 
@@ -155,7 +159,7 @@ class TopicVectorBackfillerTest {
         setup.slices(2);
         var inProgress = UUID.randomUUID().toString();
         setup.readsTake(java.time.Duration.ofSeconds(5));
-        // 11s: two of its four reads, then less than half is left.
+        // 11s: one of its four reads, then less than half is left.
         setup.backfiller.discover(List.of(inProgress), now, now, setup.budget(11)).block();
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
         setup.readsTake(java.time.Duration.ZERO);
@@ -250,6 +254,29 @@ class TopicVectorBackfillerTest {
 
         assertThat(result.written()).isZero();
         verify(setup.metrics).backfillStuck(workspace);
+    }
+
+    @Test
+    @DisplayName("a backfill read the tick budget cut short is not counted as stuck")
+    void budgetCutReadNotStuck() {
+        var setup = new Setup();
+        // Traces past one slice's count: the read goes slice by slice, and the budget ends after the first.
+        var project = backfill(TopicVectorBackfiller.ONE_SLICE_MAX_TRACES + 1, now).toBuilder()
+                .workspaceId(setup.workspaceId).build();
+        setup.config.getVectors().getFind().setSliceSize(Duration.days(1));
+        var candidate = new Candidate(setup.workspaceId, project.projectId(), UUID.randomUUID(), now, 1, now,
+                "summary");
+        when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
+            setup.clock.advance(java.time.Duration.ofSeconds(48));
+            return Flux.just(candidate);
+        });
+        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
+                TickResult.skipped(SkipReason.INVALID_VECTOR, 1), Set.of(VectorKey.of(candidate)))));
+        var workspace = TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId);
+
+        setup.backfiller.backfill(workspace, List.of(project), setup.window(10), setup.budget(50)).block();
+
+        verify(setup.metrics, never()).backfillStuck(any());
         verify(setup.backfills).record(List.of());
     }
 
