@@ -1,0 +1,719 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.extension.ResponseTransformerV2;
+import com.github.tomakehurst.wiremock.http.HttpHeader;
+import com.github.tomakehurst.wiremock.http.HttpHeaders;
+import com.github.tomakehurst.wiremock.http.Response;
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
+import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
+import com.redis.testcontainers.RedisContainer;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.domain.ailabels.AiLabelTaskLoader.CLASSPATH_DIRECTORY;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.assertVectors;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.doneStatus;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.expectedVectors;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.outputLabel;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.rawVector;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+
+/**
+ * The topic vectors tick against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/embed} stubbed in
+ * WireMock by {@link EmbedStub}, which answers every input with a deterministic vector of its text. Tests seed
+ * {@code ai_label_status} and {@code ai_labels} directly and call {@link TopicVectorsTickService#tick(Instant)}.
+ */
+@DisplayName("topic vectors tick")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
+class TopicVectorsTickTest {
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final String EMBED_PATH = "/v1/embed";
+
+    private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+    // Not reused: the opt-in read spans the whole table, and the traces cutover is destructive.
+    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer(false, network);
+    private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(false, network,
+            zookeeper);
+
+    private final EmbedStub embedStub = new EmbedStub();
+    private final WireMockServer wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(redis, mysql, zookeeper, clickHouse).join();
+        wireMock = new WireMockServer(wireMockConfig().dynamicPort().extensions(embedStub));
+        wireMock.start();
+        MigrationUtils.runMysqlDbMigration(mysql);
+        PostCutoverTraces.migrate(clickHouse);
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
+                .jdbcUrl(mysql.getJdbcUrl())
+                .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
+                        DATABASE_NAME))
+                .runtimeInfo(new WireMockRuntimeInfo(wireMock))
+                .redisUrl(redis.getRedisURI())
+                .customConfigs(List.of(
+                        new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
+                        new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
+                        new CustomConfig("aiLabels.enabled", "true"),
+                        new CustomConfig("inference.url", wireMock.baseUrl()),
+                        new CustomConfig("inference.credential", "test-credential"),
+                        new CustomConfig("aiLabels.tasksDir", writeTasks().toString()),
+                        new CustomConfig("aiLabels.tickInterval", "1h"),
+                        new CustomConfig("aiLabels.healthInterval", "1h"),
+                        new CustomConfig("topics.enabled", "true"),
+                        new CustomConfig("topics.vectors.tickBudget", "30s")))
+                .build());
+    }
+
+    private OpikConfiguration opikConfig;
+    private TransactionTemplate template;
+    private TransactionTemplateAsync templateAsync;
+    private TopicVectorsTickService tickService;
+    private TopicVectorsDAO vectorsDAO;
+    private AiLabelStatusDAO statusDAO;
+    private AiLabelsDAO labelsDAO;
+    private TopicWorkspaceService workspaceService;
+    private TopicVectorsTables tables;
+    private TopicsConfig.VectorsConfig defaults;
+
+    @BeforeAll
+    void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
+            @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
+            @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
+            @Jit TopicWorkspaceService workspaceService) {
+        this.opikConfig = opikConfig;
+        this.template = template;
+        this.templateAsync = templateAsync;
+        this.tickService = tickService;
+        this.vectorsDAO = vectorsDAO;
+        this.statusDAO = statusDAO;
+        this.labelsDAO = labelsDAO;
+        this.workspaceService = workspaceService;
+        this.tables = new TopicVectorsTables(template, templateAsync);
+        var vectors = config();
+        this.defaults = new TopicsConfig.VectorsConfig();
+        defaults.setTickBudget(vectors.getTickBudget());
+        defaults.setEmbedBatchSize(vectors.getEmbedBatchSize());
+        defaults.setEmbedTimeout(vectors.getEmbedTimeout());
+        defaults.setMaxTracesPerTick(vectors.getMaxTracesPerTick());
+    }
+
+    @AfterAll
+    void afterAll() {
+        wireMock.stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        mysql.stop();
+        network.close();
+    }
+
+    @BeforeEach
+    void setUp() {
+        template.inTransaction(WRITE, handle -> {
+            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
+            return null;
+        });
+        opikConfig.getTopics().setEnabledWorkspaces("");
+        wireMock.resetAll();
+        wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
+        embedStub.reset();
+    }
+
+    @AfterEach
+    void tearDown() {
+        config().setTickBudget(defaults.getTickBudget());
+        config().setEmbedBatchSize(defaults.getEmbedBatchSize());
+        config().setEmbedTimeout(defaults.getEmbedTimeout());
+        config().setMaxTracesPerTick(defaults.getMaxTracesPerTick());
+    }
+
+    @Test
+    @DisplayName("a workspace needs both opt-ins: the topics list alone or ai-labels alone gets no vectors, every "
+            + "embed call is an enabled workspace's with cache off, and taking it off either one drops it on the next "
+            + "tick")
+    void topicsOptIn() {
+        var both = enabledWorkspace();
+        var other = enabledWorkspace();
+        var aiLabelsOnly = workspaceWith(true, false);
+        var listedOnly = workspaceWith(false, true);
+        var listedWithoutAiLabelsRow = ID_GENERATOR.generateId().toString();
+        setListed(listedWithoutAiLabelsRow, true);
+        var projectId = ID_GENERATOR.generateId();
+        var labeled = new LinkedHashMap<String, List<UUID>>();
+        for (var workspaceId : List.of(both, other, aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
+            labeled.put(workspaceId, labelTraces(workspaceId, projectId, 2, 1));
+        }
+
+        assertThat(workspaceService.enabledWorkspaceIds()).containsExactlyInAnyOrder(both, other);
+
+        assertThat(tick()).isEqualTo(TickResult.written(4));
+
+        for (var workspaceId : List.of(both, other)) {
+            assertVectors(tables.vectors(workspaceId, labeled.get(workspaceId)),
+                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
+        }
+        for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
+            assertThat(tables.vectors(workspaceId, labeled.get(workspaceId))).isEmpty();
+        }
+        var sent = wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
+        assertThat(sent).allSatisfy(request -> {
+            var body = json(request.getBodyAsString());
+            assertThat(List.of(both, other)).contains(body.path("org_id").asText());
+            assertThat(body.path("cache").asBoolean(true)).isFalse();
+        });
+
+        // Taken off the list (a deploy) or off ai-labels (no deploy): the next tick drops it; its vectors stay.
+        setListed(both, false);
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(other, false, "test");
+            return null;
+        });
+        var later = Map.of(both, labelTraces(both, projectId, 2, 1), other, labelTraces(other, projectId, 2, 1));
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        for (var workspaceId : List.of(both, other)) {
+            assertThat(tables.vectors(workspaceId, later.get(workspaceId))).isEmpty();
+            assertVectors(tables.vectors(workspaceId, labeled.get(workspaceId)),
+                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
+        }
+        assertThat(workspaceService.enabledWorkspaceIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a trace id reused in two projects gets each project's own summary")
+    void traceIdReusedInTwoProjects() {
+        var workspaceId = enabledWorkspace();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var traceId = labelTraces(workspaceId, first, 1, 1).getFirst();
+        // The same trace id in another project, with another summary (the text depends on the task version).
+        label(workspaceId, second, List.of(traceId), 2);
+
+        assertThat(tick()).isEqualTo(TickResult.written(2));
+
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, first, traceId, 1), vector(workspaceId, second, traceId, 2)));
+    }
+
+    @Test
+    @DisplayName("a 429 on the second chunk: the first chunk is written and the watermark stays behind the second, "
+            + "which the next tick completes, moving the watermark to its start")
+    void throttledSecondChunk() {
+        config().setEmbedBatchSize(10);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 15, 1);
+        embedStub.throttleCall = 2;
+
+        // MySQL keeps microseconds.
+        var first = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(first).block())
+                .isEqualTo(new TickResult(10, Map.of(SkipReason.EMBED_FAILED, 5)));
+        assertThat(countRows(workspaceId)).isEqualTo(10);
+        assertThat(watermark(workspaceId)).isBefore(first);
+
+        var second = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(second).block()).isEqualTo(TickResult.written(5));
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(watermark(workspaceId)).isEqualTo(second);
+    }
+
+    private Instant watermark(String workspaceId) {
+        return workspaceService.vectorsWatermarks(List.of(workspaceId)).get(workspaceId);
+    }
+
+    @Test
+    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk is "
+            + "still sent, and the watermark moves past the refused traces")
+    void rejectedChunk() {
+        config().setEmbedBatchSize(2);
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 4, 1);
+        embedStub.fail(workspaceId, 400, "{\"error\":{\"code\":\"invalid_request\",\"message\":\"m\"}}");
+
+        // MySQL keeps microseconds.
+        var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var result = tickService.tick(start).block();
+
+        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(2);
+        assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_FAILED, 4));
+        assertThat(watermark(workspaceId)).isEqualTo(start);
+    }
+
+    @Test
+    @DisplayName("an embed timeout writes nothing and escapes nothing: its traces are embed_failed")
+    void embedTimeout() {
+        config().setEmbedTimeout(io.dropwizard.util.Duration.milliseconds(500));
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 4, 1);
+        embedStub.delay = Duration.ofSeconds(3);
+
+        assertThat(tick()).isEqualTo(TickResult.skipped(SkipReason.EMBED_FAILED, 4));
+        assertThat(countRows(workspaceId)).isZero();
+        // WireMock journals a request only after the stub's delay ends, after this test. Wait for it, so the entry
+        // cannot land after the next test's resetAll and show up in that test's journal.
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))))
+                        .hasSize(embedStub.calls.get()));
+    }
+
+    @Test
+    @DisplayName("the find guards reach the window read: max_rows_to_read 1 trips it and the tick writes and skips "
+            + "nothing; the default reads it")
+    void findGuardsReachTheWindowRead() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 3, 1);
+        var find = config().getFind();
+        var maxRowsToRead = find.getMaxRowsToRead();
+        find.setMaxRowsToRead(1);
+        TickResult tripped;
+        try {
+            // ClickHouse's TOO_MANY_ROWS: the guard, not some other failure, fails the read.
+            assertThatThrownBy(() -> vectorsDAO.findUnvectored(TopicVectorsFind.builder()
+                    .workspaceId(workspaceId)
+                    .task(TopicEmbedding.SUMMARY_TASK)
+                    .lowerBound(Instant.now().minus(1, ChronoUnit.HOURS))
+                    .upperBound(Instant.now())
+                    .createdAfter(Instant.EPOCH)
+                    .limit(100)
+                    .maxExecutionSeconds(10)
+                    .build()).collectList().block())
+                    .hasStackTraceContaining("Code: 158");
+            tripped = tick();
+        } finally {
+            find.setMaxRowsToRead(maxRowsToRead);
+        }
+
+        assertThat(tripped).isEqualTo(TickResult.EMPTY);
+        assertThat(countRows(workspaceId)).isZero();
+
+        assertThat(tick()).isEqualTo(TickResult.written(3));
+    }
+
+    @Test
+    @DisplayName("done statuses without an output row or with a blank summary are not found or counted; the rest are "
+            + "written")
+    void unusableSummaries() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var withoutOutput = ID_GENERATOR.generateId();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, withoutOutput, 1))).block();
+        var blank = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, " \t\n"))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, blank, 1))).block();
+        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
+
+        assertThat(tick()).isEqualTo(TickResult.written(2));
+        assertThat(tables.vectors(workspaceId, List.of(withoutOutput, blank))).isEmpty();
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("a zero vector costs only its own trace: it is counted as invalid_vector, the rest of the chunk is "
+            + "written")
+    void invalidVector() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var zero = ID_GENERATOR.generateId();
+        embedStub.zeroText = "a summary the stub embeds as zeros";
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, zero, 1, embedStub.zeroText))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, zero, 1))).block();
+        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
+
+        assertThat(tick()).isEqualTo(new TickResult(2, Map.of(SkipReason.INVALID_VECTOR, 1)));
+        assertThat(tables.vectors(workspaceId, List.of(zero))).isEmpty();
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("two task versions of one trace give two rows, both kept")
+    void twoTaskVersions() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 1))).block();
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+
+        // A relabel: the new version's label, then its status, as ai-labels writes them.
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 2))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 2))).block();
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, projectId, traceId, 1), vector(workspaceId, projectId, traceId, 2)));
+    }
+
+    @Test
+    @DisplayName("with a cap of 5,000, one tick writes 5,000 of a project's 20,000 traces, oldest status first, four "
+            + "ticks write all, and a fifth neither writes nor embeds")
+    void cap() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        // Four batches of 5,000, labeled in this order. Each batch's ids are generated after the next one's, so trace id
+        // order is the reverse of status order: the ticks can only follow status order if they sort by updated_at.
+        var batches = new ArrayList<List<UUID>>();
+        for (int i = 0; i < 4; i++) {
+            batches.addFirst(IntStream.range(0, 5_000).mapToObj(j -> ID_GENERATOR.generateId()).toList());
+        }
+        for (var batch : batches) {
+            label(workspaceId, projectId, batch, 1);
+        }
+
+        // Trace ids, not whole vectors: a read of 20,000 trace ids would pass ClickHouse's max_query_size.
+        var written = new HashSet<UUID>();
+        for (var batch : batches) {
+            assertThat(tick()).isEqualTo(TickResult.written(5_000));
+            written.addAll(batch);
+            assertThat(Set.copyOf(writtenTraceIds(workspaceId))).isEqualTo(written);
+        }
+
+        assertThat(countRows(workspaceId)).isEqualTo(20_000);
+        int calls = embedStub.calls.get();
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(embedStub.calls.get()).isEqualTo(calls);
+    }
+
+    static Stream<Arguments> backOffs() {
+        return Stream.of(
+                arguments(429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}"),
+                // Refusals of the workspace itself, not of the inputs: every later chunk would get the same answer.
+                arguments(401, "{\"error\":{\"code\":\"unauthorized\",\"message\":\"m\"}}"),
+                arguments(403, "{\"error\":{\"code\":\"org_not_allowed\",\"message\":\"m\"}}"),
+                // An unknown code and no retryable flag.
+                arguments(503, "{\"error\":{\"code\":\"something_new\",\"message\":\"m\"}}"));
+    }
+
+    @ParameterizedTest(name = "status {0}")
+    @MethodSource("backOffs")
+    @DisplayName("the cap is per workspace, and a 429, a 401, a 403, or a 5xx with an unknown code and no retryable "
+            + "flag, backs off only its workspace after one call")
+    void perWorkspaceCapAndBackOff(int status, String body) {
+        config().setMaxTracesPerTick(4);
+        config().setEmbedBatchSize(2);
+        var throttled = enabledWorkspace();
+        var healthy = enabledWorkspace();
+        var throttledProject = ID_GENERATOR.generateId();
+        var healthyProject = ID_GENERATOR.generateId();
+        var throttledTraces = labelTraces(throttled, throttledProject, 6, 1);
+        var healthyTraces = labelTraces(healthy, healthyProject, 6, 1);
+        embedStub.fail(throttled, status, body);
+
+        var result = tick();
+
+        assertThat(embedStub.callsFor(throttled)).isOne();
+        assertThat(result).isEqualTo(new TickResult(4, Map.of(SkipReason.EMBED_FAILED, 4)));
+        assertVectors(tables.vectors(healthy, healthyTraces),
+                expectedVectors(healthy, healthyProject, oldestFour(healthyTraces), 1));
+        assertThat(tables.vectors(throttled, throttledTraces)).isEmpty();
+
+        embedStub.reset();
+        assertThat(tick()).isEqualTo(TickResult.written(6));
+        assertVectors(tables.vectors(throttled, throttledTraces),
+                expectedVectors(throttled, throttledProject, oldestFour(throttledTraces), 1));
+        assertVectors(tables.vectors(healthy, healthyTraces),
+                expectedVectors(healthy, healthyProject, healthyTraces, 1));
+    }
+
+    @Test
+    @DisplayName("a tick that runs out of budget starts no chunk with less than the embed timeout left, counts the rest "
+            + "as over_budget, and the next tick continues")
+    void budget() {
+        config().setEmbedBatchSize(10);
+        config().setTickBudget(io.dropwizard.util.Duration.seconds(2));
+        config().setEmbedTimeout(io.dropwizard.util.Duration.milliseconds(500));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 100, 1);
+        embedStub.delay = Duration.ofMillis(300);
+
+        var first = tick();
+
+        assertThat(first.written()).isPositive().isLessThan(100);
+        assertThat(first)
+                .isEqualTo(new TickResult(first.written(), Map.of(SkipReason.OVER_BUDGET, 100 - first.written())));
+        assertThat(embedStub.calls.get() * 10).isEqualTo(first.written());
+
+        embedStub.delay = Duration.ZERO;
+        config().setTickBudget(defaults.getTickBudget());
+        var second = tick();
+
+        assertThat(second).isEqualTo(TickResult.written(100 - first.written()));
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    private TickResult tick() {
+        return tickService.tick(Instant.now()).block();
+    }
+
+    /**
+     * Answers {@code /v1/embed} with {@link TopicVectorsFixtures#rawVector} of each input, or zeros for
+     * {@link #zeroText}; can throttle one call, delay every call, or fail every call of one workspace.
+     */
+    static final class EmbedStub implements ResponseTransformerV2 {
+
+        static final String NAME = "embed-stub";
+
+        final AtomicInteger calls = new AtomicInteger();
+        private final Map<String, AtomicInteger> callsByOrg = new ConcurrentHashMap<>();
+        volatile int throttleCall;
+        volatile Duration delay = Duration.ZERO;
+        volatile String zeroText;
+        private volatile String failOrg;
+        private volatile int failStatus;
+        private volatile String failBody;
+
+        void reset() {
+            calls.set(0);
+            callsByOrg.clear();
+            throttleCall = 0;
+            delay = Duration.ZERO;
+            zeroText = null;
+            failOrg = null;
+        }
+
+        /** Answers every call for {@code orgId} with {@code status} and {@code body}. */
+        void fail(String orgId, int status, String body) {
+            failStatus = status;
+            failBody = body;
+            failOrg = orgId;
+        }
+
+        int callsFor(String orgId) {
+            return callsByOrg.getOrDefault(orgId, new AtomicInteger()).get();
+        }
+
+        @Override
+        public Response transform(Response response, ServeEvent serveEvent) {
+            int call = calls.incrementAndGet();
+            var request = json(serveEvent.getRequest().getBodyAsString());
+            var orgId = request.path("org_id").asText();
+            callsByOrg.computeIfAbsent(orgId, key -> new AtomicInteger()).incrementAndGet();
+            if (!delay.isZero()) {
+                Mono.delay(delay).block();
+            }
+            var json = new HttpHeaders(new HttpHeader("Content-Type", "application/json"));
+            if (call == throttleCall) {
+                return Response.Builder.like(response).but().status(429).headers(json)
+                        .body("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"m\",\"retryable\":true}}")
+                        .build();
+            }
+            if (orgId.equals(failOrg)) {
+                return Response.Builder.like(response).but().status(failStatus).headers(json).body(failBody).build();
+            }
+            var body = InferenceJson.MAPPER.createObjectNode();
+            body.put("request_id", "r").put("cache_hit", false).put("latency_ms", 1);
+            body.putObject("usage").put("input_tokens", 1).put("output_tokens", 0);
+            var result = body.putObject("result");
+            result.put("dimensions", TopicEmbedding.DIMENSIONS);
+            var embeddings = result.putArray("embeddings");
+            for (var input : request.path("inputs")) {
+                var text = input.asText();
+                var raw = text.equals(zeroText) ? new float[TopicEmbedding.DIMENSIONS] : rawVector(text);
+                var vector = embeddings.addArray();
+                for (float value : raw) {
+                    vector.add(value);
+                }
+            }
+            return Response.Builder.like(response).but().status(200).headers(json).body(body.toString()).build();
+        }
+
+        @Override
+        public String getName() {
+            return NAME;
+        }
+
+        @Override
+        public boolean applyGlobally() {
+            return false;
+        }
+    }
+
+    private TopicsConfig.VectorsConfig config() {
+        return opikConfig.getTopics().getVectors();
+    }
+
+    private String enabledWorkspace() {
+        return workspaceWith(true, true);
+    }
+
+    /** Enabled in ai_label_workspaces or not, and listed in topics.enabledWorkspaces or not. */
+    private String workspaceWith(boolean aiLabels, boolean topics) {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, aiLabels, "test");
+            return null;
+        });
+        if (topics) {
+            setListed(workspaceId, true);
+        }
+        return workspaceId;
+    }
+
+    /** Adds the workspace to, or removes it from, topics.enabledWorkspaces, as a Helm change would. */
+    private void setListed(String workspaceId, boolean listed) {
+        var topics = opikConfig.getTopics();
+        var ids = new TreeSet<>(topics.enabledWorkspaceIds());
+        if (listed) {
+            ids.add(workspaceId);
+        } else {
+            ids.remove(workspaceId);
+        }
+        topics.setEnabledWorkspaces(String.join(",", ids));
+    }
+
+    private List<UUID> labelTraces(String workspaceId, int count, int taskVersion) {
+        return labelTraces(workspaceId, ID_GENERATOR.generateId(), count, taskVersion);
+    }
+
+    /** {@code count} traces labeled as ai-labels writes them: the output rows, then the done statuses. */
+    private List<UUID> labelTraces(String workspaceId, UUID projectId, int count, int taskVersion) {
+        var traceIds = IntStream.range(0, count).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        label(workspaceId, projectId, traceIds, taskVersion);
+        return traceIds;
+    }
+
+    private void label(String workspaceId, UUID projectId, List<UUID> traceIds, int taskVersion) {
+        tables.project(workspaceId, projectId);
+        labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, taskVersion))
+                .toList()).block();
+        statusDAO.insert(traceIds.stream().map(traceId -> doneStatus(workspaceId, projectId, traceId, taskVersion))
+                .toList()).block();
+    }
+
+    /**
+     * The four of one {@link #labelTraces} call's traces a cap of 4 takes: its statuses are one insert, so they share
+     * {@code updated_at}, and the window read's tie-break is the trace id.
+     */
+    private static List<UUID> oldestFour(List<UUID> traceIds) {
+        return traceIds.stream().sorted(Comparator.comparing(UUID::toString)).limit(4).toList();
+    }
+
+    private List<UUID> writtenTraceIds(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Flux
+                .from(connection.createStatement("""
+                        SELECT DISTINCT trace_id FROM topic_vectors WHERE workspace_id = :workspace_id
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("trace_id", String.class))))
+                .collectList())
+                .block();
+    }
+
+    private long countRows(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("""
+                        SELECT count() AS cnt FROM (
+                            SELECT trace_id, is_deleted FROM topic_vectors WHERE workspace_id = :workspace_id
+                            ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
+                            LIMIT 1 BY workspace_id, project_id, trace_id, task_version)
+                        WHERE is_deleted = 0
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                .block();
+    }
+
+    private static JsonNode json(String body) {
+        try {
+            return InferenceJson.MAPPER.readTree(body.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    private static Path writeTasks() {
+        try (var bundled = TopicVectorsTickTest.class.getClassLoader()
+                .getResourceAsStream(CLASSPATH_DIRECTORY + "/trace_summary.yaml")) {
+            var summary = new String(bundled.readAllBytes(), StandardCharsets.UTF_8)
+                    .replaceFirst("(?m)^applies_from: .*$", "applies_from: 2020-01-01T00:00:00Z");
+            var directory = Files.createTempDirectory("topics-tasks");
+            Files.writeString(directory.resolve("trace_summary.yaml"), summary);
+            return directory;
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+}

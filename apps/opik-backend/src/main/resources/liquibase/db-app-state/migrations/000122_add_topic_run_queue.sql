@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000119_add_topic_run_queue
+--changeset yaroslavb:000122_add_topic_run_queue
 --comment: Topics runs across pods: queued and cancelling attempts, their deadline, heartbeat and cancel reason (OPIK-8987)
 
 -- Nothing writes topic_projects' attempt columns yet, so no row holds a value the new ENUMs lose on rollback.

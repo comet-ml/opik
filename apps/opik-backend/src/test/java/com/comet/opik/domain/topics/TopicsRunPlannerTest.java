@@ -16,8 +16,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,7 +38,7 @@ class TopicsRunPlannerTest {
 
         assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, night, true).block())
                 .isInstanceOf(ServiceUnavailableException.class);
-        verify(store).dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull());
+        verify(store).dropUnclaimed(workspaceId, projectId, runId);
     }
 
     @Test
@@ -72,7 +70,7 @@ class TopicsRunPlannerTest {
         when(store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD))
                 .thenReturn(Mono.just(Optional.of(runId)));
         when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
-        when(store.dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull())).thenReturn(Mono.just(dropped));
+        when(store.dropUnclaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(dropped));
         when(store.isClaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(claimed));
         return new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), workspaces, store,
                 mock(TopicsRunReconciler.class), candidates, publisher, new TopicsBackfillGate(CONFIG));
