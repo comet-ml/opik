@@ -46,7 +46,6 @@ class TopicVectorsMetrics {
     private final LongCounter readFailures;
     private final LongCounter workspacesNotRead;
     private final LongCounter longWindowMissed;
-    private final LongCounter backfillStuck;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
 
@@ -77,12 +76,6 @@ class TopicVectorsMetrics {
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed_total")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
                         + "rows the short window missed, by workspace; should stay near zero")
-                .build();
-        this.backfillStuck = meter.counterBuilder("topics.vectors.backfill.stuck_total")
-                .setDescription(
-                        "Backfill reads that came back full and wrote nothing, by workspace: every trace on the "
-                                + "page can never get a vector, so the project's next read returns the same page; should stay "
-                                + "at zero")
                 .build();
         this.embedDuration = meter.histogramBuilder("topics.vectors.embed.duration_seconds").setUnit("s")
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
@@ -135,10 +128,6 @@ class TopicVectorsMetrics {
         if (vectors > 0) {
             longWindowMissed.add(vectors, workspace.attributes());
         }
-    }
-
-    void backfillStuck(@NonNull Workspace workspace) {
-        backfillStuck.add(1, workspace.attributes());
     }
 
     void readFailure(@NonNull String phase, @NonNull Workspace workspace, @NonNull Throwable error) {

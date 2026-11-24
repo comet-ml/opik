@@ -376,11 +376,11 @@ class TopicVectorBackfiller {
      * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
      * its candidates were left for a later tick ({@link TopicVectorWriter.ChunkWrite#leftForLater}). No progress when there is nothing to record:
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
-     * was left and vectors were written, so another read now finds the next ones.
+     * was left and some got a vector or a status row, so another read now finds the next ones.
      *
-     * <p>A read can return keys an earlier turn of the tick settled: a refused input or an invalid vector has no row,
-     * and a replica behind the insert does not see the new rows yet. They are not embedded again; a read that returns
-     * only those writes nothing and ends the project's turns.
+     * <p>A read can return keys an earlier turn of the tick settled: a replica behind the insert does not see the new
+     * vector and status rows yet. They are not embedded again; a read that returns only those writes nothing and ends
+     * the project's turns.
      */
     private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, TopicBackfill project, TopicVectorsFind window,
             TickBudget budget, Set<VectorKey> settledBefore) {
@@ -402,24 +402,18 @@ class TopicVectorBackfiller {
                                 var result = written.result();
                                 boolean cut = written.leftForLater(candidates);
                                 boolean drained = read.complete() && !cut;
+                                // A page of only traces that got a status row moves on too: the next read leaves
+                                // them out.
+                                boolean more = !read.complete() && !cut && !written.settled().isEmpty();
                                 if (!drained && result.written() == 0) {
-                                    // Full: the read stopped at the limit, not for want of time.
-                                    if (read.candidates().size() >= window.limit() && !cut
-                                            && !candidates.isEmpty()) {
-                                        metrics.backfillStuck(workspace);
-                                        log.warn("Topic vectors backfill read came back full of traces that can "
-                                                + "never get a vector, the project does not advance, workspace '{}', "
-                                                + "project '{}', traces '{}'", workspaceId, project.projectId(),
-                                                candidates.size());
-                                    }
-                                    return new Turn(result, Optional.empty(), false, written.settled());
+                                    return new Turn(result, Optional.empty(), more, written.settled());
                                 }
                                 return new Turn(result, Optional.of(TopicBackfillProgress.builder()
                                         .workspaceId(workspaceId)
                                         .projectId(project.projectId())
                                         .drainedAt(drained ? budget.start() : null)
                                         .written(result.written())
-                                        .build()), !read.complete() && !cut, written.settled());
+                                        .build()), more, written.settled());
                             });
                 })
                 .onErrorResume(exception -> {

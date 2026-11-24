@@ -18,6 +18,7 @@ import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
@@ -45,6 +46,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -193,6 +195,38 @@ class TopicVectorsStorageTest {
 
         assertThat(findUnvectored(workspaceId, lower)).isEmpty();
         assertThat(tables.vectors(workspaceId, List.of(traceId))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("a trace with a status row is left out by the window read, and the trace-delete cascade deletes its "
+            + "status row with its vectors")
+    void statusRowAndCascade() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var unembeddable = ID_GENERATOR.generateId();
+        var embedded = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, unembeddable, 3))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, unembeddable, 3))).block();
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, embedded, 3))).block();
+        var lower = Instant.now().minus(1, ChronoUnit.HOURS);
+        var found = findUnvectored(workspaceId, lower);
+        assertCandidates(found, candidate(workspaceId, projectId, unembeddable, 3));
+
+        vectorsDAO.insertStatuses(List.of(new TopicVectorStatus(found.getFirst(), SkipReason.INVALID_VECTOR))).block();
+
+        assertThat(findUnvectored(workspaceId, lower)).isEmpty();
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable)))
+                .containsExactly(Map.entry(unembeddable, "invalid_vector"));
+
+        vectorsDAO.deleteByTraceIds(Set.of(unembeddable, embedded), projectId)
+                .contextWrite(context -> context.put(RequestContext.USER_NAME, "user")
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable))).isEmpty();
+        assertThat(tables.vectors(workspaceId, List.of(embedded))).isEmpty();
+        // Its done status is ai-labels', not deleted here: with the status row gone, the read finds it again.
+        assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, unembeddable, 3));
     }
 
     @Test
