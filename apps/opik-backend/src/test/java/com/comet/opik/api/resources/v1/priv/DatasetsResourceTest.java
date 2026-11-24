@@ -115,6 +115,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -9290,8 +9291,10 @@ class DatasetsResourceTest {
 
         private void assertExperimentItems(List<ExperimentItem> actualExperimentItems,
                 ExperimentItem... expectedExperimentItems) {
+            // datasetItemData is only on streamed rows; the stream tests assert it against the dataset item
             assertThat(actualExperimentItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                            ArrayUtils.add(IGNORED_FIELDS_LIST, "datasetItemData"))
                     .containsExactlyInAnyOrder(expectedExperimentItems);
 
             var expectedById = Arrays.stream(expectedExperimentItems)
@@ -9507,6 +9510,9 @@ class DatasetsResourceTest {
                     .extracting(ExperimentItem::id)
                     .containsExactlyElementsOf(inStreamOrder(expectedExperimentItems));
             assertExperimentItems(actualExperimentItems, expectedExperimentItems.toArray(ExperimentItem[]::new));
+            var dataByItemId = datasetItems.stream().collect(toMap(DatasetItem::id, DatasetItem::data));
+            assertThat(actualExperimentItems).allSatisfy(item -> assertThat(item.datasetItemData())
+                    .isEqualTo(dataByItemId.get(item.datasetItemId())));
         }
 
         @Test
@@ -9542,7 +9548,8 @@ class DatasetsResourceTest {
                     .limit(2)
                     .build());
 
-            var pagedExperimentItems = getPage(dataset.id(), datasetVersions, null).content().stream()
+            var pagedItems = getPage(dataset.id(), datasetVersions, null).content();
+            var pagedExperimentItems = pagedItems.stream()
                     .flatMap(item -> item.experimentItems().stream())
                     .toList();
             assertThat(pagedExperimentItems)
@@ -9554,8 +9561,13 @@ class DatasetsResourceTest {
             assertThat(actualExperimentItems)
                     .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .withIgnoredFields("datasetItemData")
                             .build())
                     .containsExactlyInAnyOrderElementsOf(pagedExperimentItems);
+            var pagedDataByItemId = pagedItems.stream().collect(toMap(DatasetItem::id, DatasetItem::data));
+            assertThat(actualExperimentItems).allSatisfy(item -> assertThat(item.datasetItemData())
+                    .isNotEmpty()
+                    .isEqualTo(pagedDataByItemId.get(item.datasetItemId())));
         }
 
         @Test
