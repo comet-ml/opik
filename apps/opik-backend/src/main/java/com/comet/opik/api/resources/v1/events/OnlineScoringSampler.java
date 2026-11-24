@@ -249,6 +249,8 @@ public class OnlineScoringSampler {
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, workspaceId);
 
+            refreshOrganizationForThreadJudges(evaluators, scorableTraces, workspaceId, organizationId);
+
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
                 // Samples traces for this rule.
@@ -292,6 +294,23 @@ public class OnlineScoringSampler {
                 }
             });
         });
+    }
+
+    /**
+     * Thread judges are enqueued later by the closing-thread job, which has no Comet credentials and can only read the
+     * cached organization. Running the event's lookup now, with the request's credentials, keeps that cache warm.
+     */
+    private void refreshOrganizationForThreadJudges(List<? extends AutomationRuleEvaluator<?, ?>> evaluators,
+            List<Trace> traces, String workspaceId, Mono<String> organizationId) {
+        boolean hasThreadJudge = evaluators.stream()
+                .anyMatch(evaluator -> evaluator.isEnabled()
+                        && evaluator.getType() == AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE);
+        if (!hasThreadJudge || traces.stream().allMatch(trace -> StringUtils.isBlank(trace.threadId()))) {
+            return;
+        }
+        organizationId.subscribe(unused -> {
+        }, error -> log.warn("Could not look the organization up for thread judges, workspace '{}'", workspaceId,
+                error));
     }
 
     /**
