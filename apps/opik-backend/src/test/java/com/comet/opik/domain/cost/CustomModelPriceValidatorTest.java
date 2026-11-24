@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -564,10 +563,10 @@ class CustomModelPriceValidatorTest {
     @Test
     void validateWarnsOnEachPriceFieldOutOfRangeOnEitherSide() {
         ModelPrice builtIn = builtIn("claude-sonnet-4-5", "anthropic");
-        Function<BigDecimal, BigDecimal> perMillion = perToken -> perToken.movePointRight(6);
-        BigDecimal input = perMillion.apply(builtIn.inputPrice()).multiply(BigDecimal.valueOf(100));
+        BigDecimal input = builtIn.inputPrice().movePointRight(6).multiply(BigDecimal.valueOf(100));
         BigDecimal output = builtIn.outputPrice();
-        BigDecimal cacheRead = perMillion.apply(builtIn.cacheReadInputTokenPrice()).multiply(BigDecimal.valueOf(100));
+        BigDecimal cacheRead = builtIn.cacheReadInputTokenPrice().movePointRight(6)
+                .multiply(BigDecimal.valueOf(100));
         BigDecimal cacheWrite = builtIn.cacheCreationInputTokenPrice();
 
         var result = validate(row("model", "claude-sonnet-4-5", "provider", "anthropic", "kind", "fixed",
