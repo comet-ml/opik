@@ -25,4 +25,11 @@ class PackageVersionHook(MetadataHookInterface):
             raise RuntimeError(
                 f"{', '.join(map(str, missing))} missing; run npm run build in sdks/genui first"
             )
-        metadata["version"] = json.loads(source.read_text())["version"]
+        version = json.loads(source.read_text())["version"]
+        built = json.loads(ENGINE_DATA.read_text()).get("version")
+        if built != version:
+            raise RuntimeError(
+                f"{ENGINE_DATA} was built for version {built}, not {version}; "
+                "run npm run build in sdks/genui again"
+            )
+        metadata["version"] = version

@@ -11,6 +11,7 @@ DATA = Path(__file__).parent.parent / "src" / "opik_genui" / "data"
 
 def test_constants__match_engine_json():
     engine = json.loads((DATA / "engine.json").read_text())
+    assert opik_genui.__version__ == engine["version"]
     assert opik_genui.ENGINE_VERSION == engine["engine_version"]
     assert isinstance(opik_genui.ENGINE_VERSION, int)
     assert opik_genui.AREAS == ("widget",)

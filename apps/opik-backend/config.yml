@@ -1598,6 +1598,10 @@ partitionMetrics:
   interval: ${PARTITION_METRICS_INTERVAL:-5m}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
+  # Tiered-storage gauges from system.query_log / system.part_log (fans out to every replica).
+  tieredStorageEnabled: ${PARTITION_METRICS_TIERED_STORAGE_ENABLED:-false}
+  # How far behind now the tiered-storage window ends, to wait for the system log flush (default 15s). Min 1s, max 5m.
+  tieredStorageLogFlushLag: ${PARTITION_METRICS_TIERED_STORAGE_LOG_FLUSH_LAG:-15s}
 
 # LLM providers client configuration
 # Configuration for dynamic token auth on custom LLM providers (auth_config recipes)
@@ -2750,6 +2754,35 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 20
+    #  Description: Nightly: the traces no topic took are grouped only when at least this many; a group of at least
+    #  this many traces is a candidate for a new topic
+    nightlyMinCandidate: ${TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE:-20}
+    #  Default: 2
+    #  Description: Fewest k-means groups the nightly grouping makes (never more than its unique texts)
+    nightlyMinGroups: ${TOPICS_ALGORITHM_NIGHTLY_MIN_GROUPS:-2}
+    #  Default: 20
+    #  Description: Most k-means groups the nightly grouping makes. At least nightlyMinGroups
+    nightlyMaxGroups: ${TOPICS_ALGORITHM_NIGHTLY_MAX_GROUPS:-20}
+    #  Default: 40
+    #  Description: Nightly: k = unique texts of the traces no topic took / nightlyTextsPerGroup, within
+    #  nightlyMinGroups and nightlyMaxGroups (the first build's rule, with its own numbers)
+    nightlyTextsPerGroup: ${TOPICS_ALGORITHM_NIGHTLY_TEXTS_PER_GROUP:-40}
+    #  Default: 3
+    #  Description: Most repeated texts a nightly group shows before the ones nearest its centre
+    nightlyFrequent: ${TOPICS_ALGORITHM_NIGHTLY_FREQUENT:-3}
+    #  Default: 5
+    #  Description: Example texts a nightly group shows. At least nightlyFrequent
+    nightlyExamples: ${TOPICS_ALGORITHM_NIGHTLY_EXAMPLES:-5}
+    #  Default: 7
+    #  Description: A group's recent share counts the traces of the last recentDays days (24 hours each) before the night
+    recentDays: ${TOPICS_ALGORITHM_RECENT_DAYS:-7}
+    #  Default: 0.005
+    #  Description: A topic whose share of the window is below this on a night has a low night
+    retireShare: ${TOPICS_ALGORITHM_RETIRE_SHARE:-0.005}
+    #  Default: 3
+    #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
+    retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
@@ -2773,6 +2806,12 @@ topics:
     #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
     #  traces without a vector. Never before the task's applies_from
     window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 15m
+    #  Description: How far before its watermark each workspace's fresh read starts. Covers a done status that becomes
+    #  visible after a later one was read: a write to a lagging replica, or a status visible before its output row.
+    #  Each tick re-reads this much of the window, less the traces that have a vector. A status visible later than this
+    #  is left to the daily pass. At most window
+    watermarkOverlap: ${TOPICS_VECTORS_WATERMARK_OVERLAP:-15m}
     #  Default: 7d
     #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
     #  window
@@ -2788,8 +2827,7 @@ topics:
     backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
     #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
-    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read, and
-    #  summaries are read 1000 at a time
+    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
     #  Default: 256 (inference.limits.maxEmbedInputs)
     #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
@@ -2800,8 +2838,8 @@ topics:
     #  longer, toward embedTimeout, and a call over the service's queue is answered with quota_exceeded (429)
     embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
-    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
-    #  tickBudget, at most inference.limits.maxEmbedDeadline
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. At
+    #  least 1s under tickBudget, at most inference.limits.maxEmbedDeadline
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
     find:
       #  Default: 30000000
@@ -2811,7 +2849,7 @@ topics:
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
-      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      #  Description: Per window read, cut to the time left in the tick. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
       #  Default: 2
       #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1

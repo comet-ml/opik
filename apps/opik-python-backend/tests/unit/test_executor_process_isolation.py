@@ -1,4 +1,4 @@
-"""Process workers isolate user code only with PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION=true.
+"""Process workers isolate user code unless PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION=false.
 
 Isolated, each worker drops to an unprivileged account, loses the inherited environment and
 runs under a seccomp filter refusing new sockets and process inspection. That needs Linux
@@ -429,9 +429,9 @@ def _score_in_pool(data: dict, code: str = PROBE_METRIC) -> dict:
     return executor.run_scoring(code, data)
 
 
-@pytest.mark.parametrize("isolation", [None, "false", "FALSE", ""])
+@pytest.mark.parametrize("isolation", ["false", "FALSE"])
 @pytest.mark.parametrize("allow_network", [None, "false", "true"])
-def test_pool_worker_is_not_isolated_without_setting(monkeypatch, listener, isolation, allow_network):
+def test_pool_worker_is_not_isolated_when_turned_off(monkeypatch, listener, isolation, allow_network):
     for name, value in ((PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation), (ALLOW_NETWORK_ENV_VAR, allow_network)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
@@ -452,9 +452,12 @@ def test_invalid_setting_fails_startup(monkeypatch, isolation):
 
 
 @needs_isolation
-@pytest.mark.parametrize("isolation", ["true", "True"])
-def test_pool_worker_is_isolated_with_setting(monkeypatch, listener, secret_file, isolation):
-    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+@pytest.mark.parametrize("isolation", [None, "", "true", "True"])
+def test_pool_worker_is_isolated_by_default(monkeypatch, listener, secret_file, isolation):
+    if isolation is None:
+        monkeypatch.delenv(PROCESS_NETWORK_ISOLATION_ENV_VAR)
+    else:
+        monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
 
     result = _score_in_pool({"port": listener, "full": True, "file_fd": secret_file})
 
@@ -512,7 +515,7 @@ def _assert_single_isolation_error(caplog, failed_step: str) -> None:
     errors = _isolation_errors(caplog)
     assert len(errors) == 1, errors
     assert errors[0].startswith(
-        f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({failed_step} failed: "
+        f"{PROCESS_NETWORK_ISOLATION_ENV_VAR} is on but process workers cannot be isolated ({failed_step} failed: "
     ), errors[0]
 
 
@@ -1478,9 +1481,9 @@ def test_docker_strategy_job_runs_with_invalid_process_settings(tmp_path):
     script.write_text(RUNNER_MAIN_SCRIPT)
     src = os.path.dirname(os.path.dirname(executor_process.__file__))
     env = {**os.environ, "PYTHON_CODE_EXECUTOR_STRATEGY": "docker", "PYTHON_COLORS": "0",
+           PROCESS_NETWORK_ISOLATION_ENV_VAR: "false",
            executor_process.READY_TIMEOUT_ENV_VAR: "abc", executor_process.MAX_REPLY_BYTES_ENV_VAR: "0",
            "PYTHONPATH": os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")]))}
-    env.pop(PROCESS_NETWORK_ISOLATION_ENV_VAR, None)
 
     run = subprocess.run([sys.executable, str(script), "start"], capture_output=True, text=True, timeout=120, env=env)
 
