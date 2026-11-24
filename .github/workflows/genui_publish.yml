@@ -176,6 +176,8 @@ jobs:
         # it. Runs before anything is uploaded, so a wrong PyPI registration cannot
         # leave npm published and PyPI not. Same check as build_and_publish_sdk.yaml.
         # npm has no equivalent: its publisher is first exercised by the publish.
+        # Manual runs only: a release already ran it before tagging.
+        if: contains(github.workflow_ref, '/genui_publish.yml@')
         run: |
           set -euo pipefail
           # Tokens go via stdin, never argv; a 200 body holds a live upload
