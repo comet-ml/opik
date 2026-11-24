@@ -106,7 +106,6 @@ vi.mock("./useBuiltInPrices", () => ({
   default: () => ({ data: BUILT_INS, isPending: false }),
 }));
 
-
 import CostCenterTab from "./CostCenterTab";
 
 const renderTab = (access?: ModelPricesAccess) =>
