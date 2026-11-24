@@ -26,12 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Keeps {@link FreeFormSqlForbiddenFunctions} reviewed against the ClickHouse functions CI runs. The inventory lists
  * every function and alias of the pinned version with its review decision: {@code allow} or {@code deny} for a
  * function, empty for an alias of a listed function, which takes that function's decision. CI runs the Alpine build of
- * the version production runs as the Helm chart's standard image.
+ * the version the Helm chart pins.
  *
  * <p>On a ClickHouse upgrade the test fails and prints, as inventory lines, the functions and aliases the new version
  * adds or removes. Add each with a decision: {@code deny} for anything that discloses the account, the server or its
- * configuration, reads data outside the row policies, or has side effects. Add every {@code deny} to
- * {@link FreeFormSqlForbiddenFunctions}, then rename the file and {@link #VERSION} to the new version.
+ * configuration, reads data outside the row policies, or has side effects. Add every function and alias the inventory
+ * denies to {@link FreeFormSqlForbiddenFunctions}, then rename the file and {@link #VERSION} to the new version.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Free-form SQL ClickHouse function inventory")
@@ -95,11 +95,10 @@ class FreeFormSqlFunctionInventoryTest {
     }
 
     @Test
-    @DisplayName("every function has a decision, and the deny decisions are exactly the forbidden functions")
+    @DisplayName("every function has a decision, and the denied functions and aliases are exactly the forbidden ones")
     void decisionsMatchTheForbiddenFunctions() throws IOException {
         List<Entry> inventory = inventory();
-        Map<String, Entry> functions = inventory.stream().filter(entry -> !entry.isAlias()).collect(Collectors.toMap(
-                entry -> entry.name().toLowerCase(Locale.ROOT), Function.identity(), (first, second) -> first));
+        Map<String, Entry> functions = functionsByLowerName(inventory);
 
         assertThat(inventory.stream()
                 .filter(entry -> entry.isAlias() && target(entry, functions) != null
@@ -114,15 +113,43 @@ class FreeFormSqlFunctionInventoryTest {
                 Collectors.mapping(entry -> decisionOf(entry, functions), Collectors.toSet())));
 
         assertThat(inventory.stream()
-                .filter(entry -> !entry.isAlias() && entry.decision().equals("deny"))
+                .filter(entry -> decisionOf(entry, functions).equals("deny"))
                 .map(entry -> entry.name().toLowerCase(Locale.ROOT))
                 .filter(name -> !FreeFormSqlForbiddenFunctions.ALL.contains(name)))
-                .as("functions the inventory denies but FreeFormSqlForbiddenFunctions does not list")
+                .as("functions and aliases the inventory denies but FreeFormSqlForbiddenFunctions does not list")
                 .isEmpty();
         assertThat(FreeFormSqlForbiddenFunctions.ALL.stream()
                 .filter(name -> !Set.of("deny").equals(decisionsByLowerName.get(name))))
                 .as("FreeFormSqlForbiddenFunctions entries the inventory does not have, or does not deny")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the denied names ClickHouse calls when written bare are exactly the bare names")
+    void bareNamesMatchClickHouse() throws Exception {
+        List<Entry> inventory = inventory();
+        Map<String, Entry> functions = functionsByLowerName(inventory);
+        List<String> denied = inventory.stream()
+                .filter(entry -> decisionOf(entry, functions).equals("deny"))
+                .map(Entry::name)
+                .toList();
+        // One statement per name; --ignore-error skips the names ClickHouse cannot resolve as identifiers.
+        String probes = denied.stream()
+                .map(name -> "SELECT '%s', toString(`%s`);".formatted(name, name))
+                .collect(Collectors.joining("\n"));
+        var result = clickHouse.execInContainer("clickhouse", "client", "--ignore-error", "--multiquery",
+                "--query", probes);
+
+        assertThat(result.getStdout().lines()
+                .map(line -> line.split("\t", 2)[0].toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet()))
+                .as("lower-cased denied names that resolve as bare identifiers")
+                .isEqualTo(FreeFormSqlForbiddenFunctions.BARE_NAMES);
+    }
+
+    private static Map<String, Entry> functionsByLowerName(List<Entry> inventory) {
+        return inventory.stream().filter(entry -> !entry.isAlias()).collect(Collectors.toMap(
+                entry -> entry.name().toLowerCase(Locale.ROOT), Function.identity(), (first, second) -> first));
     }
 
     /**

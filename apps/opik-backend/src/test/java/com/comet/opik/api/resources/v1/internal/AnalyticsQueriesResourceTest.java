@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.internal;
 
-import com.clickhouse.client.api.Client;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -84,10 +83,6 @@ class AnalyticsQueriesResourceTest {
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
 
-    // Rows seeded directly into the legacy tables, per workspace (dataset_items) or project (feedback_scores).
-    // Distinct from PER_PROJECT, so a count taken from the wrong table cannot pass by coincidence.
-    private static final int LEGACY_ROWS = 3;
-
     private static final String RESULT_QUERY = "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM traces ORDER BY id";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -143,7 +138,7 @@ class AnalyticsQueriesResourceTest {
     private FreeFormSqlTestData seeded;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) throws Exception {
+    void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -179,27 +174,7 @@ class AnalyticsQueriesResourceTest {
                 .buildClient()) {
             seeded = FreeFormSqlTestData.seed(client, wireMock, admin);
             mockWorkspace(seeded.a().apiKey(), seeded.a().name(), seeded.a().id());
-            // The API no longer writes these legacy tables (scores go to authored_feedback_scores, and dataset
-            // versioning writes dataset_item_versions), so they are seeded directly.
-            insertLegacyDatasetItems(admin, seeded.a().id());
-            insertLegacyDatasetItems(admin, seeded.b().id());
-            Stream.of(seeded.a1(), seeded.a2(), seeded.b1())
-                    .forEach(project -> insertLegacyFeedbackScores(admin, project));
         }
-    }
-
-    private static void insertLegacyDatasetItems(Client admin, String workspaceId) {
-        admin.queryAll("""
-                INSERT INTO %s.dataset_items (id, dataset_id, workspace_id)
-                SELECT toString(generateUUIDv4()), '%s', '%s' FROM numbers(%d)
-                """.formatted(DATABASE_NAME, UUID.randomUUID(), workspaceId, LEGACY_ROWS));
-    }
-
-    private static void insertLegacyFeedbackScores(Client admin, FreeFormSqlTestData.Project project) {
-        admin.queryAll("""
-                INSERT INTO %s.feedback_scores (entity_id, entity_type, project_id, workspace_id, name, value, source)
-                SELECT toString(generateUUIDv4()), 'trace', '%s', '%s', 'score', 1, 'sdk' FROM numbers(%d)
-                """.formatted(DATABASE_NAME, project.id(), project.workspace().id(), LEGACY_ROWS));
     }
 
     @Test
@@ -277,7 +252,7 @@ class AnalyticsQueriesResourceTest {
                 "displayName()", "DISPLAYNAME()", "enabledRoles()", "defaultRoles()", "getOSKernelVersion()",
                 "tcpPort()", "TCPPORT()", "authenticatedUser()", "enabledProfiles()", "defaultProfiles()",
                 "current_database", "database", "schema", "user", "currentDatabase", "currentUser",
-                // ClickHouse aliases of listed functions whose own names are not listed: caught by canonical name.
+                // ClickHouse aliases of listed functions, listed under their own spelling.
                 "authUser()", "current_schemas(true)", "fullHostName()", "connection_id()",
                 // Server configuration, schema probes and runtime state, with valid arguments.
                 "getServerSetting('max_server_memory_usage')", "getMergeTreeSetting('index_granularity')",
@@ -328,8 +303,46 @@ class AnalyticsQueriesResourceTest {
                 arguments("metadata function in WHERE", """
                         SELECT toJSONString(map('n', '1')) AS result FROM traces
                         WHERE currentUser() != ''
+                        """),
+                arguments("catalog column without FROM", """
+                        SELECT toJSONString(map('n', toString(system.one.dummy))) AS result
+                        """),
+                arguments("quoted catalog column without FROM", """
+                        SELECT toJSONString(map('n', toString(`system`.one.dummy))) AS result
                         """));
-        return Stream.concat(Stream.concat(catalogTables, metadataExpressions), nested);
+        // A name ClickHouse could resolve to a forbidden function is rejected wherever the caller uses it.
+        var metadataNames = Stream.of(
+                arguments("metadata-named column currentUser", """
+                        SELECT toJSONString(map('n', toString(currentUser))) AS result
+                        FROM (SELECT 1 AS currentUser)
+                        """),
+                arguments("metadata-named column currentDatabase", """
+                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
+                        FROM (SELECT 1 AS currentDatabase)
+                        """),
+                arguments("metadata-named alias currentUser", """
+                        WITH 1 AS currentUser
+                        SELECT toJSONString(map('n', toString(currentUser))) AS result
+                        """),
+                arguments("metadata-named alias currentDatabase", """
+                        WITH 1 AS currentDatabase
+                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
+                        """),
+                arguments("metadata-named CTE currentUser", """
+                        WITH currentUser AS (SELECT 1 AS n)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentUser
+                        """),
+                arguments("metadata-named CTE currentDatabase", """
+                        WITH currentDatabase AS (SELECT 1 AS n)
+                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentDatabase
+                        """),
+                arguments("metadata-named table alias user", """
+                        SELECT toJSONString(map('n', '1')) AS result FROM traces AS user
+                        """),
+                arguments("metadata-named result alias database", """
+                        SELECT toJSONString(map('n', '1')) AS database
+                        """));
+        return Stream.of(catalogTables, metadataExpressions, nested, metadataNames).flatMap(s -> s);
     }
 
     private Stream<Arguments> forbiddenQueriesByEndpoint() {
@@ -373,29 +386,14 @@ class AnalyticsQueriesResourceTest {
                         SELECT toJSONString(map('n', '1')) AS result
                         FROM (SELECT count() AS c FROM traces ARRAY JOIN tags AS tag)
                         """),
-                arguments("metadata-named column currentUser", """
-                        SELECT toJSONString(map('n', toString(currentUser))) AS result
-                        FROM (SELECT 1 AS currentUser)
+                arguments("column qualified by a table alias", """
+                        SELECT toJSONString(map('n', toString(t.c))) AS result FROM (SELECT 1 AS c) AS t
                         """),
-                arguments("metadata-named column currentDatabase", """
-                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
-                        FROM (SELECT 1 AS currentDatabase)
+                arguments("alias named after a function ClickHouse never calls bare", """
+                        SELECT toJSONString(map('n', toString(tid))) AS result FROM (SELECT 1 AS tid)
                         """),
-                arguments("metadata-named alias currentUser", """
-                        WITH 1 AS currentUser
-                        SELECT toJSONString(map('n', toString(currentUser))) AS result
-                        """),
-                arguments("metadata-named alias currentDatabase", """
-                        WITH 1 AS currentDatabase
-                        SELECT toJSONString(map('n', toString(currentDatabase))) AS result
-                        """),
-                arguments("metadata-named CTE currentUser", """
-                        WITH currentUser AS (SELECT 1 AS n)
-                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentUser
-                        """),
-                arguments("metadata-named CTE currentDatabase", """
-                        WITH currentDatabase AS (SELECT 1 AS n)
-                        SELECT toJSONString(map('n', toString(n))) AS result FROM currentDatabase
+                arguments("column whose name contains a metadata name", """
+                        SELECT toJSONString(map('n', toString(user_count))) AS result FROM (SELECT 1 AS user_count)
                         """));
     }
 
@@ -406,7 +404,7 @@ class AnalyticsQueriesResourceTest {
 
     @ParameterizedTest(name = "{0} via {1}")
     @MethodSource("allowedQueriesByEndpoint")
-    @DisplayName("metadata-like identifiers and FROM-less queries remain valid through both HTTP endpoints")
+    @DisplayName("FROM-less queries and ordinary aliases remain valid through both HTTP endpoints")
     void allowedQuery__thenReturnsResult(String label, Endpoint endpoint, String query) {
         try (Response response = call(endpoint, query)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
@@ -418,8 +416,9 @@ class AnalyticsQueriesResourceTest {
 
     /**
      * Counts fixed by the seeding, not read back. Project-bound tables see project A1 only; experiments, their items
-     * and dataset items belong to the workspace, so they count both of A's projects. Workspace B and project A2 hold
-     * the same data, so any count above these means a read escaped the caller's scope.
+     * and dataset item versions belong to the workspace, so they count both of A's projects. Workspace B and project A2
+     * hold the same data, so any count above these means a read escaped the caller's scope. No endpoint writes the
+     * legacy feedback_scores and dataset_items tables, so they only show the query is accepted.
      */
     private Stream<Arguments> allowedTablesByEndpoint() {
         var standard = Stream.of("spans", "traces", "authored_feedback_scores")
@@ -427,12 +426,12 @@ class AnalyticsQueriesResourceTest {
         var extendedProjectBound = Stream.concat(
                 Stream.of("spans", "traces", "authored_feedback_scores", "trace_threads")
                         .map(table -> arguments(Endpoint.EXECUTE_SCOPED, table, PER_PROJECT)),
-                Stream.of(arguments(Endpoint.EXECUTE_SCOPED, "feedback_scores", LEGACY_ROWS)));
+                Stream.of(arguments(Endpoint.EXECUTE_SCOPED, "feedback_scores", 0)));
         var extendedWorkspaceBound = Stream.of(
                 arguments(Endpoint.EXECUTE_SCOPED, "experiments", 2),
                 arguments(Endpoint.EXECUTE_SCOPED, "experiment_items", 2 * PER_PROJECT),
                 arguments(Endpoint.EXECUTE_SCOPED, "dataset_item_versions", 2 * PER_PROJECT),
-                arguments(Endpoint.EXECUTE_SCOPED, "dataset_items", LEGACY_ROWS));
+                arguments(Endpoint.EXECUTE_SCOPED, "dataset_items", 0));
         return Stream.of(standard, extendedProjectBound, extendedWorkspaceBound).flatMap(s -> s);
     }
 

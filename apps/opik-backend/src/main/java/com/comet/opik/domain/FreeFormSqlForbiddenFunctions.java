@@ -5,15 +5,15 @@ import lombok.experimental.UtilityClass;
 import java.util.Set;
 
 /**
- * ClickHouse functions and aliases the free-form SQL accounts must not call. They disclose the service account, the
- * server or its configuration, read data outside the row policies, or have side effects, and an analytics query over
- * a workspace's own data needs none of them. Names are lower-cased so case variants of case-insensitive functions
- * match, and are checked both on the AST, before ClickHouse analyses the query, and on the resolved query tree, which
- * reports an alias under its canonical name and turns a bare name such as {@code database} into a call.
+ * ClickHouse functions the free-form SQL accounts must not call, with every alias. They disclose the service account,
+ * the server or its configuration, read data outside the row policies, or have side effects, and an analytics query
+ * over a workspace's own data needs none of them. Names are lower-cased so case variants of case-insensitive functions
+ * match. They are checked on the AST, before ClickHouse analyses the query, and again on the resolved query tree, which
+ * reports an alias under its canonical name, as a backstop.
  *
  * <p>Reviewed against every function of the ClickHouse version the inventory in
  * {@code FreeFormSqlFunctionInventoryTest} pins: that test fails on a version with functions nobody has decided on,
- * and on any entry here that the inventory does not mark {@code deny}.
+ * and unless this list holds exactly the functions and aliases the inventory denies.
  */
 @UtilityClass
 class FreeFormSqlForbiddenFunctions {
@@ -23,6 +23,7 @@ class FreeFormSqlForbiddenFunctions {
     static final String CURRENT_USER_SQL_ALIAS = "current_user";
     static final String USER = "user";
     static final String AUTHENTICATED_USER = "authenticateduser";
+    static final String AUTH_USER = "authuser";
     static final String CURRENT_ROLES = "currentroles";
     static final String ENABLED_ROLES = "enabledroles";
     static final String DEFAULT_ROLES = "defaultroles";
@@ -37,10 +38,12 @@ class FreeFormSqlForbiddenFunctions {
     static final String DATABASE = "database";
     static final String SCHEMA = "schema";
     static final String CURRENT_SCHEMAS = "currentschemas";
+    static final String CURRENT_SCHEMAS_SQL_ALIAS = "current_schemas";
 
     // Host, build and network identity of the server.
     static final String HOST_NAME = "hostname";
     static final String FQDN = "fqdn";
+    static final String FULL_HOST_NAME = "fullhostname";
     static final String VERSION = "version";
     static final String REVISION = "revision";
     static final String BUILD_ID = "buildid";
@@ -68,6 +71,7 @@ class FreeFormSqlForbiddenFunctions {
     static final String FILESYSTEM_CAPACITY = "filesystemcapacity";
     static final String FILESYSTEM_UNRESERVED = "filesystemunreserved";
     static final String CONNECTION_ID = "connectionid";
+    static final String CONNECTION_ID_SQL_ALIAS = "connection_id";
     static final String HAS_THREAD_FUZZER = "hasthreadfuzzer";
     static final String TRANSACTION_ID = "transactionid";
     static final String TRANSACTION_LATEST_SNAPSHOT = "transactionlatestsnapshot";
@@ -139,17 +143,17 @@ class FreeFormSqlForbiddenFunctions {
     static final String DICT_IS_IN = "dictisin";
 
     static final Set<String> ALL = Set.of(
-            CURRENT_USER, CURRENT_USER_SQL_ALIAS, USER, AUTHENTICATED_USER,
+            CURRENT_USER, CURRENT_USER_SQL_ALIAS, USER, AUTHENTICATED_USER, AUTH_USER,
             CURRENT_ROLES, ENABLED_ROLES, DEFAULT_ROLES, CURRENT_PROFILES,
             ENABLED_PROFILES, DEFAULT_PROFILES, DISPLAY_NAME, CURRENT_DATABASE,
-            CURRENT_DATABASE_SQL_ALIAS, DATABASE, SCHEMA, CURRENT_SCHEMAS,
-            HOST_NAME, FQDN, VERSION, REVISION,
+            CURRENT_DATABASE_SQL_ALIAS, DATABASE, SCHEMA, CURRENT_SCHEMAS, CURRENT_SCHEMAS_SQL_ALIAS,
+            HOST_NAME, FQDN, FULL_HOST_NAME, VERSION, REVISION,
             BUILD_ID, SERVER_UUID, UPTIME, GET_OS_KERNEL_VERSION,
             GET_MACRO, GET_SERVER_PORT, TCP_PORT, SHOW_CERTIFICATE,
             GET_SERVER_SETTING, GET_MERGE_TREE_SETTING, GET_SETTING, GET_SETTING_OR_DEFAULT,
             GLOBAL_VARIABLE, GET_CLIENT_HTTP_HEADER, SHARD_NUM, SHARD_COUNT,
             ZOOKEEPER_SESSION_UPTIME, FILESYSTEM_AVAILABLE, FILESYSTEM_CAPACITY, FILESYSTEM_UNRESERVED,
-            CONNECTION_ID, HAS_THREAD_FUZZER, TRANSACTION_ID, TRANSACTION_LATEST_SNAPSHOT,
+            CONNECTION_ID, CONNECTION_ID_SQL_ALIAS, HAS_THREAD_FUZZER, TRANSACTION_ID, TRANSACTION_LATEST_SNAPSHOT,
             TRANSACTION_OLDEST_SNAPSHOT, TID, HAS_COLUMN_IN_TABLE, GET_MAX_TABLE_NAME_LENGTH_FOR_DATABASE,
             GENERATE_SERIAL_ID, LOG_TRACE, FILE, CATBOOST_EVALUATE,
             SLEEP, SLEEP_EACH_ROW, ADDRESS_TO_LINE, ADDRESS_TO_LINE_WITH_INLINES,
@@ -165,4 +169,12 @@ class FreeFormSqlForbiddenFunctions {
             DICT_GET_UINT32, DICT_GET_UINT32_OR_DEFAULT, DICT_GET_UINT64, DICT_GET_UINT64_OR_DEFAULT,
             DICT_GET_UINT8, DICT_GET_UINT8_OR_DEFAULT, DICT_GET_UUID, DICT_GET_UUID_OR_DEFAULT,
             DICT_HAS, DICT_IS_IN);
+
+    /**
+     * The forbidden functions ClickHouse also calls when the name is written bare, as in {@code SELECT user}. Since any
+     * identifier could be one, these names are rejected wherever the AST holds them, including a caller's own alias or
+     * CTE name; readable tables have no columns with these names.
+     */
+    static final Set<String> BARE_NAMES = Set.of(
+            CURRENT_USER, CURRENT_USER_SQL_ALIAS, USER, CURRENT_DATABASE, CURRENT_DATABASE_SQL_ALIAS, DATABASE, SCHEMA);
 }

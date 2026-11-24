@@ -29,7 +29,6 @@ import org.mockito.quality.Strictness;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -173,28 +172,64 @@ class FreeFormSqlQueryServiceTest {
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
-    @Test
-    @DisplayName("a newly niladic metadata function is rejected when ClickHouse resolves it")
-    void newlyNiladicMetadataFunctionIsRejected() {
-        givenClickHouseReturnsOneRow();
-        String query = "SELECT toJSONString(map('n', toString(version))) AS result";
-        when(dao.explainAst(FreeFormSqlAccount.STANDARD, query))
-                .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  Identifier version")));
-        when(dao.explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, query))
-                .thenReturn(CompletableFuture.completedFuture(List.of(
-                        "QUERY id: 0", "  FUNCTION id: 1, function_name: version, result_type: String")));
+    private static Stream<Arguments> forbiddenAstNodes() {
+        return Stream.of(
+                arguments("forbidden function call", "Function currentUser (children 1)"),
+                arguments("alias spelling of a forbidden function", "Function authUser (children 1)"),
+                arguments("bare forbidden name", "Identifier currentUser"),
+                arguments("bare forbidden name with an alias", "Identifier database (alias n)"),
+                arguments("forbidden name as an expression alias", "Literal UInt64_1 (alias currentUser)"),
+                arguments("forbidden name as a function alias", "Function count (alias USER) (children 1)"),
+                arguments("forbidden name as a CTE reference", "TableIdentifier currentDatabase"),
+                arguments("forbidden name as a table alias", "TableIdentifier traces (alias schema)"),
+                arguments("catalog table", "TableIdentifier system.tables"),
+                arguments("catalog column without FROM", "Identifier system.one.dummy"),
+                arguments("information schema column", "Identifier INFORMATION_SCHEMA.TABLES.table_name"));
+    }
 
-        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, query).join())
-                .isInstanceOf(CompletionException.class)
-                .cause().isExactlyInstanceOf(BadRequestException.class)
-                .satisfies(
-                        error -> assertThat(((WebApplicationException) error).getResponse().getEntity())
-                                .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE))));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenAstNodes")
+    @DisplayName("forbidden names and catalog references are rejected on the AST, before ClickHouse analyses the query")
+    void forbiddenAstNodeIsRejectedBeforeAnalysis(String label, String node) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY)).thenReturn(CompletableFuture.completedFuture(
+                List.of("SelectWithUnionQuery (children 1)", "    " + node)));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
+    private static Stream<Arguments> allowedAstNodes() {
+        return Stream.of(
+                arguments("column qualified by a table alias", "Identifier t.user"),
+                arguments("name containing a forbidden name", "Identifier user_count (alias users)"),
+                arguments("alias named after a function ClickHouse never calls bare",
+                        "Identifier trace_id (alias tid)"),
+                arguments("string literal mentioning an alias", "Literal \\'x (alias user)\\'"),
+                arguments("allowed table", "TableIdentifier traces (alias t)"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allowedAstNodes")
+    @DisplayName("names that only contain, qualify or reuse a forbidden name safely pass the AST check")
+    void allowedAstNodePassesToAnalysis(String label, String node) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY)).thenReturn(CompletableFuture.completedFuture(
+                List.of("SelectWithUnionQuery (children 1)", "    " + node)));
+
+        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join();
+
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
+    }
+
     @Test
-    @DisplayName("a function alias missing from the AST denylist is rejected by its resolved name")
+    @DisplayName("a function the AST check misses is rejected by its resolved name, as a backstop")
     void resolvedFunctionAliasIsRejected() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);

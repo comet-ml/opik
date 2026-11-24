@@ -36,10 +36,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -48,11 +51,12 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
- * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, direct catalog reads, table functions,
- * and listed environment or identity functions before execution. Every query is also pre-flighted through
- * {@code EXPLAIN QUERY TREE} under its caller scope. The resolved tree restricts table reads to the account's tables
- * and catches function aliases whose AST spelling is not listed, while allowing columns or aliases with a
- * metadata-function name. The tree also rejects scalar subqueries that read tables in every mode. The workspace and
+ * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, catalog references, table functions,
+ * forbidden function calls, and names ClickHouse resolves to a forbidden call when written bare ({@code user}), also as
+ * an alias or CTE name, before ClickHouse analyses the query. Every query that passes is then pre-flighted through
+ * {@code EXPLAIN QUERY TREE} under its caller scope, as a backstop: the resolved tree restricts table reads to the
+ * account's tables and rejects forbidden functions by their canonical name. The tree also rejects scalar subqueries
+ * that read tables in every mode. The workspace and
  * project bounds are sent as ClickHouse server settings consumed by the restrictive row policies.
  *
  * <p>The post-run check verifies from the query's {@code system.query_log} entries and plan that every table it read
@@ -111,12 +115,16 @@ public class FreeFormSqlQueryService {
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
     private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
+    private static final Pattern AST_CHILDREN_SUFFIX = Pattern.compile(" \\(children \\d+\\)$");
+    private static final Pattern AST_ALIAS_SUFFIX = Pattern.compile(" \\(alias (.+)\\)$");
     private static final String TABLE_EXPRESSION_AST_PREFIX = "TableExpression ";
     /**
      * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
      * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
-     * Matched on the database qualifier of a {@code TableIdentifier} node, lower-cased, since ClickHouse exposes both
-     * {@code information_schema} and {@code INFORMATION_SCHEMA}. ClickHouse grants deny most of these too; direct
+     * Matched on the database qualifier of a {@code TableIdentifier} or {@code Identifier} node, lower-cased, since
+     * ClickHouse exposes both {@code information_schema} and {@code INFORMATION_SCHEMA} and resolves a qualified column
+     * such as {@code system.one.dummy} without a FROM clause. ClickHouse grants deny most of these too; direct
      * table references are rejected in the app even if those grants change.
      */
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
@@ -312,10 +320,10 @@ public class FreeFormSqlQueryService {
         if (containsSetNode(nodeLabels)) {
             throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
-        if (containsForbiddenCatalogTableNode(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
+        if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
             throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
-        if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
+        if (containsForbiddenFunctionName(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
@@ -454,12 +462,50 @@ public class FreeFormSqlQueryService {
         return firstToken(label.substring(prefix.length()));
     }
 
-    private static boolean containsForbiddenCatalogTableNode(List<String> nodeLabels) {
+    private static boolean containsCatalogReference(List<String> nodeLabels) {
         return nodeLabels.stream()
-                .map(String::stripLeading)
-                .filter(label -> label.startsWith(TABLE_IDENTIFIER_AST_PREFIX))
-                .map(label -> label.substring(TABLE_IDENTIFIER_AST_PREFIX.length()).toLowerCase(Locale.ROOT))
-                .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
+                .flatMap(label -> referencedName(label).stream())
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .anyMatch(name -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(name::startsWith));
+    }
+
+    /**
+     * A forbidden function called by any spelling, or a name ClickHouse calls when written bare, wherever it appears:
+     * an identifier, a table or CTE reference, or an alias.
+     */
+    private static boolean containsForbiddenFunctionName(List<String> nodeLabels) {
+        return nodeLabels.stream().anyMatch(label -> isForbidden(functionName(label), FreeFormSqlForbiddenFunctions.ALL)
+                || isForbidden(referencedName(label), FreeFormSqlForbiddenFunctions.BARE_NAMES)
+                || isForbidden(alias(label), FreeFormSqlForbiddenFunctions.BARE_NAMES));
+    }
+
+    private static boolean isForbidden(Optional<String> name, Set<String> forbidden) {
+        return name.map(value -> forbidden.contains(value.toLowerCase(Locale.ROOT))).orElse(false);
+    }
+
+    private static Optional<String> functionName(String label) {
+        String node = label.stripLeading();
+        return node.startsWith(FUNCTION_AST_PREFIX)
+                ? Optional.of(firstTokenAfterPrefix(node, FUNCTION_AST_PREFIX))
+                : Optional.empty();
+    }
+
+    /** The name an {@code Identifier} or {@code TableIdentifier} node refers to, without its alias. */
+    private static Optional<String> referencedName(String label) {
+        String node = withoutChildren(label);
+        return Stream.of(IDENTIFIER_AST_PREFIX, TABLE_IDENTIFIER_AST_PREFIX)
+                .filter(node::startsWith)
+                .findFirst()
+                .map(prefix -> AST_ALIAS_SUFFIX.matcher(node.substring(prefix.length())).replaceFirst(""));
+    }
+
+    private static Optional<String> alias(String label) {
+        var matcher = AST_ALIAS_SUFFIX.matcher(withoutChildren(label));
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    private static String withoutChildren(String label) {
+        return AST_CHILDREN_SUFFIX.matcher(label.stripLeading()).replaceFirst("");
     }
 
     /** A function directly under a table expression is a table function; reject it before resolving it. */
@@ -489,13 +535,6 @@ public class FreeFormSqlQueryService {
         String prefix = database + ".";
         return table.equals("system.one")
                 || table.startsWith(prefix) && ALLOWED_TABLES.get(account).contains(table.substring(prefix.length()));
-    }
-
-    private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
-        return nodeLabels.stream().map(String::stripLeading)
-                .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
-                .map(label -> firstTokenAfterPrefix(label, FUNCTION_AST_PREFIX).toLowerCase(Locale.ROOT))
-                .anyMatch(FreeFormSqlForbiddenFunctions.ALL::contains);
     }
 
     /** A FUNCTION node whose name cannot be read counts as forbidden, so a tree format change fails closed. */
