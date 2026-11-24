@@ -88,9 +88,11 @@ import static com.comet.opik.domain.topics.TopicVectorsFixtures.rawVector;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -450,6 +452,34 @@ class TopicVectorsTickTest {
         assertThat(tickService.tick(second).block()).isEqualTo(TickResult.written(5));
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
         assertThat(watermark(workspaceId)).isEqualTo(second);
+    }
+
+    @Test
+    @DisplayName("a workspace read the budget cuts short after the turn's own budget check reads nothing and leaves "
+            + "the watermark as it is, so the next tick still finds a status older than the overlap")
+    void budgetEndsBeforeTheRead() {
+        // The turn starts with at least 1s + embedTimeout (3s) left; the 6s name lookup leaves the read under that.
+        config().setTickBudget(io.dropwizard.util.Duration.seconds(8));
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(2));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        // Drained, so its traces are the workspace read's, which keeps the watermark.
+        markDrained(workspaceId, projectId);
+        var traceId = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        // Inside the short window, older than the overlap before the next tick's start.
+        tables.insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(1, ChronoUnit.HOURS));
+        wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+                .willReturn(aResponse().withStatus(200).withBody("slow-name").withFixedDelay(6_000)));
+
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(watermark(workspaceId)).isNull();
+
+        config().setTickBudget(defaults.getTickBudget());
+        config().setEmbedTimeout(defaults.getEmbedTimeout());
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, projectId, traceId, 1)));
     }
 
     private Instant watermark(String workspaceId) {

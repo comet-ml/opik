@@ -166,28 +166,10 @@ public class TopicVectorsTickService {
                     find.toBuilder().excludedProjectIds(readableWithout.get()).build(),
                     pass ? vectors.getFind().getSliceSize().toJavaDuration() : null, budget,
                     vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
-                    .flatMap(read -> backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start())
-                            .flatMap(served -> {
-                                var readTime = since(readStarted);
-                                long embedStarted = System.nanoTime();
-                                return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore)
-                                        .flatMap(written -> {
-                                            var visit = new Visit(workspace, true, read.complete(), written.result(),
-                                                    served.started(), readTime, since(embedStarted));
-                                            if (pass) {
-                                                return Mono.just(visit);
-                                            }
-                                            // The traces of the projects it started are the backfill's from now on.
-                                            var settled = new HashSet<>(written.settled());
-                                            var servedKeys = served.candidates().stream().map(VectorKey::of)
-                                                    .collect(Collectors.toSet());
-                                            read.candidates().stream().map(VectorKey::of)
-                                                    .filter(key -> !servedKeys.contains(key))
-                                                    .forEach(settled::add);
-                                            return saveWatermark(workspaceId, watermark(read.candidates(), settled,
-                                                    find.limit(), find.upperBound())).thenReturn(visit);
-                                        });
-                            }))
+                    .flatMap(read -> !read.complete() && read.candidates().isEmpty()
+                            // The budget ran out before the read: nothing was read, so the watermark stays.
+                            ? Mono.just(Visit.notRead(workspace, false))
+                            : serve(workspace, read, find, pass, missedBefore, budget, readStarted))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
@@ -195,6 +177,31 @@ public class TopicVectorsTickService {
                         return Mono.just(new Visit(workspace, true, false, TickResult.EMPTY, List.of(),
                                 since(readStarted), Duration.ZERO));
                     });
+        });
+    }
+
+    /** A turn after its read: the candidates embedded and written, then, outside a pass, the watermark saved. */
+    private Mono<Visit> serve(TopicVectorsMetrics.Workspace workspace, WindowRead read, TopicVectorsFind find,
+            boolean pass, @Nullable Instant missedBefore, TickBudget budget, long readStarted) {
+        var workspaceId = workspace.id();
+        return backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start()).flatMap(served -> {
+            var readTime = since(readStarted);
+            long embedStarted = System.nanoTime();
+            return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore).flatMap(written -> {
+                var visit = new Visit(workspace, true, read.complete(), written.result(), served.started(), readTime,
+                        since(embedStarted));
+                if (pass) {
+                    return Mono.just(visit);
+                }
+                // The traces of the projects it started are the backfill's from now on.
+                var settled = new HashSet<>(written.settled());
+                var servedKeys = served.candidates().stream().map(VectorKey::of).collect(Collectors.toSet());
+                read.candidates().stream().map(VectorKey::of)
+                        .filter(key -> !servedKeys.contains(key))
+                        .forEach(settled::add);
+                return saveWatermark(workspaceId,
+                        watermark(read.candidates(), settled, find.limit(), find.upperBound())).thenReturn(visit);
+            });
         });
     }
 
