@@ -1,7 +1,10 @@
 export type ModelPriceKind = "fixed" | "alias";
 
 export type PriceField =
-  "input_price" | "output_price" | "cache_read_price" | "cache_write_price";
+  | "input_price"
+  | "output_price"
+  | "cache_read_price"
+  | "cache_write_price";
 
 export const PRICE_FIELDS: PriceField[] = [
   "input_price",
