@@ -2913,6 +2913,10 @@ topics:
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. At
     #  least 1s under tickBudget, at most inference.limits.maxEmbedDeadline
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
+    #  Default: 5s
+    #  Description: How much longer than the rest the leader lock lasts, for the insert after the last embed call,
+    #  which has no deadline of its own. The tick is cancelled when the lock's lease ends. At most 1m
+    leaseSlack: ${TOPICS_VECTORS_LEASE_SLACK:-5s}
     find:
       #  Default: 30000000
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000
@@ -2921,7 +2925,8 @@ topics:
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
-      #  Description: Per window read, cut to the time left in the tick. At most tickBudget
+      #  Description: Per window read, cut to the time left in the tick. Adds to the leader lock's lease. At most
+      #  tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
       #  Default: 2
       #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
