@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.153](https://img.shields.io/badge/Version-2.2.153-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.153](https://img.shields.io/badge/AppVersion-2.2.153-informational?style=flat-square)
+![Version: 2.3.1](https://img.shields.io/badge/Version-2.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.3.1](https://img.shields.io/badge/AppVersion-2.3.1-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -456,7 +456,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT | string | `"64"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE | string | `"16m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
@@ -466,7 +466,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
@@ -566,6 +566,8 @@ Call opik api on http://localhost:5173/api
 | partitionMetrics.enabled | bool | `false` |  |
 | partitionMetrics.interval | string | `"5m"` |  |
 | partitionMetrics.lwdTables | string | `"traces,spans"` |  |
+| partitionMetrics.tieredStorageEnabled | bool | `false` |  |
+| partitionMetrics.tieredStorageLogFlushLag | string | `"15s"` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
@@ -600,7 +602,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.6"` |  |
+| zookeeper.image.tag | string | `"3.9.7"` |  |
 | zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |

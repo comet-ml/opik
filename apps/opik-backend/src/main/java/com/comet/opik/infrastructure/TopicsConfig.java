@@ -32,6 +32,15 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private AlgorithmConfig algorithm;
 
+    @Valid @NotNull @JsonProperty
+    private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private ReadConfig read;
+
+    @Valid @NotNull @JsonProperty
+    private StorageConfig storage;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -72,6 +81,43 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
 
+        @JsonProperty
+        @Min(1) @Max(100_000) private int nightlyMinCandidate;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMinGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int nightlyMaxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyTextsPerGroup;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int nightlyFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyExamples;
+
+        @JsonProperty
+        @Min(1) @Max(365) private int recentDays;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double retireShare;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int retireNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
+            return nightlyMinGroups <= nightlyMaxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.nightlyFrequent must not be above nightlyExamples") public boolean isNightlyExamplesOrdered() {
+            return nightlyFrequent <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;
@@ -96,6 +142,102 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
+
+    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    @Data
+    public static class BuildConfig {
+
+        @Valid @NotNull @JsonProperty
+        private BuildReadConfig read;
+    }
+
+    /**
+     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     */
+    @Data
+    public static class BuildReadConfig implements ReadGuards {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse query priority; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** The topic counts read the window in slices of this much creation time, one query each. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration countSlice;
+    }
+
+    /** The ClickHouse guards a topics read binds: the build's and the read API's are two sets of them. */
+    public interface ReadGuards {
+
+        long getMaxRowsToRead();
+
+        long getMaxMemoryUsage();
+
+        int getMaxThreads();
+
+        int getPriority();
+
+        int getMaxBlockSize();
+    }
+
+    /**
+     * The read API's ClickHouse guards, apart from the build's: a page request, not a background job. Its reads (the
+     * per topic and day counts, the collecting count) share one time budget.
+     */
+    @Data
+    public static class ReadConfig implements ReadGuards {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse priority of the collecting count; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the collecting count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** A request's ClickHouse reads end within this; a read that does not is a guard trip. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration budget;
+    }
+
+    /** The topics state's MySQL writes. */
+    @Data
+    public static class StorageConfig {
+
+        /**
+         * Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays bounded
+         * however many projects went at once.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int deleteBatchSize;
+    }
 
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
@@ -128,6 +270,16 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
+
+        /**
+         * How far before its watermark a workspace's read starts: covers a done status that becomes visible after a
+         * later status was read, such as one written to a lagging replica or before its output row. A status later than
+         * this is left to the daily pass. At most {@code window}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration watermarkOverlap;
 
         /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
@@ -177,14 +329,22 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
+        @AssertTrue(message = "topics.vectors.watermarkOverlap must not be longer than topics.vectors.window") public boolean isWatermarkOverlapValid() {
+            return watermarkOverlap == null || window == null
+                    || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
+        }
+
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
+        // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
+        // shorter budget would read nothing.
         @JsonIgnore
-        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+        @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
-                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+                    || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
         }
 
         @JsonIgnore
@@ -214,7 +374,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;

@@ -1074,6 +1074,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
@@ -1101,6 +1102,33 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    nightlyMinCandidate: 20
+    nightlyMinGroups: 2
+    nightlyMaxGroups: 20
+    nightlyTextsPerGroup: 40
+    nightlyFrequent: 3
+    nightlyExamples: 5
+    recentDays: 7
+    retireShare: 0.005
+    retireNights: 3
+  build:
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1381,6 +1409,10 @@ partitionMetrics:
   interval: 5m
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: traces,spans
+  # Tiered-storage gauges from system.query_log / system.part_log (fans out to every replica).
+  tieredStorageEnabled: false
+  # How far behind now the tiered-storage window ends, to wait for the system log flush (default 15s). Min 1s, max 5m.
+  tieredStorageLogFlushLag: 15s
 
 # Job timeout configuration
 jobTimeout:

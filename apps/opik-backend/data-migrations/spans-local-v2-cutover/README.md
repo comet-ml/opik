@@ -80,8 +80,8 @@ recorded as such, with the reason, because silently changing a number to look di
 
 | knob | traces | spans | derived from |
 |---|---|---|---|
-| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. See ["Blocker 1"](#blocker-1--disk-headroom). |
-| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.381** | Destination bytes per source byte under the `000116` codec set, as measured during OPIK-7400 on representative spans data. It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. |
+| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. A resume credits what the destination already holds. See ["Blocker 1"](#blocker-1--disk-headroom). |
+| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.420** | Destination bytes per source byte under the `000116` codec set, measured at the completion of a full prod-test copy (OPIK-8380). It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. Take the figure **at completion, once merges settle**: `backfill.sh` logs the measured ratio after every week and at the end, but a mid-run reading drifts substantially in either direction as the copy advances, so it shows the trend, not the answer, and the end-of-run reading precedes the destination's merges. Re-run `estimate.sh` once they have settled; it prints the measured ratio whenever `spans_local_v2` holds data. |
 | `backfill.sh --max-partitions-per-insert-block` (and the delta's / sweep's) | 2,000 | **20,000** | A block cannot span more partitions than the table has, so the destination's TOTAL distinct partition count is a hard upper bound on a block's spread. Same sizing rule as traces, different input. 20,000 is above the SCHEMA's own ceiling — `UUIDv7ToDateTime` is honest from the epoch to 2299, ~17,000 weekly partitions — so it cannot be too low for any estate. It is a limit check rather than an allocation, so a generous value costs nothing; confirm against `estimate.sh` audit 1 and move on. |
 | `backfill.sh --min-insert-block-size-bytes` | — (stock 256 MiB, implicit) | **256 MiB, carried explicitly** | Same value as traces, made explicit because on spans it is the ONE dial over peak insert memory and it trades against part count. Measured on spans-shaped rows: 256 MiB → ~1.1 GiB peak and the fewest parts; 32 MiB → ~315 MiB peak and ~5× the parts. Lower it only if the data nodes are memory-constrained. See ["Partition spread"](#partition-spread-and-the-one-setting-that-matters). |
 | `backfill.sh --max-insert-block-size` | 1,048,576 (stock) | **1,048,576 (unchanged, and re-derived)** | Re-derived rather than inherited, and it lands on the stock value: at spans' uncompressed row width the BYTE bound above fires long before this row count, so lowering it would be cosmetic on the backfill. It is carried explicitly only so the delta's and the sweep's lower value reads as a deliberate difference rather than drift. |
@@ -110,13 +110,14 @@ verdict and the arithmetic behind it.
 
 The traces gate was deliberately conservative: it sized from the **source**, because a driver cannot know what the
 destination will compress to. For spans the destination is substantially smaller — migration `000116`'s codec set was
-measured during OPIK-7400 at well under half the source's bytes per row. But "it should fit" is not a headroom plan for
+measured during OPIK-7400 at well under half the source's bytes per row, and at 0.420 at the completion of a full
+prod-test copy (OPIK-8380). But "it should fit" is not a headroom plan for
 a multi-day copy that also has to absorb merges.
 
 **The answer this runbook commits to: re-derive the factor from an explicit destination projection, and prove the
 projection before the production window.** Concretely:
 
-1. `backfill.sh --dest-compression-ratio` (default `0.381`) makes the projection an argument rather than an assumption,
+1. `backfill.sh --dest-compression-ratio` (default `0.420`) makes the projection an argument rather than an assumption,
    and `--min-free-factor` (default `1.35`) multiplies the **projection**, covering merge scratch on top of the finished
    copy rather than a second whole copy of the source. `estimate.sh` reports source size, projection, free space and the
    resulting margin as four numbers, so the decision is made on arithmetic rather than on a pass/fail flag.
@@ -133,7 +134,22 @@ projection before the production window.** Concretely:
 
 **What is explicitly NOT the answer: passing a lower `--min-free-factor`.** The gate is the only thing standing between
 a multi-day copy and a full volume, and lowering it makes the same copy run with less margin, not more room. The driver
-says this in its abort message, because the flag is right there.
+says this in its abort message, because the flag is right there. **`--min-free-factor 0` is worse than any lowered
+factor:** it skips the startup gate *and* the free-space floor `backfill.sh` re-checks after every week, which is the
+only guard left once the copy is running.
+
+**A resume is sized from the remaining work.** Free space falls as the copy writes, so a gate pinned to the full
+projection refuses a resume more firmly the further the copy has got. Whenever `spans_local_v2` already holds data
+(whatever `--from-week` says), `backfill.sh` instead requires the remaining work plus the same
+`(--min-free-factor − 1) ×` projection margin a fresh start reserves. The remaining work is the projection minus what
+the destination holds on disk, floored at zero. It is sized in bytes, not rows: the source keeps versions and updates the
+destination collapses, so their physical row counts never converge and a row-based estimate would refuse a finished
+copy. A destination already past the projection means the ratio is optimistic for this estate; the gate then requires
+only the margin, and `backfill.sh` warns to raise `--dest-compression-ratio` toward the measured ratio. The margin is deliberately not
+scaled down with progress: merge scratch grows with the destination rather than shrinking as the copy nears its end, and
+the same figure is the per-week floor, so a resumed run keeps the protection a fresh one has. On an empty destination the
+requirement is exactly `--min-free-factor ×` the projection, as before. A resume abort therefore means the remaining work
+does not fit at the projected ratio, and the levers are the same as for a fresh start.
 
 **On tiered storage the whole-node figure is necessary and not sufficient.** New parts land on the hot volume before
 they tier, so validate per-volume headroom out of band; `backfill.sh` refuses a tiered or mismatched `storage_policy`
@@ -427,9 +443,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    retention note above first.
 8. **Sufficient free disk, sized from the DESTINATION** — see ["Blocker 1"](#blocker-1--disk-headroom), which is the
    single hardest prerequisite here and the one the traces runbook cannot lend us. Run `estimate.sh` and read its
-   headroom verdict; `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the source size
-   (defaults 1.35 and 0.381). **A pass with under 3 TiB of margin is
-   a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
+   headroom verdict; on a fresh start `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the
+   source size (defaults 1.35 and 0.420), and a resume is sized from the remaining work. **A pass with under 3 TiB of
+   margin is a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
    On tiered storage this whole-node floor is necessary but not sufficient — validate per-volume (hot) headroom too,
    since new parts land hot before they tier, and `backfill.sh` refuses a tiered policy without
    `--confirm-tiered-headroom`.
@@ -462,13 +478,15 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     the window (a straggler pre-7483 backend could emit a project-less trace delete whose cascade then bridges an
     empty-`project_id` span event the replay would miss), then assert the bridge holds none.
     `deletion_events_local` is a per-shard local table, so query it cluster-wide:
+
     ```sql
     SELECT count() FROM clusterAllReplicas('{cluster}', <database>.deletion_events_local)
     WHERE source_table = 'spans' AND project_id = '';
     ```
+
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
 14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, anchored at the current instant.** The
-    driver takes a literal timestamp carrying the ` UTC` marker, so read the clock first and pass what it printed:
+    driver takes a literal timestamp carrying the `UTC` marker, so read the clock first and pass what it printed:
     `SELECT toString(now64(6, 'UTC'))`, then `--backfill-start '<that value> UTC'`. Both statements execute but match
     nothing (no row has `created_at`/`last_updated_at` in the future, and the bridge holds no events after that instant),
     so it is a functional no-op against the data — while still proving the migration user can actually perform every kind
@@ -553,12 +571,14 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    so a resumed run keeps the original anchor rather than minting a later one that would miss early-window deletes.
    `--pause-seconds` throttles between windows; `--dry-run` prints the window plan and each window's source row
    count. Preview then run:
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/backfill.sh --database opik --dry-run
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/backfill.sh --database opik \
        --pause-seconds 90 \
        --max-partitions-per-insert-block <estimate.sh audit 1 total_partitions, rounded up>
    ```
+
    **Expect days, not hours** — `estimate.sh` says how many — so run it detached (`nohup` / `screen`) and pass an
    ABSOLUTE `--state-file`. The default is CWD-relative, and on a multi-session copy that is how the anchor gets lost;
    the driver refuses to mint a fresh one onto a non-empty destination, so losing it costs a restart of the whole copy.
@@ -577,11 +597,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    up. That sum is the *first half* of the final-delta→`EXCHANGE` gap, which is the window step 5 sweeps back. The
    second half is `exchange_and_wrap.sh`'s own run through the swap, which that driver reports (step 4). Without
    `--time` a bare `--query` prints no timing at all.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
+
    It prints two things step 5 needs. **`RECORD delta_start=`** is the instant the pass began reading, and it is the
-   gap anchor `reconcile.sh` sweeps from — record it with the ` UTC` marker, exactly like `backfill_start`. **The
+   gap anchor `reconcile.sh` sweeps from — record it with the `UTC` marker, exactly like `backfill_start`. **The
    pending-delta size** is how many rows the source took *while the pass ran*, i.e. what an `EXCHANGE` issued now would
    strand in the parked backup. Re-run the driver to watch it shrink; it will **not reach 0** while the source is live,
    which is precisely why reconciliation happens after the swap and not before it. Losing `delta_start` is not an
@@ -607,11 +629,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    the **connected node only**, so a host that missed the swap is invisible to every later step, and both the deferred
    wrap and `finalize.sh` assume the cluster is uniform. If any host reports non-zero, stop and reconcile it before
    running anything else.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
        --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused \
        --confirm-columns-non-nullable
    ```
+
    Every EXCHANGE path requires three things: `--backfill-start` (for the final deletion replay),
    `--confirm-retention-paused` (retention deletes bypass the bridge, so a retention sweep in the window would leak
    across the swap) and `--confirm-columns-non-nullable` (the read side must already speak the successor's sentinel
@@ -640,6 +664,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): enable `spansDistributedWrapEnabled` so span mutations target `spans_local` first (OPIK-7799).** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
+>
 > - `DELETE FROM <distributed>` → `Code 36 BAD_ARGUMENTS: DELETE query is not supported`
 > - `ALTER TABLE <distributed> DELETE` → `Code 48 NOT_IMPLEMENTED: Distributed doesn't support mutations`
 >
@@ -713,6 +738,7 @@ problem, and OPIK-8382 owns the production execution.
 > **"In lockstep" cannot mean simultaneous — plan for a short mismatch window.** The toggle is a
 > config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
 > one of two windows is unavoidable:
+>
 > - **toggle first** (recommended): from the moment the FIRST backend comes up with `true` until the wrap completes,
 >   every span delete on that instance targets a `spans_local` that does not exist yet → `Code: 60 UNKNOWN_TABLE`,
 >   logged server-side and **not returned to the caller** (see above). Reads and writes are unaffected.
@@ -783,11 +809,13 @@ problem, and OPIK-8382 owns the production execution.
    **This step is not optional and it is not a check** — it is the second half of the data cutover. Everything written
    to the old table between step 2's last delta pass and the `EXCHANGE` is sitting in `spans_pre_cutover_backup`,
    absent from live `spans`.
+
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/reconcile.sh --database opik \
        --gap-start '<delta_start from step 2> UTC' --swap-done '<exchange_done from step 4> UTC' \
        --confirm-retention-paused
    ```
+
    It derives the direction from the live topology (no `--direction` flag to get wrong), gates on the cluster-wide
    settle (the same gate as step 4, with a post-swap scope — see
    ["The replication-settle gate"](#the-replication-settle-gate)), then **sweeps → replays deletes → asserts a
@@ -812,10 +840,12 @@ problem, and OPIK-8382 owns the production execution.
    > still in the bridge, so they can be re-applied by hand; the reconciliation itself is complete either way.
 6. **QA over the reconciled range — `verify.sh --window-from/--window-to`** for the payload-level picture over exactly
    what step 5 swept, alongside the usual bounded weekly compare (see "Verifying the migration"):
+
    ```bash
    ./scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
        --window-from '<delta_start>' --window-to '<exchange_done, UTC>'
    ```
+
    > **The upper bound is the swap, not `now`.** `spans_pre_cutover_backup` froze at the `EXCHANGE`; live `spans` keeps
    > taking writes. A span **created** after the swap therefore exists on the live side only, and `000005` bounds
    > `created_at` identically on both sides and passes a window only when `src_rows = dst_rows` — so a window extending
@@ -1252,10 +1282,12 @@ the backfill ETA. It reads the live row/byte counts of `spans`, estimates copy t
 probe** (`SELECT … FORMAT Null` — it creates no table), derates it by `--write-cost-factor`, and reports the projected
 window count, copy time, throttle idle, and total. Run it with the same `--max-rows-per-insert` and
 `--pause-seconds` you plan to use:
+
 ```bash
 CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/estimate.sh --database opik \
     --max-rows-per-insert 1500000 --pause-seconds 90
 ```
+
 For an exact figure, time one real window with `backfill.sh` and feed its rows/sec back via `--rows-per-sec`.
 It is a planning ballpark, and the parts it does not model are on the write side — the probe measures reads and
 derates them by a fixed `--write-cost-factor`, and it ignores `--max-insert-threads` entirely. Real throughput varies
@@ -1715,7 +1747,7 @@ by the server's offset — and a *later* anchor silently drops the rows written 
 deletion replay both miss because they share that bound.
 
 Because that failure is silent, the persisted anchor carries the claim rather than relying on it: `backfill.sh` writes
-`--state-file` with an explicit ` UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
+`--state-file` with an explicit `UTC` marker and **refuses a file without one**, since a bare timestamp cannot be
 attributed to a timezone and step 2 would read it as UTC regardless. An anchor written by an older revision is therefore
 rejected, with the three ways out the driver prints: delete the file if the destination is still empty, since nothing was
 copied against the lost anchor and a fresh one is owed; re-record it with the marker if it is known to have been taken on
@@ -2047,6 +2079,7 @@ Pick the stage by how far the cutover got:
   restores `NULL` on the rows the flag wrote into the still-Nullable original and recomputes their `duration`. **The
   window is mandatory** (see below). Which invocation depends on whether a promote parked the successor, because that is
   the only topological proof a cutover ran on this estate:
+
   ```bash
   W=(--sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>')
   # after a stage B/C promote — spans_post_rollback_backup is the proof
@@ -2054,6 +2087,7 @@ Pick the stage by how far the cutover got:
   # no parked successor: abandoned pre-EXCHANGE (incl. after stage A), or finalize.sh has recycled it
   ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted --confirm-flag-was-live "${W[@]}"
   ```
+
   The second asserts the flag was live here, because without the parked successor nothing in the topology or the data
   distinguishes an epoch `end_time` this flag minted from a value a client sent — and the repair rewrites the whole
   table. **Single shard only:** it mutates the shard it connects to while verifying across all of them, so it refuses on
@@ -2258,10 +2292,12 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    original's `duration` expression epoch-guards `start_time` but checks `end_time` for NULL alone — a large **negative**
    `duration`. The promote made them live again and `finalize.sh` discards the successor's healed copy, so repair them
    here, **after** step 1 has landed on every instance or in-flight writes keep minting more:
+
    ```
    ./scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
      --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'
    ```
+
    **Both window bounds are required, and there is no safe default.** An epoch `end_time` is not evidence the flag
    produced it: clients send them, and rows predating the flag hold them. Unbounded, the repair would set those to
    `NULL` with no way back — the parked successor encodes an absent `end_time` as that same epoch, so nothing holds the
@@ -2355,9 +2391,11 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
 
 1. **`finalize.sh` must not have run.** It truncates the parked backup — that is the point of no return for this path.
 2. Restore the shadow name:
+
    ```sql
    RENAME TABLE <database>.spans_post_rollback_backup TO <database>.spans_local_v2 ON CLUSTER '{cluster}';
    ```
+
    It fails if `spans_local_v2` already exists — which is itself the signal that a retry cutover began before this
    rollback was finalized. Resolve that by hand rather than forcing it.
 3. **The post-cutover writes the rollback discarded come back as live rows** once the retry's `EXCHANGE` lands. That is
@@ -2603,6 +2641,7 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 >
 > **Two steps need privileges the rollback grant set does not give.** Plan for them before the window,
 > because both surface at the end when the pressure is highest:
+>
 > - the sentinel **count** is a full-table scan, so a read-only account carrying a `max_rows_to_read`
 >   ceiling cannot run it;
 > - the sentinel **repair** needs `ALTER UPDATE(end_time)` / `(ttft)`, which the rollback set deliberately
@@ -2704,27 +2743,39 @@ and escalate rather than passing it — arbitrary is not the same as benign.
 
 **Feasibility at scale.** `spans` is unpartitioned and `created_at` is not in its sorting key, so a week's window is
 narrowed only by the `created_at` minmax skip index, granule by granule — and a granule whose rows span many weeks is
-read again by every week it touches. The default walk, one query per week, therefore reads the source several times
-over, and on a full-size estate that is the whole of its cost: storage-bound, with CPU largely idle. Raising
+read again by every week it touches. Under `FINAL`, `use_skip_indexes_if_final_exact_mode` (on by default on servers
+that have it) also re-reads the key neighbours of every selected granule, which can widen one week to most of both
+tables. The default walk, one query per week, therefore reads the estate up to once per week, and each `confirm-keys`
+re-check of a differing week costs up to another full read; on a full-size estate that is the whole of its cost:
+storage-bound, with CPU largely idle. Raising
 `max_threads` does not help a read that is waiting on the volume.
+
 - `--single-pass` reads the range **once** and reports every week's verdict from that read (`000005`'s `compare-weeks`
   block): the same fingerprint, normalization and per-week output, so it is exact, not a sample, and a week that differs
   is resolved on its own window exactly as in the walk. The one difference is in `FINAL`'s favour: a wider read sees
   more of each key's versions, so a superseded-version artifact the walk reports as `OK — superseded-version artifact`
-  may read plain `OK`. The old side's `GROUP BY` covers every key in the range; it is streamed in sorting-key order
-  (`optimize_aggregation_in_order`), so memory is held per key prefix rather than per estate, with
-  `max_bytes_before_external_group_by` as the spill bound. `--batch-weeks N` splits the range into queries of N weeks —
-  resumable at batch granularity, at the cost of re-reading what the batches share. It stays off by default until its
-  runtime is measured on prod-test against the walk's; `--estimate-only` shows the two modes' estimated reads
-  beforehand.
+  may read plain `OK`. The old side's `GROUP BY` covers every key in the range, bounded by
+  `max_bytes_before_external_group_by` (4 GB). Past it, the state of every key in the range spills to the server's
+  temporary path, about 70 bytes per key compressed in a local measurement, written and read back once: a small fraction
+  of the table read, but held all at once where the walk holds one week's, and covered by neither `--io-budget-pct` nor
+  the estimate. Check the temporary path's free space against it before the run. The block sets
+  `optimize_aggregation_in_order = 0`: that `GROUP BY` shares only a key prefix with the source's sorting key, and
+  in-order aggregation under `FINAL` ran on one thread, several times slower than the walk. `--batch-weeks N` splits the
+  range into queries of N weeks — resumable at batch granularity and holding one batch's spill, but each batch can cost
+  up to a full read of both tables, so use as few as resuming and the temporary path allow. In a local volume test it
+  returned the walk's verdict lines in a fraction of the walk's time; the walk stays the default, and `--estimate-only`
+  shows the two modes' estimated reads beforehand.
 - `--coverage PCT` compares PCT% of the rows: those created in the first `36 × PCT` seconds of every UTC hour. The slice
   is a condition on `created_at` alone, so it selects the *same* rows on both sides, every week and every hour is
   represented, and — unlike a hash of the `id` — the skip index can drop granules lying wholly outside it, so the read
-  shrinks with the coverage. Two properties to read it by, both printed by the driver: the **bias** — each project counts
-  in proportion to its activity inside the slices, so traffic periodic on the hour is over- or under-represented; and
-  the **floor** — a granule whose `created_at` spans more than an hour (a quiet project, non-time-ordered trace ids) is
-  read whatever the coverage, so runtime falls with the coverage only as far as the estate's granules are narrow. The
-  estimate printed before the run shows how far that is on a given estate. On server versions that have
+  shrinks as far as the granules allow. Two properties to read it by, both printed by the driver: the **bias** — each
+  project counts in proportion to its activity inside the slices, so traffic periodic on the hour is over- or
+  under-represented; and the **floor** — a granule whose `created_at` spans more than an hour is read whatever the
+  coverage. On the source that is a quiet project's or a non-time-ordered trace's granule; on `spans_local_v2`, whose
+  granules are cut at 40 MiB (`index_granularity_bytes`), it is most granules, so the destination's read barely
+  shrinks. **Runtime therefore does not fall in proportion to the coverage**: use `--coverage` to sample every week
+  cheaply on the source side, not as a cost lever for the whole compare. The estimate printed before the run shows how
+  far the read falls on a given estate. On server versions that have
   `use_skip_indexes_if_final_exact_mode`, the driver disables it for a coverage run: under `FINAL` it re-reads the key
   neighbours of every granule the skip index selects, which for slices scattered across the table is nearly all of it.
   A slice can then surface a superseded version on one side, which `confirm-keys` resolves as usual.
@@ -2742,7 +2793,7 @@ over, and on a full-size estate that is the whole of its cost: storage-bound, wi
 - `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
   `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 - `--window-from` / `--window-to` compare **one arbitrary `created_at` window** instead of walking the week grid —
-  half-open `[from, to)`, `'YYYY-MM-DD HH:MM:SS[.ffffff]'`, interpreted as UTC (an optional ` UTC` marker is accepted, so
+  half-open `[from, to)`, `'YYYY-MM-DD HH:MM:SS[.ffffff]'`, interpreted as UTC (an optional `UTC` marker is accepted, so
   a value pasted from a driver's `RECORD` line works as-is). This is the shape post-swap reconciliation needs: the range
   of interest is *the gap*, which is not a calendar week and sits inside the one a weekly bound excludes.
   **Mutually exclusive with `--from-week` / `--to-week` / `--weeks-stride`** — those are offsets into a grid this mode
@@ -2754,10 +2805,12 @@ over, and on a full-size estate that is the whole of its cost: storage-bound, wi
   A window in which no span was created on either side **fails** rather than passing over nothing: an arbitrary range
   is easy to place where no data sits, and "nothing to compare" is not a verdict. If the range is genuinely empty, record
   that instead of a `PASSED`.
+
   ```bash
   ./scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
       --window-from '<delta_start>' --window-to '<exchange_done, UTC>'
   ```
+
   Bound the window at the swap, never at `now`: the parked table stops receiving rows there, and the compare passes
   only when both sides hold the same count, so a later bound fails on post-swap traffic rather than on fidelity.
 
@@ -2878,8 +2931,9 @@ below, alongside the other driver guards, rather than in a suite that drives SQL
 So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and the
 `verify.sh` behaviours worth separating from the rest because they decide a *verdict*
 rather than reject an argument — and a wrong verdict from a fidelity gate is the failure this whole procedure exists to
-avoid. The rehearsal is also where the compare modes get their **measured runtimes** on a prod-test-sized estate —
-walk, `--single-pass`, and `--coverage` at 1%, 10% and 50% — which the Go/No-Go's fidelity item records:
+avoid. The rehearsal is also where the gate's compare gets its **measured cost** on a production-sized estate — the
+walk's and `--single-pass`'s runtime, and the single pass's temporary-disk use — which the Go/No-Go's fidelity item
+records:
 
 - refusing to report `PASSED` when the bounds selected **no** window, or when every window it compared was empty on
   both sides (a pass over nothing would be vacuous);
@@ -2971,14 +3025,25 @@ here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-mai
 be made at all), and `--settle-timeout` must refuse a leading zero as well as anything outside 0–7200. Keep that last
 check **lexical**, on the digit count, rather than turning it into a numeric comparison: bash arithmetic wraps silently
 past 2^63 instead of erroring, and a wrapped value is negative, so it both passes a `<=` test and leaves the gate's poll
-count negative — which skips every sample and passes the gate without reading replication at all.
+count negative — which skips every sample and passes the gate without reading replication at all. In both
+`backfill.sh` and `estimate.sh`, `--dest-compression-ratio` must refuse 0 and anything above 1.0 (such a value is
+almost certainly the inverse, source / destination, ratio), and `--min-free-factor` must refuse anything between 0 and
+1, including `0.0`: its negative margin would pass the gate short of the projection and silently disable the per-week
+floor.
 
 **Four `backfill.sh` guards are new for spans and have no traces counterpart, so they need exercising explicitly:**
 
-- **the destination-relative headroom gate.** Confirm it refuses below the requirement, that its abort message names
-  the levers and explicitly rules out lowering the flag, and that the thin-margin WARNING fires between the requirement
-  and +3 TiB. Also confirm `--dest-compression-ratio` above 1.0 is refused — that direction would make a conservative
-  gate optimistic, which is the one thing this parameter must never do;
+- **the destination-relative headroom gate.** Confirm it refuses below the requirement (a large `--min-free-factor`
+  forces that locally), that its abort message names the levers, rules out lowering the flag and says `0` also
+  disables the per-week floor, and that the thin-margin WARNING fires between the requirement and +3 TiB. Repeat on a
+  **resume**: stop a backfill with `--to-week`, resume it with `--from-week`, and confirm it logs `Capacity (resume)`
+  crediting what `spans_local_v2` holds, that a forced abort gives the resume form of the message, and that
+  `--from-week` over an empty destination still sizes as a fresh start. Resumed with `--dest-compression-ratio 0.01`,
+  the projection falls below what the destination holds: confirm it logs the WARNING that the destination already holds
+  the whole projection and that the gate requires only the margin. Confirm the measured ratio is logged after every
+  week, that the run stopped by `--to-week` labels its final reading a mid-run sample while the run reaching the last
+  week labels it the completion figure, and that `estimate.sh` then notes the destination holds data and prints the
+  measured ratio. Confirm `--from-week` past `--to-week` is refused;
 - **`reconcile.sh`'s reverse usage-range precheck.** Plant a `usage` value above `2^31` in the parked successor and
   confirm the reverse direction REFUSES rather than importing it wrapped, and that `--report-only` reports it rather
   than staying silent.
@@ -3145,9 +3210,11 @@ these is working the wrong problem.
       `--batch-weeks`) reports the same per-week verdicts from one read and satisfies the gate exactly as the weekly
       walk does; and the gate may be **resumed** on a pinned `--anchor` — a run labelled `RESUMED at week N …` together
       with the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no
-      `delta_replay.sh` ran between the two runs. Use whichever the Go/No-Go's measured
-      runtimes make affordable, run it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the
-      ETA printed before the run and the runtime measured after it. Reserve coverage/ranged runs for follow-up confidence
+      `delta_replay.sh` ran between the two runs. Prefer `--single-pass`, which reads each table once, where the
+      server's temporary path holds its spill (see "Feasibility at scale"; otherwise `--batch-weeks` or the walk); run
+      it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the ETA printed before the run, the
+      runtime measured after it and, for a single pass, its temporary-disk use (`ExternalAggregationCompressedBytes` in
+      `system.query_log`, by the driver's `log_comment`). Reserve coverage/ranged runs for follow-up confidence
       *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh`, and read the result for what it can be
       under live traffic: windows bound on `created_at`, so spans updated after the last delta read differ inside their
       own week and a clean `PASSED` is not generally obtainable. The gate passes when every `genuinely_differing_keys`

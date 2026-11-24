@@ -2,8 +2,8 @@
 
 ## Installation pre-requirements for local installation
 
-- Docker: https://docs.docker.com/engine/install/
-- Docker Compose: https://docs.docker.com/compose/install/
+- Docker: <https://docs.docker.com/engine/install/>
+- Docker Compose: <https://docs.docker.com/compose/install/>
 
 ## Service Profiles for Development
 
@@ -12,7 +12,7 @@ Opik supports Docker Compose profiles to start different combinations of service
 ### Available Profiles
 
 1. **Infrastructure Services** (always enabled): MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.
-2. **Backend Services** (`backend`): Infrastructure (automatic) + Backend, Python Backend services etc. 
+2. **Backend Services** (`backend`): Infrastructure (automatic) + Backend, Python Backend services etc.
 3. **Opik Services** (`opik`): The full Opik suite including all infrastructure and services, except for Guardrails services
 4. **Guardrails** (`guardrails`): Guardrails services, meant to be combined with other profiles. Guardrails are always optional by default, even for the full Opik suite, unless explicitly enabled
 5. **Opik with OpenTelemetry** (`opik-otel`): The full Opik suite plus Jaeger and OpenTelemetry Collector for observability
@@ -20,31 +20,37 @@ Opik supports Docker Compose profiles to start different combinations of service
 ### Profile Usage Examples
 
 **Start only infrastructure services (default behavior when no profile):**
+
 ```bash
 docker compose up -d
 ```
 
 **Start infrastructure + backend services:**
+
 ```bash
 docker compose --profile backend up -d
 ```
 
 **Start full Opik suite (all infrastructure and services, except guardrails):**
+
 ```bash
 docker compose --profile opik up -d
 ```
 
 **Start backend + guardrails:**
+
 ```bash
 docker compose --profile backend --profile guardrails up -d
 ```
 
 **Start full Opik suite + guardrails:**
+
 ```bash
 docker compose --profile opik --profile guardrails up -d
 ```
 
 **Start full Opik suite + OpenTelemetry:**
+
 ```bash
 docker compose --profile opik-otel up -d
 ```
@@ -92,6 +98,7 @@ docker compose -f docker-compose.yaml --profile opik up -d
 ## Run `docker compose` with building application from latest code
 
 From the root of the project:
+
 ```bash
 cd deployment/docker-compose
 
@@ -132,8 +139,10 @@ This will expose the following services to the host machine:
 - Frontend: Available on port 5173.
 
 ## Binding Ports in Docker Compose
+
 By default, Docker Compose binds exposed container ports to 0.0.0.0, making them accessible from any network interface on the host. To restrict access, specify a specific IP in the ports section, such as 127.0.0.1:8080:80, to limit exposure to the local machine.
 This can be done in `docker-compose.yaml` file
+
 ```
 frontend:
     ports:
@@ -200,9 +209,10 @@ docker compose --profile opik-otel up -d
 ```
 
 This will start:
+
 - Opik Stack (Frontend, Backend, etc.)
 - OpenTelemetry Collector (ports 4317, 4318, 5140/udp, etc.)
-- Jaeger (UI at http://localhost:16686)
+- Jaeger (UI at <http://localhost:16686>)
 
 ### Enable Nginx Tracing and Log Shipping
 
@@ -221,6 +231,7 @@ docker compose --profile opik-otel up -d
 ```
 
 When enabled:
+
 - **Nginx Traces**: Will be sent to the OTel Collector and visible in Jaeger.
 - **Nginx Logs**: Will be sent via syslog to the OTel Collector.
 
