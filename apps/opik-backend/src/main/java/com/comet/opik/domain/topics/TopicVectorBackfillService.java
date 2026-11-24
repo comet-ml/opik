@@ -2,11 +2,14 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
 import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
@@ -35,8 +38,9 @@ public interface TopicVectorBackfillService {
 
     /**
      * One discovery of a workspace's projects, in one transaction: restarts the backfills of a workspace not
-     * discovered since {@code staleBefore}, marks it discovered at {@code now} and writes what was found. Returns the
-     * rows of deleted projects it removed.
+     * discovered since {@code staleBefore}, marks it discovered at {@code now} and writes what was found. Then removes
+     * the rows of deleted projects, {@code topics.storage.deleteBatchSize} projects per transaction, and returns how
+     * many it removed.
      */
     int discovered(String workspaceId, List<Backfill> found, Instant now, Instant staleBefore);
 
@@ -50,6 +54,7 @@ public interface TopicVectorBackfillService {
 class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
 
     private final @NonNull TransactionTemplate template;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     @Override
     public Map<String, List<Backfill>> findUndrained(@NonNull Collection<String> workspaceIds) {
@@ -87,16 +92,21 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
     @Override
     public int discovered(@NonNull String workspaceId, @NonNull List<Backfill> found, @NonNull Instant now,
             @NonNull Instant staleBefore) {
-        return template.inTransaction(WRITE, handle -> {
+        template.inTransaction(WRITE, handle -> {
             var projects = handle.attach(TopicProjectDAO.class);
             projects.resetStaleBackfills(workspaceId, staleBefore, now);
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             if (!found.isEmpty()) {
                 projects.discoverBackfills(found);
             }
-            // Last, so a project deleted while the tick read it gets no row back.
-            return projects.deleteOfMissingProjects(workspaceId);
+            return null;
         });
+        // After the discovery's commit, so a project deleted while the tick read it gets no row back.
+        var missing = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicProjectDAO.class).findOfMissingProjects(workspaceId));
+        return Lists.partition(missing, config.getStorage().getDeleteBatchSize()).stream()
+                .mapToInt(batch -> deleteByProjects(workspaceId, batch))
+                .sum();
     }
 
     @Override

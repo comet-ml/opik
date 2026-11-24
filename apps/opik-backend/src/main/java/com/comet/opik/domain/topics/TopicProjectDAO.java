@@ -268,15 +268,10 @@ public interface TopicProjectDAO {
             @BindList("projectIds") Collection<UUID> projectIds);
 
     /**
-     * Removes the workspace's rows whose project no longer exists: a row a tick wrote for a project deleted meanwhile,
-     * or one a failed delete on {@code ProjectsDeleted} left behind. A plain read finds them and the delete goes by
-     * their ids, so nothing in {@code projects} is locked.
+     * The workspace's rows whose project no longer exists: a row a tick wrote for a project deleted meanwhile, or one a
+     * failed delete on {@code ProjectsDeleted} left behind. For the caller to delete by {@link #deleteByProjects} in
+     * bounded batches. A plain read, so nothing in {@code projects} is locked.
      */
-    default int deleteOfMissingProjects(String workspaceId) {
-        var missing = findOfMissingProjects(workspaceId);
-        return missing.isEmpty() ? 0 : deleteByProjects(workspaceId, missing);
-    }
-
     @SqlQuery("""
             SELECT t.project_id FROM topic_projects t
             LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id

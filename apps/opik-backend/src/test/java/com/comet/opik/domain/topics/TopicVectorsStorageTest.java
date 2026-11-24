@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.TASK;
@@ -630,23 +631,28 @@ class TopicVectorsStorageTest {
     }
 
     @Test
-    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again")
+    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again, "
+            + "in more than one batch")
     void discoveryRemovesRowsOfDeletedProjects() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var kept = ID_GENERATOR.generateId();
-        var deleted = ID_GENERATOR.generateId();
+        // More than topics.storage.deleteBatchSize (2 in the tests), so the delete takes two transactions.
+        var deleted = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
         tables.project(workspaceId, kept);
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
         var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         // Left behind by a failed delete on ProjectsDeleted.
-        backfillService.start(List.of(row.projectId(kept).build(), row.projectId(deleted).build()));
+        backfillService.start(Stream.concat(Stream.of(kept), deleted.stream())
+                .map(projectId -> row.projectId(projectId).build())
+                .toList());
 
-        // The deleted project's statuses are still there, so the discovery finds it again.
+        // The first deleted project's statuses are still there, so the discovery finds it again.
         int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).backfillTracesTotal(3)
-                .build(), row.projectId(deleted).backfillTracesTotal(3).build()), t0.plusSeconds(60), t0);
+                .build(), row.projectId(deleted.getFirst()).backfillTracesTotal(3).build()), t0.plusSeconds(60), t0);
 
-        assertThat(removed).isOne();
-        assertThat(backfillService.findByKeys(workspaceId, List.of(kept, deleted))).containsOnlyKeys(kept);
+        assertThat(removed).isEqualTo(deleted.size());
+        assertThat(backfillService.findByKeys(workspaceId, Stream.concat(Stream.of(kept), deleted.stream()).toList()))
+                .containsOnlyKeys(kept);
     }
 
     private Instant vectorsCheckedAt(String workspaceId) {
