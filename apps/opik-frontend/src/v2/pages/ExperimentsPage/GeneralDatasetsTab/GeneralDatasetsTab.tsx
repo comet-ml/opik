@@ -53,7 +53,6 @@ import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
-import { cn } from "@/lib/utils";
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -760,58 +759,9 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           )}
         </PageBodyStickyContainer>
       )}
-      <PageBodyStickyContainer
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pt-4",
-          selectedRows.length > 0 ? "pb-1" : "pb-6",
-        )}
-        direction="bidirectional"
-        limitWidth
-      >
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search"
-            className="w-[200px]"
-            dimension="sm"
-          ></SearchInput>
-          <GroupsButton
-            columns={filterAndGroupColumns}
-            config={filtersAndGroupsConfig as never}
-            groups={groups}
-            onChange={setGroups}
-          />
-          <FiltersButton
-            columns={filterAndGroupColumns}
-            config={filtersAndGroupsConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="add"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <ColumnsButton
-            columns={availableColumns}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-            layout="labeled"
-          ></ColumnsButton>
-          <RefreshButton
-            tooltip="Refresh experiments list"
-            isFetching={isFetching}
-            onRefresh={() => {
-              refetch();
-              refetchPinned();
-            }}
-          />
-        </div>
-      </PageBodyStickyContainer>
-      {selectedRows.length > 0 && (
+      {selectedRows.length > 0 ? (
         <SelectionActionBar
+          className="pb-6 pt-4"
           selectedCount={selectedRows.length}
           onDeselectAll={() => setRowSelection({})}
         >
@@ -824,6 +774,54 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             buttonSize="2xs"
           />
         </SelectionActionBar>
+      ) : (
+        <PageBodyStickyContainer
+          className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+          direction="bidirectional"
+          limitWidth
+        >
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search"
+              className="w-[200px]"
+              dimension="sm"
+            ></SearchInput>
+            <GroupsButton
+              columns={filterAndGroupColumns}
+              config={filtersAndGroupsConfig as never}
+              groups={groups}
+              onChange={setGroups}
+            />
+            <FiltersButton
+              columns={filterAndGroupColumns}
+              config={filtersAndGroupsConfig as never}
+              filters={filters}
+              onChange={setFilters}
+              layout="add"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <ColumnsButton
+              columns={availableColumns}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+              sections={columnSections}
+              layout="labeled"
+            ></ColumnsButton>
+            <RefreshButton
+              tooltip="Refresh experiments list"
+              isFetching={isFetching}
+              onRefresh={() => {
+                refetch();
+                refetchPinned();
+              }}
+            />
+          </div>
+        </PageBodyStickyContainer>
       )}
       <DataTable
         key={hasGroups ? "grouped" : "ungrouped"}
