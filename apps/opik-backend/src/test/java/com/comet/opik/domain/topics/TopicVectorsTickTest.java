@@ -386,6 +386,8 @@ class TopicVectorsTickTest {
         markDrained(read, readProject);
         var cappedTraces = oldStatuses(capped, cappedProject, 3);
         var readTraces = oldStatuses(read, readProject, 1);
+        // A short tick first: the pass's progress is kept on the watermark rows a fresh read creates.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         makeLongWindowPassDue();
         var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
