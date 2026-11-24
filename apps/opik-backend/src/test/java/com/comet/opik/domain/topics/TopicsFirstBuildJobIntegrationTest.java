@@ -357,9 +357,9 @@ class TopicsFirstBuildJobIntegrationTest {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
             var drained = UUID.randomUUID();
-            dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
+            dao.startBackfills(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                     .projectId(drained).backfillStartedAt(now).backfillLastDoneAt(now).build()));
-            dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
+            dao.recordBackfills(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                     .projectId(drained).drainedAt(now).build()));
             return null;
         });
