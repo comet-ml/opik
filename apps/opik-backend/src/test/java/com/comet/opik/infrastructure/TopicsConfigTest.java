@@ -29,7 +29,10 @@ class TopicsConfigTest {
                 arguments("wsA:nightly", Map.of("wsA", TopicsStage.NIGHTLY)),
                 arguments("wsA:ui", Map.of("wsA", TopicsStage.UI)),
                 arguments(" wsA , wsB : vectors ,, wsC:build, ", Map.of(
-                        "wsA", TopicsStage.UI, "wsB", TopicsStage.VECTORS, "wsC", TopicsStage.BUILD)));
+                        "wsA", TopicsStage.UI, "wsB", TopicsStage.VECTORS, "wsC", TopicsStage.BUILD)),
+                arguments("wsA,wsA", Map.of("wsA", TopicsStage.UI)),
+                arguments("wsA, wsA:ui", Map.of("wsA", TopicsStage.UI)),
+                arguments("wsA:build, wsB, wsA:build", Map.of("wsA", TopicsStage.BUILD, "wsB", TopicsStage.UI)));
     }
 
     @ParameterizedTest(name = "''{0}''")
@@ -54,15 +57,26 @@ class TopicsConfigTest {
     }
 
     @ParameterizedTest(name = "''{0}''")
-    @ValueSource(strings = {"wsA:unknown", "wsA:Build", "wsA:", "wsA:build:ui", ":build", "wsA,wsA",
-            "wsA:vectors, wsA:build"})
-    void unknownStageOrRepeatedIdFailsValidation(String enabledWorkspaces) {
+    @ValueSource(strings = {"wsA:unknown", "wsA:Build", "wsA:", "wsA:build:ui", ":build"})
+    void malformedEntryOrUnknownStageFailsValidation(String enabledWorkspaces) {
         var config = withList(enabledWorkspaces);
 
         assertThatThrownBy(config::enabledWorkspaceStages).isInstanceOf(IllegalArgumentException.class);
         assertThat(VALIDATOR.validateProperty(config, "enabledWorkspacesValid")).singleElement()
                 .satisfies(violation -> assertThat(violation.getMessage())
                         .contains("topics.enabledWorkspaces", "vectors, build, arrival, nightly, ui"));
+    }
+
+    @ParameterizedTest(name = "''{0}''")
+    @ValueSource(strings = {"wsA:vectors, wsA:build", "wsA, wsB, wsA:build"})
+    void idListedWithTwoStagesFailsValidation(String enabledWorkspaces) {
+        var config = withList(enabledWorkspaces);
+
+        assertThatThrownBy(config::enabledWorkspaceStages).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("workspace 'wsA'").hasMessageContaining("'build'");
+        assertThat(VALIDATOR.validateProperty(config, "enabledWorkspacesValid")).singleElement()
+                .satisfies(violation -> assertThat(violation.getMessage())
+                        .contains("topics.enabledWorkspaces", "one stage per id"));
     }
 
     @Test

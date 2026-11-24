@@ -19,6 +19,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
  * Topics settings; config.yml describes each key and its default. Deliberately not a service toggle. Needs ai-labels
  * on and uses its opik-inference deployment and credential: see {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
+@Slf4j
 @Data
 public class TopicsConfig {
 
@@ -324,9 +326,10 @@ public class TopicsConfig {
 
     /**
      * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
-     * {@link TopicsStage#ALL}. Throws on an unknown stage or a repeated id, which {@link #isEnabledWorkspacesValid()}
-     * rejects at startup. Not named as a bean getter, since Lombok and Jackson call getters. The parse is kept against
-     * the string it came from, so a value bound or set later is parsed again rather than served stale.
+     * {@link TopicsStage#ALL}. An id repeated with the same stage is listed once. Throws on an unknown stage or an id
+     * listed with two stages, which {@link #isEnabledWorkspacesValid()} rejects at startup. Not named as a bean getter,
+     * since Lombok and Jackson call getters. The parse is kept against the string it came from, so a value bound or set
+     * later is parsed again rather than served stale.
      */
     public Map<String, TopicsStage> enabledWorkspaceStages() {
         var raw = enabledWorkspaces;
@@ -353,9 +356,11 @@ public class TopicsConfig {
                     ? TopicsStage.ALL
                     : TopicsStage.fromConfigName(parts[1].strip()).orElseThrow(() -> new IllegalArgumentException(
                             "topics.enabledWorkspaces: unknown stage in '%s'".formatted(entry)));
-            if (stages.putIfAbsent(workspaceId, stage) != null) {
+            var listed = stages.putIfAbsent(workspaceId, stage);
+            if (listed != null && listed != stage) {
                 throw new IllegalArgumentException(
-                        "topics.enabledWorkspaces: listed more than once, workspace '%s'".formatted(workspaceId));
+                        "topics.enabledWorkspaces: workspace '%s' is listed with stages '%s' and '%s'"
+                                .formatted(workspaceId, listed.configName(), stage.configName()));
             }
         }
         return Map.copyOf(stages);
@@ -367,11 +372,13 @@ public class TopicsConfig {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.enabledWorkspaces must list each workspace id once, as id or id:stage, with stage one of vectors, build, arrival, nightly, ui") public boolean isEnabledWorkspacesValid() {
+    @AssertTrue(message = "topics.enabledWorkspaces must list each workspace id as id or id:stage, with one stage per id and stage one of vectors, build, arrival, nightly, ui") public boolean isEnabledWorkspacesValid() {
         try {
             enabledWorkspaceStages();
             return true;
         } catch (IllegalArgumentException exception) {
+            // The constraint message is fixed text: this names the entry.
+            log.error("Topics config is not valid: {}", exception.getMessage());
             return false;
         }
     }
