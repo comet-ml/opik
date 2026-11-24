@@ -1,7 +1,12 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.api.Source;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.PrototypeVectors;
 import com.comet.opik.domain.topics.Topic;
@@ -10,15 +15,18 @@ import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicProjectDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -27,6 +35,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +48,8 @@ public class TopicsReadTestUtils {
     public static final String RESOURCE_PATH = "%s/v1/private/topics";
 
     private static final String USER = "user-" + UUID.randomUUID();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final PodamFactory PODAM = PodamFactoryUtils.newPodamFactory();
 
     private final @NonNull WireMockServer wireMock;
     private final @NonNull ClientSupport client;
@@ -59,6 +71,37 @@ public class TopicsReadTestUtils {
 
     public UUID project(Caller caller) {
         return projectClient.createProject("topics-" + UUID.randomUUID(), caller.apiKey(), caller.workspaceName());
+    }
+
+    /**
+     * {@code count} SDK traces in the project, created through the API, read back for their {@code created_at}, in
+     * creation order. The API sets {@code created_at} itself and takes no visibility: a test that needs a past day or
+     * a hidden trace writes it with {@link PostCutoverTraces#insertTraces}.
+     */
+    public List<Trace> createTraces(Caller caller, UUID projectId, int count) {
+        var traceClient = new TraceResourceClient(client, baseUrl);
+        var projectName = projectClient.getProject(projectId, caller.apiKey(), caller.workspaceName()).name();
+        var traces = IntStream.range(0, count)
+                .mapToObj(i -> PODAM.manufacturePojo(Trace.class).toBuilder()
+                        .id(ID_GENERATOR.generateId())
+                        .projectId(null)
+                        .projectName(projectName)
+                        // As the SDK logs it, so the Logs filters keep it.
+                        .source(Source.SDK)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .comments(null)
+                        .build())
+                .toList();
+        traceClient.batchCreateTraces(traces, caller.apiKey(), caller.workspaceName());
+        // After the cut-over the API writes through the Distributed traces table, which ships rows in the background
+        // (prefer_localhost_replica = 0 in users.xml): wait until each trace reads back.
+        return traces.stream()
+                .map(trace -> Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
+                        .ignoreExceptions()
+                        .until(() -> traceClient.getById(trace.id(), caller.workspaceName(), caller.apiKey()),
+                                read -> read.createdAt() != null))
+                .toList();
     }
 
     /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces as a Helm change would. */
