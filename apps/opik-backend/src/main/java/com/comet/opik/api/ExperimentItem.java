@@ -66,7 +66,9 @@ public record ExperimentItem(
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<AssertionResult> assertionResults,
         @JsonView({
-                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status) {
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status,
+        @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, implementation = JsonNode.class, ref = "JsonNode", description = "The dataset item's data. Returned by the dataset experiment-item stream, where rows aren't nested under their dataset item") Map<String, JsonNode> datasetItemData) {
 
     public static class View {
         public static class Write {

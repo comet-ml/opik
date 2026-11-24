@@ -1,7 +1,8 @@
 import json
+import logging
 import math
 from concurrent import futures
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
@@ -9,6 +10,8 @@ from ... import exceptions, json_helpers, rest_api
 from ...rest_api.core.api_error import ApiError
 from ...rest_api.core.jsonable_encoder import jsonable_encoder
 from ...rest_api.types import experiment_public
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_experiment_data_by_name(
@@ -141,6 +144,132 @@ def find_experiment_items_for_dataset(
             _collect_page(page, collected_items, max_results)
 
     return collected_items
+
+
+def stream_experiment_items_for_dataset(
+    rest_client: rest_api.OpikApi,
+    dataset_id: str,
+    dataset_versions: Optional[List[str]],
+    max_results: int,
+    truncate: bool,
+    filter_expression: Optional[str] = None,
+) -> List[experiment_item.ExperimentItemContent]:
+    """Every regular experiment's items on a dataset, read from the cursor stream.
+
+    Results are grouped by dataset item, so one item's history across experiments
+    is contiguous.
+    """
+    if max_results <= 0:
+        return []
+
+    last_row: Dict[str, Optional[str]] = {"id": None, "experiment_id": None}
+
+    def read_page(batch_size: int, last_retrieved_id: Optional[str]) -> Iterable[bytes]:
+        # The experiment_id hint lets the backend resume from the start of that
+        # experiment, rather than the start of the stream, if the cursor row was
+        # deleted between pages.
+        hint = {}
+        if last_retrieved_id is not None and last_retrieved_id == last_row["id"]:
+            hint["last_retrieved_experiment_id"] = last_row["experiment_id"]
+        return _checked_page(
+            rest_client.datasets.stream_dataset_experiment_items(
+                dataset_id=dataset_id,
+                dataset_versions=dataset_versions,
+                filters=filter_expression,
+                limit=batch_size,
+                last_retrieved_id=last_retrieved_id,
+                truncate=truncate,
+                **hint,
+            ),
+            last_row,
+        )
+
+    try:
+        rows = rest_stream_parser.read_and_parse_full_stream(
+            read_source=read_page,
+            parsed_item_class=dict,
+            max_results=max_results,
+        )
+    except ApiError as e:
+        # A 404 is also what a dataset deleted since it was resolved returns, so
+        # only the backend's own version message maps to the typed exception.
+        message = _error_message(e.body)
+        if e.status_code == 404 and message.startswith(_VERSION_NOT_FOUND_PREFIX):
+            raise exceptions.DatasetVersionNotFound(message) from e
+        raise
+
+    if len(rows) >= max_results:
+        LOGGER.warning(
+            "Stopped reading experiment items at max_results=%d. The stream returns "
+            "them experiment by experiment, so later experiments' results may be "
+            "missing; raise max_results or filter to fewer dataset items.",
+            max_results,
+        )
+
+    items = [_stream_row_to_item(row) for row in rows]
+    items.sort(key=lambda item: item.dataset_item_id or "")
+    return items
+
+
+def _checked_page(
+    chunks: Iterable[bytes], last_row: Dict[str, Optional[str]]
+) -> Iterator[bytes]:
+    """Pass a page's bytes through, then inspect its last line.
+
+    A failure after the stream has started (e.g. a timeout) arrives as a final
+    error line on the 200 response, not as an HTTP error: raise it as soon as the
+    page ends, before it counts as a record or another page is requested.
+    Otherwise remember the last row, so the next request can send its experiment.
+    """
+    tail = b""
+    last_line = b""
+    for chunk in chunks:
+        yield chunk
+        lines = (tail + chunk).split(b"\n")
+        tail = lines.pop()
+        complete_lines = [line for line in lines if line.strip()]
+        if complete_lines:
+            last_line = complete_lines[-1]
+
+    final_line = tail if tail.strip() else last_line
+    try:
+        record = json.loads(final_line) if final_line.strip() else None
+    except ValueError:
+        # The parser reports undecodable lines itself.
+        return
+    if not isinstance(record, dict):
+        return
+    if "id" not in record and "message" in record:
+        raise ApiError(status_code=record.get("code"), headers={}, body=record)
+    last_row["id"] = record.get("id")
+    last_row["experiment_id"] = record.get("experiment_id")
+
+
+def _stream_row_to_item(row: Dict[str, Any]) -> experiment_item.ExperimentItemContent:
+    # Same shape as the paged read: the dataset item's data plus its id.
+    dataset_item_data = row.get("dataset_item_data")
+    if dataset_item_data is not None:
+        experiment_item.require_json_type(
+            dataset_item_data, dict, "`dataset_item_data`"
+        )
+        dataset_item_data = {**dataset_item_data, "id": row.get("dataset_item_id")}
+    return experiment_item.ExperimentItemContent.from_compare_dict(
+        row, dataset_item_data=dataset_item_data
+    )
+
+
+_VERSION_NOT_FOUND_PREFIX = "Version not found"
+
+
+def _error_message(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ""
+    if isinstance(body.get("message"), str):
+        return body["message"]
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors and isinstance(errors[0], str):
+        return errors[0]
+    return ""
 
 
 def http_client(rest_client: rest_api.OpikApi) -> Any:

@@ -36,6 +36,9 @@ public class TopicsConfig {
     private BuildConfig build;
 
     @Valid @NotNull @JsonProperty
+    private ReadConfig read;
+
+    @Valid @NotNull @JsonProperty
     private StorageConfig storage;
 
     /**
@@ -230,7 +233,7 @@ public class TopicsConfig {
      * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
      */
     @Data
-    public static class BuildReadConfig {
+    public static class BuildReadConfig implements ReadGuards {
 
         @JsonProperty
         @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
@@ -254,6 +257,51 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration countSlice;
+    }
+
+    /** The ClickHouse guards a topics read binds: the build's and the read API's are two sets of them. */
+    public interface ReadGuards {
+
+        long getMaxRowsToRead();
+
+        long getMaxMemoryUsage();
+
+        int getMaxThreads();
+
+        int getPriority();
+
+        int getMaxBlockSize();
+    }
+
+    /**
+     * The read API's ClickHouse guards, apart from the build's: a page request, not a background job. Its reads (the
+     * per topic and day counts, the collecting count) share one time budget.
+     */
+    @Data
+    public static class ReadConfig implements ReadGuards {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse priority of the collecting count; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the collecting count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** A request's ClickHouse reads end within this; a read that does not is a guard trip. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration budget;
     }
 
     /** The topics state's MySQL writes. */

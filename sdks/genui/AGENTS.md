@@ -55,11 +55,12 @@ Run from `sdks/genui`.
 - A new contract ships with Opik first; Ollie and opik-mcp move to it by upgrading their pin of the packages.
 
 ## Release
-- Both packages are published by hand with `.github/workflows/genui_publish.yml` ("Run workflow" on `main` with `is_release`), not by the Opik release, so a failed publish cannot block one. Give it the version of an Opik release that already happened: it builds that release's tag once and publishes `opik-genui` to npm and then to PyPI with that version.
-- Without `is_release` (off by default, as in the SDK publish workflows) it builds and checks the branch it is started from, proves the PyPI registration and uploads nothing. Run it that way before the first release and after any change to the workflow or the packaging.
-- `js/package.json` is the only version source. The workflow sets it at build time, the build writes it into `engine.json`, the Python package reads it from there, and the wheel build fails on data built for another version. The version in the repository stays `0.1.0` and is never published.
-- Auth is trusted publishing (OIDC). `genui_publish.yml` is the registered publisher on both registries: npm matches the workflow that starts the run, PyPI the workflow that contains the job. Renaming the file breaks both until the registrations are changed. Moving the publish into the Opik release needs a second npm publisher, `release-wrapper-release-n-deploy.yml`.
-- A version cannot be published twice. A rerun skips a package that is already on its registry.
+
+- Both packages are published by the Opik release: `release.yaml` calls `.github/workflows/genui_publish.yml`, which builds the tag once and publishes `opik-genui` to npm and then to PyPI with the Opik version. A failed publish fails the release, as for the SDKs.
+- The same workflow runs by hand ("Run workflow" on `main`): with `is_release` and the version of a release that already happened it re-publishes that version; without `is_release` it builds and checks the branch it is started from, proves the PyPI registration and uploads nothing.
+- `js/package.json` is the only version source. The build writes it into `engine.json`, the Python package reads it from there, and the wheel build fails on data built for another version. The release commits the new version to `main`; do not edit it.
+- Auth is trusted publishing (OIDC), and the two registries match a different file. npm matches the workflow that starts the run: `release-wrapper-release-n-deploy.yml` for a release and `genui_publish.yml` for a manual run, both registered. PyPI matches the workflow that contains the job, `genui_publish.yml`, in both cases. Renaming either file breaks that publish until the registration is changed. The release checks the PyPI registration before it tags; npm has no such check.
+- A version cannot be published twice. A replayed release or a rerun skips a package that is already on its registry.
 - What ships: `js/package.json` `files` and `exports` for npm, `python/pyproject.toml` for PyPI. A new entry point or library needs an `exports` entry; a library bundle ships with its licences file.
 
 ## Areas

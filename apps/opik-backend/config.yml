@@ -2859,6 +2859,30 @@ topics:
       #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
+  #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
+  #  build's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
+  #  trip or a spent budget answers 503 with Retry-After
+  read:
+    #  Default: 30000000
+    #  Description: Per query; the counts run one query per UTC day of the window. At most 1000000000
+    maxRowsToRead: ${TOPICS_READ_MAX_ROWS_TO_READ:-30000000}
+    #  Default: 1073741824 (1 GiB)
+    #  Description: Per query. At most 8589934592 (8 GiB)
+    maxMemoryUsage: ${TOPICS_READ_MAX_MEMORY_USAGE:-1073741824}
+    #  Default: 2
+    #  Description: ClickHouse threads per query. From 1 to 16
+    maxThreads: ${TOPICS_READ_MAX_THREADS:-2}
+    #  Default: 0
+    #  Description: ClickHouse priority of the collecting count; a higher number yields to lower ones, 0 is none. The
+    #  counts per day run at the server's default priority. From 0 to 1000
+    priority: ${TOPICS_READ_PRIORITY:-0}
+    #  Default: 8192
+    #  Description: Rows per block of the collecting count; its in-flight per-trace arrays grow with it. From 1024 to
+    #  1048576
+    maxBlockSize: ${TOPICS_READ_MAX_BLOCK_SIZE:-8192}
+    #  Default: 10s
+    #  Description: A request's ClickHouse reads end within this. From 1s to 60s
+    budget: ${TOPICS_READ_BUDGET:-10s}
   #  The topics state's MySQL writes
   storage:
     #  Default: 100
