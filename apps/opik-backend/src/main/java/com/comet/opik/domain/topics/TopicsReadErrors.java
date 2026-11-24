@@ -29,17 +29,22 @@ public class TopicsReadErrors {
     private static final int TOO_MANY_BYTES = 307;
     private static final int TOO_MANY_ROWS_OR_BYTES = 396;
 
-    private static final Set<Integer> TOO_LARGE_CODES = Set.of(TOO_MANY_ROWS, TOO_MANY_BYTES, TOO_MANY_ROWS_OR_BYTES);
+    private static final Set<Integer> GUARD_CODES = Set.of(TOO_MANY_ROWS, TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED,
+            TOO_MANY_BYTES, TOO_MANY_ROWS_OR_BYTES);
     private static final Set<Integer> LIMIT_CODES = Set.of(TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED);
 
-    /** A rows or bytes limit: the same project fails the same way on a retry, so the caller gets a 400. */
-    static boolean isTooLarge(@NonNull Throwable error) {
-        return hasCode(error, TOO_LARGE_CODES);
+    /**
+     * Any ClickHouse guard of a read API query (rows, bytes, time or memory): the project is too large for the read,
+     * and a retry fails the same way, so the read API answers {@code status: too_large}, not an error.
+     */
+    static boolean isGuardTrip(@NonNull Throwable error) {
+        return hasCode(error, GUARD_CODES);
     }
 
     /**
-     * A time or memory limit, or the client timeout anywhere in the causal chain: a retry can pass, so the caller gets
-     * a 503 with Retry-After. False for the codes of {@link #isTooLarge}.
+     * A time or memory limit, or the client timeout anywhere in the causal chain, of a query that is not the read
+     * API's: the traces list filtered by topic, where load can pass and a 503 with Retry-After fits. False for the rows
+     * and bytes limits.
      */
     static boolean isLimit(@NonNull Throwable error) {
         return hasCode(error, LIMIT_CODES) || Throwables.getCausalChain(error).stream()

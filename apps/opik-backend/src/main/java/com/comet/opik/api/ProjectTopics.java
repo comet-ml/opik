@@ -24,7 +24,8 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProjectTopics(
         @Schema(description = "disabled: the workspace is not opted in to topics. collecting: the project has no "
-                + "topics yet. ready: topics with counts") Status status,
+                + "topics yet. ready: topics with counts. too_large: the project has too many traces in the window "
+                + "to count; a retry answers the same") Status status,
         @Schema(description = "The UTC date of the request, the window's last day") LocalDate today,
         @Schema(description = "The window's first UTC day, inclusive") LocalDate windowFrom,
         @Nullable @Schema(description = "When the project's last saved run (a first build or a nightly update) "
@@ -47,7 +48,8 @@ public record ProjectTopics(
     public enum Status {
         DISABLED("disabled"),
         COLLECTING("collecting"),
-        READY("ready");
+        READY("ready"),
+        TOO_LARGE("too_large");
 
         @JsonValue
         private final String value;
