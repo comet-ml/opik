@@ -1,12 +1,17 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
+
+import java.util.concurrent.TimeUnit;
 
 @Data
 public class CustomChartsConfig {
@@ -51,4 +56,19 @@ public class CustomChartsConfig {
      */
     @JsonProperty
     private @Min(1) @Max(50_000) int maxNameLookupIds = 5_000;
+
+    /**
+     * How many free-form SQL queries one workspace may run at once across every backend pod. Keep it below the EXTENDED
+     * account's per-replica {@code max_concurrent_queries_for_user}, so one workspace cannot take the whole cap.
+     */
+    @JsonProperty
+    private @Min(1) @Max(50) int maxConcurrentQueriesPerWorkspace = 4;
+
+    /**
+     * The longest a query holds its slot. It only matters when a pod dies mid-query; keep it above the ClickHouse
+     * profile's max_execution_time so a live query never loses its slot.
+     */
+    @JsonProperty
+    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration concurrencySlotLease = Duration
+            .seconds(200);
 }

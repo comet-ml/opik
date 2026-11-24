@@ -129,7 +129,7 @@ public class FreeFormSqlQueryService {
     private static final int CH_SYNTAX_ERROR = 62;
     /** The account's concurrent-query cap, e.g. a dashboard loading many widgets at once: worth a retry. */
     private static final int CH_TOO_MANY_SIMULTANEOUS_QUERIES = 202;
-    private static final String RETRY_AFTER_SECONDS = "1";
+    static final String RETRY_AFTER_SECONDS = "1";
     private static final Set<Integer> CH_LIMIT_CODES = Set.of(
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES,
             CH_TOO_MANY_BYTES);
