@@ -16,6 +16,7 @@ import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
@@ -2407,151 +2408,22 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceIdInMultipleProjects {
 
+        private static final String[] AGGREGATE_FIELDS = {"totalEstimatedCost", "spanCount", "llmSpanCount",
+                "hasToolSpans", "providers", "spanFeedbackScores", "guardrailsValidations", "annotationQueues"};
+
         private static final String[] IGNORED_FIELDS_AGGREGATES = Arrays.stream(IGNORED_FIELDS_SCORES)
                 .map(field -> "spanFeedbackScores." + field)
                 .toArray(String[]::new);
-
-        private record ProjectTrace(String projectName, UUID projectId, Trace expectedTrace, Comment comment) {
-        }
-
-        private record SharedTrace(UUID id, ProjectTrace returned, ProjectTrace other, String sharedScoreName) {
-        }
-
-        private record ExpectedTraces(Trace returned, Trace other) {
-        }
-
-        /**
-         * Logs the same trace id in two projects, each with its own spans, trace scores (one name shared by both
-         * projects), span scores, comment, guardrails and annotation queue. The trace in the project that is not
-         * returned by id is created first, so its comment is added while it is the only project with that trace id.
-         */
-        private SharedTrace createSharedTrace() {
-            // ClickHouse compares project_id as a string, so the trace by id comes from the larger UUID string.
-            var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(32))
-                    .limit(2)
-                    .map(name -> Map.entry(name, projectResourceClient.createProject(name, API_KEY, TEST_WORKSPACE)))
-                    .sorted(Map.Entry.comparingByValue(Comparator.comparing(UUID::toString)))
-                    .toList();
-
-            var id = generator.generate();
-            var sharedScoreName = RandomStringUtils.secure().nextAlphanumeric(32);
-            var other = logTrace(id, projects.getFirst().getKey(), projects.getFirst().getValue(), sharedScoreName);
-            var returned = logTrace(id, projects.getLast().getKey(), projects.getLast().getValue(), sharedScoreName);
-
-            return new SharedTrace(id, returned, other, sharedScoreName);
-        }
-
-        private ProjectTrace logTrace(UUID id, String projectName, UUID projectId, String sharedScoreName) {
-            var trace = createTrace().toBuilder()
-                    .id(id)
-                    .projectName(projectName)
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
-
-            var comment = traceResourceClient.generateAndCreateComment(id, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_CREATED);
-
-            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
-                    .map(span -> span.toBuilder()
-                            .projectName(projectName)
-                            .traceId(id)
-                            .parentSpanId(null)
-                            .build())
-                    .toList();
-            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
-
-            var traceScores = Stream.concat(
-                    PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class).stream(),
-                    Stream.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                            .name(sharedScoreName)
-                            .build()))
-                    .<FeedbackScoreBatchItem>map(score -> score.toBuilder()
-                            .id(id)
-                            .projectName(projectName)
-                            .build())
-                    .toList();
-            traceResourceClient.feedbackScores(traceScores, API_KEY, TEST_WORKSPACE);
-
-            var spanScores = spans.stream()
-                    .<FeedbackScoreBatchItem>map(
-                            span -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                                    .id(span.id())
-                                    .projectName(projectName)
-                                    .build())
-                    .toList();
-            spanResourceClient.feedbackScores(spanScores, API_KEY, TEST_WORKSPACE);
-
-            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(id, spans.getFirst().id(), projectName);
-            guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
-
-            var queue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
-                    .projectId(projectId)
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .build();
-            annotationQueuesResourceClient.createAnnotationQueueBatch(new LinkedHashSet<>(List.of(queue)), API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-            annotationQueuesResourceClient.addItemsToAnnotationQueue(queue.id(), Set.of(id), API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
-
-            var expectedTrace = trace.toBuilder()
-                    .usage(aggregateSpansUsage(spans))
-                    .totalEstimatedCost(getTotalEstimatedCost(spans))
-                    .spanCount(spans.size())
-                    .llmSpanCount((int) spans.stream().filter(span -> span.type() == SpanType.llm).count())
-                    .hasToolSpans(spans.stream().anyMatch(span -> span.type() == SpanType.tool))
-                    .providers(spans.stream()
-                            .map(Span::provider)
-                            .filter(StringUtils::isNotEmpty)
-                            .distinct()
-                            .sorted()
-                            .toList())
-                    .feedbackScores(traceScores.stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
-                    .spanFeedbackScores(spanScores.stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
-                    .comments(List.of(comment))
-                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(guardrails))
-                    .annotationQueues(List.of(new AnnotationQueueReference(queue.id(), queue.name())))
-                    .build();
-
-            return new ProjectTrace(projectName, projectId, expectedTrace, comment);
-        }
-
-        private void assertSharedTrace(SharedTrace sharedTrace, ExpectedTraces expectedTraces) {
-            var actualTrace = getAndAssert(expectedTraces.returned(), sharedTrace.returned().projectId(), API_KEY,
-                    TEST_WORKSPACE);
-            assertAggregates(actualTrace, expectedTraces.returned());
-
-            assertProjectTrace(sharedTrace.returned(), expectedTraces.returned());
-            assertProjectTrace(sharedTrace.other(), expectedTraces.other());
-        }
-
-        private void assertProjectTrace(ProjectTrace projectTrace, Trace expectedTrace) {
-            var actualTraces = traceResourceClient.getTraces(projectTrace.projectName(), null, API_KEY,
-                    TEST_WORKSPACE, null, null, 10, Map.of()).content();
-
-            TraceAssertions.assertTraces(actualTraces, List.of(expectedTrace), USER);
-            assertThat(actualTraces.getFirst().projectId()).isEqualTo(projectTrace.projectId());
-            assertAggregates(actualTraces.getFirst(), expectedTrace);
-        }
-
-        /** Compares the fields that {@link TraceAssertions} ignores. */
-        private void assertAggregates(Trace actualTrace, Trace expectedTrace) {
-            assertThat(actualTrace)
-                    .usingRecursiveComparison()
-                    .comparingOnlyFields("totalEstimatedCost", "spanCount", "llmSpanCount", "hasToolSpans",
-                            "providers", "spanFeedbackScores", "guardrailsValidations", "annotationQueues")
-                    .ignoringFields(IGNORED_FIELDS_AGGREGATES)
-                    .ignoringCollectionOrder()
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                    .isEqualTo(expectedTrace);
-        }
 
         @Test
         @DisplayName("when a trace id exists in two projects, then get by id returns the trace with the highest project id and only its project's data")
         void getTrace__whenTraceIdExistsInTwoProjects__thenReturnHighestProjectWithItsOwnData() {
             var sharedTrace = createSharedTrace();
 
-            assertSharedTrace(sharedTrace, new ExpectedTraces(
-                    sharedTrace.returned().expectedTrace(), sharedTrace.other().expectedTrace()));
+            assertSharedTrace(sharedTrace, ExpectedTraces.builder()
+                    .returned(sharedTrace.returned().expectedTrace())
+                    .other(sharedTrace.other().expectedTrace())
+                    .build());
         }
 
         Stream<Arguments> writeByTraceId() {
@@ -2576,15 +2448,182 @@ class TracesResourceTest {
             assertSharedTrace(sharedTrace, expectedTraces);
         }
 
+        /**
+         * Logs the same trace id in two projects, each with its own spans, trace scores (one name shared by both
+         * projects), span scores, comment, guardrails and annotation queue. The trace in the project that is not
+         * returned by id is created first, so its comment is added while it is the only project with that trace id.
+         */
+        private SharedTrace createSharedTrace() {
+            // ClickHouse compares project_id as a string, so the trace by id comes from the larger UUID string.
+            var projects = Stream.generate(() -> "project-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .limit(2)
+                    .map(name -> Map.entry(name, projectResourceClient.createProject(name, API_KEY, TEST_WORKSPACE)))
+                    .sorted(Map.Entry.comparingByValue(Comparator.comparing(UUID::toString)))
+                    .toList();
+
+            var id = generator.generate();
+            var sharedScoreName = RandomStringUtils.secure().nextAlphanumeric(32);
+
+            // Per project: the batch endpoint keeps one trace per id, and the comment of the project that is not
+            // returned has to be added before the other project's trace exists.
+            var other = createTraceWithComment(id, projects.getFirst().getKey(), projects.getFirst().getValue(),
+                    sharedScoreName);
+            var returned = createTraceWithComment(id, projects.getLast().getKey(), projects.getLast().getValue(),
+                    sharedScoreName);
+            var seeds = List.of(other, returned);
+
+            // One request each, covering both projects.
+            batchCreateSpansAndAssert(seeds.stream().flatMap(seed -> seed.spans().stream()).toList(), API_KEY,
+                    TEST_WORKSPACE);
+            traceResourceClient.feedbackScores(seeds.stream().flatMap(seed -> seed.traceScores().stream()).toList(),
+                    API_KEY, TEST_WORKSPACE);
+            spanResourceClient.feedbackScores(seeds.stream().flatMap(seed -> seed.spanScores().stream()).toList(),
+                    API_KEY, TEST_WORKSPACE);
+            guardrailsResourceClient.addBatch(seeds.stream().flatMap(seed -> seed.guardrails().stream()).toList(),
+                    API_KEY, TEST_WORKSPACE);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    seeds.stream().map(ProjectSeed::queue).collect(Collectors.toCollection(LinkedHashSet::new)),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            seeds.forEach(seed -> annotationQueuesResourceClient.addItemsToAnnotationQueue(seed.queue().id(),
+                    Set.of(id), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT));
+
+            return SharedTrace.builder()
+                    .id(id)
+                    .returned(toProjectTrace(returned))
+                    .other(toProjectTrace(other))
+                    .sharedScoreName(sharedScoreName)
+                    .build();
+        }
+
+        /** Creates the trace and its comment, and generates the rest of the project's data without sending it. */
+        private ProjectSeed createTraceWithComment(UUID id, String projectName, UUID projectId,
+                String sharedScoreName) {
+            var trace = createTrace().toBuilder()
+                    .id(id)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var comment = traceResourceClient.generateAndCreateComment(id, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(id)
+                            .parentSpanId(null)
+                            .build())
+                    .toList();
+
+            var traceScores = Stream.concat(
+                    PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class).stream(),
+                    Stream.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .name(sharedScoreName)
+                            .build()))
+                    .<FeedbackScoreBatchItem>map(score -> score.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            var spanScores = spans.stream()
+                    .<FeedbackScoreBatchItem>map(
+                            span -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .id(span.id())
+                                    .projectName(projectName)
+                                    .build())
+                    .toList();
+
+            var queue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+
+            return ProjectSeed.builder()
+                    .projectName(projectName)
+                    .projectId(projectId)
+                    .trace(trace)
+                    .comment(comment)
+                    .spans(spans)
+                    .traceScores(traceScores)
+                    .spanScores(spanScores)
+                    .guardrails(guardrailsGenerator.generateGuardrailsForTrace(id, spans.getFirst().id(), projectName))
+                    .queue(queue)
+                    .build();
+        }
+
+        private ProjectTrace toProjectTrace(ProjectSeed seed) {
+            var spans = seed.spans();
+            var expectedTrace = seed.trace().toBuilder()
+                    .usage(aggregateSpansUsage(spans))
+                    .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .spanCount(spans.size())
+                    .llmSpanCount((int) spans.stream().filter(span -> span.type() == SpanType.llm).count())
+                    .hasToolSpans(spans.stream().anyMatch(span -> span.type() == SpanType.tool))
+                    .providers(spans.stream()
+                            .map(Span::provider)
+                            .filter(StringUtils::isNotEmpty)
+                            .distinct()
+                            .sorted()
+                            .toList())
+                    .feedbackScores(
+                            seed.traceScores().stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
+                    .spanFeedbackScores(
+                            seed.spanScores().stream().map(TracesResourceTest.this::mapFeedbackScore).toList())
+                    .comments(List.of(seed.comment()))
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(seed.guardrails()))
+                    .annotationQueues(List.of(new AnnotationQueueReference(seed.queue().id(), seed.queue().name())))
+                    .build();
+
+            return ProjectTrace.builder()
+                    .projectName(seed.projectName())
+                    .projectId(seed.projectId())
+                    .expectedTrace(expectedTrace)
+                    .comment(seed.comment())
+                    .build();
+        }
+
+        private void assertSharedTrace(SharedTrace sharedTrace, ExpectedTraces expectedTraces) {
+            var actualTrace = getAndAssert(expectedTraces.returned(), sharedTrace.returned().projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            assertAggregates(actualTrace, expectedTraces.returned());
+
+            assertProjectTrace(sharedTrace.returned(), expectedTraces.returned());
+            assertProjectTrace(sharedTrace.other(), expectedTraces.other());
+        }
+
+        private void assertProjectTrace(ProjectTrace projectTrace, Trace expectedTrace) {
+            var actualTraces = traceResourceClient.getTraces(projectTrace.projectName(), null, API_KEY,
+                    TEST_WORKSPACE, null, null, 10, Map.of()).content();
+
+            TraceAssertions.assertTraces(actualTraces, List.of(expectedTrace), USER);
+            assertThat(actualTraces.getFirst().projectId()).isEqualTo(projectTrace.projectId());
+            assertAggregates(actualTraces.getFirst(), expectedTrace);
+        }
+
+        /** Compares the fields that {@link TraceAssertions} ignores or only checks when present. */
+        private void assertAggregates(Trace actualTrace, Trace expectedTrace) {
+            assertThat(actualTrace)
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields(AGGREGATE_FIELDS)
+                    .ignoringFields(IGNORED_FIELDS_AGGREGATES)
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .isEqualTo(expectedTrace);
+            // TraceAssertions skips comments when the actual trace has none, so a lost comments join would pass it.
+            assertComments(expectedTrace.comments(), actualTrace.comments());
+        }
+
         private ExpectedTraces createScore(SharedTrace sharedTrace) {
             var score = factory.manufacturePojo(FeedbackScore.class);
             traceResourceClient.feedbackScore(sharedTrace.id(), score, TEST_WORKSPACE, API_KEY);
 
             var returned = sharedTrace.returned().expectedTrace();
             var feedbackScores = Stream.concat(returned.feedbackScores().stream(), Stream.of(score)).toList();
-            return new ExpectedTraces(
-                    returned.toBuilder().feedbackScores(feedbackScores).build(),
-                    sharedTrace.other().expectedTrace());
+            return ExpectedTraces.builder()
+                    .returned(returned.toBuilder().feedbackScores(feedbackScores).build())
+                    .other(sharedTrace.other().expectedTrace())
+                    .build();
         }
 
         private ExpectedTraces deleteScore(SharedTrace sharedTrace) {
@@ -2596,9 +2635,10 @@ class TracesResourceTest {
             var feedbackScores = returned.feedbackScores().stream()
                     .filter(score -> !score.name().equals(sharedTrace.sharedScoreName()))
                     .toList();
-            return new ExpectedTraces(
-                    returned.toBuilder().feedbackScores(feedbackScores.isEmpty() ? null : feedbackScores).build(),
-                    sharedTrace.other().expectedTrace());
+            return ExpectedTraces.builder()
+                    .returned(returned.toBuilder().feedbackScores(feedbackScores).build())
+                    .other(sharedTrace.other().expectedTrace())
+                    .build();
         }
 
         private ExpectedTraces createComment(SharedTrace sharedTrace) {
@@ -2609,9 +2649,10 @@ class TracesResourceTest {
             var comments = Stream.concat(returned.comments().stream(), Stream.of(comment))
                     .sorted(Comparator.comparing(Comment::id))
                     .toList();
-            return new ExpectedTraces(
-                    returned.toBuilder().comments(comments).build(),
-                    sharedTrace.other().expectedTrace());
+            return ExpectedTraces.builder()
+                    .returned(returned.toBuilder().comments(comments).build())
+                    .other(sharedTrace.other().expectedTrace())
+                    .build();
         }
 
         private ExpectedTraces updateComment(SharedTrace sharedTrace) {
@@ -2620,11 +2661,30 @@ class TracesResourceTest {
             var text = RandomStringUtils.secure().nextAlphanumeric(32);
             traceResourceClient.updateComment(text, comment.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            return new ExpectedTraces(
-                    sharedTrace.returned().expectedTrace(),
-                    sharedTrace.other().expectedTrace().toBuilder()
+            return ExpectedTraces.builder()
+                    .returned(sharedTrace.returned().expectedTrace())
+                    .other(sharedTrace.other().expectedTrace().toBuilder()
                             .comments(List.of(comment.toBuilder().text(text).build()))
-                            .build());
+                            .build())
+                    .build();
+        }
+
+        @Builder(toBuilder = true)
+        private record ProjectSeed(String projectName, UUID projectId, Trace trace, Comment comment, List<Span> spans,
+                List<FeedbackScoreBatchItem> traceScores, List<FeedbackScoreBatchItem> spanScores,
+                List<Guardrail> guardrails, AnnotationQueue queue) {
+        }
+
+        @Builder(toBuilder = true)
+        private record ProjectTrace(String projectName, UUID projectId, Trace expectedTrace, Comment comment) {
+        }
+
+        @Builder(toBuilder = true)
+        private record SharedTrace(UUID id, ProjectTrace returned, ProjectTrace other, String sharedScoreName) {
+        }
+
+        @Builder(toBuilder = true)
+        private record ExpectedTraces(Trace returned, Trace other) {
         }
     }
 
