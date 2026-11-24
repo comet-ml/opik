@@ -36,6 +36,12 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private AlgorithmConfig algorithm;
 
+    @Valid @NotNull @JsonProperty
+    private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private StorageConfig storage;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -150,6 +156,57 @@ public class TopicsConfig {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private volatile ParsedWorkspaces parsedWorkspaces;
+
+    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    @Data
+    public static class BuildConfig {
+
+        @Valid @NotNull @JsonProperty
+        private BuildReadConfig read;
+    }
+
+    /**
+     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     */
+    @Data
+    public static class BuildReadConfig {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse query priority; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** The topic counts read the window in slices of this much creation time, one query each. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration countSlice;
+    }
+
+    /** The topics state's MySQL writes. */
+    @Data
+    public static class StorageConfig {
+
+        /**
+         * Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays bounded
+         * however many projects went at once.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int deleteBatchSize;
+    }
 
     /**
      * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
