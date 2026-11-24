@@ -1131,6 +1131,9 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:
