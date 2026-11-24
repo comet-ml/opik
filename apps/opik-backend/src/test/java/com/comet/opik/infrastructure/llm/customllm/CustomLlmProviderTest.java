@@ -78,6 +78,7 @@ class CustomLlmProviderTest {
         wireMock.start();
 
         var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setJudgeMaxRetries(0);
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
         var relaxedGuard = ProviderBaseUrlGuard.builder()

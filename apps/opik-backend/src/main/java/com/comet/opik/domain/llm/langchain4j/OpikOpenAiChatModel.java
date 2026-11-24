@@ -45,9 +45,10 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.validate;
 @Slf4j
 public class OpikOpenAiChatModel extends OpenAiChatModel {
 
-    // Hardcoded defaults for fields we need (matching OpenAiChatModel defaults)
+    // The parent keeps these private, so they are held again here
     private final OpenAiClient client;
-    private final Integer maxRetries = 2;
+    private final int maxRetries;
+    // Hardcoded defaults (matching OpenAiChatModel defaults)
     private final Boolean strictTools = false;
     private final Boolean strictJsonSchema = false;
     private final Boolean returnThinking = false;
@@ -63,10 +64,13 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
      *
      * @param builder The OpenAI chat model builder with standard parameters
      * @param customParameters Additional parameters as JsonNode (will be converted to Map<String,Object> at request time)
+     * @param maxRetries The retries set on the builder, which the parent keeps private
      */
-    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
+    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters,
+            int maxRetries) {
         super(builder);
         this.customParameters = customParameters;
+        this.maxRetries = maxRetries;
         // Checked while the judge model is built, so the scorer gets the 400 as is. Thrown from doChat, it would be
         // retried and then reported as a 500, which the online scoring queue redelivers.
         CustomParametersOverrides.rejectOpikManagedKeys(convertCustomParameters());
