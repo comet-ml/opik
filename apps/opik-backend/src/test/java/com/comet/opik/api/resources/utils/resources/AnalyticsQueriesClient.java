@@ -50,12 +50,7 @@ public class AnalyticsQueriesClient {
     }
 
     public Response callExecuteScoped(UUID projectId, String query, String apiKey, String workspaceName) {
-        return client.target(SCOPED_RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.entity(ScopedAnalyticsQueryRequest.builder().query(query).projectId(projectId).build(),
-                        MediaType.APPLICATION_JSON_TYPE));
+        return postScoped(SCOPED_RESOURCE_PATH, projectId, query, apiKey, workspaceName);
     }
 
     public AnalyticsQueryResponse run(UUID projectId, String query, String apiKey, String workspaceName) {
@@ -66,7 +61,12 @@ public class AnalyticsQueriesClient {
     }
 
     public Response callRun(UUID projectId, String query, String apiKey, String workspaceName) {
-        return client.target(PUBLIC_RESOURCE_PATH.formatted(baseURI))
+        return postScoped(PUBLIC_RESOURCE_PATH, projectId, query, apiKey, workspaceName);
+    }
+
+    private Response postScoped(String pathTemplate, UUID projectId, String query, String apiKey,
+            String workspaceName) {
+        return client.target(pathTemplate.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

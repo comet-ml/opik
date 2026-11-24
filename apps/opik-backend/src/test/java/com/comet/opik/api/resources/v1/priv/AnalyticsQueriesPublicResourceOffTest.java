@@ -30,8 +30,9 @@ class AnalyticsQueriesPublicResourceOffTest {
         var resource = new AnalyticsQueriesPublicResource(freeFormSqlQueryService, requestContext, serviceToggles,
                 customCharts);
 
-        try (Response response = resource.runQuery(
-                new ScopedAnalyticsQueryRequest("SELECT toJSONString(map('ok', 1)) AS result", null))) {
+        try (Response response = resource.runQuery(ScopedAnalyticsQueryRequest.builder()
+                .query("SELECT toJSONString(map('ok', 1)) AS result")
+                .build())) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_IMPLEMENTED.getStatusCode());
         }
         verifyNoInteractions(freeFormSqlQueryService);
