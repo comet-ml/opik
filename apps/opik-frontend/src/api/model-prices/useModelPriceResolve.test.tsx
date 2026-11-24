@@ -1,5 +1,5 @@
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import useModelPriceResolve from "./useModelPriceResolve";
@@ -28,6 +28,10 @@ const renderResolve = (queryClient: QueryClient) =>
   });
 
 describe("useModelPriceResolve", () => {
+  beforeEach(() => {
+    post.mockReset();
+  });
+
   it("doesn't answer from a price resolved a minute ago, which may have changed since", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

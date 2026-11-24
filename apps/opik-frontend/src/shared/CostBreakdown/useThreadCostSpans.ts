@@ -11,6 +11,7 @@ import { Span, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { COLUMN_TYPE } from "@/types/shared";
 import {
   COST_SPANS_STALE_TIME,
+  COSTED_FILTER,
   costedSpansParams,
 } from "@/shared/CostBreakdown/useTraceCostSpans";
 
@@ -31,7 +32,7 @@ const TRACE_FIELDS_NOT_NEEDED = [
   "annotation_queues",
 ];
 
-const combineSpanQueries = (
+export const combineSpanQueries = (
   queries: UseQueryResult<UseSpansListResponse>[],
 ) => ({
   spans: queries.flatMap((query): Span[] => query.data?.content ?? []),
@@ -62,13 +63,7 @@ export default function useThreadCostSpans({
           operator: "=",
           value: threadId,
         },
-        {
-          id: "",
-          field: "total_estimated_cost",
-          type: COLUMN_TYPE.cost,
-          operator: ">",
-          value: 0,
-        },
+        COSTED_FILTER,
       ],
       sorting: [{ id: "start_time", desc: false }],
       exclude: TRACE_FIELDS_NOT_NEEDED,

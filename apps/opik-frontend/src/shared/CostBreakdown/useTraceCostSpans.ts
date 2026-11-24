@@ -6,7 +6,7 @@ import { Filter } from "@/types/filters";
 export const COSTED_SPANS_LIMIT = 1000;
 export const COST_SPANS_STALE_TIME = 60 * 1000;
 
-const COSTED_FILTER: Filter = {
+export const COSTED_FILTER: Filter = {
   id: "",
   field: "total_estimated_cost",
   type: COLUMN_TYPE.cost,
