@@ -2,7 +2,11 @@ import isNumber from "lodash/isNumber";
 import modelPricing from "@/data/model_prices_and_context_window.json";
 import openRouterModelPricing from "@/data/model_prices_openrouter.json";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
-import { DECISION_MODELS } from "@/constants/decisionModels";
+import {
+  DECISION_MODELS,
+  DECISIONS_API_MODELS,
+} from "@/constants/decisionModels";
+import { LLMJudgeModelApi } from "@/types/automations";
 
 type ModelPricingEntry = {
   supports_vision?: boolean;
@@ -125,12 +129,19 @@ export const isCustomProviderModel = (model: string): boolean => {
 };
 
 /**
- * Checks if a model is a decisions model (TypeSafe Jev): it answers yes/no questions through the
- * OpenRouter Decisions API instead of chatting, so it takes no model settings, Boolean scores only and
- * a single text-only user message.
+ * Checks if a judge runs on a decisions model: it answers yes/no questions through a Decisions API instead of
+ * chatting, so it takes no model settings, Boolean scores only and a single text-only user message. Like the
+ * backend, it resolves on the model and the rule's `api` together: Jev is decisions-only, while gpt-6-luna is a
+ * decisions model only for rules that ask for the Decisions API.
  */
-export const isDecisionModel = (model?: string | null): boolean =>
-  Boolean(model) && DECISION_MODELS.some((m) => m.value === model);
+export const isDecisionModel = (
+  model?: string | null,
+  api?: LLMJudgeModelApi | null,
+): boolean =>
+  Boolean(model) &&
+  (DECISION_MODELS.some((m) => m.value === model) ||
+    (api === "decisions" &&
+      DECISIONS_API_MODELS.some((m) => m.value === model)));
 
 /**
  * Checks if a model supports image input (vision capabilities).

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -67,9 +68,12 @@ class TopicsReadDAOTest {
     private static final long MAX_EXECUTION_SECONDS = 10;
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
-    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
-    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
+    // Not reusable: the cut-over below would change the traces table of every later class on a reused container.
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer(false, network);
+    private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(false, network,
+            zookeeper);
+    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
