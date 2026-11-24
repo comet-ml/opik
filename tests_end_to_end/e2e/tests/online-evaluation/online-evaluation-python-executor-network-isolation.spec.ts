@@ -55,6 +55,28 @@ import { LogsPage } from '@e2e/pom/logs.page';
  *
  * Deterministic and free: a python rule runs the user's own code, so the score
  * is the literal one the metric constructed. No provider key, no LLM.
+ *
+ * ## Extended by the 2.3.0 release pass
+ *
+ * The 2.3.0 staging exploration drove this flow by hand and reported two facts
+ * the spec did not yet assert, both added to the unguarded test rather than to a
+ * near-duplicate spec:
+ *
+ *  - **One attempt, no retry.** The ERROR rows read the same whether the engine
+ *    gave up after one invocation or retried a refusal that cannot succeed, so
+ *    the evaluator-send lines are counted and pinned at exactly one. On the
+ *    docker strategy a retry is a container start per attempt, per trace.
+ *  - **The absence is asserted in the trace PANEL.** The release report ranks
+ *    this PR's manual item first precisely because the user sees "a score row
+ *    quietly disappeared" rather than an error — and that was asserted only
+ *    through the API, where a panel rendering a placeholder or a stale row for
+ *    the refused rule would have gone unnoticed.
+ *
+ * The exploration also observed `OSError: [Errno 101] Network is unreachable`
+ * in the ERROR row and proposed asserting that text. It is deliberately still
+ * NOT asserted, for the reason the frame assertion below already gives: the
+ * errno is strategy-specific, and pinning it would turn a deployment-agnostic
+ * spec into one that only holds on the `docker` strategy staging happens to run.
  */
 
 /** The prefix the backend puts in front of whatever cause it managed to format. */
@@ -62,6 +84,17 @@ const CANT_BE_EVALUATED = "can't be evaluated: ";
 
 /** Runner internals that must never reach a user-facing log line. */
 const RUNNER_FRAMES = ['process_worker.py', 'scoring_runner.py'];
+
+/**
+ * The user-facing line the engine logs once per evaluator invocation
+ * (`OnlineScoringEngine.logAndPrepareEvaluatorInput`). Counting it is how the
+ * no-retry assertion counts attempts.
+ *
+ * Deliberately short of the entity label and id, which differ between the trace
+ * and span scorers: what is being counted is invocations of the evaluator, not
+ * the shape of the line announcing one.
+ */
+const EVALUATOR_SEND_LINE = 'to Python evaluator';
 
 /**
  * The value the probe metric returns when every attempt was refused, and the
@@ -375,6 +408,34 @@ test.describe(
           }
         });
 
+        await test.step('The refusal was attempted exactly once — the rule is not retried', async () => {
+          // A refusal that is RETRIED is the expensive failure mode of this
+          // flip, and it is invisible in every assertion above: the ERROR rows
+          // say "the sandbox refused it" just as clearly whether the engine
+          // gave up after one attempt or hammered the executor. Every trace a
+          // user ingests would pay for N sandbox round-trips that cannot
+          // succeed, which on the docker strategy means N container starts.
+          //
+          // Counted off the user-facing stream rather than inferred: the engine
+          // logs one "Sending <entity> '<id>' to Python evaluator" line per
+          // invocation (OnlineScoringEngine.logAndPrepareEvaluatorInput), so
+          // the count of those lines IS the number of attempts.
+          const rows = await backendClient.getAutomationRuleLogs(rules.unguarded);
+          const sends = rows.filter((row) => row.message.includes(EVALUATOR_SEND_LINE));
+          expect(
+            sends.length,
+            'one evaluator invocation for the one trace — more than one is a retry of a ' +
+              'refusal that cannot succeed, none means this count is reading the wrong line',
+          ).toBe(1);
+          // The ERROR rows are counted here rather than in the step that first
+          // polled for them: that one waits for the FIRST row to appear, so it
+          // cannot also assert there is only one without racing a second.
+          expect(
+            rows.filter((row) => row.level === 'ERROR').length,
+            'and exactly one ERROR row, matching the one attempt',
+          ).toBe(1);
+        });
+
         await test.step('The refusal was not stored as a score', async () => {
           // The control rule is the bystander that makes this absence mean
           // something: the trace demonstrably received a score, so "no score
@@ -393,6 +454,52 @@ test.describe(
             'and the control score is its constant, not a value the refusal reached',
           ).toEqual([SCORED]);
         });
+
+        await test.step(
+          'And the trace panel shows the control row with no row for the refused rule',
+          async () => {
+            // THE user-visible symptom, and the reason this PR's manual item is
+            // ranked first: a metric that worked before the upgrade now
+            // produces nothing, and what the user sees is a score row quietly
+            // missing — never an error. Asserted in the panel and not only
+            // through the API above, because the panel is where they look, and
+            // because a panel that rendered a placeholder or a stale row for
+            // the refused rule would satisfy the API assertion perfectly.
+            const logs = new LogsPage(page);
+            await logs.goto(project.id);
+            // Raised from the 15s default for the reason `waitForReady`
+            // documents: this project was created inside this test and holds a
+            // single trace written moments ago.
+            await logs.waitForReady({ timeout: 60_000 });
+
+            const panel = await logs.openTraceById(traceId);
+            await panel.waitForFullyLoaded();
+            await panel.openFeedbackScoresTab();
+
+            // A spanless trace renders only the Trace scores table, so the row
+            // count below really is this trace's own scores.
+            await expect(
+              panel.feedbackScoreTables(),
+              'a spanless trace renders one feedback-scores table',
+            ).toHaveCount(1);
+            // Exhaustive, not a lookup: "the control row is there" would hold
+            // just as well beside a row the refused rule should never have
+            // produced.
+            await expect(
+              panel.feedbackScoreRows(),
+              'exactly one row — the control scored, the refused rule stored nothing',
+            ).toHaveCount(1);
+            await expect(panel.feedbackScoreRowByName(controlScore)).toHaveCount(1);
+            await expect(
+              panel.feedbackScoreValueCell(controlScore),
+              'and it carries the control constant',
+            ).toHaveText(String(SCORED));
+            await expect(
+              panel.feedbackScoreRowByName(unguardedScore),
+              'no row for the refused rule, under its own score name',
+            ).toHaveCount(0);
+          },
+        );
 
         await test.step('The automation-logs page renders the same ERROR row', async () => {
           // The page is where a user actually reads this, and it renders the
