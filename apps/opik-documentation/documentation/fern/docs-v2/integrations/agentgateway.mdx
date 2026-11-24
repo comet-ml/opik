@@ -12,7 +12,7 @@ title: Observability for agentgateway with Opik
 Opik ingests these traces at its native OTLP endpoint, without a plugin or a collector. Each LLM call becomes an Opik trace with an `llm` span that shows the model, the provider, the token usage, the cost, and the latency. A child span shows the request that the gateway sent to the LLM provider. You can also capture the prompt and the response, and send the traces of each caller to its own project and thread.
 
 <Note>
-  This guide needs Opik 2.3.2 or later. Opik Cloud always runs the latest version.
+  This guide needs Opik 2.3.2 or later.
 </Note>
 
 ## Account Setup
@@ -203,7 +203,7 @@ One gateway usually serves many applications. Opik reads two span attributes tha
 | `opik.project_name` | Project | The caller's API key metadata, or a request header |
 | `gen_ai.conversation.id` | Thread | A conversation ID that the application sends in a request header |
 
-Traces without `opik.project_name` go to the project in the `projectName` header.
+Traces without `opik.project_name` go to the project in the `projectName` header. The child spans of the gateway go to the project of their request span.
 
 <Tabs>
   <Tab value="Standalone" title="Standalone">

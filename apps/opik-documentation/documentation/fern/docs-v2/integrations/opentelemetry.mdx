@@ -197,7 +197,7 @@ the standard OpenTelemetry API on any span.
 | `opik.tags` | Adds tags to the span. On the root span, Opik also adds the tags to the trace, so you can filter your traces by tag. |
 | `opik.metadata.<key>` | Adds `<key>` to the metadata of the span. The metadata of the root span also becomes the metadata of the trace. |
 | `thread_id` | Groups traces into one conversational thread. See [Multi-turn conversations](/evaluation/evaluate_threads). |
-| `opik.trace_id`, `opik.parent_span_id`, `opik.span_id` | Attaches the span to an Opik trace and parent span that already exist. See [Distributed traces](/tracing/advanced/log_distributed_traces). |
+| `opik.trace_id`, `opik.parent_span_id`, `opik.span_id` | Attaches the span to an Opik trace and parent span that already exist. The descendants of the span in the same export request go into the same trace. See [Distributed traces](/tracing/advanced/log_distributed_traces). |
 
 ### Tagging traces and spans
 
@@ -227,20 +227,21 @@ with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
 Some OpenTelemetry Collector processors, such as `tail_sampling`, do not forward the HTTP headers of the incoming
 request. In that case, set the project with the `opik.project_name` attribute instead of the `projectName` header.
 
-Opik picks the project of each span on its own, in this order:
+Opik picks the project of each span in this order:
 
 1. The `opik.project_name` attribute of the span
 2. The `opik.project_name` attribute of the resource of the span
-3. The `projectName` header
-4. The `Default Project`
+3. The `opik.project_name` attribute of the nearest ancestor span in the same export request
+4. The `projectName` header
+5. The `Default Project`
 
 Opik ignores a value longer than 150 characters.
 
 <Warning>
-  Every span must have the `opik.project_name` attribute. Opik does not copy the project from the root span to the
-  other spans: OpenTelemetry exports the spans of a long trace in more than one batch, and the root span usually comes
-  last. If you set the attribute on the root span only, the other spans go to the project in the header, and they do
-  not show under any trace. Set the project as a resource attribute, so that every span has it.
+  Set the project as a resource attribute, so that every span has it. Opik copies the project of an ancestor span only
+  inside one export request. OpenTelemetry exports the spans of a long trace in more than one batch, and the root span
+  usually comes last. If you set the attribute on the root span only, the spans in the other batches go to the project
+  in the header, and they do not show under any trace.
 </Warning>
 
 #### Set the project on every span
