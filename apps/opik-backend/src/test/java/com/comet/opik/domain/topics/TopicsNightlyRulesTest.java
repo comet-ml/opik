@@ -67,7 +67,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("one call for every pair; a missing or out-of-range pair is not verified")
         void answers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> {
+            var verdicts = drive(Verifier.ask("verify_naming", pairs, CONFIG), (tag, prompt, schema, maxTokens) -> {
                 assertThat(tag).isEqualTo("verify_naming");
                 assertThat(maxTokens).isEqualTo(60 + 25 * 2);
                 assertThat(schema).isEqualTo(TopicPrompts.VERIFY_SCHEMA);
@@ -83,19 +83,21 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("a failed call fails the run: read as 'no pair verified', it would turn sound assigns into new topics")
         void failed() {
-            assertThatThrownBy(() -> drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> {
-                throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
-            })).isInstanceOfSatisfying(TopicsRunException.class,
-                    exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
+            assertThatThrownBy(
+                    () -> drive(Verifier.ask("verify_naming", pairs, CONFIG), (tag, prompt, schema, maxTokens) -> {
+                        throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
+                    })).isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
         }
 
         @Test
         @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
         void conflictingAnswers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> json("""
-                    {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
-                    {"pair": 1, "same": true}]}
-                    """));
+            var verdicts = drive(Verifier.ask("verify_naming", pairs, CONFIG), (tag, prompt, schema, maxTokens) -> json(
+                    """
+                            {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
+                            {"pair": 1, "same": true}]}
+                            """));
 
             assertThat(verdicts).containsOnly(Map.entry(1, true));
         }
@@ -105,7 +107,7 @@ class TopicsNightlyRulesTest {
                 "a number|, \"same\": 1"})
         @DisplayName("a same that is missing or not a boolean does not verify the pair")
         void sameNotBoolean(String label, String same) {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> json(
+            var verdicts = drive(Verifier.ask("verify_naming", pairs, CONFIG), (tag, prompt, schema, maxTokens) -> json(
                     "{\"answers\": [{\"pair\": 0" + (same == null ? "" : same) + "}, {\"pair\": 1, \"same\": true}]}"));
 
             assertThat(verdicts).containsOnly(Map.entry(1, true));
@@ -127,7 +129,7 @@ class TopicsNightlyRulesTest {
 
             assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.OTHER_LOOSE, null),
                     new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1));
-            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, NightlyUpdate.OTHER));
+            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, TopicAlgorithm.OTHER));
             assertThat(state.topic(1).getName()).isEqualTo("Weather");
         }
 
@@ -154,7 +156,7 @@ class TopicsNightlyRulesTest {
                     named(Map.of("naming", newTopics(entry == null ? "" : entry))));
 
             assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, result, topic));
-            assertThat(map).containsOnly(Map.entry(0, topic == null ? NightlyUpdate.OTHER : topic));
+            assertThat(map).containsOnly(Map.entry(0, topic == null ? TopicAlgorithm.OTHER : topic));
             assertThat(state.liveCount()).isEqualTo(live);
             if (name != null) {
                 assertThat(state.topic(topic).getName()).isEqualTo(name);
@@ -229,7 +231,7 @@ class TopicsNightlyRulesTest {
             assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.ASSIGNED, 1),
                     new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 2),
                     new ForcedBirth.Outcome(2, ForcedBirth.Result.OTHER_NAME, null));
-            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, 2), Map.entry(2, NightlyUpdate.OTHER));
+            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, 2), Map.entry(2, TopicAlgorithm.OTHER));
         }
 
         @Test
@@ -270,7 +272,7 @@ class TopicsNightlyRulesTest {
 
             assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 1),
                     new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_SMALL, null));
-            assertThat(map).containsExactly(Map.entry(1, 1), Map.entry(0, NightlyUpdate.OTHER));
+            assertThat(map).containsExactly(Map.entry(1, 1), Map.entry(0, TopicAlgorithm.OTHER));
         }
 
         @Test
@@ -661,8 +663,8 @@ class TopicsNightlyRulesTest {
             assertThat(tags).containsExactly("naming", "verify_naming", "naming_new");
             assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
                     .containsExactly(ForcedBirth.Result.OTHER_NAME, ForcedBirth.Result.OTHER_NAME);
-            assertThat(result.groupMap()).containsOnly(Map.entry(0, NightlyUpdate.OTHER),
-                    Map.entry(1, NightlyUpdate.OTHER));
+            assertThat(result.groupMap()).containsOnly(Map.entry(0, TopicAlgorithm.OTHER),
+                    Map.entry(1, TopicAlgorithm.OTHER));
             assertThat(state.topic(1).getPrototypes()).containsExactly(NORTH);
         }
 
@@ -1164,8 +1166,10 @@ class TopicsNightlyRulesTest {
 
     private static List<ForcedBirth.Outcome> force(NightState state, List<NightGroup> ordered,
             Map<Integer, TopicPrompts.PromptTopic> topics, Map<Integer, Integer> map, int maxTopics, NightLlm llm) {
-        return drive(ForcedBirth.apply(state, ordered, map, () -> List.copyOf(topics.values()), maxTopics,
-                CONFIG.getRecentDays()), llm);
+        var named = drive(ForcedBirth.apply(state, ordered, () -> List.copyOf(topics.values()), maxTopics, CONFIG),
+                llm);
+        map.putAll(named.groupMap());
+        return named.outcomes();
     }
 
     /** The LLM as a test scripts it: the answer per call, picked by the call's tag. */

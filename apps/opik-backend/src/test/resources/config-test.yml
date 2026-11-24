@@ -1146,6 +1146,12 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+    nightlyMinTightness: 0.80
+    nightlyBigShare: 0.02
+    nightlySameMemory: 0.95
+    nightlyNamingMaxTokens: 2500
+    nightlyVerifyBaseTokens: 60
+    nightlyVerifyTokensPerPair: 25
   read:
     maxRowsToRead: 30000000
     maxMemoryUsage: 1073741824

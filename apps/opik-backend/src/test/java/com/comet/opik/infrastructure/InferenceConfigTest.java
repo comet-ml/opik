@@ -149,10 +149,10 @@ class InferenceConfigTest {
         var config = TestConfigUtils.loadConfigTest();
         var max = config.getInference().getLimits().getMaxGenerateBatchDeadline();
         var aboveMax = Duration.milliseconds(max.toMilliseconds() + 1);
-        var build = config.getTopics().getRun();
-        build.setLlmDeadline("llmDeadline".equals(overLimitDeadline) ? aboveMax : max);
-        build.setNamingDeadline("namingDeadline".equals(overLimitDeadline) ? aboveMax : max);
-        build.setVerifyDeadline("verifyDeadline".equals(overLimitDeadline) ? aboveMax : max);
+        var run = config.getTopics().getRun();
+        run.setLlmDeadline("llmDeadline".equals(overLimitDeadline) ? aboveMax : max);
+        run.setNamingDeadline("namingDeadline".equals(overLimitDeadline) ? aboveMax : max);
+        run.setVerifyDeadline("verifyDeadline".equals(overLimitDeadline) ? aboveMax : max);
 
         assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlinesWithinLimits"))
                 .hasSize(overLimitDeadline == null ? 0 : 1);

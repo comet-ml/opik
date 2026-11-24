@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.experimental.UtilityClass;
 
@@ -14,23 +15,22 @@ import java.util.Map;
  * boolean. A pair without such an answer, or answered both ways, is not verified. A failed call fails the run.
  */
 @UtilityClass
-public class Verifier {
-
-    static final int BASE_TOKENS = 60;
-    static final int TOKENS_PER_PAIR = 25;
+class Verifier {
 
     /**
      * One batched verify call, then the verdict per pair index that got a valid answer. A bad answer verifies no pair.
      * A failed call (timeout or error) fails the run before the step goes on: read as "no pair verified", it would turn
      * sound assigns into new topics.
      */
-    static NightStep<Map<Integer, Boolean>> ask(String tag, List<TopicPrompts.VerifyPair> prompts) {
+    static NightStep<Map<Integer, Boolean>> ask(String tag, List<TopicPrompts.VerifyPair> prompts,
+            AlgorithmConfig config) {
         var request = LlmRequest.builder()
                 .call(LlmCall.VERIFY)
                 .tag(tag)
                 .prompt(TopicPrompts.verify(prompts))
                 .schema(TopicPrompts.VERIFY_SCHEMA)
-                .maxTokens(BASE_TOKENS + TOKENS_PER_PAIR * prompts.size())
+                .maxTokens(
+                        config.getNightlyVerifyBaseTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size())
                 .build();
         return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
     }

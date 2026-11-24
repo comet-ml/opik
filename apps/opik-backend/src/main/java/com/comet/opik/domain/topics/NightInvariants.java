@@ -14,9 +14,9 @@ import java.util.UUID;
  * {@code invariant}.
  */
 @UtilityClass
-public class NightInvariants {
+class NightInvariants {
 
-    public static void check(@NonNull NightState state, int dimensions) {
+    static void check(@NonNull NightState state, int dimensions) {
         var liveKeys = new HashMap<String, UUID>();
         for (int t : state.live()) {
             var topic = state.topic(t);

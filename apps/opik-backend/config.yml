@@ -2819,6 +2819,26 @@ topics:
     #  Default: 3
     #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
     retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
+    #  Default: 0.80
+    #  Description: Nightly: a candidate group whose tightness is below this is known Other without a naming call
+    nightlyMinTightness: ${TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS:-0.80}
+    #  Default: 0.02
+    #  Description: Nightly: a candidate whose share of the window is at least this is big, and a new topic needs its
+    #  groups' share to be at least this
+    nightlyBigShare: ${TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE:-0.02}
+    #  Default: 0.95
+    #  Description: Nightly: a known-Other prototype within this cosine of one already kept is not kept again
+    nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
+    #  Default: 2500
+    #  Description: Nightly: the most tokens a naming call may answer with
+    nightlyNamingMaxTokens: ${TOPICS_ALGORITHM_NIGHTLY_NAMING_MAX_TOKENS:-2500}
+    #  Default: 60
+    #  Description: Nightly: the verify call may answer with nightlyVerifyBaseTokens + nightlyVerifyTokensPerPair per
+    #  pair it checks
+    nightlyVerifyBaseTokens: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_BASE_TOKENS:-60}
+    #  Default: 25
+    #  Description: Nightly: the verify call's tokens per pair it checks, on top of nightlyVerifyBaseTokens
+    nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
   #  A topic run's settings: a discovery run, a nightly update and their labelling pass
   run:
     #  Default: 15m

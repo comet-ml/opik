@@ -116,6 +116,24 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(1_000) private int retireNights;
 
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyMinTightness;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyBigShare;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlySameMemory;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int nightlyNamingMaxTokens;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int nightlyVerifyBaseTokens;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
             return nightlyMinGroups <= nightlyMaxGroups;
@@ -234,7 +252,7 @@ public class TopicsConfig {
                     || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
-        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */
         @JsonIgnore
         @AssertTrue(message = "topics.run.maxVectors must be at least topics.run.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;

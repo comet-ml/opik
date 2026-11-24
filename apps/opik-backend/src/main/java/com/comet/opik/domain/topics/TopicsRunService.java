@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -22,7 +23,8 @@ import java.util.concurrent.Callable;
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
  * It also drives a nightly update's steps ({@link #update}). It owns the run's time limit and its cancel; the scheduler
- * its CPU steps and timers run on is the caller's.
+ * a discovery run's CPU steps and timers run on is the caller's, and a nightly update's steps run where the LLM answer
+ * is handed to ({@code boundedElastic}).
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -118,43 +120,47 @@ public class TopicsRunService {
     }
 
     /**
-     * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's pure steps on
-     * {@code compute}, and each LLM call they ask for through {@link TopicsLlm}, with that call's deadline. An answer
-     * that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a failed call errors with
-     * its code and ends the night. The night's stats and its calls' go to {@code stats}.
+     * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run where the call before them
+     * answered. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
+     * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
      */
-    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull ObjectNode stats, @NonNull NightState state,
-            @NonNull NightWindow window, @NonNull Scheduler compute) {
-        return compute(run, "update", compute,
-                () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
-                .flatMap(step -> night(run, stats, step, compute))
-                .doOnNext(update -> stats.setAll(update.stats()));
+    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
+        return timed(run, "update", Mono.fromCallable(
+                () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics())))
+                .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
     }
 
     /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
-    private Mono<TopicUpdate> night(TopicRun run, ObjectNode stats, NightStep<TopicUpdate> step, Scheduler compute) {
+    private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step, ObjectNode calls) {
         return switch (step) {
-            case NightStep.Done<TopicUpdate> done -> Mono.just(done.result());
+            case NightStep.Done<TopicUpdate> done -> {
+                var stats = calls.deepCopy();
+                stats.setAll(done.result().stats());
+                yield Mono.just(done.result().toBuilder().stats(stats).build());
+            }
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .doOnNext(answer -> addCall(stats, answer.stats()))
-                        .flatMap(answer -> compute(run, "update", compute, () -> ask.next().apply(answer.value())))
-                        .flatMap(next -> night(run, stats, next, compute));
+                        .flatMap(answer -> timed(run, "update", Mono.fromCallable(
+                                () -> ask.next().apply(answer.value())))
+                                .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
         };
     }
 
     /**
-     * Adds a call's stats to the run's, as a nightly update makes several calls: numbers add up, and any other field
-     * takes the last call's value.
+     * The calls' stats with one more call's: numbers add up, and any other field takes the last call's value, as a
+     * nightly update makes several calls.
      */
-    private static void addCall(ObjectNode stats, ObjectNode call) {
+    private static ObjectNode plus(ObjectNode calls, ObjectNode call) {
+        var sum = calls.deepCopy();
         call.properties().forEach(field -> {
             if (field.getValue().isNumber()) {
-                stats.put(field.getKey(), stats.path(field.getKey()).asLong(0) + field.getValue().asLong());
+                sum.put(field.getKey(), sum.path(field.getKey()).asLong(0) + field.getValue().asLong());
             } else {
-                stats.set(field.getKey(), field.getValue());
+                sum.set(field.getKey(), field.getValue());
             }
         });
+        return sum;
     }
 
     private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows, Scheduler compute) {
