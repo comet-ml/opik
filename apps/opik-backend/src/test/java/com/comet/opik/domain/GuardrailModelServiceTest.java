@@ -55,7 +55,7 @@ class GuardrailModelServiceTest {
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private final RequestContext requestContext = new RequestContext();
     private TransactionTemplate template;
-    private GuardrailTrainingRunDAO runs;
+    private Jdbi jdbi;
     private GuardrailPolicyDAO policies;
     private GuardrailTrainingService trainingService;
     private GuardrailModelService service;
@@ -64,10 +64,9 @@ class GuardrailModelServiceTest {
     void setUp() {
         mysql.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        var jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+        jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                 .installPlugin(new SqlObjectPlugin());
         template = new TransactionTemplate(new UnitManager(jdbi));
-        runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
         policies = jdbi.onDemand(GuardrailPolicyDAO.class);
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> ID_GENERATOR.generate());
@@ -82,9 +81,14 @@ class GuardrailModelServiceTest {
         requestContext.setUserName(USER);
     }
 
+    /** Ends the model's run in flight as the run worker will, whose status writes come with it. */
     private GuardrailTrainingRun end(UUID modelId, GuardrailTrainingRunStatus status) {
         var run = trainingService.findInFlight(modelId).orElseThrow();
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), run.status(), status, null, null, USER)).isOne();
+        jdbi.useHandle(
+                handle -> handle.createUpdate("UPDATE guardrail_training_runs SET status = :status WHERE id = :id")
+                        .bind("status", status.name())
+                        .bind("id", run.id().toString())
+                        .execute());
         return trainingService.get(modelId, run.id());
     }
 
@@ -121,7 +125,12 @@ class GuardrailModelServiceTest {
 
         var page = service.find(1, 10, null, false, null, List.of());
         assertThat(page.content()).extracting(GuardrailModel::id).containsExactly(id);
-        assertThat(runs.countInFlight(requestContext.getWorkspaceId())).isOne();
+        long runsInTheWorkspace = jdbi.withHandle(handle -> handle
+                .createQuery("SELECT COUNT(*) FROM guardrail_training_runs WHERE workspace_id = :workspaceId")
+                .bind("workspaceId", requestContext.getWorkspaceId())
+                .mapTo(Long.class)
+                .one());
+        assertThat(runsInTheWorkspace).isOne();
     }
 
     @Test

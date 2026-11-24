@@ -45,6 +45,7 @@ class GuardrailTrainingServiceTest {
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private final RequestContext requestContext = new RequestContext();
     private TransactionTemplate template;
+    private Jdbi jdbi;
     private GuardrailTrainingRunDAO runs;
     private GuardrailTrainingService service;
 
@@ -52,7 +53,7 @@ class GuardrailTrainingServiceTest {
     void setUp() {
         mysql.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        var jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+        jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                 .installPlugin(new SqlObjectPlugin());
         template = new TransactionTemplate(new UnitManager(jdbi));
         runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
@@ -67,9 +68,13 @@ class GuardrailTrainingServiceTest {
         requestContext.setUserName(USER);
     }
 
+    /** Moves the run as the run worker will, whose status writes come with it. */
     private GuardrailTrainingRun move(GuardrailTrainingRun run, GuardrailTrainingRunStatus newStatus) {
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), run.status(), newStatus, null, null, USER))
-                .isOne();
+        jdbi.useHandle(
+                handle -> handle.createUpdate("UPDATE guardrail_training_runs SET status = :status WHERE id = :id")
+                        .bind("status", newStatus.name())
+                        .bind("id", run.id().toString())
+                        .execute());
         return runs.findById(run.id(), run.workspaceId()).orElseThrow();
     }
 
@@ -110,8 +115,8 @@ class GuardrailTrainingServiceTest {
     }
 
     @Test
-    @DisplayName("A model's runs page newest first, and its serving run is its latest completed one")
-    void findAndFindServingRun() {
+    @DisplayName("A model's runs page newest first, and are found by their ids")
+    void find() {
         var modelId = ID_GENERATOR.generate();
         var first = move(service.create(modelId), COMPLETED);
         var second = service.create(modelId);
@@ -121,7 +126,6 @@ class GuardrailTrainingServiceTest {
         assertThat(page.content()).containsExactly(second);
         assertThat(page.total()).isEqualTo(2);
         assertThat(service.find(modelId, 2, 1).content()).containsExactly(first);
-        assertThat(service.findServingRun(modelId)).contains(first);
         assertThat(service.findByIds(List.of(first.id(), second.id()))).containsExactlyInAnyOrder(first, second);
         assertThat(service.findByIds(List.of())).isEmpty();
     }
@@ -149,16 +153,30 @@ class GuardrailTrainingServiceTest {
     }
 
     @Test
-    @DisplayName("A run that has ended cannot be cancelled")
-    void cancelWhenEndedReturnsConflict() {
+    @DisplayName("Cancelling a cancelled run again does nothing")
+    void cancelWhenCancelledDoesNothing() {
         var modelId = ID_GENERATOR.generate();
-        var completed = move(service.create(modelId), COMPLETED);
+        var run = service.create(modelId);
+        service.cancel(modelId, run.id());
+        var cancelled = service.get(modelId, run.id());
 
-        assertThatThrownBy(() -> service.cancel(modelId, completed.id()))
+        service.cancel(modelId, run.id());
+
+        assertThat(service.get(modelId, run.id())).isEqualTo(cancelled);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = GuardrailTrainingRunStatus.class, names = {"COMPLETED", "FAILED"})
+    @DisplayName("A run that has completed or failed cannot be cancelled")
+    void cancelWhenEndedReturnsConflict(GuardrailTrainingRunStatus status) {
+        var modelId = ID_GENERATOR.generate();
+        var ended = move(service.create(modelId), status);
+
+        assertThatThrownBy(() -> service.cancel(modelId, ended.id()))
                 .isInstanceOfSatisfying(ClientErrorException.class,
                         exception -> assertThat(exception.getResponse().getStatus()).isEqualTo(409));
 
-        assertThat(service.get(modelId, completed.id())).isEqualTo(completed);
+        assertThat(service.get(modelId, ended.id())).isEqualTo(ended);
     }
 
     @Test
