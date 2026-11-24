@@ -31,7 +31,7 @@ import java.util.Map;
  * last answer from Comet.
  * <p>
  * When Comet fails for a workspace with no such hash, {@code opik:workspace-organization-failed:<workspaceId>} holds
- * the epoch millis after which Comet is asked again, and expires then.
+ * the epoch millis after which Comet is asked again, and expires then. Any answer from Comet removes it.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -79,6 +79,7 @@ class WorkspaceOrganizationCache {
                 ORGANIZATION_ID, StringUtils.defaultString(organizationId),
                 REFRESH_AFTER, String.valueOf(now().plus(freshFor).toEpochMilli())))
                 .then(map.expire(keptFor))
+                .then(failed(workspaceId).delete())
                 .then();
     }
 

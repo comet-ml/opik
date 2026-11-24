@@ -29,6 +29,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
+import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.RedisException;
 import org.testcontainers.lifecycle.Startables;
@@ -564,6 +565,22 @@ class RemoteOrganizationResolverTest {
             assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
         }
+
+        @Test
+        void answerSavedAfterTheFailureEndsTheRetryWindow() {
+            stubApiKey(serverError());
+            ask();
+            cache.save(workspaceId, organizationId).block();
+            wireMock.server().resetAll();
+            stubApiKey(organization(organizationId, false));
+
+            // A stale TTL shorter than the retry window lets the saved answer expire while the window is still open
+            entryMap().delete();
+
+            assertThat(failureTimeToLive()).isEqualTo(NO_KEY);
+            assertThat(ask()).isEqualTo(organizationId);
+            assertCometCalls(API_KEY_PATH, 1);
+        }
     }
 
     @Nested
@@ -785,8 +802,12 @@ class RemoteOrganizationResolverTest {
                 .build();
     }
 
+    private RMap<Object, Object> entryMap() {
+        return redissonClient.getMap("opik:workspace-organization:%s".formatted(workspaceId));
+    }
+
     private long entryTimeToLive() {
-        return redissonClient.getMap("opik:workspace-organization:%s".formatted(workspaceId)).remainTimeToLive();
+        return entryMap().remainTimeToLive();
     }
 
     private long failureTimeToLive() {
