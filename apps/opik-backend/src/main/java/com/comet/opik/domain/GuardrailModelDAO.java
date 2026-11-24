@@ -21,8 +21,9 @@ import java.util.UUID;
 /**
  * A model's state is two correlated reads on its runs: its serving run, the most recent COMPLETED one, on the runs'
  * (model_id, status, created_at) index, and its latest run, across statuses, which MySQL sorts from that index while a
- * model has a few runs and reads in order from (model_id, created_at, id) as they grow. Both break a tie in created_at
- * by id. The runs need no workspace check of their own: they are reached through a model already checked.
+ * model has a few runs and reads in order from (model_id, created_at) as they grow. Both break a tie in created_at by
+ * id, which InnoDB keeps at the end of every secondary index. The runs need no workspace check of their own: they are
+ * reached through a model already checked.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(GuardrailModel.class)
