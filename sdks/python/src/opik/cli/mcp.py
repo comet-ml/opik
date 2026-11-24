@@ -20,6 +20,7 @@ from opik.configurator import configure as opik_configure
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
 from opik.configurator import opik_rest_helpers
+from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import handoff as mcp_handoff
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
@@ -114,11 +115,8 @@ def _check_connection_flags(
             raise click.UsageError(
                 "--url needs a full address, such as http://localhost:5173."
             )
-    if deployment is self_hosted and not (url and workspace):
-        # Not guessed: an account with several would be read from the wrong one.
-        raise click.UsageError(
-            "--deployment self-hosted needs --url and --workspace (or OPIK_WORKSPACE)."
-        )
+    if deployment is self_hosted and not url:
+        raise click.UsageError("--deployment self-hosted needs --url.")
 
 
 def _named_opik(
@@ -138,6 +136,7 @@ def _flag_params(
     deployment: interactive_helpers.DeploymentType,
     url: Optional[str],
     workspace: Optional[str],
+    local_server: bool,
 ) -> McpSetupParams:
     """The Opik the flags name. Asks nothing, so it works without a terminal."""
     if deployment is interactive_helpers.DeploymentType.CLOUD:
@@ -151,18 +150,31 @@ def _flag_params(
                 "runs at: --url <url>."
             )
         return _named_opik(urllib.parse.urljoin(base_url, "api/"))
-    # Never a flag: that would leave it in the shell history and an agent's transcript.
-    api_key = os.environ.get("OPIK_API_KEY", "").strip()
-    if not api_key:
+    api_url = urllib.parse.urljoin(base_url, "opik/api/")
+    # Never a flag: that would leave it in the shell history and an agent's
+    # transcript. Only a local server uses it; a hosted one signs in in the browser.
+    api_key = os.environ.get("OPIK_API_KEY", "").strip() or None
+    # Checked now, so a script or an agent sees it in the exit status.
+    if api_key is None and (
+        local_server
+        or mcp_detection.detect_hosted_mcp_server(
+            base_url=base_url,
+            api_url=api_url,
+            check_tls_certificate=opik_config.OpikConfig().check_tls_certificate,
+        )
+        is None
+    ):
+        needs_local_server = (
+            "--local-server asks for a local MCP server"
+            if local_server
+            else f"{base_url} runs no hosted MCP server, so the AI client needs a "
+            "local one"
+        )
         raise click.ClickException(
-            "--deployment self-hosted reads the API key from OPIK_API_KEY, which is "
+            f"{needs_local_server}, which reads the API key from OPIK_API_KEY. It is "
             "not set."
         )
-    return _named_opik(
-        urllib.parse.urljoin(base_url, "opik/api/"),
-        api_key=api_key,
-        workspace=workspace,
-    )
+    return _named_opik(api_url, api_key=api_key, workspace=workspace)
 
 
 #: The variables that take precedence over ~/.opik.config for which Opik to use.
@@ -274,8 +286,8 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     help="Which Opik to connect to, instead of the saved one or the question: "
     "`cloud` (the hosted server; no API key, the AI client signs in in the "
     "browser), `local` (an Opik you run yourself, at http://localhost:5173 unless "
-    "--url says otherwise) or `self-hosted` (a Comet platform at --url, with the "
-    "API key from OPIK_API_KEY).",
+    "--url says otherwise) or `self-hosted` (a Comet platform at --url; no API key "
+    "when it runs the hosted server, otherwise the key from OPIK_API_KEY).",
 )
 @click.option(
     "--url",
@@ -286,7 +298,8 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     "--workspace",
     default=None,
     help="The workspace, for --deployment self-hosted: the segment after /opik/ "
-    "in your Opik URL. Defaults to OPIK_WORKSPACE.",
+    "in your Opik URL. Defaults to OPIK_WORKSPACE. Only a local server uses it; "
+    "with the hosted one you pick it when signing in.",
 )
 def configure(
     local_server: bool,
@@ -420,7 +433,12 @@ def run_configure(
 
         if named_deployment is not None:
             stage = "deployment"
-            params = _flag_params(named_deployment, url=url, workspace=workspace)
+            params = _flag_params(
+                named_deployment,
+                url=url,
+                workspace=workspace,
+                local_server=local_server,
+            )
         elif saved is not None and not _needs_opik_configuration(params):
             # A redirect from `opik configure` has just shown these settings.
             if invoked_via == "direct":
@@ -462,9 +480,10 @@ def run_configure(
                     f"    opik mcp configure {clients} --deployment cloud\n"
                     f"    opik mcp configure {clients} --deployment local --url <url>\n"
                     f"    opik mcp configure {clients} --deployment self-hosted "
-                    "--url <url> --workspace <workspace>\n\n"
-                    "Opik Cloud needs no API key: the AI client signs in in the "
-                    "browser. Self-hosted reads the key from OPIK_API_KEY."
+                    "--url <url>\n\n"
+                    "Opik Cloud needs no API key, nor does a Comet platform running "
+                    "the hosted MCP server: the AI client signs in in the browser. "
+                    "Otherwise the key is read from OPIK_API_KEY."
                 )
             install_view.render_connection(
                 opik_url=params["base_url"],

@@ -356,6 +356,38 @@ class TestAskForUrl:
             f" the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
         )
 
+    @patch(
+        "builtins.input",
+        side_effect=["https://comet.acme.com/opik/team-ws/projects?size=10"],
+    )
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_ask_for_url__self_hosted_comet__checks_opik_under_the_opik_path(
+        self, mock_is_instance_active, mock_input
+    ):
+        """A Comet platform serves Opik under /opik/; its root is the web app."""
+        config = OpikConfigurator(self_hosted_comet=True)
+        config._ask_for_url()
+
+        assert config.base_url == "https://comet.acme.com/"
+        mock_is_instance_active.assert_called_once_with("https://comet.acme.com/opik/")
+
+    @patch("builtins.input", side_effect=["https://comet.acme.com"] * 3)
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=False,
+    )
+    @patch("opik.configurator.configure.LOGGER.error")
+    def test_ask_for_url__self_hosted_comet_not_answering__example_is_not_localhost(
+        self, mock_logger_error, mock_is_instance_active, mock_input
+    ):
+        with pytest.raises(ConfigurationError):
+            OpikConfigurator(self_hosted_comet=True)._ask_for_url()
+
+        assert OPIK_BASE_URL_LOCAL not in mock_logger_error.call_args.args[0]
+
 
 class TestSetApiKey:
     @pytest.mark.parametrize("blank_key", ["", "   ", "\t"])

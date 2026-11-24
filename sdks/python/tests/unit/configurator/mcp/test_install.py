@@ -758,6 +758,30 @@ class TestWorkspaceAmbiguity:
         warned = args["view"].said
         assert "pick a workspace first" in warned
 
+    def test_setup_mcp_server__ambiguous_workspace_but_hosted_server__installs_it(
+        self, monkeypatch
+    ):
+        """The hosted server is not told a workspace: it is picked at sign-in."""
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://comet.acme.com/opik/api/v1/mcp",
+        )
+        monkeypatch.setattr(
+            install, "_workspace_ambiguity", lambda **k: "pick a workspace first"
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult("Cursor", True, "Added")
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("cursor", True, install_spy)]
+        )
+
+        install.setup_mcp_server(**_make_args(), assume_confirmed=True)
+
+        install_spy.assert_called_once()
+        assert isinstance(install_spy.call_args.args[0], spec.RemoteServerSpec)
+
 
 class TestUvHint:
     def test_uv_install_hint__names_the_command_to_run(self, monkeypatch):
