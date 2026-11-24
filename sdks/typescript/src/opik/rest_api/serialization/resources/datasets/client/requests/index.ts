@@ -1,6 +1,7 @@
 export { CreateDatasetItemsFromSpansRequest } from "./CreateDatasetItemsFromSpansRequest.js";
 export { CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest.js";
 export { DatasetExpansionWrite } from "./DatasetExpansionWrite.js";
+export { DatasetExperimentItemStreamRequest } from "./DatasetExperimentItemStreamRequest.js";
 export { DatasetIdentifier } from "./DatasetIdentifier.js";
 export { DatasetIdentifierPublic } from "./DatasetIdentifierPublic.js";
 export { DatasetItemBatchUpdate } from "./DatasetItemBatchUpdate.js";
