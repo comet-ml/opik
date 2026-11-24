@@ -37,6 +37,7 @@ public class ModelPriceTable {
     private static final Map<String, ModelPrice> modelProviderPrices;
     private static final Set<String> pricedProviders;
     private static final Map<String, Map<String, List<String>>> prefixedModelNames;
+    private static final Map<String, Set<String>> providersByModelName;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     /**
@@ -66,6 +67,12 @@ public class ModelPriceTable {
                 .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
                 .collect(Collectors.toUnmodifiableSet());
         prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
+        providersByModelName = modelProviderPrices.keySet().stream()
+                .collect(Collectors.collectingAndThen(Collectors.groupingBy(
+                        key -> key.substring(0, key.lastIndexOf(MODEL_PROVIDER_SEPARATOR)),
+                        Collectors.mapping(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1),
+                                Collectors.toUnmodifiableSet())),
+                        Collections::unmodifiableMap));
     }
 
     static ModelPrice get(String modelName, String provider) {
@@ -78,6 +85,11 @@ public class ModelPriceTable {
 
     static Set<String> pricedProviders() {
         return pricedProviders;
+    }
+
+    /** The providers with a built-in price filed under exactly this model name. */
+    static Set<String> providersOf(@NonNull String modelName) {
+        return providersByModelName.getOrDefault(modelName, Set.of());
     }
 
     /**

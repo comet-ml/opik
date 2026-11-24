@@ -87,8 +87,43 @@ class ModelPriceResolver {
         List<String> lookupOrder = ProviderRegistry.resolve(provider, modelName)
                 .map(ProviderRegistry::priceLookupOrder)
                 .orElse(List.of());
-        return findCustom(layers, lookupOrder, spellings(ModelPriceTable.parseModelName(modelName)), true)
-                .map(CustomMatch::row);
+        return firstCustomRows(modelName, List.of(lookupOrder), layers).stream().findFirst();
+    }
+
+    /**
+     * The organization row, aliases included, that a span named {@code modelName} matches first under each provider
+     * lookup order, distinct. An empty lookup order stands for a provider with no rows of its own. The spellings are
+     * built once for all of them.
+     */
+    List<CustomModelPrice> firstCustomRows(@NonNull String modelName, @NonNull List<List<String>> lookupOrders,
+            @NonNull PriceLayers layers) {
+        if (!layers.hasRows()) {
+            return List.of();
+        }
+        Map<String, NameForm> spellings = spellings(ModelPriceTable.parseModelName(modelName));
+        return lookupOrders.stream()
+                .map(lookupOrder -> findCustom(layers, lookupOrder, spellings, true))
+                .flatMap(Optional::stream)
+                .map(CustomMatch::row)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * The built-in price a span of this model gets under each provider that files one of its spellings, sorted by
+     * provider: how an any-provider row's spans are priced without it. The providers come from an index, so this
+     * doesn't try every provider.
+     */
+    List<PriceMatch> builtInMatchesUnderEveryProvider(@NonNull String modelName) {
+        Map<String, NameForm> spellings = spellings(ModelPriceTable.parseModelName(modelName));
+        return spellings.keySet().stream()
+                .flatMap(spelling -> ModelPriceTable.providersOf(spelling).stream())
+                .distinct()
+                .sorted()
+                .map(provider -> findBuiltIn(modelName, Optional.of(provider),
+                        ProviderRegistry.priceLookupOrder(provider), spellings))
+                .flatMap(Optional::stream)
+                .toList();
     }
 
     private Optional<PriceMatch> findPrice(String modelName, Optional<String> resolvedProvider, PriceLayers layers,
@@ -107,8 +142,16 @@ class ModelPriceResolver {
         Optional<CustomMatch> custom = findCustom(layers, lookupOrder, spellings, followAliases);
         if (custom.isPresent() && custom.get().row().kind() == CustomModelPrice.Kind.ALIAS) {
             CustomMatch alias = custom.get();
-            return resolveAliasTarget(alias.row(), resolvedProvider, layers)
-                    .map(target -> target.toBuilder()
+            Optional<PriceMatch> target = resolveAliasTarget(alias.row(), resolvedProvider, layers);
+            // Token rates would bill a model priced per character or per second for tokens its spans never log.
+            if (target.isPresent() && !target.get().price().isPricedPerUnit()) {
+                Optional<PriceMatch> builtIn = findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings);
+                if (builtIn.map(match -> match.price().isPricedPerUnit()).orElse(false)) {
+                    return builtIn;
+                }
+            }
+            return target
+                    .map(match -> match.toBuilder()
                             .provider(alias.provider())
                             .nameForm(alias.nameForm())
                             .customRow(alias.row())

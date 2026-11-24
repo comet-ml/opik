@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -113,13 +114,65 @@ class CostServicePriceTest {
         assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
     }
 
-    @Test
-    void priceOfAModelBilledPerCharacterIgnoresAFixedRowsTokenRates() {
-        var priced = CostService.price("tts-1", "openai", Map.of("input_characters", 1000), null,
-                layers(fixed("tts-1", "openai", "1.00", "1.00")));
+    private static void assertPriced(PricedCost actual, PricedCost expected) {
+        assertThat(actual).usingRecursiveComparison()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .isEqualTo(expected);
+    }
 
-        assertThat(priced.cost()).isEqualByComparingTo("0.015");
-        assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
+    private static Stream<Arguments> rowsNamedLikeAModelPricedPerUnit() {
+        // tts-1 bills 1000 characters at 1.5e-5, sora-2 bills 10 seconds at 0.1.
+        var characters = Map.of("input_characters", 1000);
+        var seconds = Map.of("video_duration_seconds", 10);
+        return Stream.of(
+                Arguments.of("fixed row, per character", "tts-1", characters,
+                        layers(fixed("tts-1", "openai", "1.00", "1.00")), "0.015"),
+                Arguments.of("fixed row, per second", "sora-2", seconds,
+                        layers(fixed("sora-2", "openai", "1.00", "1.00")), "1.0"),
+                Arguments.of("alias to a token-priced model, per character", "tts-1", characters,
+                        layers(alias("tts-1", "openai", "gpt-4o", "openai")), "0.015"),
+                Arguments.of("alias to a token-priced model, per second", "sora-2", seconds,
+                        layers(alias("sora-2", "openai", "gpt-4o", "openai")), "1.0"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rowsNamedLikeAModelPricedPerUnit")
+    void priceOfAModelPricedPerUnitIgnoresARowsTokenRates(String description, String modelName,
+            Map<String, Integer> usage, PriceLayers layers, String expectedCost) {
+        var priced = CostService.price(modelName, "openai", usage, null, layers);
+
+        assertPriced(priced, new PricedCost(new BigDecimal(expectedCost), CostSource.BUILT_IN));
+    }
+
+    @Test
+    void priceOfAnAliasToAModelPricedPerUnitBillsItsUnits() {
+        var priced = CostService.price("aide-voice", "openai", Map.of("input_characters", 1000), null,
+                layers(alias("aide-voice", "openai", "tts-1", "openai")));
+
+        assertPriced(priced, new PricedCost(new BigDecimal("0.015"), CostSource.ORGANIZATION));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"openai", "azure", "github_copilot"})
+    void priceOfAnAnyProviderAliasUsesItsTargetUnderTheSpansProvider(String spanProvider) {
+        var builtIn = CostService.price("gpt-5-mini", spanProvider, usage(1000, 0, 500), null,
+                PriceLayers.BUILT_IN_ONLY);
+
+        var priced = CostService.price("aide-mini", spanProvider, usage(1000, 0, 500), null,
+                layers(alias("aide-mini", CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+                        CustomModelPrice.SPAN_PROVIDER)));
+
+        assertThat(builtIn.source()).isEqualTo(CostSource.BUILT_IN);
+        assertPriced(priced, new PricedCost(builtIn.cost(), CostSource.ORGANIZATION));
+    }
+
+    @Test
+    void priceOfAnAnyProviderAliasIsNothingUnderAProviderWithoutTheTarget() {
+        var priced = CostService.price("aide-mini", "anthropic", usage(1000, 0, 500), null,
+                layers(alias("aide-mini", CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+                        CustomModelPrice.SPAN_PROVIDER)));
+
+        assertPriced(priced, new PricedCost(BigDecimal.ZERO, CostSource.NONE));
     }
 
     @Test
