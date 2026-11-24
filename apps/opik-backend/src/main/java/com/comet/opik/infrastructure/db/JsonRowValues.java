@@ -138,8 +138,8 @@ public class JsonRowValues {
         checkField(field);
         checkField(slimField);
         if (value != null && value.isContainerNode()) {
-            node.putRawValue(field, new RawValue(TruncationUtils.toFullJson(value)));
-            node.putRawValue(slimField, new RawValue(TruncationUtils.toSlimJson(value)));
+            node.putRawValue(field, new RawValue(TruncationUtils.fullJsonSerializable(value)));
+            node.putRawValue(slimField, new RawValue(TruncationUtils.slimJsonSerializable(value)));
             return;
         }
         var columns = TruncationUtils.toJsonWithSlim(value);

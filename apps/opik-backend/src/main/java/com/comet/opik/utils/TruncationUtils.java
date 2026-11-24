@@ -154,8 +154,8 @@ public final class TruncationUtils {
      * its slim column ({@code input_slim}, {@code output_slim}), with the default max length.
      *
      * <p>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
-     * {@code String} instance. Otherwise it is {@link #toSlimJson(JsonNode)}, written in one walk of the node.
-     * For a node parsed from JSON, both match {@code toJsonString(node)} and
+     * {@code String} instance. Otherwise it is {@link #slimJsonSerializable(JsonNode)}, written in one walk of the
+     * node. For a node parsed from JSON, both match {@code toJsonString(node)} and
      * {@code createSlimJsonString(toJsonString(node))}.
      *
      * @param node the payload node (may be null)
@@ -172,7 +172,8 @@ public final class TruncationUtils {
         }
 
         try {
-            return JsonWithSlim.builder().json(json).slim(PayloadJson.NODE_WRITER.writeValueAsString(toSlimJson(node)))
+            return JsonWithSlim.builder().json(json)
+                    .slim(PayloadJson.NODE_WRITER.writeValueAsString(slimJsonSerializable(node)))
                     .build();
         } catch (JsonProcessingException exception) {
             throw new UncheckedIOException(exception);
@@ -183,7 +184,7 @@ public final class TruncationUtils {
      * The full and slim JSON strings of a payload node.
      *
      * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
-     * @param slim the slim JSON, as {@link #toSlimJson(JsonNode)} writes it
+     * @param slim the slim JSON, as {@link #slimJsonSerializable(JsonNode)} writes it
      */
     @Builder(toBuilder = true)
     public record JsonWithSlim(@NonNull String json, @NonNull String slim) {
@@ -201,19 +202,19 @@ public final class TruncationUtils {
      * @param node the payload node
      * @return the full JSON, written when the enclosing value is serialized
      */
-    public static JsonSerializable toFullJson(@NonNull JsonNode node) {
+    public static JsonSerializable fullJsonSerializable(@NonNull JsonNode node) {
         return PayloadJson.builder().node(node).slim(false).build();
     }
 
     /**
      * The slim JSON of a payload node, as a value that writes itself into the caller's generator: every string
      * value longer than the default max length is cut to it and followed by {@code "..."}, keys and structure are
-     * kept. Like {@link #toFullJson(JsonNode)}, it does not depend on the caller's mapper configuration.
+     * kept. Like {@link #fullJsonSerializable(JsonNode)}, it does not depend on the caller's mapper configuration.
      *
      * @param node the payload node
      * @return the slim JSON, written when the enclosing value is serialized
      */
-    public static JsonSerializable toSlimJson(@NonNull JsonNode node) {
+    public static JsonSerializable slimJsonSerializable(@NonNull JsonNode node) {
         return PayloadJson.builder().node(node).slim(true).build();
     }
 
