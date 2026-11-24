@@ -4,19 +4,21 @@ run-name: "Generative UI Engine ${{ inputs.is_release && 'publish' || 'build' }}
 # Publishes `opik-genui` to npm and to PyPI from one build of one commit, so the
 # two packages of a version always carry the same contract and guidance.
 #
-# Manual only for now: it is not part of the Opik release, so it cannot block one.
-# Run it after an Opik release, with that release's version, to publish the engine
-# at the same version. Without `is_release` it builds, checks and proves the PyPI
-# registration, and uploads nothing.
+# It runs two ways:
+#   as a job of the Opik release (release.yaml), with the release version;
+#   by hand ("Run workflow"), to re-publish a version the release missed or to try
+#   a change. Without `is_release` it builds, checks and proves the PyPI
+#   registration, and uploads nothing.
 #
-# Trusted publishing (OIDC), no stored tokens. Both registries have THIS file,
-# `genui_publish.yml`, registered as the trusted publisher for `opik-genui`, for
-# different reasons:
-#   npm  validates the *entry-point* workflow, the one that started the run.
-#   PyPI validates the workflow that contains the job (`job_workflow_ref`).
-# Renaming this file breaks both until the registrations are changed. When this
-# becomes a job of the release, npm needs `release-wrapper-release-n-deploy.yml`
-# registered as well; PyPI needs nothing new.
+# Trusted publishing (OIDC), no stored tokens. The registries identify the
+# publisher differently:
+#   npm  validates the *entry-point* workflow, the one that started the run. Two
+#        files are registered for `opik-genui`: `release-wrapper-release-n-deploy.yml`
+#        for releases and this one, `genui_publish.yml`, for manual runs.
+#   PyPI validates the workflow that contains the job (`job_workflow_ref`), so
+#        this file is the one registration for both ways of running.
+# Renaming this file breaks PyPI and the manual npm publish until the
+# registrations are changed.
 on:
   workflow_dispatch:
     inputs:
@@ -29,6 +31,26 @@ on:
         required: false
         default: false
         description: Publish to npm and PyPI. When off, build and check the branch this run is started from and upload nothing.
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+      is_release:
+        type: boolean
+        required: false
+        default: false
+      preflight_only:
+        type: boolean
+        required: false
+        default: false
+        description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
+      preflight_non_blocking:
+        type: boolean
+        required: false
+        default: false
+        description: Let the preflight fail without failing the job, so a PyPI outage doesn't block a release
 
 env:
   # Retry transient PyPI/network failures longer before failing the build.
@@ -38,12 +60,42 @@ env:
 permissions:
   contents: read
 
-concurrency:
-  group: genui-publish
-  cancel-in-progress: false
-
 jobs:
+  # Mints a PyPI upload token from this workflow's OIDC identity and discards it,
+  # so release.yaml can prove the `opik-genui` Trusted Publisher matches before
+  # tagging. Same check as build_and_publish_sdk.yaml, which proves only `opik`.
+  # npm has no equivalent: its publisher is first exercised by the publish itself.
+  pypi-oidc-preflight:
+    if: inputs.preflight_only
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    timeout-minutes: 5
+    steps:
+      - name: PyPI Trusted Publishing preflight
+        continue-on-error: ${{ inputs.preflight_non_blocking }}
+        run: |
+          set -euo pipefail
+          # Tokens go via stdin, never argv; a 200 body holds a live upload
+          # token, so it lands in a 0600 mktemp file removed on exit.
+          MINT=$(mktemp)
+          trap 'rm -f "$MINT"' EXIT
+          AUDIENCE=$(curl -fsS https://pypi.org/_/oidc/audience | jq -r .audience)
+          OIDC=$(printf 'Authorization: bearer %s\n' "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            | curl -fsS -H @- "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" | jq -r .value)
+          echo "::add-mask::${OIDC}"
+          CODE=$(printf '{"token": "%s"}' "${OIDC}" \
+            | curl -sS -o "$MINT" -w '%{http_code}' -X POST https://pypi.org/_/oidc/mint-token \
+                -H 'Content-Type: application/json' --data-binary @-)
+          if [ "${CODE}" != "200" ]; then
+            # Error bodies carry no token, only codes like invalid-publisher.
+            echo "::error title=PyPI preflight::Trusted Publishing rejected this workflow (HTTP ${CODE}): $(jq -c '.errors // .' "$MINT")"
+            exit 1
+          fi
+          echo "OK: PyPI accepts this workflow as a Trusted Publisher for opik-genui."
+
   build-and-publish:
+    if: ${{ !inputs.preflight_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -63,12 +115,15 @@ jobs:
         working-directory: .
         env:
           REF: ${{ github.ref }}
+          # The entry-point workflow: this file for a manual run, the release
+          # wrapper when the release calls it. Only a manual run is tied to main.
+          ENTRY_POINT: ${{ github.workflow_ref }}
         run: |
           if ! [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error title=Validate inputs::version='${RELEASE_VERSION}' is not X.Y.Z. PyPI and npm must receive the same version string."
             exit 1
           fi
-          if [ "${IS_RELEASE}" = "true" ] && [ "${REF}" != "refs/heads/main" ]; then
+          if [ "${IS_RELEASE}" = "true" ] && [[ "${ENTRY_POINT}" == */genui_publish.yml@* ]] && [ "${REF}" != "refs/heads/main" ]; then
             echo "::error title=Validate inputs::a release must be started from main (got ${REF}). Run without is_release to try a branch."
             exit 1
           fi
@@ -121,6 +176,8 @@ jobs:
         # it. Runs before anything is uploaded, so a wrong PyPI registration cannot
         # leave npm published and PyPI not. Same check as build_and_publish_sdk.yaml.
         # npm has no equivalent: its publisher is first exercised by the publish.
+        # Manual runs only: a release already ran it before tagging.
+        if: contains(github.workflow_ref, '/genui_publish.yml@')
         run: |
           set -euo pipefail
           # Tokens go via stdin, never argv; a 200 body holds a live upload
@@ -187,9 +244,8 @@ jobs:
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: sdks/genui/python/dist
-          # Off on purpose: PyPI rejects the attestation once this runs as a called
-          # workflow of the release (pypi/warehouse#11096), and the two ways of
-          # running it should publish the same thing.
+          # PyPI rejects the attestation from a nested reusable-workflow call
+          # (pypi/warehouse#11096). See build_and_publish_sdk.yaml.
           attestations: false
           skip-existing: true
 
