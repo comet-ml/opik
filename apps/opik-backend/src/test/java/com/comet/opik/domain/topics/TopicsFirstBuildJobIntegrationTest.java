@@ -212,20 +212,21 @@ class TopicsFirstBuildJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("a job fire deletes the topics of a project that no longer exists, with their prototype vectors, and "
-            + "keeps an existing project's")
+    @DisplayName("a job fire deletes the topics of projects that no longer exist, with their prototype vectors, in "
+            + "batches, and keeps an existing project's")
     void jobSweepsDeletedProjects() {
         var workspaceId = enabledWorkspace();
-        var deleted = UUID.randomUUID();
+        // More than topics.storage.deleteBatchSize (2 in the tests), so the sweep deletes in two transactions.
+        var deleted = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         var kept = UUID.randomUUID();
         data.project(workspaceId, kept);
-        data.savedList(workspaceId, deleted, tomorrowStart(), FIXTURE.size());
+        deleted.forEach(projectId -> data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size()));
         data.savedList(workspaceId, kept, tomorrowStart(), FIXTURE.size());
         lockService.unlockUsingToken(SWEEP_LOCK).block();
 
         Awaitility.await().atMost(WAIT).untilAsserted(() -> {
             job.doJob(null);
-            assertThat(data.topics(deleted)).isEmpty();
+            assertThat(deleted).allSatisfy(projectId -> assertThat(data.topics(projectId)).isEmpty());
         });
         assertThat(data.topics(kept)).singleElement()
                 .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));

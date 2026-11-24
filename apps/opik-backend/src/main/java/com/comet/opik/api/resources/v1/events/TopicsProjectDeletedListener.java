@@ -4,13 +4,18 @@ import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicProject.CancelReason;
 import com.comet.opik.domain.topics.TopicRunStore;
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.google.common.collect.Lists;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.util.List;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -28,6 +33,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public class TopicsProjectDeletedListener {
 
     private final @NonNull TransactionTemplate template;
+    private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicRunStore runStore;
 
     @Subscribe
@@ -44,8 +50,12 @@ public class TopicsProjectDeletedListener {
                     event.workspaceId(), event.projectIds().size(), exception);
         }
         try {
-            int topics = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                    .deleteTopicsByProjects(event.workspaceId(), event.projectIds()));
+            // One transaction per batch: a bulk project delete names any number of projects.
+            int topics = Lists.partition(List.copyOf(event.projectIds()), config.getStorage().getDeleteBatchSize())
+                    .stream()
+                    .mapToInt(batch -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                            .deleteTopicsByProjects(event.workspaceId(), batch)))
+                    .sum();
             if (topics > 0) {
                 log.info("Deleted the topics of deleted projects, workspace '{}', project count '{}', topics '{}'",
                         event.workspaceId(), event.projectIds().size(), topics);

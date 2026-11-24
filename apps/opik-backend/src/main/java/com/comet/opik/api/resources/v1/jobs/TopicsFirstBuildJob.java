@@ -1,10 +1,12 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.topics.TopicDAO;
+import com.comet.opik.domain.topics.TopicProjectKey;
 import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.google.common.collect.Lists;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -24,7 +26,10 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -132,8 +137,19 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
             if (workspaceIds.isEmpty()) {
                 return 0;
             }
-            return template.inTransaction(WRITE,
-                    handle -> handle.attach(TopicDAO.class).deleteTopicsOfMissingProjects(workspaceIds));
+            var missing = template.inTransaction(READ_ONLY,
+                    handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(workspaceIds));
+            // One transaction per batch, so a bulk project delete the listener missed is never one large delete.
+            return missing.stream()
+                    .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
+                            Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
+                    .entrySet().stream()
+                    .flatMap(entry -> Lists.partition(entry.getValue(), config.getStorage().getDeleteBatchSize())
+                            .stream()
+                            .map(batch -> Map.entry(entry.getKey(), batch)))
+                    .mapToInt(batch -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                            .deleteTopicsByProjects(batch.getKey(), batch.getValue())))
+                    .sum();
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnNext(topics -> {
