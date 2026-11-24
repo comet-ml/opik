@@ -1666,6 +1666,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: ${LLM_PROVIDER_CLIENT_MAX_ATTEMPTS:-3}
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: ${LLM_PROVIDER_CLIENT_JUDGE_MAX_RETRIES:-0}
   # Default: 500
   # Description: Number of milliseconds to wait between retry attempts
   delayMillis: ${LLM_PROVIDER_CLIENT_DELAY_MILLIS:-500}

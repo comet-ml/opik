@@ -50,7 +50,7 @@ public class OpenAiDecisionsClient implements DecisionsClient {
     @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
-        return Mono.fromCallable(() -> clientGenerator.newResponsesApiClient(config, request.model(), null, false)
+        return Mono.fromCallable(() -> clientGenerator.newResponsesApiClient(config, request.model(), null, false, null)
                 .decisions()
                 .create(toParams(request)))
                 .subscribeOn(Schedulers.boundedElastic())
