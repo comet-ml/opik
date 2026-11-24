@@ -14,8 +14,6 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
-import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -557,12 +555,13 @@ class TopicVectorsStorageTest {
         var third = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
         List.of(first, second, third).forEach(projectId -> tables.project(workspaceId, projectId));
-        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
         backfillService.start(List.of(row.projectId(first).backfillStartedAt(t0.plusSeconds(60)).build()));
         var t1 = t0.plusSeconds(100);
-        backfillService.record(List.of(Progress.builder().workspaceId(workspaceId).projectId(first).drainedAt(t1)
-                .written(5).build()));
+        backfillService
+                .record(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(first).drainedAt(t1)
+                        .written(5).build()));
 
         var started = backfillService.findByKeys(workspaceId, List.of(first, second, third));
         // Never discovered, so its total is 0 and nothing written counts yet.
@@ -574,11 +573,11 @@ class TopicVectorsStorageTest {
 
         var t2 = t0.plusSeconds(200);
         var t3 = t0.plusSeconds(300);
-        var found = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t3).backfillLastDoneAt(t2);
+        var found = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t3).backfillLastDoneAt(t2);
         backfillService.discovered(workspaceId, List.of(
                 found.projectId(first).backfillTracesTotal(10).backfillTracesDone(4).build(),
                 found.projectId(third).backfillTracesTotal(7).backfillTracesDone(0).build()), t3, t0.minusSeconds(1));
-        var progress = Progress.builder().workspaceId(workspaceId).projectId(third).written(5).build();
+        var progress = TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(third).written(5).build();
         backfillService.record(List.of(progress, progress));
 
         assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
@@ -596,7 +595,7 @@ class TopicVectorsStorageTest {
         var t4 = t3.plus(3, ChronoUnit.DAYS);
         backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
 
-        var reset = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
+        var reset = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
         assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
                 first, reset.projectId(first).backfillLastDoneAt(t2).build(),
                 second, reset.projectId(second).backfillLastDoneAt(t0).build(),
@@ -618,7 +617,7 @@ class TopicVectorsStorageTest {
         assertThat(backfillService.findByKeys(workspaceId, List.of(projectId))).isEmpty();
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
 
-        var backfill = Backfill.builder().workspaceId(workspaceId).projectId(projectId).backfillStartedAt(t0)
+        var backfill = TopicBackfill.builder().workspaceId(workspaceId).projectId(projectId).backfillStartedAt(t0)
                 .backfillLastDoneAt(t0).backfillTracesTotal(3).build();
         backfillService.start(List.of(backfill));
 
@@ -640,7 +639,7 @@ class TopicVectorsStorageTest {
         var deleted = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
         tables.project(workspaceId, kept);
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
-        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         // Left behind by a failed delete on ProjectsDeleted.
         backfillService.start(Stream.concat(Stream.of(kept), deleted.stream())
                 .map(projectId -> row.projectId(projectId).build())

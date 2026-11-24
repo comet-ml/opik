@@ -1,7 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
-import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
@@ -28,13 +26,13 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface TopicVectorBackfillService {
 
     /** The started backfills not drained yet, by workspace. */
-    Map<String, List<Backfill>> findUndrained(Collection<String> workspaceIds);
+    Map<String, List<TopicBackfill>> findUndrained(Collection<String> workspaceIds);
 
     /** The started backfills of {@code projectIds}, by project. */
-    Map<UUID, Backfill> findByKeys(String workspaceId, Collection<UUID> projectIds);
+    Map<UUID, TopicBackfill> findByKeys(String workspaceId, Collection<UUID> projectIds);
 
     /** Starts a backfill for each project that has none. */
-    void start(List<Backfill> backfills);
+    void start(List<TopicBackfill> backfills);
 
     /**
      * One discovery of a workspace's projects, in one transaction: restarts the backfills of a workspace not
@@ -42,9 +40,9 @@ public interface TopicVectorBackfillService {
      * the rows of deleted projects, {@code topics.storage.deleteBatchSize} projects per transaction, and returns how
      * many it removed.
      */
-    int discovered(String workspaceId, List<Backfill> found, Instant now, Instant staleBefore);
+    int discovered(String workspaceId, List<TopicBackfill> found, Instant now, Instant staleBefore);
 
-    void record(List<Progress> progress);
+    void record(List<TopicBackfillProgress> progress);
 
     int deleteByProjects(String workspaceId, Collection<UUID> projectIds);
 }
@@ -57,29 +55,29 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
     private final @NonNull @Config("topics") TopicsConfig config;
 
     @Override
-    public Map<String, List<Backfill>> findUndrained(@NonNull Collection<String> workspaceIds) {
+    public Map<String, List<TopicBackfill>> findUndrained(@NonNull Collection<String> workspaceIds) {
         if (workspaceIds.isEmpty()) {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findUndrainedBackfills(workspaceIds))
                 .stream()
-                .collect(Collectors.groupingBy(Backfill::workspaceId));
+                .collect(Collectors.groupingBy(TopicBackfill::workspaceId));
     }
 
     @Override
-    public Map<UUID, Backfill> findByKeys(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds) {
+    public Map<UUID, TopicBackfill> findByKeys(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds) {
         if (projectIds.isEmpty()) {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findBackfills(workspaceId, projectIds))
                 .stream()
-                .collect(Collectors.toMap(Backfill::projectId, Function.identity()));
+                .collect(Collectors.toMap(TopicBackfill::projectId, Function.identity()));
     }
 
     @Override
-    public void start(@NonNull List<Backfill> backfills) {
+    public void start(@NonNull List<TopicBackfill> backfills) {
         if (backfills.isEmpty()) {
             return;
         }
@@ -90,7 +88,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
     }
 
     @Override
-    public int discovered(@NonNull String workspaceId, @NonNull List<Backfill> found, @NonNull Instant now,
+    public int discovered(@NonNull String workspaceId, @NonNull List<TopicBackfill> found, @NonNull Instant now,
             @NonNull Instant staleBefore) {
         template.inTransaction(WRITE, handle -> {
             var projects = handle.attach(TopicProjectDAO.class);
@@ -110,7 +108,7 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
     }
 
     @Override
-    public void record(@NonNull List<Progress> progress) {
+    public void record(@NonNull List<TopicBackfillProgress> progress) {
         if (progress.isEmpty()) {
             return;
         }
