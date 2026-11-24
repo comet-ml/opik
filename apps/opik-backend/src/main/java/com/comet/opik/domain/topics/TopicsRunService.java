@@ -23,8 +23,8 @@ import java.util.concurrent.Callable;
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
  * It also drives a nightly update's steps ({@link #update}). It owns the run's time limit and its cancel; the scheduler
- * a discovery run's CPU steps and timers run on is the caller's, and a nightly update's steps run where the LLM answer
- * is handed to ({@code boundedElastic}).
+ * a discovery run's CPU steps and timers run on is the caller's, and a nightly update's steps run on the context's
+ * scheduler ({@link TopicsCpu}).
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -121,13 +121,13 @@ public class TopicsRunService {
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
-     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run where the call before them
-     * answered. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on the context's scheduler
+     * ({@link TopicsCpu}). An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
      * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
      */
     Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
-        return timed(run, "update", Mono.fromCallable(
-                () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics())))
+        return timed(run, "update",
+                TopicsCpu.step(() -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics())))
                 .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
     }
 
@@ -141,8 +141,8 @@ public class TopicsRunService {
             }
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .flatMap(answer -> timed(run, "update", Mono.fromCallable(
-                                () -> ask.next().apply(answer.value())))
+                        .flatMap(answer -> timed(run, "update",
+                                TopicsCpu.step(() -> ask.next().apply(answer.value())))
                                 .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
         };
     }

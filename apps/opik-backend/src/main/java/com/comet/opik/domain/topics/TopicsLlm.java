@@ -20,7 +20,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.SocketTimeoutException;
@@ -75,8 +74,6 @@ class TopicsLlm {
                     .build();
             return client.generate(request, Instant.now().plus(deadline(call.call())))
                     .onErrorMap(InferenceException.class, exception -> failed(run, call.call(), exception))
-                    // Off the HTTP client's thread: the caller's next step is CPU work.
-                    .publishOn(Schedulers.boundedElastic())
                     .map(response -> answer(run, call, response, read));
         });
     }
