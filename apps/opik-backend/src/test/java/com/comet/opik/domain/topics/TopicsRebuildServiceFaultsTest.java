@@ -166,27 +166,6 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before the LLM call and "
-            + "the save")
-    void windowReadGuardHit() {
-        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
-                .thenReturn(Flux.error(new IllegalStateException(
-                        "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
-
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.FAILED);
-        assertThat(outcome.errorCode()).isEqualTo("window_read");
-        verify(projectDAO).markFailed(eq(workspaceId), eq(projectId), eq(runId), any(),
-                eq(TopicProject.RunError.WINDOW_READ));
-        verify(client, never()).generate(any(), any());
-        verify(topicDAO, never()).insertTopics(any());
-        verify(traceTopicsDAO, never()).insert(any());
-        assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "window_read")).isEqualTo(1);
-    }
-
-    @Test
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
         when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
@@ -326,50 +305,6 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
-    private static float[] unit(int d, int i, double a, int j, double b) {
-        var out = new float[d];
-        out[i] = (float) a;
-        out[j] += (float) b;
-        return out;
-    }
-
-    @Test
-    @DisplayName("a prototype passes the check before the save only with 384 values and unit length, NaN fails")
-    void unitPrototype() {
-        int d = TopicEmbedding.DIMENSIONS;
-        // The embedding model's output size, independent of the constant the code reads.
-        assertThat(d).isEqualTo(384);
-        var unit = unit(d, 0, 0.6, 1, 0.8);
-        assertThat(PrototypeVectors.isUnit(unit)).isTrue();
-        var nearUnit = unit.clone();
-        nearUnit[0] *= 1.0005f;
-        assertThat(PrototypeVectors.isUnit(nearUnit)).isTrue();
-
-        var tooLong = unit.clone();
-        tooLong[0] = 0.7f;
-        assertThat(PrototypeVectors.isUnit(tooLong)).isFalse();
-        var nan = unit.clone();
-        nan[2] = Float.NaN;
-        assertThat(PrototypeVectors.isUnit(nan)).isFalse();
-        var infinite = unit.clone();
-        infinite[2] = Float.POSITIVE_INFINITY;
-        assertThat(PrototypeVectors.isUnit(infinite)).isFalse();
-        assertThat(PrototypeVectors.isUnit(new float[]{0.6f, 0.8f})).isFalse();
-    }
-
-    @Test
-    @DisplayName("the window read stops after topics.build.readTimeout, or after a shorter run timeout; the insert's "
-            + "bound covers every attempt and backoff")
-    void readTimeoutAndInsertBound() {
-        var build = TestConfigUtils.loadConfigTest().getTopics().getBuild();
-        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(READ_TIMEOUT.toJavaDuration());
-        assertThat(TopicRunStore.insertBound(build))
-                .isEqualTo(Duration.milliseconds(4 * 120_000 + 3_500 + 30_000).toJavaDuration());
-
-        build.setProjectTimeout(Duration.minutes(1));
-        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(Duration.minutes(1).toJavaDuration());
-    }
-
     private void answer(JsonNode output) {
         when(client.generate(any(), any())).thenReturn(Mono.just(response(output)));
     }

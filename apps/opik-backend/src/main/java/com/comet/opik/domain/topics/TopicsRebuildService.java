@@ -7,11 +7,11 @@ import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.dropwizard.lifecycle.Managed;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
@@ -42,8 +42,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
-public class TopicsRebuildService {
+public class TopicsRebuildService implements Managed {
 
     /**
      * Failure codes whose exceptions can carry trace-derived text: of the LLM's answer, or the topic names and definitions
@@ -60,8 +59,33 @@ public class TopicsRebuildService {
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull WorkspaceNameService workspaceNames;
     private final @NonNull TopicAlgorithm algorithm;
-    /** The k-means and assign steps: CPU work, one run at a time per pod plus one started by hand. */
-    private final Scheduler cpu = Schedulers.newBoundedElastic(2, Integer.MAX_VALUE, "topics-cpu", 60, true);
+    /**
+     * The k-means and assign steps: CPU work, {@code topics.build.cpuThreads} at a time, at most
+     * {@code topics.build.cpuQueue} waiting. Disposed when the application stops.
+     */
+    private final @NonNull Scheduler cpu;
+
+    @Inject
+    TopicsRebuildService(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicWindowReader reader,
+            @NonNull TopicsLlm llm, @NonNull TopicRunStore store, @NonNull IdGenerator idGenerator,
+            @NonNull TopicsMetrics metrics, @NonNull WorkspaceNameService workspaceNames,
+            @NonNull TopicAlgorithm algorithm) {
+        this.config = config;
+        this.reader = reader;
+        this.llm = llm;
+        this.store = store;
+        this.idGenerator = idGenerator;
+        this.metrics = metrics;
+        this.workspaceNames = workspaceNames;
+        this.algorithm = algorithm;
+        var build = config.getBuild();
+        this.cpu = Schedulers.newBoundedElastic(build.getCpuThreads(), build.getCpuQueue(), "topics-cpu", 60, true);
+    }
+
+    @Override
+    public void stop() {
+        cpu.dispose();
+    }
 
     /** How a run ended, with the stats it logged. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
@@ -70,8 +94,8 @@ public class TopicsRebuildService {
     }
 
     /**
-     * The stats a run logs and returns, built here from what each phase returns, and its seconds per phase. Only the
-     * run's own flow writes it.
+     * The stats a run logs and returns, from what each phase returned, and its seconds per phase. Never changed in
+     * place: each step passes on a new one.
      */
     private record RunStats(ObjectNode stats, ObjectNode seconds) {
 
@@ -82,16 +106,36 @@ public class TopicsRebuildService {
             return new RunStats(stats, JsonUtils.createObjectNode());
         }
 
-        void add(ObjectNode phaseStats) {
-            stats.setAll(phaseStats);
+        RunStats with(ObjectNode phaseStats) {
+            var next = stats.deepCopy();
+            next.setAll(phaseStats);
+            return new RunStats(next, seconds);
         }
 
-        void time(String phase, Duration duration) {
-            seconds.put(phase, seconds.path(phase).asDouble(0) + duration.toMillis() / 1000.0);
+        /** A phase timed more than once adds up. */
+        RunStats timed(String phase, Duration duration) {
+            var next = seconds.deepCopy();
+            next.put(phase, next.path(phase).asDouble(0) + duration.toMillis() / 1000.0);
+            return new RunStats(stats, next);
         }
 
         ObjectNode json() {
             return stats.deepCopy().set("seconds", seconds.deepCopy());
+        }
+    }
+
+    /** A step's value, with the run's stats up to and including it. */
+    private record Step<T>(T value, RunStats stats) {
+    }
+
+    /** A failed step, with the run's stats up to and including it, so the failed outcome logs them. */
+    private static final class StepFailure extends RuntimeException {
+
+        private final transient RunStats stats;
+
+        StepFailure(RunStats stats, Throwable cause) {
+            super(cause.getMessage(), cause, false, false);
+            this.stats = stats;
         }
     }
 
@@ -131,30 +175,33 @@ public class TopicsRebuildService {
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
         var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-        var stats = RunStats.of(run);
-        return build(run, stats, windowTraces)
-                .flatMap(built -> timed(run, stats, "save", store.save(run, built.topics(), built.otherVectors()))
-                        .map(kept -> kept ? built : built.discarded()))
+        return build(run, RunStats.of(run), windowTraces)
+                .flatMap(built -> timed(run, built.stats(), "save",
+                        store.save(run, built.value().topics(), built.value().otherVectors()))
+                        .map(kept -> new Step<>(kept.value() ? built.value() : built.value().discarded(),
+                                kept.stats())))
                 .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
                         "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
-                .flatMap(built -> saved(run, stats, built))
-                .onErrorResume(error -> failed(run, stats, error));
+                .flatMap(built -> saved(run, built.stats(), built.value()))
+                .onErrorResume(error -> failed(run, error));
     }
 
-    private Mono<Built> build(TopicRun run, RunStats stats, long windowTraces) {
-        return timed(run, stats, "window", reader.read(run, windowTraces)).flatMap(window -> {
-            stats.add(window.stats());
-            stats.add(windowStats(window));
-            var traces = window.traces();
-            return timed(run, stats, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
+    private Mono<Step<Built>> build(TopicRun run, RunStats start, long windowTraces) {
+        return timed(run, start, "window", reader.read(run, windowTraces)).flatMap(read -> {
+            var window = read.value();
+            var windowed = read.stats().with(window.stats()).with(windowStats(window));
+            return timed(run, windowed, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
                     config.getAlgorithm().getMaxTopics())))
-                    .doOnNext(clustering -> stats.add(clustering.stats()))
-                    .flatMap(clustering -> timed(run, stats, "llm", llm.generate(run, clustering.author(),
-                            AuthorAnswer::parse))
-                            .doOnNext(answer -> stats.add(answer.stats()))
-                            .flatMap(answer -> timed(run, stats, "assign",
-                                    cpu(() -> clustering.finish(answer.value())))))
-                    .map(built -> built(run, stats, traces, built));
+                    .flatMap(clustered -> {
+                        var clustering = clustered.value();
+                        return timed(run, clustered.stats().with(clustering.stats()), "llm",
+                                llm.generate(run, clustering.author(), AuthorAnswer::parse))
+                                .flatMap(answered -> timed(run,
+                                        answered.stats().with(answered.value().stats()), "assign",
+                                        cpu(() -> clustering.finish(answered.value().value()))));
+                    })
+                    .flatMap(assigned -> step(assigned.stats(),
+                            () -> built(run, assigned.stats(), window.traces(), assigned.value())));
         });
     }
 
@@ -169,8 +216,8 @@ public class TopicsRebuildService {
         return stats;
     }
 
-    /** Checks the list and turns it into the rows the save writes. */
-    private Built built(TopicRun run, RunStats runStats, List<TopicWindowReader.WindowTrace> traces,
+    /** Checks the list and turns it into the rows the save writes, with the run's stats so far plus its own. */
+    private Step<Built> built(TopicRun run, RunStats runStats, List<TopicWindowReader.WindowTrace> traces,
             FirstBuild built) {
         checkPrototypes(built);
         var topics = topics(run, built);
@@ -185,11 +232,11 @@ public class TopicsRebuildService {
         stats.put("other_share", (double) other / n);
         stats.put("prototypes", topics.stream().mapToInt(topic -> topic.vectors().size()).sum()
                 + built.otherPrototypes().size());
-        runStats.add(stats);
+        var withBuilt = runStats.with(stats);
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}', seconds '{}'", run.runId(), run.projectId(), run.from(), run.to(), n,
                 topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3),
-                runStats.seconds());
+                withBuilt.seconds());
         var traceTopics = new ArrayList<TraceTopic>(traces.size());
         for (int i = 0; i < traces.size(); i++) {
             int label = built.labels()[i];
@@ -203,7 +250,7 @@ public class TopicsRebuildService {
                     .runId(run.runId())
                     .build());
         }
-        return new Built(topics, otherVectors, traceTopics);
+        return new Step<>(new Built(topics, otherVectors, traceTopics), withBuilt);
     }
 
     /** Each topic with its size and the prototype vectors it owns, in the run's order. */
@@ -253,7 +300,7 @@ public class TopicsRebuildService {
         var insert = built.traceTopics().isEmpty()
                 ? Mono.just(false)
                 : store.insertTraceTopics(run, built.traceTopics());
-        return insert.map(inserted -> {
+        return failingWith(stats, insert).map(inserted -> {
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", run.runId(),
                     run.projectId(), inserted ? built.traceTopics().size() : 0, stats.json());
             return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
@@ -264,7 +311,10 @@ public class TopicsRebuildService {
      * Marks the run failed. When it had ended already, a timeout raced its commit: the run is saved, without its
      * trace_topics, which the labelling pass gives.
      */
-    private Mono<Outcome> failed(TopicRun run, RunStats stats, Throwable error) {
+    private Mono<Outcome> failed(TopicRun run, Throwable failure) {
+        // A step's failure carries the stats up to it; the timeout and a cancel come from outside the steps.
+        var stats = failure instanceof StepFailure step ? step.stats : RunStats.of(run);
+        var error = failure instanceof StepFailure ? failure.getCause() : failure;
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
         return store.fail(run.runId(), run.workspace(), run.projectId(), code)
                 .flatMap(marked -> marked ? Mono.just(false) : store.isSaved(run))
@@ -314,16 +364,32 @@ public class TopicsRebuildService {
         return Mono.fromCallable(step).subscribeOn(cpu);
     }
 
-    /** A phase timed more than once adds up in the stats. */
-    private <T> Mono<T> timed(TopicRun run, RunStats stats, String phase, Mono<T> action) {
+    /** The phase's value with {@code stats} plus its duration; a failure carries them too. */
+    private <T> Mono<Step<T>> timed(TopicRun run, RunStats stats, String phase, Mono<T> action) {
         return Mono.defer(() -> {
             long started = System.nanoTime();
-            return action.doFinally(signal -> {
-                var duration = Duration.ofNanos(System.nanoTime() - started);
-                stats.time(phase, duration);
-                metrics.phase(run.workspace(), phase, duration);
-            });
+            return failingWith(stats, action)
+                    .map(value -> new Step<>(value, stats.timed(phase, record(run, phase, started))))
+                    .onErrorMap(StepFailure.class,
+                            error -> new StepFailure(error.stats.timed(phase, record(run, phase, started)),
+                                    error.getCause()))
+                    .doOnCancel(() -> record(run, phase, started));
         });
+    }
+
+    private Duration record(TopicRun run, String phase, long started) {
+        var duration = Duration.ofNanos(System.nanoTime() - started);
+        metrics.phase(run.workspace(), phase, duration);
+        return duration;
+    }
+
+    /** A step that is no phase of its own, such as the checks before the save. */
+    private static <T> Mono<Step<T>> step(RunStats stats, Callable<Step<T>> step) {
+        return failingWith(stats, Mono.fromCallable(step));
+    }
+
+    private static <T> Mono<T> failingWith(RunStats stats, Mono<T> action) {
+        return action.onErrorMap(error -> !(error instanceof StepFailure), error -> new StepFailure(stats, error));
     }
 
     private static TopicsRunException invariant(String message) {

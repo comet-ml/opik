@@ -201,6 +201,14 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration insertBackoff;
 
+        /** Threads of the build's CPU steps (k-means, assign), shared by the pod's runs. */
+        @JsonProperty
+        @Min(1) @Max(16) private int cpuThreads;
+
+        /** CPU steps that wait for a thread; a step past this is rejected and fails its run with {@code internal}. */
+        @JsonProperty
+        @Min(1) @Max(1000) private int cpuQueue;
+
         @JsonIgnore
         @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null

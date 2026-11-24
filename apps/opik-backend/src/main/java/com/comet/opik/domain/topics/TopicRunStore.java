@@ -15,7 +15,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -32,8 +31,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 @Singleton
 class TopicRunStore {
-
-    private static final Duration INSERT_BOUND_SLACK = Duration.ofSeconds(30);
 
     private final TopicsConfig.BuildConfig build;
     private final TransactionTemplate template;
@@ -163,14 +160,6 @@ class TopicRunStore {
                     run.projectId(), error);
             return Mono.just(true);
         });
-    }
-
-    /** The longest the insert after the commit takes: every attempt to its stop, the backoffs, and some slack. */
-    static Duration insertBound(@NonNull TopicsConfig.BuildConfig build) {
-        int retries = build.getInsertRetries();
-        var backoffs = build.getInsertBackoff().toJavaDuration().multipliedBy((1L << retries) - 1);
-        return build.getReadTimeout().toJavaDuration().multipliedBy(retries + 1L).plus(backoffs)
-                .plus(INSERT_BOUND_SLACK);
     }
 
     /**

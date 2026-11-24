@@ -62,6 +62,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -239,6 +240,28 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
         assertThat(sum(metricReader, "topics.llm.calls", "outcome", "error")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a window read that trips the ClickHouse row guard fails the run with window_read, before the LLM "
+            + "call and the save")
+    void windowReadGuardHit() {
+        var read = config.getBuild().getRead();
+        long maxRows = read.getMaxRowsToRead();
+        read.setMaxRowsToRead(1);
+        try {
+            var runId = start();
+
+            var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+
+            assertThat(outcome.errorCode()).isEqualTo("window_read");
+            assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
+            wireMock.server().verify(0, postRequestedFor(urlEqualTo(GENERATE_PATH)));
+            assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "window_read"))
+                    .isEqualTo(1);
+        } finally {
+            read.setMaxRowsToRead(maxRows);
+        }
     }
 
     @Test
