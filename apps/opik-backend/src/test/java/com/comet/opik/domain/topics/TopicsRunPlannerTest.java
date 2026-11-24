@@ -96,13 +96,13 @@ class TopicsRunPlannerTest {
         when(store.queue(workspaceId, projectId, TopicProject.RunMode.NIGHTLY_UPDATE))
                 .thenReturn(Mono.just(Optional.of(runId)));
         when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
-        when(store.dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull())).thenReturn(Mono.just(true));
+        when(store.dropUnclaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(true));
         var planner = new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), mock(TopicWorkspaceService.class),
                 store, mock(TopicsRunReconciler.class), mock(TopicsFirstBuildCandidates.class), publisher,
                 new TopicsBackfillGate(CONFIG), nightPass);
 
         assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, night).block())
                 .isInstanceOf(ServiceUnavailableException.class);
-        verify(store).dropQueued(eq(workspaceId), eq(projectId), eq(runId), isNull());
+        verify(store).dropUnclaimed(workspaceId, projectId, runId);
     }
 }
