@@ -1,7 +1,11 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.resources.utils.PayloadCases;
+import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -229,6 +233,63 @@ class TruncationUtilsTest {
             String result = TruncationUtils.createSlimJsonString(input, 100);
             // Should not throw and should produce valid output
             assertThat(result).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("toJsonWithSlim")
+    class ToJsonWithSlimTests {
+
+        private static final int MAX = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+
+        private static JsonWithSlim expectedFromReparse(JsonNode node) {
+            String json = TruncationUtils.toJsonString(node);
+            return JsonWithSlim.builder()
+                    .json(json)
+                    .slim(TruncationUtils.createSlimJsonString(json))
+                    .build();
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.utils.PayloadCases#parsedPayloads")
+        @DisplayName("should match serializing and reparsing for parsed payloads")
+        void shouldMatchReparseForParsedPayloads(JsonNode node) {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            assertThat(actual).isEqualTo(expectedFromReparse(node));
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.utils.PayloadCases#builtPayloads")
+        @DisplayName("should truncate the strings of programmatically built payloads, keeping every other value")
+        void shouldTruncateStringsOfBuiltPayloads(JsonNode node) {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            var expected = JsonWithSlim.builder()
+                    .json(TruncationUtils.toJsonString(node))
+                    .slim(JsonUtils.writeValueAsString(TruncationUtils.createSlimJson(node)))
+                    .build();
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("should return empty json and slim for null")
+        void shouldReturnEmptyForNull() {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(null);
+
+            assertThat(actual).isEqualTo(JsonWithSlim.builder().json("").slim("").build());
+        }
+
+        @Test
+        @DisplayName("should reuse the full json as slim when no string exceeds the max length")
+        void shouldReuseJsonWhenNothingIsTruncated() {
+            ObjectNode node = JsonNodeFactory.instance.objectNode()
+                    .put("text", PayloadCases.randomAlphanumeric(MAX))
+                    .put("number", 1);
+
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            assertThat(actual.slim()).isSameAs(actual.json());
         }
     }
 
