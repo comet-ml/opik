@@ -1,4 +1,4 @@
-"""Opt-in hardening of the in-container Docker daemon used by the docker executor strategy.
+"""Hardening of the in-container Docker daemon used by the docker executor strategy, on unless set to false.
 
 entrypoint.sh runs this file as a script before starting dockerd, so it imports only the standard library.
 """
@@ -15,13 +15,13 @@ HARDENED_CONFIG_PATH = "/run/opik-dockerd/daemon.json"
 
 
 def hardening_enabled() -> bool:
-    """Any value other than true/false (any case) or empty raises, so a typo fails startup instead of
-    leaving the executor unhardened."""
+    """On when unset or empty. Any value other than true/false (any case) raises, so a typo fails startup
+    instead of leaving the executor unhardened."""
     value = os.getenv(HARDENING_ENV_VAR, "").lower()
-    if value in ("", "false"):
-        return False
-    if value == "true":
+    if value in ("", "true"):
         return True
+    if value == "false":
+        return False
     raise ValueError(f"{HARDENING_ENV_VAR} must be true or false, not {value[:32]!r}")
 
 

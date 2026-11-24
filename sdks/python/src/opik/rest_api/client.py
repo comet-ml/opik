@@ -48,6 +48,7 @@ from .spans.client import AsyncSpansClient, SpansClient
 from .system_analytics_queries.client import AsyncSystemAnalyticsQueriesClient, SystemAnalyticsQueriesClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
+from .views.client import AsyncViewsClient, ViewsClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
 from .workspace_permissions.client import AsyncWorkspacePermissionsClient, WorkspacePermissionsClient
 from .workspaces.client import AsyncWorkspacesClient, WorkspacesClient
@@ -152,6 +153,7 @@ class OpikApi:
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
+        self.views = ViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = WorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
@@ -310,6 +312,7 @@ class AsyncOpikApi:
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
+        self.views = AsyncViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = AsyncWorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)

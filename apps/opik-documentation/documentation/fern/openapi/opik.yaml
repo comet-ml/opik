@@ -115,6 +115,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Views
+  description: Generated view resources
 - name: Welcome Wizard
   description: Welcome wizard tracking resources
 - name: Workspace permissions
@@ -3280,13 +3282,14 @@ paths:
             \ experiment on the dataset (optimizer trial, mini-batch and mutation\
             \ experiments are excluded); item filters are then evaluated against the\
             \ newest version of each item that those experiments reference"
-      - name: dataset_version
+      - name: dataset_versions
         in: query
         schema:
           type: string
-          description: Dataset version hash or tag. Only experiments run against this
-            version are included. Requires experiment_ids to be omitted. Returns 404
-            if the version does not exist
+          description: "JSON array of dataset version hashes or tags, such as 'latest'.\
+            \ Only experiments run against one of these versions are included; omit\
+            \ for every version. Requires experiment_ids to be omitted. Returns 404\
+            \ if any version does not exist"
       - name: filters
         in: query
         schema:
@@ -3568,6 +3571,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DatasetExportJob_Public"
+  /v1/private/datasets/items/experiments/items/stream:
+    post:
+      tags:
+      - Datasets
+      summary: Stream a dataset's experiment items
+      description: |-
+        Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+        Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+        received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+        send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+        resume from the start of its experiment instead of from the start of the stream.
+      operationId: streamDatasetExperimentItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetExperimentItemStreamRequest"
+      responses:
+        "200":
+          description: Experiment items stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/ExperimentItem"
+                  - $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Dataset or dataset version not found
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/items/stream:
     post:
       tags:
@@ -9917,6 +9958,271 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/views:
+    post:
+      tags:
+      - Views
+      summary: Create view
+      description: Create a view with its first version
+      operationId: createView
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewCreate"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/views/{viewId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/View"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/views/{id}/versions:
+    get:
+      tags:
+      - Views
+      summary: Get view versions
+      description: "List the versions of a view, newest first"
+      operationId: getViewVersions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: View versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewVersionPage"
+        "404":
+          description: View not found
+    post:
+      tags:
+      - Views
+      summary: Create view version
+      description: Add a version to a view and make it current
+      operationId: createViewVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewVersionCreate"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/views/{viewId}/versions/{version}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewVersion"
+        "404":
+          description: View not found
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/views/{id}:
+    get:
+      tags:
+      - Views
+      summary: Get view by id
+      description: Get a view with its current version
+      operationId: getViewById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: View resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/View"
+        "404":
+          description: View not found
+    delete:
+      tags:
+      - Views
+      summary: Delete view
+      description: Soft delete a view.
+      operationId: deleteView
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: View not found
+    patch:
+      tags:
+      - Views
+      summary: Update view
+      description: Update the name and description of a view
+      operationId: updateView
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewUpdate"
+      responses:
+        "200":
+          description: View resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/View"
+        "404":
+          description: View not found
+  /v1/private/views/{id}/versions/{version}:
+    get:
+      tags:
+      - Views
+      summary: Get view version
+      description: Get one version of a view
+      operationId: getViewVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: version
+        in: path
+        required: true
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: View version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewVersion"
+        "404":
+          description: View or version not found
+    delete:
+      tags:
+      - Views
+      summary: Delete view version
+      description: "Delete one version of a view. Refused for the current version,\
+        \ and so for the only version; version numbers are never reused."
+      operationId: deleteViewVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: version
+        in: path
+        required: true
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: View or version not found
+        "409":
+          description: The version is the current one
+  /v1/private/views/{id}/current:
+    put:
+      tags:
+      - Views
+      summary: Select view version
+      description: Make an existing version the one that renders. Also used for rollback;
+        writes no version.
+      operationId: setViewCurrentVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewCurrentVersion"
+      responses:
+        "200":
+          description: View resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/View"
+        "404":
+          description: View or version not found
   /v1/private/welcome-wizard:
     get:
       tags:
@@ -13124,9 +13430,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -13600,9 +13906,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -14086,9 +14392,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -17067,6 +17373,60 @@ components:
               type: string
         closed:
           type: boolean
+    DatasetExperimentItemStreamRequest:
+      type: object
+      properties:
+        dataset_id:
+          type: string
+          description: Dataset ID. Set this or dataset_name
+          format: uuid
+        dataset_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset name. Set this or dataset_id
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "Project of the dataset, used with dataset_name"
+        dataset_versions:
+          maxItems: 20
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: "Dataset version hashes or tags, such as 'latest'. Only experiments\
+            \ run against one of these versions are included; omit for every version.\
+            \ Returns 404 if any version does not exist"
+          items:
+            minLength: 1
+            type: string
+            description: "Dataset version hashes or tags, such as 'latest'. Only experiments\
+              \ run against one of these versions are included; omit for every version.\
+              \ Returns 404 if any version does not exist"
+        filters:
+          type: string
+          description: "JSON array of dataset item filters, evaluated against the\
+            \ newest version of each item that the experiments reference"
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          description: Maximum number of experiment items to return
+          format: int32
+          default: 2000
+        last_retrieved_experiment_id:
+          type: string
+          description: "Optional hint: experiment_id of the last experiment item received.\
+            \ Used only if that item was deleted, to resume from the start of its\
+            \ experiment instead of from the start of the stream. Requires last_retrieved_id"
+          format: uuid
+        last_retrieved_id:
+          type: string
+          description: id of the last experiment item received
+          format: uuid
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     DatasetItemStreamRequest:
       required:
       - dataset_name
@@ -23165,6 +23525,7 @@ components:
       - geminiProviderEnabled
       - guardrailsEnabled
       - guardrailsValidationsEnabled
+      - modelPricesEnabled
       - ollamaProviderEnabled
       - ollieEnabled
       - openaiProviderEnabled
@@ -23200,6 +23561,8 @@ components:
         exportEnabled:
           type: boolean
         costIntelligenceEnabled:
+          type: boolean
+        modelPricesEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean
@@ -24655,6 +25018,299 @@ components:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+    View:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        area:
+          type: string
+          enum:
+          - widget
+        name:
+          type: string
+        description:
+          type: string
+        current_version:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+        last_updated_by:
+          type: string
+        version:
+          $ref: "#/components/schemas/ViewVersion"
+      description: A generated view and the version that renders
+    ViewInput:
+      required:
+      - kind
+      - query_id
+      type: object
+      properties:
+        kind:
+          type: string
+          description: Source type
+          enum:
+          - query
+        query_id:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: The saved query to run
+        columns:
+          type: object
+          additionalProperties:
+            type: string
+            description: "The columns the author saw when it ran the query, name to\
+              \ type. Informational"
+          description: "The columns the author saw when it ran the query, name to\
+            \ type. Informational"
+      description: A data source of a view; the host resolves it and passes the result
+        under the input name
+    ViewVersion:
+      type: object
+      properties:
+        view_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+        author:
+          type: string
+          enum:
+          - user
+          - ollie
+          - agent
+        summary:
+          type: string
+        type:
+          type: string
+          enum:
+          - html
+        engine_version:
+          type: integer
+          description: HTML contract version the view was written against
+          format: int32
+        inputs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ViewInput"
+        libraries:
+          uniqueItems: true
+          type: array
+          description: Libraries the host loads before the view runs; omitted when
+            it uses none
+          items:
+            type: string
+            description: Libraries the host loads before the view runs; omitted when
+              it uses none
+        html:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+      description: An immutable version of a view
+    ViewCreate:
+      required:
+      - area
+      - engine_version
+      - html
+      - inputs
+      - name
+      - type
+      type: object
+      properties:
+        area:
+          type: string
+          description: The content area the view is written for; fixed after creation
+          enum:
+          - widget
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        summary:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: "What the first version shows, one line"
+        author:
+          type: string
+          description: "Who produced the version: user (default), ollie or agent.\
+            \ Informational only"
+          enum:
+          - user
+          - ollie
+          - agent
+        type:
+          type: string
+          description: View type
+          enum:
+          - html
+        engine_version:
+          minimum: 1
+          type: integer
+          description: HTML contract version the view was written against
+          format: int32
+        libraries:
+          maxItems: 10
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Libraries the host loads before the view runs; none when omitted
+          items:
+            maxLength: 50
+            minLength: 0
+            pattern: "^[a-z][a-z0-9-]*$"
+            type: string
+            description: Libraries the host loads before the view runs; none when
+              omitted
+        inputs:
+          minProperties: 1
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ViewInput"
+          description: "Input name to data source, one or several; the view receives\
+            \ one data object with a key per input"
+        html:
+          maxLength: 1000000
+          minLength: 0
+          type: string
+          description: "The view: HTML, CSS and script rendered in a sandboxed iframe"
+    ViewVersionCreate:
+      required:
+      - engine_version
+      - html
+      - inputs
+      - type
+      type: object
+      properties:
+        summary:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: "What changed, one line"
+        author:
+          type: string
+          description: "Who produced the version: user (default), ollie or agent.\
+            \ Informational only"
+          enum:
+          - user
+          - ollie
+          - agent
+        type:
+          type: string
+          description: View type
+          enum:
+          - html
+        engine_version:
+          minimum: 1
+          type: integer
+          description: HTML contract version the view was written against
+          format: int32
+        libraries:
+          maxItems: 10
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Libraries the host loads before the view runs; none when omitted
+          items:
+            maxLength: 50
+            minLength: 0
+            pattern: "^[a-z][a-z0-9-]*$"
+            type: string
+            description: Libraries the host loads before the view runs; none when
+              omitted
+        inputs:
+          minProperties: 1
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ViewInput"
+          description: "Input name to data source, one or several; the view receives\
+            \ one data object with a key per input"
+        html:
+          maxLength: 1000000
+          minLength: 0
+          type: string
+          description: "The view: HTML, CSS and script rendered in a sandboxed iframe"
+    ViewVersionPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ViewVersionSummary"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          description: Number of versions in this page
+          format: int32
+        total:
+          type: integer
+          format: int64
+      description: "A page of a view's versions, newest first"
+    ViewVersionSummary:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        author:
+          type: string
+          enum:
+          - user
+          - ollie
+          - agent
+        summary:
+          type: string
+          description: Change summary; omitted when the author gave none
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+      description: A version of a view without its HTML
+    ViewCurrentVersion:
+      required:
+      - version
+      type: object
+      properties:
+        version:
+          minimum: 1
+          type: integer
+          description: "An existing version number of the view, starting at 1"
+          format: int32
+      description: The version to make current
+    ViewUpdate:
+      type: object
+      properties:
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: Omit to keep the description; an empty or blank string clears
+            it
     WelcomeWizardTracking:
       type: object
       properties:

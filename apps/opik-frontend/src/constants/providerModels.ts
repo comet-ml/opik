@@ -406,6 +406,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4.1-flash-1017",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
+      label: "dots-studio/dots-3-note-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELORIAN_GLIMPSE,
       label: "elorian/glimpse",
     },
@@ -616,6 +620,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
       label: "meta-llama/llama-3.1-8b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_3B_INSTRUCT,
+      label: "meta-llama/llama-3.2-3b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_3_70B_INSTRUCT,
@@ -1519,10 +1527,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "xiaomi/mimo-v2.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
-      label: "xiaomi/mimo-v2.5-pro",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_FLASH,
       label: "xiaomi/mimo-v2.6-flash",
     },
@@ -1791,6 +1795,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
       label: "Gemini 3.7 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
