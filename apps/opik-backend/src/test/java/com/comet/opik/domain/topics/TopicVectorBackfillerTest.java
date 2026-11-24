@@ -222,8 +222,8 @@ class TopicVectorBackfillerTest {
     void progressWriteFails() {
         var setup = new Setup();
         var project = backfill(2, now).toBuilder().workspaceId(setup.workspaceId).build();
-        var candidates = IntStream.range(0, 2).mapToObj(i -> new Candidate(setup.workspaceId, project.projectId(),
-                UUID.randomUUID(), now, 1, now, "summary")).toList();
+        var candidates = IntStream.range(0, 2).mapToObj(i -> candidate(setup.workspaceId, project.projectId()))
+                .toList();
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.fromIterable(candidates));
         when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
                 TickResult.written(2), candidates.stream().map(VectorKey::of).collect(Collectors.toSet()))));
@@ -242,8 +242,8 @@ class TopicVectorBackfillerTest {
     void stuckPage() {
         var setup = new Setup();
         var project = backfill(5, now).toBuilder().workspaceId(setup.workspaceId).build();
-        var candidates = IntStream.range(0, 2).mapToObj(i -> new Candidate(setup.workspaceId, project.projectId(),
-                UUID.randomUUID(), now, 1, now, "summary")).toList();
+        var candidates = IntStream.range(0, 2).mapToObj(i -> candidate(setup.workspaceId, project.projectId()))
+                .toList();
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.fromIterable(candidates));
         when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
                 TickResult.skipped(SkipReason.INVALID_VECTOR, 2),
@@ -264,8 +264,7 @@ class TopicVectorBackfillerTest {
         var project = backfill(TopicVectorBackfiller.ONE_SLICE_MAX_TRACES + 1, now).toBuilder()
                 .workspaceId(setup.workspaceId).build();
         setup.config.getVectors().getFind().setSliceSize(Duration.days(1));
-        var candidate = new Candidate(setup.workspaceId, project.projectId(), UUID.randomUUID(), now, 1, now,
-                "summary");
+        var candidate = candidate(setup.workspaceId, project.projectId());
         when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
             setup.clock.advance(java.time.Duration.ofSeconds(48));
             return Flux.just(candidate);
@@ -378,6 +377,11 @@ class TopicVectorBackfillerTest {
         private TickBudget budget(int seconds) {
             return TickBudget.of(clock.instant(), java.time.Duration.ofSeconds(seconds), clock);
         }
+    }
+
+    private Candidate candidate(String workspaceId, UUID projectId) {
+        return Candidate.builder().workspaceId(workspaceId).projectId(projectId).traceId(UUID.randomUUID())
+                .traceCreatedAt(now).taskVersion(1).statusUpdatedAt(now).summary("summary").build();
     }
 
     private static TopicBackfill backfill(long remaining, Instant lastDoneAt) {
