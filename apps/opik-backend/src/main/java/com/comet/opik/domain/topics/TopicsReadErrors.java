@@ -34,11 +34,21 @@ public class TopicsReadErrors {
     private static final Set<Integer> LIMIT_CODES = Set.of(TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED);
 
     /**
-     * Any ClickHouse guard of a read API query (rows, bytes, time or memory): the project is too large for the read,
+     * Any ClickHouse guard of a read API query (rows, bytes, time or memory), or its request budget running out
+     * ({@link BudgetExceededException}): the project is too large for the read,
      * and a retry fails the same way, so the read API answers {@code status: too_large}, not an error.
      */
     static boolean isGuardTrip(@NonNull Throwable error) {
-        return hasCode(error, GUARD_CODES);
+        return hasCode(error, GUARD_CODES) || Throwables.getCausalChain(error).stream()
+                .anyMatch(BudgetExceededException.class::isInstance);
+    }
+
+    /** The read API's {@code topics.read.budget} ran out before a day's query started: the time guard of the request. */
+    static final class BudgetExceededException extends RuntimeException {
+
+        BudgetExceededException(String message) {
+            super(message);
+        }
     }
 
     /**

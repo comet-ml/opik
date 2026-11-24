@@ -19,6 +19,8 @@ import com.comet.opik.domain.topics.TraceTopicsDAO.TopicCount;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
@@ -45,6 +47,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The reads behind the topics read API against real ClickHouse: the per topic and day counts of
@@ -90,11 +93,29 @@ class TopicsReadDAOTest {
 
     private TraceTopicsDAO traceTopicsDAO;
     private ConnectionFactory connectionFactory;
+    private TopicsConfig.ReadConfig read;
 
     @BeforeAll
     void setUpAll(Injector injector) {
         traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         connectionFactory = injector.getInstance(ConnectionFactory.class);
+        read = injector.getInstance(OpikConfiguration.class).getTopics().getRead();
+    }
+
+    @Test
+    @DisplayName("a spent budget fails the next day's query before it starts, as a guard trip")
+    void spentBudgetIsAGuardTrip() {
+        var workspaceId = workspaceId();
+        var projectId = UUID.randomUUID();
+        insert(arrival(workspaceId, projectId, NOON, UUID.randomUUID()));
+        var budget = read.getBudget();
+        read.setBudget(io.dropwizard.util.Duration.milliseconds(1));
+        try {
+            assertThatThrownBy(() -> count(workspaceId, projectId))
+                    .satisfies(error -> assertThat(TopicsReadErrors.isGuardTrip(error)).isTrue());
+        } finally {
+            read.setBudget(budget);
+        }
     }
 
     @Test
