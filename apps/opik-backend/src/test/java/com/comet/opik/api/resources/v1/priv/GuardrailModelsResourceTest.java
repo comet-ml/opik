@@ -316,7 +316,7 @@ class GuardrailModelsResourceTest {
     void createWhenDatasetInvalidReturnsBadRequest(String scenario, String dataset, List<String> errors) {
         var workspace = newWorkspace();
 
-        try (var response = postModel(workspace, "model", "Flags it", dataset)) {
+        try (var response = postModel(workspace, randomUUID().toString(), randomUUID().toString(), dataset)) {
             assertErrors(response, HttpStatus.SC_BAD_REQUEST, errors.toArray(String[]::new));
         }
 
@@ -339,10 +339,10 @@ class GuardrailModelsResourceTest {
     void createWhenNameOrDescriptionMissingIsRejected() {
         var workspace = newWorkspace();
 
-        try (var response = postModel(workspace, null, "Flags it", VALID_DATASET)) {
+        try (var response = postModel(workspace, null, randomUUID().toString(), VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body name must not be blank");
         }
-        try (var response = postModel(workspace, "model", " ", VALID_DATASET)) {
+        try (var response = postModel(workspace, randomUUID().toString(), " ", VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
                     "The request body description must not be blank");
         }
@@ -357,11 +357,11 @@ class GuardrailModelsResourceTest {
         var name = "n".repeat(GuardrailModel.NAME_MAX_LENGTH);
         var description = "d".repeat(GuardrailModel.DESCRIPTION_MAX_LENGTH);
 
-        try (var response = postModel(workspace, name + "n", "Flags it", VALID_DATASET)) {
+        try (var response = postModel(workspace, name + "n", randomUUID().toString(), VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
                     "The request body name cannot exceed 255 characters");
         }
-        try (var response = postModel(workspace, "model", description + "d", VALID_DATASET)) {
+        try (var response = postModel(workspace, randomUUID().toString(), description + "d", VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
                     "The request body description cannot exceed 1000 characters");
         }
@@ -550,8 +550,10 @@ class GuardrailModelsResourceTest {
     void whenGuardrailsNotEnabledForOrganizationReturnsForbidden() {
         var workspace = newWorkspace(false);
 
-        assertThat(getStatus(workspace, "")).isEqualTo(HttpStatus.SC_FORBIDDEN);
-        try (var response = postModel(workspace, "Toxicity", "Flags it", VALID_DATASET)) {
+        try (var response = request(workspace, "").get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = postModel(workspace, randomUUID().toString(), randomUUID().toString(), VALID_DATASET)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
                     .isEqualTo("Guardrails is available on the Enterprise plan");

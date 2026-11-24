@@ -73,12 +73,15 @@ public class GuardrailModelsResource {
     private static final String FORBIDDEN = "The caller lacks the workspace settings permission, or guardrail model training is not enabled for this deployment, or guardrails are not enabled for the workspace's organization";
     private static final String FORBIDDEN_READ = "Guardrail model training is not enabled for this deployment, or guardrails are not enabled for the workspace's organization";
     private static final String UNAVAILABLE = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later";
-    private static final String FILE_DESCRIPTION = "JSON Lines in UTF-8, one {\"text\": \"...\", \"label\": \"yes\" | \"no\"} object per line, yes meaning the text violates: 20 to 50,000 rows, at least 5 per label, up to 12,000 characters each, 50 MB";
+    // An annotation needs a constant, so the description gives the defaults; guardrailsTrainingDataset in config.yml sets
+    // the limits that apply.
+    private static final String FILE_DESCRIPTION = "JSON Lines in UTF-8, one {\"text\": \"...\", \"label\": \"yes\" | \"no\"} object per line, yes meaning the text violates. The deployment sets the limits; by default 20 to 50,000 rows, at least 5 per label, up to 12,000 characters each, 50 MB";
 
     private final @NonNull GuardrailModelService modelService;
     private final @NonNull GuardrailTrainingService trainingService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull GuardrailsAccess guardrailsAccess;
+    private final @NonNull GuardrailTrainingDataset trainingDataset;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull SortingFactoryGuardrailModels sortingFactory;
 
@@ -103,7 +106,7 @@ public class GuardrailModelsResource {
             @Context UriInfo uriInfo) {
         checkAccess();
 
-        GuardrailTrainingDataset.validate(file);
+        trainingDataset.validate(file);
         log.info("Creating guardrail model, name '{}', workspaceId '{}'", name, requestContext.get().getWorkspaceId());
         var id = modelService.create(name, description);
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
@@ -194,7 +197,7 @@ public class GuardrailModelsResource {
             @Context UriInfo uriInfo) {
         checkAccess();
 
-        GuardrailTrainingDataset.validate(file);
+        trainingDataset.validate(file);
         log.info("Retraining guardrail model, id '{}', workspaceId '{}'", id, requestContext.get().getWorkspaceId());
         var runId = modelService.retrain(id);
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(runId)).build();

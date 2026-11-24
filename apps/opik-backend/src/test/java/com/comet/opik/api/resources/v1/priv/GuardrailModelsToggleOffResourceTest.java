@@ -134,7 +134,8 @@ class GuardrailModelsToggleOffResourceTest {
     }
 
     private static Entity<FormDataMultiPart> multipart() {
-        var multiPart = new FormDataMultiPart().field("name", "Toxicity").field("description", "Flags it");
+        var multiPart = new FormDataMultiPart().field("name", randomUUID().toString()).field("description",
+                randomUUID().toString());
         multiPart.bodyPart(new FormDataBodyPart("file",
                 new ByteArrayInputStream("{\"text\": \"t\", \"label\": \"yes\"}".getBytes(StandardCharsets.UTF_8)),
                 MediaType.APPLICATION_OCTET_STREAM_TYPE));
@@ -152,7 +153,7 @@ class GuardrailModelsToggleOffResourceTest {
                 Arguments.of("get by id",
                         (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test.request(id).get()),
                 Arguments.of("update", (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test
-                        .request(id).method("PATCH", Entity.json(new GuardrailModelUpdate("Flags it")))),
+                        .request(id).method("PATCH", Entity.json(new GuardrailModelUpdate(randomUUID().toString())))),
                 Arguments.of("delete",
                         (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test.request(id)
                                 .delete()),
