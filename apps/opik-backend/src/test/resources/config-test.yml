@@ -1068,10 +1068,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
@@ -1102,6 +1105,22 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
+  run:
+    projectTimeout: 15m
+    minVectors: 100
+    windowDays: 30
+    maxVectors: 100000
+    llmDeadline: 120s
+    readTimeout: 120s
+    insertRetries: 3
+    insertBackoff: 500ms
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1114,6 +1133,8 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    maxTopics: 10
+    provisionalBelow: 1000
     nightlyMinCandidate: 20
     nightlyMinGroups: 2
     nightlyMaxGroups: 20
@@ -1123,14 +1144,6 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
-  build:
-    read:
-      maxRowsToRead: 300000000
-      maxMemoryUsage: 1073741824
-      maxThreads: 2
-      priority: 100
-      maxBlockSize: 8192
-      countSlice: 1d
   read:
     maxRowsToRead: 30000000
     maxMemoryUsage: 1073741824
