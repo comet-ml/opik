@@ -198,7 +198,7 @@ class TopicsRunServiceTest {
             assertThat(project.windowUntil()).isEqualTo(FIXTURE.night);
         });
         var idByName = topics.stream().collect(Collectors.toMap(Topic::name, Topic::id));
-        assertThat(data.traceTopics(workspaceId, projectId)).usingRecursiveFieldByFieldElementComparator()
+        assertThat(data.traceTopics(workspaceId, projectId))
                 .containsExactlyInAnyOrderElementsOf(expectedTraceTopics(runId, want, idByName));
 
         assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(1);
@@ -475,7 +475,7 @@ class TopicsRunServiceTest {
         assertThat(data.topicProject(projectId).otherVectors()).isEqualTo(new PrototypeVectors(List.of(other)));
         var idByName = saved.stream().collect(Collectors.toMap(Topic::name, Topic::id));
         var topicIds = List.of(idByName.get("First"), idByName.get("Second"), TraceTopic.OTHER);
-        assertThat(data.traceTopics(workspaceId, projectId)).usingRecursiveFieldByFieldElementComparator()
+        assertThat(data.traceTopics(workspaceId, projectId))
                 .containsExactlyInAnyOrderElementsOf(IntStream.range(0, FIXTURE.size())
                         .mapToObj(i -> TraceTopic.builder()
                                 .workspaceId(workspaceId)
