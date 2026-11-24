@@ -13,13 +13,18 @@ import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.util.context.ContextView;
 
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -35,10 +40,20 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             Could not check whether you are an organization admin, please try again\
             """;
 
+    @Builder(toBuilder = true)
+    private record Caller(@NonNull String workspaceId, @NonNull String workspaceName,
+            @NonNull CometCredentials credentials, @NonNull ContextView context) {
+    }
+
+    @Builder(toBuilder = true)
+    private record SharedLookup(@NonNull CometCredentials credentials, @NonNull Sinks.One<Lookup> answer) {
+    }
+
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull WorkspaceOrganizationClient client;
     private final @NonNull WorkspaceOrganizationCache cache;
     private final boolean organizationIdLookupEnabled;
+    private final ConcurrentMap<String, SharedLookup> lookupsInFlight = new ConcurrentHashMap<>();
 
     @Override
     public Mono<String> organizationId() {
@@ -56,7 +71,12 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             return ctx.<CometCredentials>getOrEmpty(RequestContext.COMET_CREDENTIALS)
                     .filter(credentials -> StringUtils.isNotBlank(workspaceName)
                             && !ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName))
-                    .map(credentials -> resolve(workspaceId.get(), workspaceName, credentials))
+                    .map(credentials -> resolve(Caller.builder()
+                            .workspaceId(workspaceId.get())
+                            .workspaceName(workspaceName)
+                            .credentials(credentials)
+                            .context(ctx)
+                            .build()))
                     .orElseGet(() -> cache.organizationId(workspaceId.get()));
         }).filter(organizationId -> !ProjectService.DEFAULT_ORGANIZATION_ID.equals(organizationId));
     }
@@ -87,32 +107,71 @@ class RemoteOrganizationResolver implements OrganizationResolver {
         });
     }
 
-    private Mono<String> resolve(String workspaceId, String workspaceName, CometCredentials credentials) {
-        return cache.find(workspaceId)
+    private Mono<String> resolve(Caller caller) {
+        return cache.find(caller.workspaceId())
                 .map(Optional::of)
                 .defaultIfEmpty(Optional.empty())
-                .flatMap(cached -> cached.filter(entry -> entry.isFresh(cache.now())).isPresent()
-                        ? Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId))
-                        : ask(workspaceId, workspaceName, credentials, cached))
+                .flatMap(cached -> cached
+                        .map(entry -> fromCache(entry, caller))
+                        .orElseGet(() -> lookUp(caller)))
                 .onErrorResume(error -> {
-                    log.warn("Could not resolve the organization, workspace '{}'", workspaceId, error);
+                    log.warn("Could not resolve the organization, workspace '{}'", caller.workspaceId(), error);
                     return Mono.empty();
                 });
     }
 
-    private Mono<String> ask(String workspaceId, String workspaceName, CometCredentials credentials,
-            Optional<WorkspaceOrganizationCache.Entry> cached) {
-        var cachedOrganization = Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId));
-        return client.fetch(credentials, workspaceName)
-                .flatMap(lookup -> remember(workspaceId, lookup).then(switch (lookup) {
-                    case Found found -> Mono.just(found.organizationId());
-                    case NoOrganization noOrganization -> Mono.<String>empty();
-                    case Denied denied -> cachedOrganization;
-                }))
+    private Mono<String> fromCache(WorkspaceOrganizationCache.Entry entry, Caller caller) {
+        if (!entry.isFresh(cache.now())) {
+            sharedLookup(caller);
+        }
+        return Mono.justOrEmpty(entry.organizationId());
+    }
+
+    private Mono<String> lookUp(Caller caller) {
+        return cache.failedRecently(caller.workspaceId())
+                .flatMap(failed -> failed ? Mono.<String>empty() : answerFor(caller, sharedLookup(caller)));
+    }
+
+    private Mono<String> answerFor(Caller caller, SharedLookup lookup) {
+        return lookup.answer().asMono().flatMap(answer -> {
+            // Comet denies a caller, not a workspace: another caller's denial says nothing about these credentials
+            if (answer instanceof Denied && !caller.credentials().equals(lookup.credentials())) {
+                return ask(caller).flatMap(RemoteOrganizationResolver::organizationOf);
+            }
+            return organizationOf(answer);
+        });
+    }
+
+    private SharedLookup sharedLookup(Caller caller) {
+        var started = SharedLookup.builder()
+                .credentials(caller.credentials())
+                .answer(Sinks.one())
+                .build();
+        var running = lookupsInFlight.putIfAbsent(caller.workspaceId(), started);
+        if (running != null) {
+            return running;
+        }
+        // Subscribed on its own, not as part of the caller's chain: a caller that goes away (closed connection,
+        // timeout) must not cancel a lookup other callers wait on, or the refresh behind a stale answer
+        Mono.defer(() -> ask(caller))
+                .contextWrite(caller.context())
+                .doFinally(signal -> lookupsInFlight.remove(caller.workspaceId(), started))
+                .subscribe(started.answer()::tryEmitValue, started.answer()::tryEmitError,
+                        started.answer()::tryEmitEmpty);
+        return started;
+    }
+
+    private Mono<Lookup> ask(Caller caller) {
+        return client.fetch(caller.credentials(), caller.workspaceName())
+                .flatMap(lookup -> remember(caller.workspaceId(), lookup).thenReturn(lookup))
                 .onErrorResume(cometFailed -> {
-                    logCometFailed(ORGANIZATION_LOOKUP, workspaceId, cometFailed);
-                    return cached.isPresent() ? retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
+                    logCometFailed(ORGANIZATION_LOOKUP, caller.workspaceId(), cometFailed);
+                    return retryLater(caller.workspaceId()).then(Mono.empty());
                 });
+    }
+
+    private static Mono<String> organizationOf(Lookup lookup) {
+        return lookup instanceof Found found ? Mono.just(found.organizationId()) : Mono.empty();
     }
 
     private Mono<Void> retryLater(String workspaceId) {

@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RBucketReactive;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.StringCodec;
@@ -28,12 +29,16 @@ import java.util.Map;
  * </ul>
  * The whole key expires {@code keptFor} ({@code authentication.organizationCacheStaleTTL}, 60m by default) after the
  * last answer from Comet.
+ * <p>
+ * When Comet fails for a workspace with no such hash, {@code opik:workspace-organization-failed:<workspaceId>} holds
+ * the epoch millis after which Comet is asked again, and expires then.
  */
 @Slf4j
 @RequiredArgsConstructor
 class WorkspaceOrganizationCache {
 
     private static final String KEY_FORMAT = "opik:workspace-organization:%s";
+    private static final String FAILED_KEY_FORMAT = "opik:workspace-organization-failed:%s";
     private static final String ORGANIZATION_ID = "organizationId";
     private static final String REFRESH_AFTER = "refreshAfter";
 
@@ -79,12 +84,20 @@ class WorkspaceOrganizationCache {
 
     /**
      * Moves only the refresh time: the expiry stays where the last answer from Comet put it, so a stale copy is never
-     * kept for longer than {@code keptFor} while Comet keeps failing.
+     * kept for longer than {@code keptFor} while Comet keeps failing. With no entry, the failure goes under a key of
+     * its own, so it can never overwrite an answer from Comet nor be read back as one.
      */
     Mono<Void> retryLater(@NonNull String workspaceId) {
-        return map(workspaceId)
-                .fastPutIfExists(REFRESH_AFTER, String.valueOf(now().plus(retryAfterFailure).toEpochMilli()))
+        var retryAfter = String.valueOf(now().plus(retryAfterFailure).toEpochMilli());
+        return map(workspaceId).fastPutIfExists(REFRESH_AFTER, retryAfter)
+                .flatMap(moved -> moved ? Mono.<Void>empty() : failed(workspaceId).set(retryAfter, retryAfterFailure))
                 .then();
+    }
+
+    Mono<Boolean> failedRecently(@NonNull String workspaceId) {
+        return failed(workspaceId).get()
+                .map(retryAfter -> now().isBefore(Instant.ofEpochMilli(Long.parseLong(retryAfter))))
+                .defaultIfEmpty(false);
     }
 
     Instant now() {
@@ -93,5 +106,9 @@ class WorkspaceOrganizationCache {
 
     private RMapReactive<String, String> map(String workspaceId) {
         return redisClient.getMap(KEY_FORMAT.formatted(workspaceId), StringCodec.INSTANCE);
+    }
+
+    private RBucketReactive<String> failed(String workspaceId) {
+        return redisClient.getBucket(FAILED_KEY_FORMAT.formatted(workspaceId), StringCodec.INSTANCE);
     }
 }
