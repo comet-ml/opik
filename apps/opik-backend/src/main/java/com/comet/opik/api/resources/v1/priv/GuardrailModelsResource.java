@@ -213,11 +213,11 @@ public class GuardrailModelsResource {
 
     @POST
     @Path("/{id}/runs/{runId}/cancel")
-    @Operation(operationId = "cancelGuardrailTrainingRun", summary = "Cancel guardrail model training run", description = "Cancel a training run that is queued or running; it gets no further attempt", responses = {
+    @Operation(operationId = "cancelGuardrailTrainingRun", summary = "Cancel guardrail model training run", description = "Cancel a training run that is queued or running. Cancelling a cancelled run again changes nothing and answers 204 too", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "403", description = FORBIDDEN, content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Training run not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "The run has already ended", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "The run has already completed or failed", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "503", description = UNAVAILABLE, content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response cancelGuardrailTrainingRun(@PathParam("id") UUID id, @PathParam("runId") UUID runId) {
