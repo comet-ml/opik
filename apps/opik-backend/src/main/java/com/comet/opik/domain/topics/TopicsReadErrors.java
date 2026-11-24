@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.google.common.base.Throwables;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -12,33 +13,49 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
+import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.MEMORY_LIMIT_EXCEEDED;
+import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.TIMEOUT_EXCEEDED;
+import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.TOO_MANY_BYTES;
+import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.TOO_MANY_ROWS;
+import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.TOO_MANY_ROWS_OR_BYTES;
+
 /**
  * How a failed ClickHouse read of the Topics DAOs shows after {@code block()}. The DAOs read through the r2dbc http
- * driver, which fails with the v1 client's checked {@link com.clickhouse.client.ClickHouseException} (Reactor wraps it
- * in a runtime exception), not with the v2 client's {@link com.clickhouse.client.api.ServerException}. Both are
- * recognised.
+ * driver, which fails with the v1 client's checked {@link ClickHouseException}; Reactor wraps it in a runtime exception.
  */
 @UtilityClass
 public class TopicsReadErrors {
 
     static final String RETRY_AFTER_SECONDS = "5";
 
-    private static final int TOO_MANY_ROWS = 158;
-    private static final int TIMEOUT_EXCEEDED = 159;
-    private static final int MEMORY_LIMIT_EXCEEDED = 241;
-    private static final int TOO_MANY_BYTES = 307;
-    private static final int TOO_MANY_ROWS_OR_BYTES = 396;
-
-    private static final Set<Integer> GUARD_CODES = Set.of(TOO_MANY_ROWS, TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED,
-            TOO_MANY_BYTES, TOO_MANY_ROWS_OR_BYTES);
+    private static final Set<Integer> TOO_LARGE_CODES = Set.of(TOO_MANY_ROWS, MEMORY_LIMIT_EXCEEDED, TOO_MANY_BYTES,
+            TOO_MANY_ROWS_OR_BYTES);
     private static final Set<Integer> LIMIT_CODES = Set.of(TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED);
 
     /**
-     * Any ClickHouse guard of a read API query (rows, bytes, time or memory): the project is too large for the read,
-     * and a retry fails the same way, so the read API answers {@code status: too_large}, not an error.
+     * A size guard of a read API query: rows, bytes or memory. The project is too large for the read and a retry fails
+     * the same way, so the read API answers {@code status: too_large}, not an error.
      */
-    static boolean isGuardTrip(@NonNull Throwable error) {
-        return hasCode(error, GUARD_CODES);
+    static boolean isTooLarge(@NonNull Throwable error) {
+        return hasCode(error, TOO_LARGE_CODES);
+    }
+
+    /**
+     * A time guard of a read API query (159), its request budget running out ({@link BudgetExceededException}) or the
+     * client timeout: the per-day counts of a large project take a fraction of the budget, so this is a busy cluster,
+     * and a retry can pass. The read API answers {@link #busy}.
+     */
+    static boolean isBusy(@NonNull Throwable error) {
+        return hasCode(error, Set.of(TIMEOUT_EXCEEDED)) || Throwables.getCausalChain(error).stream()
+                .anyMatch(cause -> cause instanceof BudgetExceededException || cause instanceof TimeoutException);
+    }
+
+    /** The read API's {@code topics.read.budget} ran out before a day's query started: the time guard of the request. */
+    static final class BudgetExceededException extends RuntimeException {
+
+        BudgetExceededException(String message) {
+            super(message);
+        }
     }
 
     /**
@@ -60,9 +77,7 @@ public class TopicsReadErrors {
 
     private static boolean hasCode(Throwable error, Set<Integer> codes) {
         return Throwables.getCausalChain(error).stream()
-                .anyMatch(cause -> (cause instanceof com.clickhouse.client.ClickHouseException v1
-                        && codes.contains(v1.getErrorCode()))
-                        || (cause instanceof com.clickhouse.client.api.ServerException v2
-                                && codes.contains(v2.getCode())));
+                .anyMatch(cause -> cause instanceof ClickHouseException clickHouse
+                        && codes.contains(clickHouse.getErrorCode()));
     }
 }

@@ -2,7 +2,10 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
+import com.comet.opik.api.ProjectTopics.OtherStats;
 import com.comet.opik.api.ProjectTopics.TopicStats;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,11 +25,12 @@ import static org.assertj.core.api.Assertions.within;
 @DisplayName("topics read API fold")
 class TopicsCountsTest {
 
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final int WINDOW_DAYS = 30;
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 3);
     private static final LocalDate FIRST_BUILD = TODAY.minusDays(20);
     private static final String WORKSPACE_ID = "ws-1";
-    private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final UUID PROJECT_ID = ID_GENERATOR.generateId();
     private static final Instant LAST_RUN = TODAY.atTime(2, 40).toInstant(ZoneOffset.UTC);
     /** Not read by the fold; a topic only needs some. */
     private static final PrototypeVectors VECTORS = new PrototypeVectors(
@@ -50,21 +55,17 @@ class TopicsCountsTest {
                 row(topic, TODAY.minusDays(10), 5),
                 row(topic, TODAY, 1)));
 
-        assertThat(body.status()).isEqualTo(ProjectTopics.Status.READY);
-        assertThat(body.today()).isEqualTo(TODAY);
-        assertThat(body.windowFrom()).isEqualTo(TODAY.minusDays(29));
-        assertThat(body.lastRunAt()).isEqualTo(LAST_RUN);
-        assertThat(body.totalTraces()).isEqualTo(8L);
-        var series = body.topics().getFirst().series();
-        assertThat(series).hasSize(30);
-        assertThat(series.getFirst()).isEqualTo(DayCount.builder().day(TODAY.minusDays(29)).count(2).build());
-        assertThat(series.get(19)).isEqualTo(DayCount.builder().day(TODAY.minusDays(10)).count(5).build());
-        assertThat(series.getLast()).isEqualTo(DayCount.builder().day(TODAY).count(1).build());
-        assertThat(series).extracting(DayCount::day)
-                .containsExactlyElementsOf(TODAY.minusDays(29).datesUntil(TODAY.plusDays(1)).toList());
-        assertThat(series).filteredOn(day -> day.count() > 0).hasSize(3);
-        assertThat(body.topics().getFirst().count()).isEqualTo(8);
-        assertThat(body.other().series()).hasSize(30).allSatisfy(day -> assertThat(day.count()).isZero());
+        assertThat(body).isEqualTo(ProjectTopics.builder()
+                .status(ProjectTopics.Status.READY)
+                .today(TODAY)
+                .windowFrom(TODAY.minusDays(29))
+                .lastRunAt(LAST_RUN)
+                .totalTraces(8L)
+                .labelledFrom(TODAY.minusDays(29))
+                .topics(List.of(stats(topic, 1, 8, 1.0,
+                        days(Map.of(TODAY.minusDays(29), 2L, TODAY.minusDays(10), 5L, TODAY, 1L)))))
+                .other(OtherStats.builder().series(days(Map.of())).build())
+                .build());
     }
 
     @Test
@@ -149,18 +150,24 @@ class TopicsCountsTest {
     @DisplayName("Other: rows of ids that are not live count as Other, with Other's own rows")
     void notLiveIdsCountAsOther() {
         var live = topic(FIRST_BUILD);
-        var retiredId = UUID.randomUUID();
+        var retiredId = ID_GENERATOR.generateId();
         var body = fold(List.of(live), List.of(
                 row(live, TODAY, 5),
                 TopicDayCount.builder().topicId(retiredId).day(TODAY.minusDays(1)).traces(3).build(),
                 TopicDayCount.builder().topicId(retiredId).day(TODAY).traces(1).build(),
                 TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(2).build()));
 
-        assertThat(body.topics()).extracting(TopicStats::id).containsExactly(live.id());
-        var other = body.other().series();
-        assertThat(other.getLast()).isEqualTo(DayCount.builder().day(TODAY).count(3).build());
-        assertThat(other.get(other.size() - 2)).isEqualTo(DayCount.builder().day(TODAY.minusDays(1)).count(3).build());
-        assertThat(body.totalTraces()).isEqualTo(11L);
+        assertThat(body.toBuilder().topics(List.of()).build()).isEqualTo(ProjectTopics.builder()
+                .status(ProjectTopics.Status.READY)
+                .today(TODAY)
+                .windowFrom(TODAY.minusDays(29))
+                .lastRunAt(LAST_RUN)
+                .totalTraces(11L)
+                .labelledFrom(TODAY.minusDays(1))
+                .topics(List.of())
+                .other(OtherStats.builder().series(days(Map.of(TODAY.minusDays(1), 3L, TODAY, 3L))).build())
+                .build());
+        assertThat(body.topics()).containsExactly(stats(live, 1, 5, 5.0 / 11, days(Map.of(TODAY, 5L))));
     }
 
     @Test
@@ -170,9 +177,7 @@ class TopicsCountsTest {
         var busy = topic(FIRST_BUILD);
         var body = fold(List.of(quiet, busy), List.of(row(busy, TODAY, 1)));
 
-        var stats = stats(body, quiet);
-        assertThat(stats.count()).isZero();
-        assertThat(stats.series()).hasSize(30).allSatisfy(day -> assertThat(day.count()).isZero());
+        assertThat(stats(body, quiet)).isEqualTo(stats(quiet, 2, 0, 0.0, days(Map.of())));
     }
 
     @Test
@@ -181,7 +186,7 @@ class TopicsCountsTest {
     void labelledFrom() {
         var topic = topic(FIRST_BUILD);
         var body = fold(List.of(topic), List.of(
-                TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY.minusDays(4)).traces(1).build(),
+                TopicDayCount.builder().topicId(ID_GENERATOR.generateId()).day(TODAY.minusDays(4)).traces(1).build(),
                 row(topic, TODAY.minusDays(3), 6),
                 row(topic, TODAY, 2)));
 
@@ -212,7 +217,7 @@ class TopicsCountsTest {
 
     private static TopicProject run(TopicProject.RunStatus status) {
         return STATE.toBuilder()
-                .runId(UUID.randomUUID())
+                .runId(ID_GENERATOR.generateId())
                 .runMode(TopicProject.RunMode.NIGHTLY_UPDATE)
                 .runStatus(status)
                 .runStartedAt(LAST_RUN)
@@ -221,6 +226,28 @@ class TopicsCountsTest {
 
     private static TopicStats stats(ProjectTopics body, Topic topic) {
         return body.topics().stream().filter(stats -> stats.id().equals(topic.id())).findFirst().orElseThrow();
+    }
+
+    /** The expected stats of a topic born before {@code today - 6}, so not new. */
+    private static TopicStats stats(Topic topic, int rank, long count, double share, List<DayCount> series) {
+        return TopicStats.builder()
+                .id(topic.id())
+                .name(topic.name())
+                .definition(topic.definition())
+                .born(topic.born())
+                .isNew(false)
+                .count(count)
+                .share(share)
+                .rank(rank)
+                .series(series)
+                .build();
+    }
+
+    /** The window's 30 days, oldest first, with {@code counts} and 0 for the other days. */
+    private static List<DayCount> days(Map<LocalDate, Long> counts) {
+        return TODAY.minusDays(WINDOW_DAYS - 1L).datesUntil(TODAY.plusDays(1))
+                .map(day -> DayCount.builder().day(day).count(counts.getOrDefault(day, 0L)).build())
+                .toList();
     }
 
     private static TopicDayCount row(Topic topic, LocalDate day, long traces) {
@@ -232,7 +259,7 @@ class TopicsCountsTest {
     }
 
     private static Topic topic(LocalDate born) {
-        return topic(UUID.randomUUID(), born);
+        return topic(ID_GENERATOR.generateId(), born);
     }
 
     private static Topic topic(UUID id, LocalDate born) {
