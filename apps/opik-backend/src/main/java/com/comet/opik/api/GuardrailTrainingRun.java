@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -20,20 +22,19 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@Schema(accessMode = Schema.AccessMode.READ_ONLY)
 public record GuardrailTrainingRun(
-        UUID id,
-        UUID modelId,
+        @NotNull UUID id,
+        @NotNull UUID modelId,
         @JsonIgnore String workspaceId,
-        GuardrailTrainingRunStatus status,
-        @Schema(description = "Why the run ended failed or cancelled; null otherwise") String statusMessage,
-        @Schema(description = "Which attempt of one training the run is, 1 for the first; a retryable failure is retried as the next attempt") int attempt,
+        @NotNull GuardrailTrainingRunStatus status,
+        @Schema(description = "Why the run ended failed or cancelled; null otherwise") @Nullable String statusMessage,
+        @Schema(description = "Which attempt of one training the run is, 1 for the first") int attempt,
         @JsonIgnore JsonNode metadata,
-        @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight") Instant finishedAt,
-        Instant createdAt,
-        String createdBy,
-        Instant lastUpdatedAt,
-        String lastUpdatedBy) {
+        @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight") @Nullable Instant finishedAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant createdAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String createdBy,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant lastUpdatedAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String lastUpdatedBy) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -21,17 +21,15 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
- * The training runs of guardrail models: their rows in MySQL, in the request's workspace, and their jobs on
- * opik-inference, which {@link #submit} and {@link #reconcile} will drive once opik-inference serves its training jobs
- * API. Every method joins a transaction its caller has open, so the models service writes a model and its run
- * together.
+ * The training runs of guardrail models: their rows in MySQL, in the request's workspace. Their jobs on opik-inference
+ * come with the run worker, once opik-inference serves its training jobs API. Every method joins a transaction its
+ * caller has open, so the models service writes a model and its run together.
  */
 @ImplementedBy(GuardrailTrainingServiceImpl.class)
 public interface GuardrailTrainingService {
@@ -46,22 +44,16 @@ public interface GuardrailTrainingService {
 
     List<GuardrailTrainingRun> findByIds(Collection<UUID> ids);
 
-    /** The run a check with the model is served by: its most recent COMPLETED one. */
-    Optional<GuardrailTrainingRun> findServingRun(UUID modelId);
-
     Optional<GuardrailTrainingRun> findInFlight(UUID modelId);
 
-    /** 404 for a run the model does not have, 409 once the run has ended. */
+    /**
+     * Cancels a run in flight. Cancelling a cancelled run again does nothing; 404 for a run the model does not have,
+     * 409 for a run that has completed or failed.
+     */
     void cancel(UUID modelId, UUID runId);
 
     /** Deletes the model's runs and returns their ids, from which their S3 keys derive. */
     List<UUID> deleteByModel(UUID modelId);
-
-    /** Submits the run's spec to opik-inference's training jobs API and moves the run to RUNNING. */
-    void submit(GuardrailTrainingRun run);
-
-    /** Brings the run in step with its job, on each tick of the run worker: stage, completion, or failure and retry. */
-    void reconcile(GuardrailTrainingRun run);
 }
 
 @Slf4j
@@ -70,10 +62,7 @@ public interface GuardrailTrainingService {
 class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
 
     private static final String RUN_NOT_FOUND = "Guardrail training run not found";
-    private static final String JOBS_NOT_IMPLEMENTED = "Training jobs on opik-inference are not implemented yet";
     private static final String FILES_LAYOUT = "v1";
-    private static final Set<GuardrailTrainingRunStatus> IN_FLIGHT = Set.of(GuardrailTrainingRunStatus.QUEUED,
-            GuardrailTrainingRunStatus.RUNNING);
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -137,14 +126,6 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
     }
 
     @Override
-    public Optional<GuardrailTrainingRun> findServingRun(@NonNull UUID modelId) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(GuardrailTrainingRunDAO.class).findServingRun(modelId, workspaceId));
-    }
-
-    @Override
     public Optional<GuardrailTrainingRun> findInFlight(@NonNull UUID modelId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -154,22 +135,23 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
 
     @Override
     public void cancel(@NonNull UUID modelId, @NonNull UUID runId) {
-        var run = get(modelId, runId);
+        String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // One conditional write, no retry: inside a caller's transaction a second read would see the same snapshot. A
-        // run that moved meanwhile is a 409 the member can retry.
-        boolean cancelled = IN_FLIGHT.contains(run.status())
-                && template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
-                        .updateStatus(run.id(), run.workspaceId(), run.status(), GuardrailTrainingRunStatus.CANCELLED,
-                                "Cancelled by %s".formatted(userName), null, userName)) > 0;
-        if (!cancelled) {
+        int cancelled = template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
+                .cancel(runId, modelId, workspaceId, "Cancelled by %s".formatted(userName), userName));
+        if (cancelled > 0) {
+            log.info("Cancelled guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, modelId,
+                    workspaceId);
+            return;
+        }
+        // Nothing written: the read tells a run the model does not have (404) from one already cancelled, which a
+        // repeated cancel leaves as it is, and from one that completed or failed (409).
+        if (get(modelId, runId).status() != GuardrailTrainingRunStatus.CANCELLED) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                     .entity(new ErrorMessage(List.of("Guardrail training run has already ended")))
                     .build());
         }
-        log.info("Cancelled guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, modelId,
-                run.workspaceId());
     }
 
     @Override
@@ -185,15 +167,5 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
         log.info("Deleted guardrail training runs, modelId '{}', workspaceId '{}', count '{}'", modelId, workspaceId,
                 runIds.size());
         return runIds;
-    }
-
-    @Override
-    public void submit(@NonNull GuardrailTrainingRun run) {
-        throw new UnsupportedOperationException(JOBS_NOT_IMPLEMENTED);
-    }
-
-    @Override
-    public void reconcile(@NonNull GuardrailTrainingRun run) {
-        throw new UnsupportedOperationException(JOBS_NOT_IMPLEMENTED);
     }
 }

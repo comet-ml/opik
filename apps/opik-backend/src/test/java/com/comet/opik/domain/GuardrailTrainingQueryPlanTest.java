@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.GuardrailTrainingRun;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -58,7 +57,6 @@ class GuardrailTrainingQueryPlanTest {
     private static final String MODELS_WORKSPACE_NAME = "guardrail_models_workspace_name_uk";
     private static final String RUNS_MODEL = "guardrail_training_runs_model_status_created_idx";
     private static final String RUNS_MODEL_CREATED = "guardrail_training_runs_model_created_idx";
-    private static final String RUNS_STATUS = "guardrail_training_runs_status_last_updated_idx";
     private static final Set<String> POLICIES_BY_WORKSPACE = Set.of("guardrail_policies_workspace_name_uk",
             "guardrail_policies_workspace_id_idx", "guardrail_policies_workspace_execution_scope_idx");
     private static final String RULES_BY_POLICY = "guardrail_policy_rules_policy_id_type_uk";
@@ -82,7 +80,6 @@ class GuardrailTrainingQueryPlanTest {
     private List<UUID> pageModelIds;
     private UUID longTrainedModelId;
     private List<UUID> modelRunIds;
-    private GuardrailTrainingRun runInFlight;
 
     @BeforeAll
     void setUp() {
@@ -92,7 +89,6 @@ class GuardrailTrainingQueryPlanTest {
                 .installPlugin(new SqlObjectPlugin());
         seed();
         var runs = jdbi.onDemand(GuardrailTrainingRunDAO.class);
-        runInFlight = runs.findInFlight(modelId, workspaceId).orElseThrow();
         modelRunIds = runs.findIdsByModel(modelId, workspaceId);
     }
 
@@ -208,7 +204,6 @@ class GuardrailTrainingQueryPlanTest {
         var allModelRuns = Map.of(RUNS, Set.of(RUNS_MODEL, RUNS_MODEL_CREATED));
         var workspaceModelsAndAllTheirRuns = Map.of(MODELS, Set.of(MODELS_WORKSPACE_NAME), RUNS,
                 Set.of(RUNS_MODEL, RUNS_MODEL_CREATED));
-        var runsInFlight = Map.of(RUNS, Set.of(RUNS_STATUS));
         return Stream.of(
                 models("count the workspace's models", dao -> dao.count(workspaceId, null, false, null),
                         workspaceModels),
@@ -229,18 +224,13 @@ class GuardrailTrainingQueryPlanTest {
                 models("delete guard", dao -> dao.isUsedByCustomClassifierRule(modelId, workspaceId),
                         Map.of(POLICIES, POLICIES_BY_WORKSPACE, RULES, Set.of(RULES_BY_POLICY))),
                 runs("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId), Map.of(RUNS, Set.of(PRIMARY))),
-                runs("serving run", dao -> dao.findServingRun(modelId, workspaceId), modelRuns),
                 runs("run in flight", dao -> dao.findInFlight(modelId, workspaceId), modelRuns),
-                runs("previous attempt", dao -> dao.findPreviousAttempt(runInFlight.toBuilder().attempt(2).build()),
-                        modelRuns),
                 runs("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), allModelRuns),
                 runs("run history of a model with thousands of runs",
                         dao -> dao.findByModel(longTrainedModelId, workspaceId, 10, 0),
                         Map.of(RUNS, Set.of(RUNS_MODEL_CREATED))),
                 runs("run history count", dao -> dao.countByModel(modelId, workspaceId), allModelRuns),
-                runs("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), allModelRuns),
-                runs("worker scan", dao -> dao.findAllInFlight(100), runsInFlight),
-                runs("workspace's runs in flight", dao -> dao.countInFlight(workspaceId), runsInFlight))
+                runs("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), allModelRuns))
                 .map(Arguments::of);
     }
 

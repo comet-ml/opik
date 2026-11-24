@@ -51,6 +51,7 @@ class GuardrailModelDAOTest {
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private TransactionTemplate template;
     private GuardrailModelDAO models;
+    private Jdbi jdbi;
     private GuardrailTrainingRunDAO runs;
     private GuardrailPolicyDAO policies;
 
@@ -58,7 +59,7 @@ class GuardrailModelDAOTest {
     void setUp() {
         mysql.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        var jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+        jdbi = Jdbi.create(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                 .installPlugin(new SqlObjectPlugin());
         template = new TransactionTemplate(new UnitManager(jdbi));
         models = jdbi.onDemand(GuardrailModelDAO.class);
@@ -84,15 +85,21 @@ class GuardrailModelDAOTest {
         return runs.findById(runId, anyRunOfTheModel.workspaceId()).orElseThrow();
     }
 
+    /** Moves the run as the run worker will, whose status writes come with it. */
     private GuardrailTrainingRun move(GuardrailTrainingRun run, GuardrailTrainingRunStatus newStatus) {
-        assertThat(runs.updateStatus(run.id(), run.workspaceId(), run.status(), newStatus, null, null, USER))
-                .isOne();
+        jdbi.useHandle(
+                handle -> handle.createUpdate("UPDATE guardrail_training_runs SET status = :status WHERE id = :id")
+                        .bind("status", newStatus.name())
+                        .bind("id", run.id().toString())
+                        .execute());
         return runs.findById(run.id(), run.workspaceId()).orElseThrow();
     }
 
+    /** A retryable failure as the run worker will write it: the run FAILED, and its next attempt QUEUED. */
     private GuardrailTrainingRun failAndRetry(GuardrailTrainingRun run) {
+        move(run, FAILED);
         var nextId = ID_GENERATOR.generate();
-        assertThat(runs.failAndQueueRetry(run, "capacity", null, nextId, RUN_METADATA, USER)).isTrue();
+        runs.insert(nextId, run.modelId(), run.workspaceId(), run.attempt() + 1, RUN_METADATA, USER);
         return runs.findById(nextId, run.workspaceId()).orElseThrow();
     }
 
