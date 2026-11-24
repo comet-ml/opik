@@ -457,11 +457,13 @@ or `OPIK_API_KEY`, and no `--deployment`, it uses a local Opik that answers at
 
 `--deployment` picks which Opik to connect to instead, and sets the saved
 configuration aside for that run. `cloud` needs no API key: the client signs in
-through the browser. `self-hosted` reads the key from `OPIK_API_KEY` only, and
-the workspace from `--workspace` or `OPIK_WORKSPACE`.
+through the browser. `self-hosted` needs only `--url` when the Comet platform runs
+the hosted MCP server, which signs in the same way. Without one, or with
+`--local-server`, it reads the key from `OPIK_API_KEY` only, and the workspace
+from `--workspace` or `OPIK_WORKSPACE`.
 
 ```bash wordWrap
 uvx opik mcp configure --ai-client cursor --deployment cloud
 uvx opik mcp configure --ai-client cursor --deployment local --url http://opik.internal:5173
-uvx opik mcp configure --ai-client cursor --deployment self-hosted --url https://comet.example.com --workspace <workspace>
+uvx opik mcp configure --ai-client cursor --deployment self-hosted --url https://comet.example.com
 ```
