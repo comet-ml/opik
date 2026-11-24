@@ -2,8 +2,8 @@ import io
 import json
 from unittest import mock
 
-import boto3
 import botocore.response
+import botocore.session
 
 import opik
 from opik.integrations.bedrock import track_bedrock
@@ -32,7 +32,11 @@ def _invoke_model(client, text):
 def test_invoke_model__bodies_read_in_reverse_order__each_span_logs_its_own_body(
     fake_backend,
 ):
-    client = track_bedrock(boto3.client("bedrock-runtime", region_name="us-east-1"))
+    client = track_bedrock(
+        botocore.session.get_session().create_client(
+            "bedrock-runtime", region_name="us-east-1"
+        )
+    )
 
     first = _invoke_model(client, "first")
     second = _invoke_model(client, "second")
