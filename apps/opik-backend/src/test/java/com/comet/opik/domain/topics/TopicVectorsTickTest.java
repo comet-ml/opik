@@ -839,7 +839,7 @@ class TopicVectorsTickTest {
         var deleted = ID_GENERATOR.generateId();
         var kept = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
-        var row = TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0)
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0)
                 .backfillLastDoneAt(t0);
         backfillService.start(List.of(row.projectId(deleted).build(), row.projectId(kept).build(),
                 row.workspaceId(otherWorkspaceId).projectId(deleted).build()));
