@@ -773,7 +773,7 @@ llmProviderClient:
   maxAttempts: 2
   # Default: 0
   # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
-  # and the scoring stream's redeliveries
+  # and the scoring stream's redeliveries. At most 3
   judgeMaxRetries: 0
   # Default: 60s
   # Description: Call timeout for LLM providers
