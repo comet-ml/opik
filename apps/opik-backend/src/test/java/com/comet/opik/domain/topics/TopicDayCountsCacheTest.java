@@ -47,7 +47,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -126,7 +125,7 @@ class TopicDayCountsCacheTest {
         var first = service.get(WORKSPACE_ID, projectId);
         var second = service.get(WORKSPACE_ID, projectId);
 
-        verify(traceTopicsDAO, times(1)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong());
+        verify(traceTopicsDAO, times(1)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any());
         assertThat(second).isEqualTo(first);
         assertThat(second.totalTraces()).isEqualTo(4L);
         assertThat(cache.ttls.values()).containsExactly(Duration.ofMinutes(5));
@@ -141,7 +140,7 @@ class TopicDayCountsCacheTest {
         savedBy(UUID.randomUUID());
         assertThat(service.get(WORKSPACE_ID, projectId).totalTraces()).isEqualTo(9L);
 
-        verify(traceTopicsDAO, times(2)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong());
+        verify(traceTopicsDAO, times(2)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any());
     }
 
     @Test
@@ -153,12 +152,12 @@ class TopicDayCountsCacheTest {
         assertThat(cache.values).isEmpty();
         assertThat(service.get(WORKSPACE_ID, projectId).totalTraces()).isEqualTo(4L);
 
-        verify(traceTopicsDAO, times(2)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong());
+        verify(traceTopicsDAO, times(2)).countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any());
     }
 
     @SafeVarargs
     private void countsReturn(Flux<TopicDayCount> first, Flux<TopicDayCount>... next) {
-        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any()))
                 .thenReturn(first, next);
     }
 
