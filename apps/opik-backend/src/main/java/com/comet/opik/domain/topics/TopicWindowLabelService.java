@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -32,8 +33,8 @@ import java.util.UUID;
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
  * in pages of at most {@code topics.run.labelPageTraces} traces, each read, assigned and inserted before the next, so
  * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
- * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on the scheduler the
- * caller put in the Reactor context ({@link TopicsCpu}).
+ * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on {@code parallel()},
+ * off the ClickHouse driver's thread that emitted the page.
  *
  * <p>A trace whose vector lands behind the cursor while the pass runs is not on any later page. So before a pass marks
  * the labels complete, it reads the whole window once more for a trace left: if there is one, the pass ends cut, and
@@ -321,8 +322,9 @@ public class TopicWindowLabelService {
                     page.slice().to(), maxPages);
         }
         var traces = page.rows().stream().map(row -> new WindowTrace(row.traceId(), row.traceCreatedAt())).toList();
-        return TopicsCpu.step(() -> saved.labeller()
+        return Mono.fromCallable(() -> saved.labeller()
                 .label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList()))
+                .subscribeOn(Schedulers.parallel())
                 .flatMap(labels -> {
                     var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
                     long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();

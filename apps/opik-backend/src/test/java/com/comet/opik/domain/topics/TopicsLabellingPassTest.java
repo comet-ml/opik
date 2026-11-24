@@ -359,11 +359,12 @@ class TopicsLabellingPassTest {
         var late = new UUID(0, 1);
         var inserts = spy(traceTopicsDAO);
         var calls = new AtomicInteger();
+        // The insert runs after the page's labelling, on parallel(), so the copy is chained instead of blocking.
         doAnswer(invocation -> {
-            if (calls.incrementAndGet() == 1) {
-                copyVector(workspaceId, projectId, TRACES.traceIds().getFirst(), late);
-            }
-            return invocation.callRealMethod();
+            var insert = (Mono<?>) invocation.callRealMethod();
+            return calls.incrementAndGet() == 1
+                    ? copyVectorLater(workspaceId, projectId, TRACES.traceIds().getFirst(), late).then(insert)
+                    : insert;
         }).when(inserts).insert(any());
 
         assertThat(label(service(windowDAO, inserts), workspaceId, projectId,
@@ -563,7 +564,11 @@ class TopicsLabellingPassTest {
 
     /** A new trace {@code traceId} with the vector row of {@code source}: same time, text and vector. */
     private void copyVector(String workspaceId, UUID projectId, UUID source, UUID traceId) {
-        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+        copyVectorLater(workspaceId, projectId, source, traceId).block();
+    }
+
+    private Mono<Long> copyVectorLater(String workspaceId, UUID projectId, UUID source, UUID traceId) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
                 INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     embed_model, embed_dimensions, text, vector)
                 SELECT workspace_id, project_id, task, :trace_id, trace_created_at, task_version, embed_model,
@@ -577,7 +582,6 @@ class TopicsLabellingPassTest {
                 .bind("source", source.toString())
                 .bind("trace_id", traceId.toString())
                 .execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated())))
-                .block();
+                .flatMap(result -> Mono.from(result.getRowsUpdated())));
     }
 }

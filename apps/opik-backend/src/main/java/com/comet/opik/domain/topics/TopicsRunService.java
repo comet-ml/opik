@@ -8,17 +8,19 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
- * It owns the run's time limit and its cancel. Its CPU steps, clustering and assignment, run on the scheduler the
- * caller put in the Reactor context ({@link TopicsCpu}).
+ * It owns the run's time limit and its cancel. Its CPU steps, clustering and assignment, run on {@code parallel()}, off
+ * the ClickHouse driver's and the inference client's threads that emit their inputs.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -73,12 +75,12 @@ public class TopicsRunService {
         // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> timed(run, "cluster",
-                        TopicsCpu.step(() -> algorithm.cluster(window.topicWindow(), maxTopics)))
+                .flatMap(window -> cpu(run, "cluster",
+                        () -> algorithm.cluster(window.topicWindow(), maxTopics))
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .flatMap(answer -> timed(run, "assign",
-                                        TopicsCpu.step(() -> assign(run, window, clustering, answer))))
+                                .flatMap(answer -> cpu(run, "assign",
+                                        () -> assign(run, window, clustering, answer)))
                                 .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
@@ -124,6 +126,11 @@ public class TopicsRunService {
     private TopicsRunException timedOut() {
         return new TopicsRunException(RunError.TIMEOUT, "the run outlasted topics.run.projectTimeout '%s'"
                 .formatted(config.getRun().getProjectTimeout()));
+    }
+
+    /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
+    private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
+        return timed(run, phase, Mono.fromCallable(step).subscribeOn(Schedulers.parallel()));
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */

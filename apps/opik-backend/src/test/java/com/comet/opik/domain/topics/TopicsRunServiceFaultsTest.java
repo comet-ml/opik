@@ -21,6 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
@@ -43,9 +45,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -80,6 +84,7 @@ class TopicsRunServiceFaultsTest {
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunService service;
+    private TopicAlgorithm algorithm;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -110,8 +115,32 @@ class TopicsRunServiceFaultsTest {
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
+        algorithm = spy(TopicsTestAlgorithm.algorithm());
         service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
-                metrics, TopicsTestAlgorithm.algorithm());
+                metrics, algorithm);
+    }
+
+    @Test
+    @DisplayName("clustering runs on parallel(), not on the thread that emitted the window")
+    void clusteringLeavesTheReadThread() {
+        var driver = Schedulers.newSingle("topics-test-driver");
+        try {
+            when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
+                    .thenReturn(Flux.fromIterable(window()).subscribeOn(driver));
+            var thread = new AtomicReference<String>();
+            doAnswer(invocation -> {
+                thread.set(Thread.currentThread().getName());
+                return invocation.callRealMethod();
+            }).when(algorithm).cluster(any(), anyInt());
+            answer(FIXTURE.answer);
+
+            var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+
+            assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(thread.get()).startsWith("parallel-");
+        } finally {
+            driver.dispose();
+        }
     }
 
     @Test
