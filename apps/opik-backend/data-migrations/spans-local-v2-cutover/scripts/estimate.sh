@@ -59,11 +59,17 @@
 #                              Default 1500000 (matches backfill.sh; derived in the runbook's threshold table).
 #   --pause-seconds S          backfill.sh --pause-seconds; added once per window as merge-catch-up idle time. Default 0.
 #   --min-free-factor F        the value you will pass to backfill.sh; applied to the PROJECTED DESTINATION size, not
-#                              to the source's. Default 1.35 (matches backfill.sh). 0 skips the headroom verdict.
-#   --dest-compression-ratio C the destination's projected on-disk size as a fraction of the source's. Default 0.381,
-#                              measured during OPIK-7400 on the 000116 codec set. Pass a value measured on your own
-#                              estate once prod-test has produced one; the runbook's acceptance criteria require that
-#                              before the production window.
+#                              to the source's. Default 1.35 (matches backfill.sh); must be 0 or at least 1, as there.
+#                              0 skips the headroom verdict. The
+#                              verdict is the fresh-start gate; a resume is sized by backfill.sh itself, which credits
+#                              what the destination already holds. When spans_local_v2 holds data, the report says so
+#                              and prints the measured ratio: run it once the destination's merges settle after a
+#                              completed copy to read the figure to record.
+#   --dest-compression-ratio C the destination's projected on-disk size as a fraction of the source's. Default 0.420
+#                              (matches backfill.sh), measured at the completion of a full prod-test copy (OPIK-8380)
+#                              on the 000116 codec set. Pass a value measured on your own estate once prod-test has
+#                              produced one, taken at completion rather than mid-run; the runbook's Go/No-Go requires
+#                              every threshold re-derived on your estate before the production window.
 #   --probe-rows N             rows to read in the throughput probe (SELECT ... LIMIT N FORMAT Null). Larger = steadier
 #                              estimate but a heavier probe. Default 100000. Ignored if --rows-per-sec is given.
 #   --write-cost-factor F      multiplier applied to the read-probe time to account for the unmeasured write+compression
@@ -85,7 +91,7 @@ RECEIVE_TIMEOUT=1800      # seconds tolerated between server packets, not total 
 MAX_ROWS=1500000          # rows per INSERT; see backfill.sh and the runbook's threshold table.
 PAUSE_SECONDS=0
 MIN_FREE_FACTOR="1.35"    # multiple of the PROJECTED DESTINATION size node free space must clear. See backfill.sh.
-DEST_COMPRESSION_RATIO="0.381"   # destination on-disk size as a fraction of the source's (measured in OPIK-7400).
+DEST_COMPRESSION_RATIO="0.420"   # destination on-disk size as a fraction of the source's (measured in OPIK-8380).
 PROBE_ROWS=100000
 WRITE_COST_FACTOR=2.5
 ROWS_PER_SEC=""
@@ -150,11 +156,14 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
     && [[ "$(awk -v v="$WRITE_COST_FACTOR" 'BEGIN { print (v >= 1e-6 && v <= 1e6) ? 1 : 0 }')" == "1" ]] \
     || { echo "ERROR: --write-cost-factor must be a number between 1e-6 and 1e6 (it divides, so zero and infinity are both out)." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
+# Same contract as backfill.sh, which refuses a factor below 1 other than 0: a verdict for one would plan a run it refuses.
+[[ "$MIN_FREE_FACTOR" == "0" || "$(awk -v k="$MIN_FREE_FACTOR" 'BEGIN { print (k >= 1) ? 1 : 0 }')" == "1" ]] \
+    || { echo "ERROR: --min-free-factor must be 0 (skip the headroom verdict) or at least 1." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
 # Same contract as backfill.sh's check on the same flag, and it belongs here MORE than there: this driver's whole output
 # is the headroom verdict, and the projection is `dest = s * ratio`, so a 0 reports a destination of zero bytes and
-# therefore sufficient headroom on any estate. A value above 1.0 is the mirror error — it projects a plan backfill.sh
-# would then refuse, since a ratio over 1.0 makes the gate looser than sizing from the source.
+# therefore sufficient headroom on any estate. A value above 1.0 is a typo, most likely the inverse (source /
+# destination) ratio, and backfill.sh would refuse it.
 [[ "$(awk -v r="$DEST_COMPRESSION_RATIO" 'BEGIN { print (r > 0 && r <= 1.0) ? 1 : 0 }')" == "1" ]] \
     || { echo "ERROR: --dest-compression-ratio must be in (0, 1.0]. The destination cannot be larger than the source under the 000115/000116 codec set." >&2; exit 2; }
 # Same reason and the same two failure directions: ROWS_PER_SEC is the divisor in the ETA (rows / rps). Empty is still
@@ -202,7 +211,7 @@ SIZE="$(ch "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHER
 # Headroom, sized from the DESTINATION rather than the source. The traces gate multiplied the SOURCE size, which is
 # deliberately conservative because a driver cannot know the destination's compression — and on spans that
 # conservatism can be fatal rather than costly: twice this table's size can exceed the whole volume. So the projection
-# is explicit (--dest-compression-ratio, defaulting to OPIK-7400's measurement) and the factor covers merge scratch on
+# is explicit (--dest-compression-ratio, defaulting to OPIK-8380's measurement) and the factor covers merge scratch on
 # top of the finished copy rather than a whole second copy. Both numbers are printed, and so is the source-relative
 # factor the free space actually affords, so the assumption is visible rather than buried in a verdict.
 #
@@ -217,9 +226,17 @@ TOTAL_DISK_BYTES="$(ch "SELECT sum(total_space) FROM system.disks")"
 # OPIK-8263 and is irreversible, so this only SIZES it — it never suggests running anything.
 TRACES_BACKUP_BYTES="$(ch "SELECT sum(bytes_on_disk) FROM system.parts WHERE database = '$DATABASE' AND table = 'traces_pre_cutover_backup' AND active")"
 TRACES_BACKUP_BYTES="${TRACES_BACKUP_BYTES:-0}"
+# What the successor already holds, for the resume note and the measured ratio. backfill.sh computes the ratio the same
+# way: destination bytes/row over source bytes/row, from active parts.
+# Assigned before splitting, so a failed read aborts under set -e instead of silently dropping the note.
+PART_ROWS="$(ch "SELECT sumIf(rows, table = 'spans'), sumIf(bytes_on_disk, table = 'spans_local_v2'),
+        sumIf(rows, table = 'spans_local_v2')
+    FROM system.parts WHERE database = '$DATABASE' AND table IN ('spans', 'spans_local_v2') AND active")"
+read -r SPANS_ROWS DST_BYTES DST_ROWS <<< "$PART_ROWS"
 
 awk -v s="$SPANS_BYTES" -v f="$FREE_BYTES" -v total="$TOTAL_DISK_BYTES" -v ratio="$DEST_COMPRESSION_RATIO" \
-    -v factor="$MIN_FREE_FACTOR" -v parked="$TRACES_BACKUP_BYTES" 'BEGIN {
+    -v factor="$MIN_FREE_FACTOR" -v parked="$TRACES_BACKUP_BYTES" -v sr="$SPANS_ROWS" -v db="$DST_BYTES" \
+    -v dr="$DST_ROWS" 'BEGIN {
     t = 1099511627776   # TiB
     dest = s * ratio
     need = dest * factor
@@ -237,6 +254,14 @@ awk -v s="$SPANS_BYTES" -v f="$FREE_BYTES" -v total="$TOTAL_DISK_BYTES" -v ratio
         }
     } else {
         printf "  VERDICT: not evaluated (--min-free-factor 0).\n"
+    }
+    if (db > 0) {
+        printf "  NOTE: `spans_local_v2` already holds %.2f TiB. The verdict above is the fresh-start requirement;\n", db/t
+        printf "        backfill.sh sizes a resume from the remaining work, crediting what is already on disk.\n"
+        if (s > 0 && sr > 0 && dr > 0) {
+            printf "  measured dest/src bytes-per-row ratio: %.3f. After a completed copy whose merges have settled,\n", (db/dr)/(s/sr)
+            printf "        this is the --dest-compression-ratio to record; mid-copy it is only a trend.\n"
+        }
     }
     printf "  for contrast, the traces gate multiplied the SOURCE: at its default x2.0 this table needs %.2f TiB,\n", s*2/t
     printf "  which is %s the whole volume (%.2f TiB). That is why the spans gate is destination-relative.\n",

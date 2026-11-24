@@ -135,6 +135,7 @@ def test_evaluate__scoring_functions__happy_flow(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of Ukraine?"},
                 "expected_model_output": {"output": "Kyiv"},
@@ -204,6 +205,7 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of Ukraine?"},
                 "expected_model_output": {"output": "Kyiv"},
@@ -281,6 +283,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of Ukraine?"},
                 "expected_model_output": {"output": "Kyiv"},
