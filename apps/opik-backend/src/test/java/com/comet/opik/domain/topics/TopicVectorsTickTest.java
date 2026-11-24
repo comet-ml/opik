@@ -652,6 +652,26 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a backfill project read page by page sends an invalid vector's trace once: the next page's read "
+            + "returns it again, as it has no row, and the turn leaves it out")
+    void backfillPagesSkipSettledKeys() {
+        config().setMaxTracesPerTick(2);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var zero = ID_GENERATOR.generateId();
+        embedStub.zeroText = "a summary the stub embeds as zeros";
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, zero, 1, embedStub.zeroText))).block();
+        // The oldest status, so every page of the project's read starts with it.
+        tables.insertStatusAt(workspaceId, projectId, zero, 1, Instant.now().minus(3, ChronoUnit.DAYS));
+        var traceIds = oldStatuses(workspaceId, projectId, 2);
+
+        assertThat(tick()).isEqualTo(new TickResult(2, Map.of(SkipReason.INVALID_VECTOR, 1)));
+        assertThat(embedStub.calls.get()).isEqualTo(2);
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+    }
+
+    @Test
     @DisplayName("two task versions of one trace give two rows, both kept")
     void twoTaskVersions() {
         var workspaceId = enabledWorkspace();

@@ -81,8 +81,12 @@ class TopicVectorBackfiller {
     record Served(@NonNull List<Candidate> candidates, @NonNull List<Backfill> started) {
     }
 
-    /** One project's turn: what to record, if anything, and whether the project should get another turn. */
-    private record Turn(@NonNull TickResult result, @NonNull Optional<Progress> progress, boolean more) {
+    /**
+     * One project's turn: what to record, if anything, whether the project should get another turn, and the keys it
+     * settled.
+     */
+    private record Turn(@NonNull TickResult result, @NonNull Optional<Progress> progress, boolean more,
+            @NonNull Set<VectorKey> settled) {
     }
 
     /**
@@ -316,7 +320,7 @@ class TopicVectorBackfiller {
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(workspace, project, window, budget).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, run.settled).doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
@@ -335,6 +339,7 @@ class TopicVectorBackfiller {
 
         private final ArrayDeque<Backfill> queue;
         private final List<Progress> progress = new ArrayList<>();
+        private final Set<VectorKey> settled = new HashSet<>();
         private TickResult result = TickResult.EMPTY;
         private boolean stopped;
 
@@ -345,6 +350,7 @@ class TopicVectorBackfiller {
         private void add(Backfill project, Turn turn) {
             result = result.plus(turn.result());
             turn.progress().ifPresent(progress::add);
+            settled.addAll(turn.settled());
             if (turn.more()) {
                 queue.addFirst(project);
             }
@@ -358,9 +364,13 @@ class TopicVectorBackfiller {
      * its candidates were left for a later tick ({@link TopicVectorWriter.ChunkWrite#leftForLater}). No progress when there is nothing to record:
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
      * was left and vectors were written, so another read now finds the next ones.
+     *
+     * <p>A read can return keys an earlier turn of the tick settled: a refused input or an invalid vector has no row,
+     * and a replica behind the insert does not see the new rows yet. They are not embedded again; a read that returns
+     * only those writes nothing and ends the project's turns.
      */
     private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, Backfill project, TopicVectorsFind window,
-            TickBudget budget) {
+            TickBudget budget, Set<VectorKey> settledBefore) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
         // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
@@ -370,26 +380,31 @@ class TopicVectorBackfiller {
                 : null;
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
-                .flatMap(read -> writer.embedAndWrite(workspace, read.candidates(), budget, null)
-                        .map(written -> {
-                            var result = written.result();
-                            boolean cut = written.leftForLater(read.candidates());
-                            boolean drained = read.complete() && !cut;
-                            if (!drained && result.written() == 0) {
-                                return new Turn(result, Optional.empty(), false);
-                            }
-                            return new Turn(result, Optional.of(Progress.builder()
-                                    .workspaceId(workspaceId)
-                                    .projectId(project.projectId())
-                                    .drainedAt(drained ? budget.start() : null)
-                                    .written(result.written())
-                                    .build()), !read.complete() && !cut);
-                        }))
+                .flatMap(read -> {
+                    var candidates = read.candidates().stream()
+                            .filter(candidate -> !settledBefore.contains(VectorKey.of(candidate)))
+                            .toList();
+                    return writer.embedAndWrite(workspace, candidates, budget, null)
+                            .map(written -> {
+                                var result = written.result();
+                                boolean cut = written.leftForLater(candidates);
+                                boolean drained = read.complete() && !cut;
+                                if (!drained && result.written() == 0) {
+                                    return new Turn(result, Optional.empty(), false, written.settled());
+                                }
+                                return new Turn(result, Optional.of(Progress.builder()
+                                        .workspaceId(workspaceId)
+                                        .projectId(project.projectId())
+                                        .drainedAt(drained ? budget.start() : null)
+                                        .written(result.written())
+                                        .build()), !read.complete() && !cut, written.settled());
+                            });
+                })
                 .onErrorResume(exception -> {
                     metrics.readFailure("backfill", workspace, exception);
                     log.warn("Topic vectors backfill read failed, reading it again next tick, workspace '{}', project "
                             + "'{}'", workspaceId, project.projectId(), exception);
-                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false));
+                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false, Set.of()));
                 });
     }
 }
