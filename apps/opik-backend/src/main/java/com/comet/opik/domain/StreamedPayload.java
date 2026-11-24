@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.utils.JsonWithSlim;
 import com.comet.opik.utils.TruncationUtils;
-import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;

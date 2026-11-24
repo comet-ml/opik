@@ -212,7 +212,7 @@ public class PayloadCases {
     }
 
     private static String cut(String text) {
-        return text.substring(0, TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH) + TruncationUtils.TRUNCATION_SUFFIX;
+        return text.substring(0, TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH) + "...";
     }
 
     /** {@code depth} arrays, each holding the next, around one short string. */

@@ -1,29 +1,19 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.SerializableString;
-import com.fasterxml.jackson.core.util.JsonGeneratorDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializable;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -44,7 +34,7 @@ public final class TruncationUtils {
     /**
      * Suffix appended to truncated strings to indicate truncation.
      */
-    public static final String TRUNCATION_SUFFIX = "...";
+    static final String TRUNCATION_SUFFIX = "...";
 
     /**
      * Creates a "slim" version of a JSON node by recursively truncating all leaf string values
@@ -189,18 +179,6 @@ public final class TruncationUtils {
     }
 
     /**
-     * The full and slim JSON strings of a payload node.
-     *
-     * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
-     * @param slim the slim JSON, as {@link #slimJsonSerializable(JsonNode)} writes it
-     */
-    @Builder(toBuilder = true)
-    public record JsonWithSlim(@NonNull String json, @NonNull String slim) {
-
-        public static final JsonWithSlim EMPTY = JsonWithSlim.builder().json("").slim("").build();
-    }
-
-    /**
      * The full JSON of a payload node, as a value that writes itself into the caller's generator: the same text as
      * {@link #toJsonString(JsonNode)}, without materializing it.
      *
@@ -224,87 +202,6 @@ public final class TruncationUtils {
      */
     public static JsonSerializable slimJsonSerializable(@NonNull JsonNode node) {
         return PayloadJson.builder().node(node).slim(true).build();
-    }
-
-    @Builder(toBuilder = true)
-    private record PayloadJson(@NonNull JsonNode node, boolean slim) implements JsonSerializable {
-
-        /**
-         * A default mapper's writer, as {@code JsonNode.toString()} uses, without flushing after each value: the payload
-         * is written into the enclosing row, which the caller flushes. Each write gets its own serializer provider.
-         */
-        private static final ObjectWriter NODE_WRITER = new ObjectMapper().writer()
-                .without(SerializationFeature.FLUSH_AFTER_WRITE_VALUE);
-
-        @Override
-        public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
-            if (slim) {
-                NODE_WRITER.writeValue(new TruncatingGenerator(generator, DEFAULT_SLIM_STRING_MAX_LENGTH), node);
-                return;
-            }
-            NODE_WRITER.writeValue(generator, node);
-        }
-
-        @Override
-        public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
-                TypeSerializer typeSerializer) throws IOException {
-            serialize(generator, provider);
-        }
-    }
-
-    /**
-     * Truncates string values as Jackson writes them, to the same chars {@link #truncateString} returns. Field
-     * names are written through {@code writeFieldName}, so they are kept whole.
-     */
-    private static class TruncatingGenerator extends JsonGeneratorDelegate {
-
-        private final int maxLength;
-
-        /**
-         * One buffer per walk for every truncated string, rather than a substring and a concatenation each. Allocated
-         * on the first one, as most payloads have none.
-         */
-        private char[] truncated;
-
-        private TruncatingGenerator(JsonGenerator delegate, int maxLength) {
-            super(delegate, false);
-            this.maxLength = maxLength;
-        }
-
-        private char[] truncated() {
-            if (truncated == null) {
-                truncated = new char[maxLength + TRUNCATION_SUFFIX.length()];
-                TRUNCATION_SUFFIX.getChars(0, TRUNCATION_SUFFIX.length(), truncated, maxLength);
-            }
-            return truncated;
-        }
-
-        @Override
-        public void writeString(String text) throws IOException {
-            if (text == null || text.length() <= maxLength) {
-                delegate.writeString(text);
-                return;
-            }
-            char[] buffer = truncated();
-            text.getChars(0, maxLength, buffer, 0);
-            delegate.writeString(buffer, 0, buffer.length);
-        }
-
-        @Override
-        public void writeString(char[] text, int offset, int length) throws IOException {
-            if (length <= maxLength) {
-                delegate.writeString(text, offset, length);
-                return;
-            }
-            char[] buffer = truncated();
-            System.arraycopy(text, offset, buffer, 0, maxLength);
-            delegate.writeString(buffer, 0, buffer.length);
-        }
-
-        @Override
-        public void writeString(SerializableString text) throws IOException {
-            writeString(text.getValue());
-        }
     }
 
     /**

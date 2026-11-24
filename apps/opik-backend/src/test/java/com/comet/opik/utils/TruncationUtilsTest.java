@@ -1,7 +1,6 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.api.resources.utils.PayloadCases;
-import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
