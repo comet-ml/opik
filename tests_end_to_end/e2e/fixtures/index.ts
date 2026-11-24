@@ -1,4 +1,4 @@
-export { test, expect } from './version-scoped-experiments.fixture';
+export { test, expect } from './openrouter-regen-repriced-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -848,3 +848,9 @@ export {
   VSE_V1_ITEM_COUNT,
   VSE_V2_ITEM_COUNT,
 } from './version-scoped-experiments.fixture';
+export type {
+  OpenRouterRegenRepricedSeed,
+  OpenRouterRegenRepricedSpansRef,
+  OpenRouterRegenRepricedSpansFixtures,
+} from './openrouter-regen-repriced-spans.fixture';
+export { OPENROUTER_REGEN_CATALOG_PROVIDER } from './openrouter-regen-repriced-spans.fixture';
