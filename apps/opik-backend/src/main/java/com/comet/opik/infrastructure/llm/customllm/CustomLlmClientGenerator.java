@@ -10,6 +10,7 @@ import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
+import io.dropwizard.util.Duration;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+
+import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_USER_AGENT;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -69,6 +72,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 modelParameters.name(), actualModelName, providerName);
 
         var maxRetries = llmProviderClientConfig.getJudgeMaxRetries();
+        var timeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .map(Duration::toJavaDuration);
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .maxRetries(maxRetries)
@@ -78,15 +83,26 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
-        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
+        timeout.ifPresent(builder::timeout);
+
+        // The parent builds its own client from the builder above but keeps it private, so the judge's client is built
+        // here as the parent builds its own: the same timeout for connecting and reading, and the parent's user agent.
+        var clientBuilder = OpenAiClient.builder()
+                .baseUrl(baseUrl)
+                .httpClientBuilder(newHttpClientBuilder(config))
+                .apiKey(clientApiKey(config))
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses())
+                .userAgent(DEFAULT_USER_AGENT);
+        timeout.ifPresent(duration -> clientBuilder.connectTimeout(duration).readTimeout(duration));
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly
-        return new OpikOpenAiChatModel(builder, modelParameters.customParameters(), maxRetries);
+        return new OpikOpenAiChatModel(builder, modelParameters.customParameters(), clientBuilder.build(),
+                maxRetries);
     }
 
     /**
