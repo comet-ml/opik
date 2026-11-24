@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -461,25 +462,25 @@ class TopicVectorsStorageTest {
                 vector(workspaceId, first, firstTraces.get(1), 1))).block();
         var lower = Instant.now().minus(2, ChronoUnit.HOURS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(first, second), 10).block();
+        var window = new TopicVectorsDAO.Slice(lower.minus(8, ChronoUnit.DAYS), null);
+        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, window, 10).collectList().block();
+        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK,
+                new TopicVectorsDAO.Slice(lower, null), List.of(first, second), 10).block();
 
         assertThat(tracesByProject(found)).isEqualTo(Map.of(first, 3L, second, 1L));
         assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                 Instant.now().plusSeconds(1)));
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
         assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
-        // A window that starts after the traces were created counts none of them, but still finds the projects.
-        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before,
-                lower.minus(8, ChronoUnit.DAYS), 10).collectList().block()))
-                .isEqualTo(Map.of(first, 0L, second, 0L));
+        // A status window that starts after the traces were created still counts them: the window read returns them.
+        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, window, 10)
+                .collectList().block()))
+                .isEqualTo(Map.of(first, 3L, second, 1L));
     }
 
     @Test
-    @DisplayName("the discovery and the vector count read slice by slice of trace creation time and add up: traces "
-            + "created days apart are each counted once, and only the asked projects are counted")
+    @DisplayName("the discovery's slices of trace creation time cover the window and add up: traces created days "
+            + "apart are each counted once, and only the asked projects are counted")
     void discoveryInSlices() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
@@ -501,15 +502,24 @@ class TopicVectorsStorageTest {
         vectorsDAO.insert(vectors).block();
         var lower = now.minus(25, ChronoUnit.DAYS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(projectId), 10).block();
+        var slices = vectorsDAO.slices(lower.minus(8, ChronoUnit.DAYS));
+        var found = Flux.fromIterable(slices)
+                .concatMap(slice -> vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, slice, 10))
+                .collect(Collectors.toMap(BackfillProject::projectId, Function.identity(),
+                        BackfillProject::merge))
+                .block();
+        var tracesWithVectors = Flux.fromIterable(vectorsDAO.slices(lower))
+                .concatMap(slice -> vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slice,
+                        List.of(projectId), 10))
+                .flatMapIterable(Map::entrySet)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum))
+                .block();
 
-        assertThat(tracesByProject(found)).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
+        assertThat(slices).hasSizeGreaterThan(3);
+        assertThat(tracesByProject(List.copyOf(found.values()))).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
         assertThat(tracesWithVectors).isEqualTo(Map.of(projectId, 3L));
-        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower, List.of(), 10).block())
-                .isEmpty();
+        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slices.getFirst(), List.of(), 10)
+                .block()).isEmpty();
     }
 
     @Test
