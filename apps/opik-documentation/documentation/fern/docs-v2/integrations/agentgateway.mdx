@@ -7,12 +7,12 @@ og:title: Integrate agentgateway with Opik
 title: Observability for agentgateway with Opik
 ---
 
-[agentgateway](https://agentgateway.dev) is an open-source proxy for LLM, MCP, and agent-to-agent traffic. It runs as a standalone binary or on Kubernetes, and it exports OpenTelemetry traces for every request that it serves.
+[agentgateway](https://agentgateway.dev) is an open-source proxy for LLM, MCP, and agent-to-agent traffic. It runs as a standalone binary or on Kubernetes, and it can export an OpenTelemetry trace for each request that it serves.
 
-Opik ingests these traces at its native OTLP endpoint, without a plugin or a collector. Each LLM call becomes an Opik trace with an `llm` span that shows the model, the provider, the token usage, the cost, and the latency. You can also capture the prompt and the response, and send the traces of each caller to its own project and thread.
+Opik ingests these traces at its native OTLP endpoint, without a plugin or a collector. Each LLM call becomes an Opik trace with an `llm` span that shows the model, the provider, the token usage, the cost, and the latency. A child span shows the request that the gateway sent to the LLM provider. You can also capture the prompt and the response, and send the traces of each caller to its own project and thread.
 
 <Note>
-  This guide needs Opik 2.2.156 or later. Opik Cloud always runs the latest version.
+  This guide needs Opik 2.3.2 or later. Opik Cloud always runs the latest version.
 </Note>
 
 ## Account Setup
@@ -23,7 +23,7 @@ Opik ingests these traces at its native OTLP endpoint, without a plugin or a col
 
 You need three values for the export:
 
-- **API key**: copy it from your Opik account settings. A self-hosted open-source deployment does not need one.
+- **API key**: copy it from your Opik account settings. A self-hosted open-source deployment does not need one: remove the `Authorization` and `Comet-Workspace` headers from the configurations below.
 - **Workspace**: the name of your Opik workspace.
 - **Project**: the Opik project for traces that do not name one. Opik creates the project on the first trace.
 
@@ -35,7 +35,7 @@ agentgateway exports traces over OTLP/HTTP. Use the host and the path for your d
 | --- | --- | --- |
 | Opik Cloud | `www.comet.com:443` | `/opik/api/v1/private/otel/v1/traces` |
 | Enterprise deployment | `<your-comet-host>:443` | `/opik/api/v1/private/otel/v1/traces` |
-| Self-hosted open source | `<your-opik-host>:5173` | `/api/v1/private/otel/v1/traces` |
+| Self-hosted open source | `<your-opik-host>:5173` (default port) | `/api/v1/private/otel/v1/traces` |
 
 <Warning>
   Opik accepts OTLP over HTTP only. Set the protocol to `http`, not `grpc`.
@@ -75,7 +75,7 @@ agentgateway exports traces over OTLP/HTTP. Use the host and the path for your d
 
   </Tab>
   <Tab value="Kubernetes" title="Kubernetes">
-    Store your Opik credentials in a Secret in the namespace of the agentgateway proxy:
+    Store your Opik credentials in a Secret in the namespace of the backend that you create in the next step:
 
     ```bash
     kubectl create secret generic opik-credentials \
@@ -146,7 +146,7 @@ agentgateway exports traces over OTLP/HTTP. Use the host and the path for your d
     kubectl apply -f opik-tracing.yaml
     ```
 
-    For a self-hosted deployment, replace `spec.static.host`, `spec.static.port`, and `path` with the values from the [trace endpoint](#trace-endpoint) table. Remove `tls` if your endpoint uses plain HTTP. On the solo.io enterprise build, the policy kind is `EnterpriseAgentgatewayPolicy`, with the same spec.
+    For a self-hosted deployment, replace `spec.static.host`, `spec.static.port`, and `path` with the values from the [trace endpoint](#trace-endpoint) table. Remove `tls` if your endpoint uses plain HTTP.
 
   </Tab>
 </Tabs>
@@ -155,11 +155,11 @@ agentgateway exports traces over OTLP/HTTP. Use the host and the path for your d
   The `Authorization` header value is the raw Opik API key. Do not add the `Bearer ` prefix.
 </Warning>
 
-Send a request through the gateway, then open your project in Opik. After a few seconds, you see a trace with an `llm` span for the call. Opik reads the model, the provider, and the token usage from the standard `gen_ai.*` attributes, and calculates the cost. The other gateway attributes, such as the route and the HTTP status, are in the span metadata.
+Send a request through the gateway, then open your project in Opik. After a few seconds, you see a trace for the call. Its root span is an `llm` span, and its child span shows the request to the LLM provider. Opik reads the model, the provider, and the token usage from the standard `gen_ai.*` attributes, and calculates the cost. The other gateway attributes, such as the route and the HTTP status, are in the span metadata.
 
 ## Capture Prompts and Responses
 
-agentgateway does not export message content by default. To show the prompt as the trace input and the response as the trace output, add these two attributes to the tracing policy:
+agentgateway does not export message content by default. To show the prompt in the trace input and the response in the trace output, add these two attributes to the tracing policy:
 
 <Tabs>
   <Tab value="Standalone" title="Standalone">
@@ -316,25 +316,40 @@ def answer(question: str) -> str:
         extra_headers={
             "x-opik-trace-id": context["opik_trace_id"],
             "x-opik-parent-span-id": context["opik_parent_span_id"],
+            "x-opik-project": "retail-assistant",
         },
     )
     return response.choices[0].message.content
 ```
 
 <Warning>
-  The gateway span and the application trace must be in the same Opik workspace and project. Use the project of the
-  caller's API key in `@track`, or send an `x-opik-project` header with the project of the application trace.
+  The gateway span and the application trace must be in the same Opik workspace and project. Send the project of the
+  application trace in the `x-opik-project` header. In an `evaluate()` run, this is the project of the dataset. A
+  nested `@track(project_name=...)` does not change the project of an existing trace.
 </Warning>
 
 ## Send Traces to More Than One Workspace
 
 Opik reads the workspace from the `Comet-Workspace` header of the export request, so one tracing policy writes to one workspace. To send callers to different workspaces, export the traces to an [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) and split them there:
 
-1. Add an `opik.workspace` attribute to the tracing policy, for example from `apiKey.opik_workspace`.
-2. In the collector, use the [routing connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/routingconnector) to send spans to one pipeline for each workspace.
-3. Give each pipeline its own `otlphttp` exporter, with the `Comet-Workspace` header and an API key for that workspace.
+1. Point the tracing policy at the OTLP/HTTP receiver of the collector (for example `host: <collector-host>:4318` and `path: /v1/traces`), and add an `opik.workspace` attribute, for example from `apiKey.opik_workspace`.
+2. In the collector, drop the child spans of agentgateway. agentgateway adds custom attributes to the request span only, so a child span has no `opik.workspace` and cannot be routed with its trace.
+3. Use the [routing connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/routingconnector) to send spans to one pipeline for each workspace.
+4. Give each pipeline its own `otlphttp` exporter, with the `Comet-Workspace` header and an API key for that workspace.
 
 ```yaml title="otel-collector.yaml"
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  filter/drop_child_spans:
+    error_mode: ignore
+    trace_conditions:
+      - span.attributes["agentgateway.outbound.kind"] != nil
+
 connectors:
   routing:
     default_pipelines: [traces/platform]
@@ -351,6 +366,17 @@ exporters:
       Comet-Workspace: retail
       projectName: agentgateway
   # ...one exporter for each workspace, plus one for traces without a workspace
+
+service:
+  pipelines:
+    traces/in:
+      receivers: [otlp]
+      processors: [filter/drop_child_spans]
+      exporters: [routing]
+    traces/retail:
+      receivers: [routing]
+      exporters: [otlphttp/retail]
+    # ...one pipeline for each workspace
 ```
 
 <Tip>
@@ -383,8 +409,9 @@ exporters:
   </Accordion>
   <Accordion title="Rejected requests appear as traces">
     agentgateway also traces requests that it rejects, for example a request with an invalid API key. These traces
-    have no key metadata, so they go to the `projectName` header project. To export only the requests that the gateway
-    served, add `filter: 'response.code == 200'` to the tracing policy.
+    have no key metadata, so they go to the `projectName` header project, unless the request has an `x-opik-project`
+    header. To export only successful calls, add `filter: 'response.code == 200'` to the tracing policy. This filter
+    also drops the calls that the LLM provider rejected.
   </Accordion>
 </AccordionGroup>
 
