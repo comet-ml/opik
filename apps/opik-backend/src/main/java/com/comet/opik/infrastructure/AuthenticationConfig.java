@@ -125,4 +125,15 @@ public class AuthenticationConfig {
                 || organizationCacheStaleTTL == null
                 || organizationCacheTTL.toMilliseconds() <= organizationCacheStaleTTL.toMilliseconds();
     }
+
+    /**
+     * A failure marker set while another pod saves an answer can outlive that answer when the retry window is longer
+     * than the stale TTL, and would then hide the workspace's organization until the marker expires.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "authentication.organizationCacheRetryAfterFailure must not exceed authentication.organizationCacheStaleTTL") public boolean isOrganizationCacheRetryWindowValid() {
+        return organizationCacheRetryAfterFailure == null
+                || organizationCacheStaleTTL == null
+                || organizationCacheRetryAfterFailure.toMilliseconds() <= organizationCacheStaleTTL.toMilliseconds();
+    }
 }
