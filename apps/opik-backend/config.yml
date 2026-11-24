@@ -2858,6 +2858,12 @@ topics:
       #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
+  #  The topics state's MySQL writes
+  storage:
+    #  Default: 100
+    #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
+    #  bounded however many projects went at once. From 1 to 10000
+    deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
