@@ -276,8 +276,8 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout, cancels the LLM call "
-            + "in flight and saves nothing")
+    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout and the stats so far, "
+            + "cancels the LLM call in flight and saves nothing")
     void runTimeoutCancelsTheCallInFlight() throws Exception {
         when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         var cancelled = new AtomicInteger();
@@ -298,6 +298,8 @@ class TopicsRebuildServiceFaultsTest {
         }
 
         assertThat(outcome.errorCode()).isEqualTo("timeout");
+        assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(TRACES);
+        assertThat(outcome.stats().get("seconds").has("llm")).isTrue();
         assertThat(cancelled).hasValue(1);
         verify(topicDAO, never()).insertTopics(any());
         verify(traceTopicsDAO, never()).insert(any());

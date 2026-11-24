@@ -205,7 +205,10 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int cpuThreads;
 
-        /** CPU steps that wait for a thread; a step past this is rejected and fails its run with {@code internal}. */
+        /**
+         * CPU steps that wait for a thread, in all: each thread queues its share, at least one. A step past this is
+         * rejected and fails its run with {@code internal}.
+         */
         @JsonProperty
         @Min(1) @Max(1000) private int cpuQueue;
 

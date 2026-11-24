@@ -61,7 +61,8 @@ public class TopicsRebuildService implements Managed {
     private final @NonNull TopicAlgorithm algorithm;
     /**
      * The k-means and assign steps: CPU work, {@code topics.build.cpuThreads} at a time, at most
-     * {@code topics.build.cpuQueue} waiting. Disposed when the application stops.
+     * {@code topics.build.cpuQueue} waiting. Reactor caps the queue of each thread, so each gets its share. Disposed
+     * when the application stops.
      */
     private final @NonNull Scheduler cpu;
 
@@ -79,7 +80,8 @@ public class TopicsRebuildService implements Managed {
         this.workspaceNames = workspaceNames;
         this.algorithm = algorithm;
         var build = config.getBuild();
-        this.cpu = Schedulers.newBoundedElastic(build.getCpuThreads(), build.getCpuQueue(), "topics-cpu", 60, true);
+        int queuePerThread = Math.max(1, build.getCpuQueue() / build.getCpuThreads());
+        this.cpu = Schedulers.newBoundedElastic(build.getCpuThreads(), queuePerThread, "topics-cpu", 60, true);
     }
 
     @Override
@@ -129,6 +131,9 @@ public class TopicsRebuildService implements Managed {
     }
 
     /** A failed step, with the run's stats up to and including it, so the failed outcome logs them. */
+    /** The context key of the run's stats when a step is cancelled, for the timeout's failure. */
+    private static final String IN_FLIGHT = "topics-run-stats";
+
     private static final class StepFailure extends RuntimeException {
 
         private final transient RunStats stats;
@@ -175,14 +180,17 @@ public class TopicsRebuildService implements Managed {
 
     private Mono<Outcome> run(TopicRun run, long windowTraces) {
         var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
-        return build(run, RunStats.of(run), windowTraces)
-                .flatMap(built -> timed(run, built.stats(), "save",
-                        store.save(run, built.value().topics(), built.value().otherVectors()))
-                        .map(kept -> new Step<>(kept.value() ? built.value() : built.value().discarded(),
+        var latest = new AtomicReference<>(RunStats.of(run));
+        return build(run, latest.get(), windowTraces)
+                .flatMap(buildStep -> timed(run, buildStep.stats(), "save",
+                        store.save(run, buildStep.value().topics(), buildStep.value().otherVectors()))
+                        .map(kept -> new Step<>(kept.value() ? buildStep.value() : buildStep.value().discarded(),
                                 kept.stats())))
-                .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
-                        "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
-                .flatMap(built -> saved(run, built.stats(), built.value()))
+                .contextWrite(context -> context.put(IN_FLIGHT, latest))
+                // The timeout cancels the step in flight first, which leaves its stats in latest.
+                .timeout(timeout, Mono.error(() -> new StepFailure(latest.get(), new TopicsRunException(
+                        RunError.TIMEOUT, "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout)))))
+                .flatMap(saveStep -> saved(run, saveStep.stats(), saveStep.value()))
                 .onErrorResume(error -> failed(run, error));
     }
 
@@ -312,7 +320,7 @@ public class TopicsRebuildService implements Managed {
      * trace_topics, which the labelling pass gives.
      */
     private Mono<Outcome> failed(TopicRun run, Throwable failure) {
-        // A step's failure carries the stats up to it; the timeout and a cancel come from outside the steps.
+        // A step's failure and the timeout carry the stats up to them; a cancel comes from outside the steps.
         var stats = failure instanceof StepFailure step ? step.stats : RunStats.of(run);
         var error = failure instanceof StepFailure ? failure.getCause() : failure;
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
@@ -366,14 +374,18 @@ public class TopicsRebuildService implements Managed {
 
     /** The phase's value with {@code stats} plus its duration; a failure carries them too. */
     private <T> Mono<Step<T>> timed(TopicRun run, RunStats stats, String phase, Mono<T> action) {
-        return Mono.defer(() -> {
+        return Mono.deferContextual(context -> {
             long started = System.nanoTime();
             return failingWith(stats, action)
                     .map(value -> new Step<>(value, stats.timed(phase, record(run, phase, started))))
                     .onErrorMap(StepFailure.class,
                             error -> new StepFailure(error.stats.timed(phase, record(run, phase, started)),
                                     error.getCause()))
-                    .doOnCancel(() -> record(run, phase, started));
+                    .doOnCancel(() -> {
+                        var cancelledAt = stats.timed(phase, record(run, phase, started));
+                        context.<AtomicReference<RunStats>>getOrEmpty(IN_FLIGHT)
+                                .ifPresent(latest -> latest.set(cancelledAt));
+                    });
         });
     }
 
