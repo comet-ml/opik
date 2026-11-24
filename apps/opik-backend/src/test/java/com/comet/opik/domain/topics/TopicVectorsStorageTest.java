@@ -18,6 +18,7 @@ import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
@@ -45,7 +46,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -192,6 +195,38 @@ class TopicVectorsStorageTest {
 
         assertThat(findUnvectored(workspaceId, lower)).isEmpty();
         assertThat(tables.vectors(workspaceId, List.of(traceId))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("a trace with a status row is left out by the window read, and the trace-delete cascade deletes its "
+            + "status row with its vectors")
+    void statusRowAndCascade() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var unembeddable = ID_GENERATOR.generateId();
+        var embedded = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, unembeddable, 3))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, unembeddable, 3))).block();
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, embedded, 3))).block();
+        var lower = Instant.now().minus(1, ChronoUnit.HOURS);
+        var found = findUnvectored(workspaceId, lower);
+        assertCandidates(found, candidate(workspaceId, projectId, unembeddable, 3));
+
+        vectorsDAO.insertStatuses(List.of(new TopicVectorStatus(found.getFirst(), SkipReason.INVALID_VECTOR))).block();
+
+        assertThat(findUnvectored(workspaceId, lower)).isEmpty();
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable)))
+                .containsExactly(Map.entry(unembeddable, "invalid_vector"));
+
+        vectorsDAO.deleteByTraceIds(Set.of(unembeddable, embedded), projectId)
+                .contextWrite(context -> context.put(RequestContext.USER_NAME, "user")
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable))).isEmpty();
+        assertThat(tables.vectors(workspaceId, List.of(embedded))).isEmpty();
+        // Its done status is ai-labels', not deleted here: with the status row gone, the read finds it again.
+        assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, unembeddable, 3));
     }
 
     @Test
@@ -460,25 +495,25 @@ class TopicVectorsStorageTest {
                 vector(workspaceId, first, firstTraces.get(1), 1))).block();
         var lower = Instant.now().minus(2, ChronoUnit.HOURS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(first, second), 10).block();
+        var window = new TopicVectorsDAO.Slice(lower.minus(8, ChronoUnit.DAYS), null);
+        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, window, 10).collectList().block();
+        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK,
+                new TopicVectorsDAO.Slice(lower, null), List.of(first, second), 10).block();
 
         assertThat(tracesByProject(found)).isEqualTo(Map.of(first, 3L, second, 1L));
         assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                 Instant.now().plusSeconds(1)));
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
         assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
-        // A window that starts after the traces were created counts none of them, but still finds the projects.
-        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before,
-                lower.minus(8, ChronoUnit.DAYS), 10).collectList().block()))
-                .isEqualTo(Map.of(first, 0L, second, 0L));
+        // A status window that starts after the traces were created still counts them: the window read returns them.
+        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, window, 10)
+                .collectList().block()))
+                .isEqualTo(Map.of(first, 3L, second, 1L));
     }
 
     @Test
-    @DisplayName("the discovery and the vector count read slice by slice of trace creation time and add up: traces "
-            + "created days apart are each counted once, and only the asked projects are counted")
+    @DisplayName("the discovery's slices of trace creation time cover the window and add up: traces created days "
+            + "apart are each counted once, and only the asked projects are counted")
     void discoveryInSlices() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
@@ -500,15 +535,24 @@ class TopicVectorsStorageTest {
         vectorsDAO.insert(vectors).block();
         var lower = now.minus(25, ChronoUnit.DAYS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(projectId), 10).block();
+        var slices = vectorsDAO.slices(lower.minus(8, ChronoUnit.DAYS));
+        var found = Flux.fromIterable(slices)
+                .concatMap(slice -> vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, slice, 10))
+                .collect(Collectors.toMap(BackfillProject::projectId, Function.identity(),
+                        BackfillProject::merge))
+                .block();
+        var tracesWithVectors = Flux.fromIterable(vectorsDAO.slices(lower))
+                .concatMap(slice -> vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slice,
+                        List.of(projectId), 10))
+                .flatMapIterable(Map::entrySet)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum))
+                .block();
 
-        assertThat(tracesByProject(found)).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
+        assertThat(slices).hasSizeGreaterThan(3);
+        assertThat(tracesByProject(List.copyOf(found.values()))).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
         assertThat(tracesWithVectors).isEqualTo(Map.of(projectId, 3L));
-        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower, List.of(), 10).block())
-                .isEmpty();
+        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slices.getFirst(), List.of(), 10)
+                .block()).isEmpty();
     }
 
     @Test

@@ -2849,7 +2849,7 @@ topics:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each
     #  tick runs the fresh phase (window), or the daily pass in its place when that is due (longWindow, in slices),
-    #  then the backfill phase (longWindow or backfillWindow, progress in the MySQL table topic_vector_backfills).
+    #  then the backfill phase (longWindow or backfillWindow, progress in the MySQL table topic_projects).
     #  At most 1h
     tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
     #  Default: 50s
@@ -2886,9 +2886,10 @@ topics:
     #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
     embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
     #  Default: 1
-    #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
-    #  pool's replica count: the pool computes one call at a time per replica, so more only makes each call wait
-    #  longer, toward embedTimeout, and a call over the service's queue is answered with quota_exceeded (429)
+    #  Description: Workspaces a tick visits at a time, each with one embed call in flight, so also the most embed
+    #  calls in flight. Set it to the embed pool's replica count: the pool computes one call at a time per replica, so
+    #  more only makes each call wait longer, toward embedTimeout, and a call over the service's queue is answered with
+    #  quota_exceeded (429)
     embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. At

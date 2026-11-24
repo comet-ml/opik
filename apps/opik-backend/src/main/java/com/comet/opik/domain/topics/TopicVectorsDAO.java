@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -40,6 +39,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 public class TopicVectorsDAO {
 
     static final String TABLE = "topic_vectors";
+    static final String STATUS_TABLE = "topic_vector_status";
     private static final String QUERY_PREFIX = "topics";
 
     /**
@@ -141,6 +141,23 @@ public class TopicVectorsDAO {
                 )
                 WHERE is_deleted = 0
             )
+            AND (project_id, trace_id, task_version) NOT IN (
+                SELECT project_id, trace_id, task_version
+                FROM (
+                    SELECT workspace_id, project_id, trace_id, task_version, is_deleted
+                    FROM topic_vector_status
+                    WHERE workspace_id = :workspace_id
+                    <if(project)>AND project_id = :project_id<endif>
+                    AND task = :task
+                    AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
+                    <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
+                    ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+                )
+                WHERE is_deleted = 0
+            )
             ORDER BY updated_at, trace_id
             LIMIT :limit
             SETTINGS max_threads = <max_threads>, max_rows_to_read = <max_rows_to_read>,
@@ -174,7 +191,7 @@ public class TopicVectorsDAO {
      */
     private static final String FIND_BACKFILL_PROJECTS = """
             SELECT project_id,
-                uniqIf(trace_id, trace_created_at >= parseDateTime64BestEffort(:lower_bound, 6, 'UTC')) AS traces,
+                uniq(trace_id) AS traces,
                 max(updated_at) AS last_done_at
             FROM ai_label_status
             WHERE workspace_id = :workspace_id
@@ -239,15 +256,24 @@ public class TopicVectorsDAO {
     }
 
     /**
-     * A project the backfill's discovery found: about how many traces created in the backfill window have a done
-     * status, and the latest done status written in it.
+     * A project the backfill's discovery found: about how many traces have a done status written in the backfill
+     * window, created within the window read's {@code trace_created_at} bound, and the latest such status. The same
+     * traces the window read returns, so the count bounds a read of the project.
      */
     @Builder(toBuilder = true)
     public record BackfillProject(@NonNull UUID projectId, long traces, @NonNull Instant lastDoneAt) {
+
+        /** One project as two slices found it: their traces added up, the later done status. */
+        static BackfillProject merge(@NonNull BackfillProject left, @NonNull BackfillProject right) {
+            return left.toBuilder()
+                    .traces(left.traces() + right.traces())
+                    .lastDoneAt(Collections.max(List.of(left.lastDoneAt(), right.lastDoneAt())))
+                    .build();
+        }
     }
 
     /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
-    private record Slice(@NonNull Instant from, @Nullable Instant before) {
+    record Slice(@NonNull Instant from, @Nullable Instant before) {
     }
 
     public Mono<Long> insert(List<TopicVector> rows) {
@@ -273,6 +299,29 @@ public class TopicVectorsDAO {
                     for (float value : row.vector()) {
                         vector.add(value);
                     }
+                    return node;
+                });
+    }
+
+    /** The status rows of traces that can never get a vector; the window read leaves their keys out. */
+    public Mono<Long> insertStatuses(List<TopicVectorStatus> rows) {
+        if (CollectionUtils.isEmpty(rows)) {
+            return Mono.just(0L);
+        }
+        return jsonBulkInsert.insert(
+                STATUS_TABLE,
+                getLogComment("topics:insert_vector_status", null, null, "rows=%d".formatted(rows.size())),
+                rows,
+                row -> {
+                    var candidate = row.candidate();
+                    var node = JsonUtils.createObjectNode();
+                    node.put("workspace_id", candidate.workspaceId());
+                    node.put("project_id", candidate.projectId().toString());
+                    node.put("task", TopicEmbedding.SUMMARY_TASK);
+                    node.put("trace_id", candidate.traceId().toString());
+                    node.put("trace_created_at", candidate.traceCreatedAt().toString());
+                    node.put("task_version", candidate.taskVersion());
+                    node.put("reason", row.reason().getValue());
                     return node;
                 });
     }
@@ -325,80 +374,63 @@ public class TopicVectorsDAO {
                         .build()));
     }
 
-    /**
-     * The backfill's discovery of the traces created from {@code createdAfter} on, one read per slice of
-     * {@code topics.vectors.find.discoverySliceSize}; each read gets {@code maxExecutionSeconds}.
-     */
+    /** The backfill's discovery of the traces created in one {@link #slices} slice, one read. */
     public Flux<BackfillProject> findBackfillProjects(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Instant lowerBound, @NonNull Instant createdAfter, long maxExecutionSeconds) {
-        return Flux.fromIterable(slices(createdAfter))
-                .concatMap(slice -> {
-                    var template = guarded(FIND_BACKFILL_PROJECTS, "topics:find_backfill_projects", workspaceId,
-                            "lower_bound=%s, created_after=%s, created_before=%s".formatted(lowerBound, slice.from(),
-                                    slice.before()),
-                            maxExecutionSeconds)
-                            .add("created_before", slice.before() != null);
-                    return Mono.from(connectionFactory.create())
-                            .flatMapMany(connection -> {
-                                var statement = connection.createStatement(template.render())
-                                        .bind("workspace_id", workspaceId)
-                                        .bind("task", task)
-                                        .bind("created_after", slice.from().toString())
-                                        .bind("lower_bound", lowerBound.toString());
-                                if (slice.before() != null) {
-                                    statement.bind("created_before", slice.before().toString());
-                                }
-                                return statement.execute();
-                            })
-                            .flatMap(result -> result.map((row, metadata) -> BackfillProject.builder()
-                                    .projectId(UUID.fromString(row.get("project_id", String.class)))
-                                    .traces(row.get("traces", Long.class))
-                                    .lastDoneAt(row.get("last_done_at", Instant.class))
-                                    .build()));
+            @NonNull Instant lowerBound, @NonNull Slice slice, long maxExecutionSeconds) {
+        var template = guarded(FIND_BACKFILL_PROJECTS, "topics:find_backfill_projects", workspaceId,
+                "lower_bound=%s, created_after=%s, created_before=%s".formatted(lowerBound, slice.from(),
+                        slice.before()),
+                maxExecutionSeconds)
+                .add("created_before", slice.before() != null);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("task", task)
+                            .bind("created_after", slice.from().toString())
+                            .bind("lower_bound", lowerBound.toString());
+                    if (slice.before() != null) {
+                        statement.bind("created_before", slice.before().toString());
+                    }
+                    return statement.execute();
                 })
-                .collect(Collectors.toMap(BackfillProject::projectId, Function.identity(),
-                        (left, right) -> left.toBuilder()
-                                .traces(left.traces() + right.traces())
-                                .lastDoneAt(Collections.max(List.of(left.lastDoneAt(), right.lastDoneAt())))
-                                .build()))
-                .flatMapIterable(Map::values);
+                .flatMap(result -> result.map((row, metadata) -> BackfillProject.builder()
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .traces(row.get("traces", Long.class))
+                        .lastDoneAt(row.get("last_done_at", Instant.class))
+                        .build()));
     }
 
     /**
-     * Per project of {@code projectIds}, its traces created from {@code createdAfter} on with a live vector of
-     * {@code task}, one read per slice of {@code topics.vectors.find.discoverySliceSize}; each read gets
-     * {@code maxExecutionSeconds}. A project without one is left out.
+     * Per project of {@code projectIds}, its traces created in one {@link #slices} slice with a live vector of
+     * {@code task}, one read. A project without one is left out.
      */
     public Mono<Map<UUID, Long>> countTracesWithVectorsByProject(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Instant createdAfter, @NonNull Collection<UUID> projectIds, long maxExecutionSeconds) {
+            @NonNull Slice slice, @NonNull Collection<UUID> projectIds, long maxExecutionSeconds) {
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
         }
         var ids = projectIds.stream().map(UUID::toString).toArray(String[]::new);
-        return Flux.fromIterable(slices(createdAfter))
-                .concatMap(slice -> {
-                    var template = guarded(COUNT_TRACES_WITH_VECTORS_BY_PROJECT,
-                            "topics:count_traces_with_vectors_by_project", workspaceId,
-                            "projects=%d, created_after=%s, created_before=%s".formatted(ids.length, slice.from(),
-                                    slice.before()),
-                            maxExecutionSeconds)
-                            .add("created_before", slice.before() != null);
-                    return Mono.from(connectionFactory.create())
-                            .flatMapMany(connection -> {
-                                var statement = connection.createStatement(template.render())
-                                        .bind("workspace_id", workspaceId)
-                                        .bind("task", task)
-                                        .bind("project_ids", ids)
-                                        .bind("created_after", slice.from().toString());
-                                if (slice.before() != null) {
-                                    statement.bind("created_before", slice.before().toString());
-                                }
-                                return statement.execute();
-                            })
-                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
-                                    UUID.fromString(row.get("project_id", String.class)),
-                                    row.get("traces_with_vectors", Long.class))));
+        var template = guarded(COUNT_TRACES_WITH_VECTORS_BY_PROJECT, "topics:count_traces_with_vectors_by_project",
+                workspaceId,
+                "projects=%d, created_after=%s, created_before=%s".formatted(ids.length, slice.from(), slice.before()),
+                maxExecutionSeconds)
+                .add("created_before", slice.before() != null);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("task", task)
+                            .bind("project_ids", ids)
+                            .bind("created_after", slice.from().toString());
+                    if (slice.before() != null) {
+                        statement.bind("created_before", slice.before().toString());
+                    }
+                    return statement.execute();
                 })
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("project_id", String.class)),
+                        row.get("traces_with_vectors", Long.class))))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 
@@ -406,7 +438,7 @@ public class TopicVectorsDAO {
      * Slices of {@code topics.vectors.find.discoverySliceSize} back from now down to {@code createdAfter}, the newest
      * open-ended, so a trace created during the reads is still in one of them.
      */
-    private List<Slice> slices(Instant createdAfter) {
+    List<Slice> slices(@NonNull Instant createdAfter) {
         var size = config.getVectors().getFind().getDiscoverySliceSize().toJavaDuration();
         var slices = new ArrayList<Slice>();
         Instant before = null;
@@ -433,20 +465,28 @@ public class TopicVectorsDAO {
                 .add("max_execution_time", maxExecutionSeconds);
     }
 
-    /** Traces linked to experiments survive retention, so their vectors do too. */
+    /**
+     * Traces linked to experiments survive retention, so their vectors do too. Each delete covers both tables,
+     * {@code topic_vectors} and {@code topic_vector_status}, which share the trace's keys and partitions.
+     */
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetention(TABLE, QUERY_PREFIX, workspaceIds, cutoffId, lowerBound);
+        return deletes.deleteForRetention(TABLE, QUERY_PREFIX, workspaceIds, cutoffId, lowerBound)
+                .zipWith(deletes.deleteForRetention(STATUS_TABLE, QUERY_PREFIX, workspaceIds, cutoffId,
+                        lowerBound), Long::sum);
     }
 
     public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetentionBounded(TABLE, QUERY_PREFIX, workspaceMinIds, cutoffId, lowerBound);
+        return deletes.deleteForRetentionBounded(TABLE, QUERY_PREFIX, workspaceMinIds, cutoffId, lowerBound)
+                .zipWith(deletes.deleteForRetentionBounded(STATUS_TABLE, QUERY_PREFIX, workspaceMinIds,
+                        cutoffId, lowerBound), Long::sum);
     }
 
     /** The trace-delete cascade; workspace from the reactive context. */
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
-        return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
+        return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId)
+                .then(deletes.deleteByTraceIds(STATUS_TABLE, QUERY_PREFIX, traceIds, projectId));
     }
 
 }
