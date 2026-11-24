@@ -296,7 +296,7 @@ public class AiLabelsTickService {
 
     public void tick(@NonNull Instant start) {
         var budget = config.getTickBudget().toJavaDuration();
-        timed("load", () -> pollAndLoad(start.plus(share(budget, LOAD_SHARE))));
+        timed("load", () -> pollAndLoad(start.plus(share(budget, LOAD_SHARE)), start.plus(budget)));
 
         var tasks = registry.tasks();
         if (tasks.isEmpty()) {
@@ -348,9 +348,10 @@ public class AiLabelsTickService {
     /**
      * Polls every submitted job in groups of up to 1,000 per call, then loads the finished ones and the lost ones (left
      * out of the response) until {@code deadline} or {@code loadMaxRows}. Their rows are written as one insert per
-     * table, and only then are the jobs marked loaded, so a crash in between means they load again.
+     * table, and only then are the jobs marked loaded, so a crash in between means they load again. The check of the
+     * written rows for deleted traces starts no query after {@code tickEnd}.
      */
-    void pollAndLoad(Instant deadline) {
+    void pollAndLoad(Instant deadline, Instant tickEnd) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());
         // Before loading, so a status call that fails still reports them; write() publishes what is left after.
         lastJobs = JobsObservation.of(jobs);
@@ -394,7 +395,7 @@ public class AiLabelsTickService {
                         }), config.getLoadConcurrency())
                 .collectList()
                 .block());
-        write(jobs, loaded);
+        write(jobs, loaded, tickEnd);
     }
 
     private record LoadedJob(AiLabelJob job, List<AiLabel> labels, List<AiLabelStatus> statuses) {
@@ -407,7 +408,7 @@ public class AiLabelsTickService {
      * Writes the loaded jobs' rows and marks them loaded, then publishes the jobs still open: {@code polled}, every job
      * the poll found, less the ones marked.
      */
-    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded) {
+    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded, Instant tickEnd) {
         if (loaded.isEmpty()) {
             return;
         }
@@ -420,7 +421,7 @@ public class AiLabelsTickService {
                     exception);
             return;
         }
-        if (!dropDeleted(loaded)) {
+        if (!dropDeleted(loaded, tickEnd)) {
             return;
         }
         var jobIds = loaded.stream().map(result -> result.job().jobId()).toList();
@@ -446,9 +447,10 @@ public class AiLabelsTickService {
      * ran too early to find. A trace's row goes before its cascade starts, so a cascade that missed these rows shows
      * here as a trace with no row. The trace's topic vectors go too, in the cascade's order: the vectors tick may have
      * embedded the done status in between, and its own check trusts that status. False when the check or a delete
-     * fails: the jobs then stay submitted, and the next tick writes and checks them again.
+     * fails, or when {@code deadline} passes before the last check query starts, so the queries stay within the leader
+     * lease: the jobs then stay submitted, and the next tick writes and checks them again.
      */
-    private boolean dropDeleted(List<LoadedJob> loaded) {
+    private boolean dropDeleted(List<LoadedJob> loaded, Instant deadline) {
         var written = Stream.concat(
                 loaded.stream().flatMap(result -> result.labels().stream())
                         .map(label -> new WrittenTrace(label.workspaceId(), label.projectId(), label.traceId())),
@@ -460,6 +462,9 @@ public class AiLabelsTickService {
             written.forEach((workspaceId, projects) -> projects.forEach((projectId, traceIds) -> {
                 var gone = new HashSet<>(traceIds);
                 for (var batch : Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE)) {
+                    if (!Instant.now().isBefore(deadline)) {
+                        throw new IllegalStateException("the tick's budget ran out before the check finished");
+                    }
                     gone.removeAll(labelsDAO.findLiveTraceIds(workspaceId, projectId, batch,
                             config.getRenderMaxExecutionTime().toSeconds()).block());
                 }
@@ -476,8 +481,8 @@ public class AiLabelsTickService {
                         + "traces '{}'", workspaceId, projectId, gone.size());
             }));
         } catch (RuntimeException exception) {
-            log.error("ai-labels failed to check '{}' loaded jobs for deleted traces; loading them again next tick",
-                    loaded.size(), exception);
+            log.error("ai-labels failed to check the loaded jobs for deleted traces; loading them again next tick, "
+                    + "jobs '{}'", loaded.size(), exception);
             return false;
         }
         return true;

@@ -103,7 +103,9 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -1059,6 +1061,32 @@ class AiLabelsTickTest {
 
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
             assertThat(inFlight(workspaceId)).hasSize(4);
+
+            tick();
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(statuses(workspaceId, traceIds)).hasSize(4)
+                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            assertThat(labels(workspaceId, traceIds)).hasSize(6);
+        }
+
+        @Test
+        @DisplayName("the tick's budget ends before the deleted-trace check: the jobs stay submitted and the next tick "
+                + "loads them")
+        void deletedTraceCheckOutOfBudget() {
+            var workspaceId = enabledWorkspace();
+            var traceIds = List.of(trace(workspaceId, UUID.randomUUID(), 1), trace(workspaceId, UUID.randomUUID(), 0));
+
+            tick();
+            completeJobs(workspaceId);
+            stubStatus();
+            var checking = spy(labelsDAO);
+            var tickEnd = Instant.now();
+            tickService(template, statusDAO, checking).pollAndLoad(tickEnd.plusSeconds(30), tickEnd);
+
+            verify(checking).insert(anyList());
+            verify(checking, never()).findLiveTraceIds(anyString(), any(UUID.class), anyCollection(), anyLong());
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
 
             tick();
 
