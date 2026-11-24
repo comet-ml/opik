@@ -12,6 +12,7 @@ export interface ServiceTogglesConfig {
     welcomeWizardEnabled: boolean;
     exportEnabled: boolean;
     costIntelligenceEnabled: boolean;
+    modelPricesEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;
     demoDataEnabled: boolean;

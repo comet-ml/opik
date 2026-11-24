@@ -337,6 +337,16 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
 
+        /**
+         * How far before its watermark a workspace's read starts: covers a done status that becomes visible after a
+         * later status was read, such as one written to a lagging replica or before its output row. A status later than
+         * this is left to the daily pass. At most {@code window}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration watermarkOverlap;
+
         /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
@@ -385,14 +395,22 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
+        @AssertTrue(message = "topics.vectors.watermarkOverlap must not be longer than topics.vectors.window") public boolean isWatermarkOverlapValid() {
+            return watermarkOverlap == null || window == null
+                    || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
+        }
+
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
+        // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
+        // shorter budget would read nothing.
         @JsonIgnore
-        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+        @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
-                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+                    || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
         }
 
         @JsonIgnore
@@ -422,7 +440,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;
