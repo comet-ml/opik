@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FieldPath, UseFormReturn } from "react-hook-form";
 import cloneDeep from "lodash/cloneDeep";
+import isBoolean from "lodash/isBoolean";
 import isEqual from "lodash/isEqual";
+import isNumber from "lodash/isNumber";
 import isObjectLike from "lodash/isObjectLike";
 import omit from "lodash/omit";
 
@@ -197,7 +199,7 @@ const useRuleEditorHistory = (
       });
 
       const value = form.getValues(name);
-      const isText = typeof value !== "number" && typeof value !== "boolean";
+      const isText = !isNumber(value) && !isBoolean(value);
       const previousText = previous ? getContentText(previous) : "";
       const nextText = getContentText(next);
       const isDeleting = nextText.length < previousText.length;
@@ -207,7 +209,7 @@ const useRuleEditorHistory = (
         !isSameTask &&
         (!group ||
           (group.field !== name && !(isText && group.isText)) ||
-          typeof value === "boolean" ||
+          isBoolean(value) ||
           now - group.at > TYPING_PAUSE_MS ||
           (isText && (group.isDeleting !== isDeleting || group.endedWord)));
       if (previous && startsStep) {
