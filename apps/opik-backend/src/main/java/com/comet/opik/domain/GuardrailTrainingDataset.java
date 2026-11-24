@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +25,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The labelled rows a guardrail model trains on, as a member uploads them: JSON Lines, one
+ * The labelled rows a guardrail model trains on, as a member uploads them: JSON Lines in UTF-8, one
  * {@code {"text": "...", "label": "yes" | "no"}} object per line, yes meaning the text violates. The whole file is
  * checked before anything is created, so a bad file is a 400 that lists its problems and leaves nothing behind. The
  * trainer checks the same rules again.
@@ -52,28 +54,37 @@ public class GuardrailTrainingDataset {
         Map<String, Integer> rowsPerLabel = new TreeMap<>();
         LABELS.forEach(label -> rowsPerLabel.put(label, 0));
         int rows = 0;
+        boolean notUtf8 = false;
         boolean tooLarge;
 
+        // A reader given only the charset turns malformed bytes into U+FFFD and reads on; this decoder stops at them.
+        var utf8 = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
         try (var bounded = BoundedInputStream.builder().setInputStream(file).setMaxCount(MAX_BYTES + 1).get();
-                var reader = new BufferedReader(new InputStreamReader(bounded, StandardCharsets.UTF_8))) {
-            int lineNumber = 0;
-            String line;
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                if (line.isBlank()) {
-                    continue;
+                var reader = new BufferedReader(new InputStreamReader(bounded, utf8))) {
+            try {
+                int lineNumber = 0;
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    lineNumber++;
+                    if (line.isBlank()) {
+                        continue;
+                    }
+                    var row = parse(rowReader, line);
+                    var problem = problemOf(row);
+                    if (problem == null) {
+                        rows++;
+                        rowsPerLabel.merge(row.get("label").asText(), 1, Integer::sum);
+                    } else if (lineProblems.size() < MAX_PROBLEMS_LISTED) {
+                        lineProblems.add("%s, line '%d'".formatted(problem, lineNumber));
+                    } else {
+                        // Only counted past the listed ones, so a file of millions of bad lines costs no memory.
+                        unlistedLineProblems++;
+                    }
                 }
-                var row = parse(rowReader, line);
-                var problem = problemOf(row);
-                if (problem == null) {
-                    rows++;
-                    rowsPerLabel.merge(row.get("label").asText(), 1, Integer::sum);
-                } else if (lineProblems.size() < MAX_PROBLEMS_LISTED) {
-                    lineProblems.add("%s, line '%d'".formatted(problem, lineNumber));
-                } else {
-                    // Only counted past the listed ones, so a file of millions of bad lines costs no memory.
-                    unlistedLineProblems++;
-                }
+            } catch (CharacterCodingException exception) {
+                notUtf8 = true;
             }
             tooLarge = bounded.getCount() > MAX_BYTES;
         } catch (IOException exception) {
@@ -82,8 +93,12 @@ public class GuardrailTrainingDataset {
 
         var problems = new ArrayList<String>();
         if (tooLarge) {
-            // Reading stopped at the limit, so the last row read may be cut short: the size is the only problem.
+            // Reading stopped at the limit, so the last row read may be cut short, even inside a character: the size
+            // is the only problem.
             problems.add("the file is larger than 50 MB");
+        } else if (notUtf8) {
+            // Reading stopped at the bad bytes, so the rows after them were never checked.
+            problems.add("the file is not valid UTF-8");
         } else {
             if (rows < MIN_ROWS || rows > MAX_ROWS) {
                 problems.add("the file needs 20 to 50,000 valid rows, rows '%d'".formatted(rows));
@@ -117,7 +132,8 @@ public class GuardrailTrainingDataset {
         if (!text.isTextual() || text.asText().isBlank()) {
             return "\"text\" must be a non-empty string";
         }
-        if (text.asText().length() > MAX_TEXT_LENGTH) {
+        // Characters are code points, as the trainer's Python len() counts them: an emoji is one, not two UTF-16 units.
+        if (text.asText().codePointCount(0, text.asText().length()) > MAX_TEXT_LENGTH) {
             return "\"text\" is longer than 12,000 characters";
         }
         if (!label.isTextual() || !LABELS.contains(label.asText())) {

@@ -58,6 +58,57 @@ class GuardrailTrainingDatasetTest {
     }
 
     @Test
+    @DisplayName("A file over 50 MB that the limit cuts inside a character is still refused for its size alone")
+    void validateWhenTooLargeAndCutInsideACharacterReportsOnlyTheSize() {
+        // Two-byte characters in 64-byte lines: the limit, a multiple of 64, ends the read on a character's first byte.
+        var line = ("é".repeat(31) + "\n\n").getBytes(StandardCharsets.UTF_8);
+        assertThat(GuardrailTrainingDataset.MAX_BYTES % line.length).isZero();
+        var endless = new InputStream() {
+            private long position;
+
+            @Override
+            public int read() {
+                return line[(int) (position++ % line.length)] & 0xFF;
+            }
+        };
+
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(endless))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("the file is larger than 50 MB"));
+    }
+
+    @Test
+    @DisplayName("A file that is not valid UTF-8 is refused for its encoding alone")
+    void validateWhenNotUtf8ReportsTheEncoding() {
+        var rows = (rows(5, "yes") + "\n" + rows(15, "no") + "\n").getBytes(StandardCharsets.UTF_8);
+        var latin1 = "{\"text\": \"café\", \"label\": \"no\"}".getBytes(StandardCharsets.ISO_8859_1);
+        var file = new byte[rows.length + latin1.length];
+        System.arraycopy(rows, 0, file, 0, rows.length);
+        System.arraycopy(latin1, 0, file, rows.length, latin1.length);
+
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(new ByteArrayInputStream(file)))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("the file is not valid UTF-8"));
+    }
+
+    @Test
+    @DisplayName("A text's length is in characters, so 12,000 emoji fit and one more does not")
+    void validateCountsTextLengthInCharacters() {
+        var emoji = "\uD83D\uDE00";
+
+        assertThatCode(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), rows(15, "no"),
+                "{\"text\": \"%s\", \"label\": \"no\"}".formatted(emoji.repeat(12_000)))))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), rows(15, "no"),
+                "{\"text\": \"%s\", \"label\": \"no\"}".formatted(emoji.repeat(12_001)))))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("\"text\" is longer than 12,000 characters, line '21'"));
+    }
+
+    @Test
     @DisplayName("Lines with problems are listed up to twenty, then only counted")
     void validateWhenManyProblemsListsTheFirstTwenty() {
         var badRows = IntStream.range(0, 25).mapToObj(index -> "not json").toArray(String[]::new);
