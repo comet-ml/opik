@@ -2,9 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { COST_LINE_LABELS, CostLine } from "@/lib/model-prices";
 import { formatExactCost } from "@/lib/money";
-import { formatPrice } from "./format";
-
-const formatTokens = (tokens: number) => tokens.toLocaleString("en-US");
+import { formatPrice, formatTokens } from "./format";
 
 const rateOf = (line: CostLine) => formatPrice(line.ratePerMillion) ?? "$0";
 

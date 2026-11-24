@@ -11,6 +11,7 @@ import {
   priceSpan,
   priceTypeOf,
   spanCostOrigin,
+  usageForPrices,
   usageRequestOf,
   visibleLines,
 } from "./costBreakdown";
@@ -374,6 +375,39 @@ describe("priceGroup", () => {
     expect(breakdown.changedSpans).toBe(1);
     expect(breakdown.unexplainedSpans).toBe(1);
     expect(breakdown.fromVersions).toEqual([4]);
+  });
+});
+
+describe("priceGroup with unrecorded prices", () => {
+  it("doesn't call a span's price changed when the span didn't record which prices it used", () => {
+    const [group] = groupSpanCosts([
+      span(),
+      span({
+        total_estimated_cost: 0.011,
+        total_estimated_cost_version: "1.1",
+      }),
+    ]).groups;
+
+    const breakdown = priceGroup(group, OVERRIDE);
+
+    expect(breakdown.changedSpans).toBe(0);
+    expect(breakdown.unrecordedSpans).toBe(1);
+    expect(breakdown.fromVersions).toEqual([]);
+  });
+});
+
+describe("usageForPrices", () => {
+  it("explains a group's prices with the first span that has tokens", () => {
+    expect(
+      usageForPrices([
+        span({ usage: { prompt_tokens: 0, completion_tokens: 0 } }),
+        span({ usage: { prompt_tokens: 120, completion_tokens: 30 } }),
+      ]),
+    ).toEqual({ prompt_tokens: 120, completion_tokens: 30 });
+    expect(usageForPrices([span({ usage: { prompt_tokens: 0 } })])).toEqual({
+      prompt_tokens: 0,
+    });
+    expect(usageForPrices([])).toEqual({});
   });
 });
 

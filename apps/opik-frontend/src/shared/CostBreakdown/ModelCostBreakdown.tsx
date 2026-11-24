@@ -9,10 +9,11 @@ import {
   needsBuiltInPrices,
   priceGroup,
   priceTypeOf,
-  usageRequestOf,
+  usageForPrices,
   visibleLines,
 } from "@/lib/model-prices";
 import { formatExactCost } from "@/lib/money";
+import { formatTokens } from "./format";
 import { Span } from "@/types/traces";
 import useModelPriceResolve from "@/api/model-prices/useModelPriceResolve";
 import useBuiltInPrices from "@/api/model-prices/useBuiltInPrices";
@@ -23,8 +24,6 @@ import { CostLinesSkeleton } from "./SpanCostBreakdown";
 
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_2.5rem_4rem_4rem_5.5rem] items-start gap-x-2";
-
-const formatTokens = (tokens: number) => tokens.toLocaleString("en-US");
 
 const plural = (count: number, word: string) =>
   `${count.toLocaleString("en-US")} ${word}${count === 1 ? "" : "s"}`;
@@ -42,8 +41,7 @@ const ModelGroupDetails: React.FC<ModelGroupDetailsProps> = ({ group }) => {
     {
       model: group.model,
       provider: group.provider || undefined,
-      // Without usage the backend reports cost_source "none" even when an organization row matches.
-      usage: usageRequestOf(group.spans[0]?.usage),
+      usage: usageForPrices(group.spans),
     },
     { enabled: Boolean(group.model) },
   );
@@ -81,14 +79,18 @@ const ModelGroupDetails: React.FC<ModelGroupDetailsProps> = ({ group }) => {
     <div className="flex flex-col gap-2">
       <div className="comet-body-xs flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-muted-slate">
-          {breakdown.changedSpans
+          {breakdown.changedSpans || breakdown.unrecordedSpans
             ? "Today's prices"
             : "Prices used when these spans ran"}
         </span>
         <PriceTypeBadge tag={priceTypeOf(resolution, builtIns)} />
         <span className="text-muted-slate">
           ·{" "}
-          {breakdown.changedSpans ? "Changed since they ran" : "Still current"}
+          {breakdown.changedSpans
+            ? "Changed since they ran"
+            : breakdown.unrecordedSpans
+              ? "Not recorded when they ran"
+              : "Still current"}
         </span>
       </div>
       {breakdown.changedSpans > 0 && (
@@ -96,6 +98,19 @@ const ModelGroupDetails: React.FC<ModelGroupDetailsProps> = ({ group }) => {
           {`Prices changed since ${changedScope} ran${
             versionChange ? ` (${versionChange})` : ""
           }. The rates below are today's: ${
+            spanCount === 1 ? "it" : "these spans"
+          } would cost ${formatExactCost(breakdown.today)} now.`}
+        </CostNote>
+      )}
+      {breakdown.unrecordedSpans > 0 && !breakdown.changedSpans && (
+        <CostNote variant="warning">
+          {`Opik didn't record which prices ${
+            breakdown.unrecordedSpans === spanCount
+              ? spanCount === 1
+                ? "this span"
+                : "these spans"
+              : `${breakdown.unrecordedSpans} of these ${spanCount} spans`
+          } used. The rates below are today's: ${
             spanCount === 1 ? "it" : "these spans"
           } would cost ${formatExactCost(breakdown.today)} now.`}
         </CostNote>

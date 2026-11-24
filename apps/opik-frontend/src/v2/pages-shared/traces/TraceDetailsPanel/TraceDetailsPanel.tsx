@@ -305,6 +305,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     [spansData?.content],
   );
   const displayedSpans = useVisibleSpans(allSpans);
+  // Past the panel's span cap the list is partial, so the cost card loads the trace's costed spans itself.
+  const costSpans =
+    spansData && spansData.total <= spansData.content.length
+      ? allSpans
+      : undefined;
 
   const traceType: BASE_TRACE_DATA_TYPE | undefined = trace
     ? TRACE_TYPE_FOR_TREE
@@ -474,7 +479,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
-                    spans={allSpans}
+                    spans={costSpans}
                     isErrorExpanded={showMcpHint ? isErrorOpen : undefined}
                     onErrorExpandedChange={
                       showMcpHint ? handleErrorExpandedChange : undefined

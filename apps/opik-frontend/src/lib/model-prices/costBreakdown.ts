@@ -80,6 +80,7 @@ export interface GroupBreakdown {
   billed: number;
   today: number;
   changedSpans: number;
+  unrecordedSpans: number;
   unexplainedSpans: number;
   fromVersions: number[];
   hints: UsageHint[];
@@ -147,6 +148,16 @@ export const usageRequestOf = (usage: unknown): Record<string, number> => {
     }
   });
   return request;
+};
+
+// Usage with no tokens makes the backend report cost_source "none", which would hide the prices of the whole group.
+export const usageForPrices = (spans: CostedSpan[]): Record<string, number> => {
+  const usages = spans.map((span) => usageRequestOf(span.usage));
+  return (
+    usages.find((usage) => Object.values(usage).some((count) => count > 0)) ??
+    usages[0] ??
+    {}
+  );
 };
 
 export const spanModelOf = (span: CostedSpan): string => {
@@ -389,6 +400,7 @@ export const priceGroup = (
   const hints: UsageHint[] = [];
   const fromVersions: number[] = [];
   let changedSpans = 0;
+  let unrecordedSpans = 0;
   let unexplainedSpans = 0;
   let today = 0;
   group.spans.forEach((span) => {
@@ -404,6 +416,10 @@ export const priceGroup = (
     hints.push(...read.hints);
     if (costsMatch(billedCostOf(span), spanToday)) return;
     const origin = spanCostOrigin(span);
+    if (origin.kind === "unrecorded" || origin.kind === "client") {
+      unrecordedSpans += 1;
+      return;
+    }
     if (versionMatches(origin, resolution)) {
       unexplainedSpans += 1;
       return;
@@ -416,6 +432,7 @@ export const priceGroup = (
     billed: group.cost,
     today,
     changedSpans,
+    unrecordedSpans,
     unexplainedSpans,
     fromVersions,
     hints,

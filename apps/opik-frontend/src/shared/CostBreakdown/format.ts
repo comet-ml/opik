@@ -3,6 +3,8 @@ import { TagProps } from "@/ui/tag";
 
 export const PRICE_UNIT_SUFFIX = "/1M tok";
 
+export const formatTokens = (tokens: number) => tokens.toLocaleString("en-US");
+
 export const formatPrice = (perMillion?: string) => {
   if (!perMillion) {
     return undefined;
