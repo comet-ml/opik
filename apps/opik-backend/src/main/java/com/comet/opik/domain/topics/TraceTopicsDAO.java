@@ -135,8 +135,7 @@ public class TraceTopicsDAO {
      * created in {@code [from, to)}: {@link #COUNT_BY_TOPIC} once per UTC day, one after another, under the
      * {@code topics.read} guards. The days share {@code topics.read.budget}: each query may run for what is left of it
      * (at least a second), and a day that would start after the budget ran out fails with
-     * {@link TopicsReadErrors.BudgetExceededException} instead, so a window that does not fit trips a guard instead of
-     * running on.
+     * {@link TopicsReadErrors.BudgetExceededException} instead of running on.
      */
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to) {

@@ -103,8 +103,8 @@ class TopicsReadDAOTest {
     }
 
     @Test
-    @DisplayName("a spent budget fails the next day's query before it starts, as a guard trip")
-    void spentBudgetIsAGuardTrip() {
+    @DisplayName("a spent budget fails the next day's query before it starts, as busy")
+    void spentBudgetIsBusy() {
         var workspaceId = workspaceId();
         var projectId = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, NOON, ID_GENERATOR.generateId()));
@@ -112,7 +112,7 @@ class TopicsReadDAOTest {
         read.setBudget(io.dropwizard.util.Duration.milliseconds(1));
         try {
             assertThatThrownBy(() -> count(workspaceId, projectId))
-                    .satisfies(error -> assertThat(TopicsReadErrors.isGuardTrip(error)).isTrue());
+                    .satisfies(error -> assertThat(TopicsReadErrors.isBusy(error)).isTrue());
         } finally {
             read.setBudget(budget);
         }

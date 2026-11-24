@@ -2807,7 +2807,8 @@ topics:
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
-  #  build's: a page request, not a background job. A trip answers status too_large
+  #  build's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
+  #  trip or a spent budget answers 503 with Retry-After
   read:
     #  Default: 30000000
     #  Description: Per query; the counts run one query per UTC day of the window. At most 1000000000

@@ -28,18 +28,26 @@ public class TopicsReadErrors {
 
     static final String RETRY_AFTER_SECONDS = "5";
 
-    private static final Set<Integer> GUARD_CODES = Set.of(TOO_MANY_ROWS, TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED,
-            TOO_MANY_BYTES, TOO_MANY_ROWS_OR_BYTES);
+    private static final Set<Integer> TOO_LARGE_CODES = Set.of(TOO_MANY_ROWS, MEMORY_LIMIT_EXCEEDED, TOO_MANY_BYTES,
+            TOO_MANY_ROWS_OR_BYTES);
     private static final Set<Integer> LIMIT_CODES = Set.of(TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED);
 
     /**
-     * Any ClickHouse guard of a read API query (rows, bytes, time or memory), or its request budget running out
-     * ({@link BudgetExceededException}): the project is too large for the read,
-     * and a retry fails the same way, so the read API answers {@code status: too_large}, not an error.
+     * A size guard of a read API query: rows, bytes or memory. The project is too large for the read and a retry fails
+     * the same way, so the read API answers {@code status: too_large}, not an error.
      */
-    static boolean isGuardTrip(@NonNull Throwable error) {
-        return hasCode(error, GUARD_CODES) || Throwables.getCausalChain(error).stream()
-                .anyMatch(BudgetExceededException.class::isInstance);
+    static boolean isTooLarge(@NonNull Throwable error) {
+        return hasCode(error, TOO_LARGE_CODES);
+    }
+
+    /**
+     * A time guard of a read API query (159), its request budget running out ({@link BudgetExceededException}) or the
+     * client timeout: the per-day counts of a large project take a fraction of the budget, so this is a busy cluster,
+     * and a retry can pass. The read API answers {@link #busy}.
+     */
+    static boolean isBusy(@NonNull Throwable error) {
+        return hasCode(error, Set.of(TIMEOUT_EXCEEDED)) || Throwables.getCausalChain(error).stream()
+                .anyMatch(cause -> cause instanceof BudgetExceededException || cause instanceof TimeoutException);
     }
 
     /** The read API's {@code topics.read.budget} ran out before a day's query started: the time guard of the request. */

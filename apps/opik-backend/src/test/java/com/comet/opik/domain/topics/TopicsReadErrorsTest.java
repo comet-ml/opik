@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,10 +15,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TopicsReadErrorsTest {
 
     @ParameterizedTest
-    @ValueSource(ints = {158, 159, 241, 307, 396})
-    @DisplayName("every rows, bytes, time or memory guard is a guard trip")
-    void everyGuardIsAGuardTrip(int code) {
-        assertThat(TopicsReadErrors.isGuardTrip(clickHouse(code))).isTrue();
+    @ValueSource(ints = {158, 241, 307, 396})
+    @DisplayName("a rows, bytes or memory guard is too large and not busy")
+    void sizeGuardIsTooLarge(int code) {
+        assertThat(TopicsReadErrors.isTooLarge(clickHouse(code))).isTrue();
+        assertThat(TopicsReadErrors.isBusy(clickHouse(code))).isFalse();
+    }
+
+    @Test
+    @DisplayName("the time guard, the spent budget and the client timeout are busy and not too large")
+    void timeIsBusy() {
+        var errors = List.of(clickHouse(159),
+                new RuntimeException(new TopicsReadErrors.BudgetExceededException("spent")),
+                new IllegalStateException(new TimeoutException("late")));
+
+        assertThat(errors).allSatisfy(error -> {
+            assertThat(TopicsReadErrors.isBusy(error)).isTrue();
+            assertThat(TopicsReadErrors.isTooLarge(error)).isFalse();
+        });
     }
 
     @ParameterizedTest
@@ -50,7 +65,8 @@ class TopicsReadErrorsTest {
         var error = clickHouse(62);
 
         assertThat(TopicsReadErrors.isLimit(error)).isFalse();
-        assertThat(TopicsReadErrors.isGuardTrip(error)).isFalse();
+        assertThat(TopicsReadErrors.isTooLarge(error)).isFalse();
+        assertThat(TopicsReadErrors.isBusy(error)).isFalse();
     }
 
     private static RuntimeException clickHouse(int code) {
