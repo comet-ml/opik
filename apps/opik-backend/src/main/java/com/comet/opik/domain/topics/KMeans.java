@@ -29,6 +29,11 @@ import java.util.concurrent.CancellationException;
 @UtilityClass
 public class KMeans {
 
+    /** {@code count / perGroup} groups within {@code [min, max]}, and never more than {@code points}. */
+    public static int groupCount(int count, int perGroup, int min, int max, int points) {
+        return Math.min(Math.clamp(count / perGroup, min, max), points);
+    }
+
     /**
      * @param points        {@code n * dimensions} values
      * @param weights       per point, positive

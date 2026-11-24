@@ -443,7 +443,9 @@ class DatasetServiceImpl implements DatasetService {
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        Dataset dataset = findByName(identifier, Visibility.PRIVATE);
+        Dataset dataset = StringUtils.isNotBlank(identifier.projectName())
+                ? findInProjectOrProjectlessByName(workspaceId, identifier)
+                : findByName(identifier, Visibility.PRIVATE);
 
         template.inTransaction(WRITE, handle -> {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
@@ -457,6 +459,34 @@ class DatasetServiceImpl implements DatasetService {
                 Set.of(dataset.id()),
                 workspaceId,
                 requestContext.get().getUserName()));
+    }
+
+    /**
+     * Finds a dataset by name in the named project, falling back only to a dataset with no project, created before
+     * project scoping. Unlike {@link #findByName(DatasetIdentifier, Visibility)}, it never falls back to a same-named
+     * dataset in another project, so a delete can't remove another project's dataset. It doesn't reuse that lookup
+     * because a missing project there means a name-only search across all projects. SDKs always send a project name,
+     * hence the project-less fallback. The project lookup joins the read transaction, so both lookups share a snapshot.
+     */
+    private Dataset findInProjectOrProjectlessByName(String workspaceId, DatasetIdentifier identifier) {
+        Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return projectService.findProjectIdByName(workspaceId, identifier.projectName())
+                    .flatMap(id -> findSingleByName(dao, workspaceId, identifier.datasetName(), id,
+                            Visibility.PRIVATE))
+                    .or(() -> findProjectlessByName(dao, workspaceId, identifier.datasetName()));
+        }).orElseThrow(this::newNotFoundException);
+
+        return verifyVisibility(dataset, Visibility.PRIVATE);
+    }
+
+    /**
+     * The unique key allows one dataset with no project per name, so there is at most one match.
+     */
+    private Optional<Dataset> findProjectlessByName(DatasetDAO dao, String workspaceId, String name) {
+        return dao.findByName(workspaceId, name, null).stream()
+                .filter(dataset -> dataset.projectId() == null)
+                .findFirst();
     }
 
     private NotFoundException newNotFoundException() {

@@ -136,6 +136,7 @@ Pure logic tests without external dependencies.
 **Location**: `tests/unit/`
 
 **Examples**:
+
 - Query language parsing
 - Prompt formatting
 - Metric calculations
@@ -160,6 +161,7 @@ Tests for SDK components with mocked API responses.
 **Location**: `tests/` (root level)
 
 **Examples**:
+
 - Batch queue behavior
 - Configuration loading
 - Track decorator

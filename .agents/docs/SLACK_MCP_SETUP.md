@@ -9,10 +9,12 @@ This setup uses the **custom Slack MCP server** (`ghcr.io/korotovsky/slack-mcp-s
 ### Setup Overview
 
 **Workspace-Level Setup (One-Time, Done by Admin):**
+
 - **Step 1**: Create a Slack App
 - **Step 2**: Configure User Token Scopes
 
 **User-Level Setup (Per Developer):**
+
 - **Step 3**: Install App to Workspace
 - **Step 4**: Get Your User OAuth Token
 - **Step 5**: Environment Variables
@@ -90,17 +92,20 @@ SLACK_MCP_XOXP_TOKEN=xoxp-your-user-oauth-token-here
    - `true` or `1`: Enable for all channels and DMs
    - Channel IDs (comma-separated): Enable only for specific channels (e.g., `XXXXXXXX,YYYYYYYY`)
    - `!XXXXXXXX`: Enable for all channels except the specified one
-  - **For the code review command**: Use `true` to enable posting to `#code-review`
+
+- **For the code review command**: Use `true` to enable posting to `#code-review`
 
 3. **`envFile`**: Points to `${workspaceFolder}/.env.local` where your `SLACK_MCP_XOXP_TOKEN` is stored securely.
 
-**Important**: 
+**Important**:
+
 - Replace `xoxp-your-user-oauth-token-here` in `.env.local` with your **User OAuth Token** from Step 4 (starts with `xoxp-`, NOT `xoxb-`)
 - The token is loaded from `.env.local` via the `envFile` configuration, keeping it out of `mcp.json`
 
 **Note**: This configuration uses the custom Slack MCP server that supports User OAuth Tokens. Messages will be posted as your authenticated user account, not as a bot.
 
 **Requirements**:
+
 - Docker must be installed and running on your system
 - The Docker image `ghcr.io/korotovsky/slack-mcp-server:latest` will be pulled automatically on first use
 - `.env.local` should be added to `.gitignore` to prevent committing your token
@@ -116,7 +121,7 @@ SLACK_MCP_XOXP_TOKEN=xoxp-your-user-oauth-token-here
 
 ## Security Notes
 
-- **Never commit tokens to Git**: 
+- **Never commit tokens to Git**:
   - Add `.env.local` to `.gitignore` to prevent committing your token
   - The `mcp.json` file references the token via environment variable, but it may contain secrets, check it before committing
   - **Token storage**: The `SLACK_MCP_XOXP_TOKEN` is stored in `.env.local` (which should be in `.gitignore`), not directly in `mcp.json`
@@ -137,19 +142,24 @@ SLACK_MCP_XOXP_TOKEN=xoxp-your-user-oauth-token-here
 
 If you see errors like "Usage: docker [OPTIONS] COMMAND" in the MCP logs:
 
-1. **Verify Docker is running**: 
+1. **Verify Docker is running**:
+
    ```bash
    docker ps
    ```
+
    If this fails, start Docker Desktop or Docker daemon
 
 2. **Test the Docker command manually**:
+
    ```bash
    docker run -i --rm -e SLACK_MCP_XOXP_TOKEN=xoxp-your-token -e LOG_LEVEL=error ghcr.io/korotovsky/slack-mcp-server:latest
    ```
+
    This should start the MCP server. If it fails, check the error message.
 
 3. **Pull the Docker image**:
+
    ```bash
    docker pull ghcr.io/korotovsky/slack-mcp-server:latest
    ```
