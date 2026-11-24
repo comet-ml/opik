@@ -29,7 +29,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
  * {@link #reaches} also checks the workspace's {@link TopicsStage} from the list.
  *
- * <p>Also keeps the vectors tick's per-workspace watermark in {@code topic_vector_watermarks}.
+ * <p>Also keeps the vectors tick's per-workspace watermark and long-window pass progress in
+ * {@code topic_vector_watermarks}.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -75,6 +76,22 @@ public class TopicWorkspaceService {
     void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark) {
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark);
+            return null;
+        });
+    }
+
+    /** When the long-window pass last read each workspace completely, for those it has. */
+    Map<String, Instant> vectorsLongWindowReads(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).longWindowReads(workspaceIds));
+    }
+
+    void setVectorsLongWindowRead(@NonNull String workspaceId, @NonNull Instant readAt) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).setLongWindowRead(workspaceId, readAt);
             return null;
         });
     }

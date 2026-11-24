@@ -70,6 +70,7 @@ class RedirectResourceTest {
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
     public static final String NO_SUCH_WORKSPACE = "No such workspace: %s";
+    private static final String WORKSPACE_NAME_PATH = "/workspaces/workspace-name";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -120,14 +121,14 @@ class RedirectResourceTest {
         mockTargetWorkspace(API_KEY, NON_EXISTING_WORKSPACE_NAME, NON_EXISTING_WORKSPACE_ID);
 
         wireMock.server().stubFor(
-                get(urlPathEqualTo("/api/workspaces/workspace-name"))
+                get(urlPathEqualTo(WORKSPACE_NAME_PATH))
                         .withQueryParam("id", equalTo(WORKSPACE_ID))
                         .willReturn(aResponse()
                                 .withStatus(200)
                                 .withBody(WORKSPACE_NAME)));
 
         wireMock.server().stubFor(
-                get(urlPathEqualTo("/api/workspaces/workspace-name"))
+                get(urlPathEqualTo(WORKSPACE_NAME_PATH))
                         .withQueryParam("id", equalTo(NON_EXISTING_WORKSPACE_ID))
                         .willReturn(WireMock.badRequest().withHeader("Content-Type", "application/json")
                                 .withJsonBody(JsonUtils.readTree(
@@ -249,6 +250,27 @@ class RedirectResourceTest {
                     .isEqualTo(OPTIMIZATION_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
                             workspaceName, datasetId, optimizationIdEncoded));
         }
+    }
+
+    @Test
+    @DisplayName("Dataset redirect resolves the workspace name when the frontend host differs from the React service")
+    void datasetsRedirectWhenFrontendHostDiffersFromReactService() {
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        wireMock.server().stubFor(
+                get(urlPathEqualTo(WORKSPACE_NAME_PATH))
+                        .withQueryParam("id", equalTo(workspaceId))
+                        .willReturn(aResponse().withStatus(200).withBody(workspaceName)));
+
+        var datasetId = datasetResourceClient.createDataset(buildDataset(), apiKey, workspaceName);
+        var frontendBaseUrl = "http://localhost:1";
+
+        var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(), null,
+                redirectResourceClient.encodedBackendPath(frontendBaseUrl), 303);
+
+        assertThat(redirectURL).isEqualTo(DATASET_REDIRECT_URL.formatted(frontendBaseUrl, workspaceName, datasetId));
     }
 
     @Test

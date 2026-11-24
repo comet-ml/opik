@@ -14,8 +14,8 @@ import java.util.UUID;
 
 /**
  * One row of {@code topic_projects}: a project's current topics state, never its history. Each run and night
- * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a first
- * build when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
+ * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a discovery
+ * run when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
  * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code savedRuns} to {@code embedModel}),
  * the night {@code lastNight} and {@code notReachedNights}. For the backfill, ClickHouse stays the only source of
@@ -35,7 +35,7 @@ import java.util.UUID;
  *        merges them
  * @param backfillTracesDone about how many of them have a vector, as last discovered, plus the vectors the backfill
  *        wrote since. Never above {@code backfillTracesTotal}. Not kept up once the project is drained
- * @param savedRuns the saved runs, first build or nightly update
+ * @param savedRuns the saved runs, discovery run or nightly update
  * @param listRunId the run whose list is saved; the save is a compare-and-set on it
  * @param windowUntil the end of that run's window
  * @param labelsComplete false from the save until the labelling pass has given every trace of that window a
@@ -80,8 +80,8 @@ public record TopicProject(
     @Getter
     @RequiredArgsConstructor
     public enum RunMode implements HasValue {
-        FIRST_BUILD("first_build"),
-        NIGHTLY_UPDATE("nightly_update");
+        DISCOVERY("discovery"),
+        UPDATE("update");
 
         private final String value;
 
