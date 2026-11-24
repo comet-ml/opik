@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -32,8 +31,8 @@ class TopicVectorBackfillerTest {
         assertThat(ordered).containsExactly(smallerOlder, small, sameAsSmallOlder, largeRecent, largeOlder);
     }
 
-    private static Backfill backfill(long remaining, Instant lastDoneAt) {
-        return Backfill.builder()
+    private static TopicBackfill backfill(long remaining, Instant lastDoneAt) {
+        return TopicBackfill.builder()
                 .workspaceId(UUID.randomUUID().toString())
                 .projectId(UUID.randomUUID())
                 .backfillStartedAt(lastDoneAt)

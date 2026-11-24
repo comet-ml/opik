@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -148,7 +147,7 @@ public class TopicVectorsTickService {
      * watermark saved. A long-window pass ({@code pass}) leaves its watermark as it is. Without time left for the read,
      * it skips the workspace name lookup too.
      */
-    private Mono<Visit> visit(String workspaceId, List<Backfill> undrained, TopicVectorsFind find, boolean pass,
+    private Mono<Visit> visit(String workspaceId, List<TopicBackfill> undrained, TopicVectorsFind find, boolean pass,
             @Nullable Instant missedBefore, TickBudget budget) {
         var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
         if (!budget.hasTimeForRead(embedTimeout)) {
@@ -213,7 +212,7 @@ public class TopicVectorsTickService {
      * The backfill phase: each workspace's projects not drained yet, the ones its workspace read started included,
      * except in a workspace an embed call failed for in the fresh phase.
      */
-    private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
+    private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<TopicBackfill>> undrained,
             Instant lowerBound, TickBudget budget) {
         long started = System.nanoTime();
         return Flux.fromIterable(visits)
@@ -259,7 +258,7 @@ public class TopicVectorsTickService {
      * backfill; {@code started} the projects its read saw for the first time.
      */
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached, boolean complete,
-            @NonNull TickResult result, @NonNull List<Backfill> started, @NonNull Duration readTime,
+            @NonNull TickResult result, @NonNull List<TopicBackfill> started, @NonNull Duration readTime,
             @NonNull Duration embedTime) {
 
         static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean complete) {
