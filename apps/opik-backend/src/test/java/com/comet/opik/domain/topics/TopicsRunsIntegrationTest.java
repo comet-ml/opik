@@ -450,10 +450,10 @@ class TopicsRunsIntegrationTest {
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
-            dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
+            dao.startBackfills(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                     .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             if (drained) {
-                dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
+                dao.recordBackfills(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                         .projectId(projectId).drainedAt(now).build()));
             }
             return null;
