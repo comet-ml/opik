@@ -22,26 +22,32 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class TopicsReadErrorsTest {
 
     @ParameterizedTest
-    @ValueSource(ints = {158, 307, 396})
-    @DisplayName("a rows or bytes limit is too large and not a limit, so the order of the checks does not matter")
-    void tooLargeIsNotALimit(int code) {
+    @ValueSource(ints = {158, 159, 241, 307, 396})
+    @DisplayName("every rows, bytes, time or memory guard is a guard trip, from either client")
+    void everyGuardIsAGuardTrip(int code) {
         var v2 = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
         var v1 = new RuntimeException(new com.clickhouse.client.ClickHouseException(code, "Limit exceeded", null));
 
-        assertThat(TopicsReadErrors.isTooLarge(v2)).isTrue();
-        assertThat(TopicsReadErrors.isTooLarge(v1)).isTrue();
-        assertThat(TopicsReadErrors.isLimit(v2)).isFalse();
-        assertThat(TopicsReadErrors.isLimit(v1)).isFalse();
+        assertThat(TopicsReadErrors.isGuardTrip(v2)).isTrue();
+        assertThat(TopicsReadErrors.isGuardTrip(v1)).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {158, 307, 396})
+    @DisplayName("a rows or bytes limit is not a limit for the filter guard")
+    void rowsOrBytesIsNotALimit(int code) {
+        var error = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
+
+        assertThat(TopicsReadErrors.isLimit(error)).isFalse();
     }
 
     @ParameterizedTest
     @ValueSource(ints = {159, 241})
-    @DisplayName("a time or memory limit is a limit and not too large")
+    @DisplayName("a time or memory limit is a limit for the filter guard")
     void timeOrMemoryIsALimit(int code) {
         var error = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
 
         assertThat(TopicsReadErrors.isLimit(error)).isTrue();
-        assertThat(TopicsReadErrors.isTooLarge(error)).isFalse();
     }
 
     @Test
@@ -56,7 +62,7 @@ class TopicsReadErrorsTest {
         var error = new RuntimeException(new ServerException(62, "Syntax error", 400, "query-id"));
 
         assertThat(TopicsReadErrors.isLimit(error)).isFalse();
-        assertThat(TopicsReadErrors.isTooLarge(error)).isFalse();
+        assertThat(TopicsReadErrors.isGuardTrip(error)).isFalse();
     }
 
     static Stream<Arguments> guardTrips() {
