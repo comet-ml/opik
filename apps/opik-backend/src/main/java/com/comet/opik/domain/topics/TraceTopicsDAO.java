@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsConfig.ReadGuards;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
@@ -20,11 +21,13 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -55,43 +58,6 @@ public class TraceTopicsDAO {
     private static final String LOGS_VISIBILITY_MODE = VisibilityMode.DEFAULT.getValue();
 
     /**
-     * The read API's counting rule: the project's traces created in the window that Logs lists, each by its latest
-     * row. Any version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival
-     * rows. The FROM to HAVING part of a select of one row per trace.
-     */
-    private static final String LATEST_ROW_PER_TRACE_IN_WINDOW = """
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                AND trace_id IN (
-                    SELECT id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                    AND source IN :logs_sources
-                    AND visibility_mode = :logs_visibility_mode
-                )
-                GROUP BY trace_id
-                HAVING argMax(is_deleted, (last_updated_at, source = 'run')) = 0
-            """;
-
-    /** Traces per topic and UTC day, by {@link #LATEST_ROW_PER_TRACE_IN_WINDOW}. */
-    private static final String COUNT_BY_TOPIC_AND_DAY = """
-            SELECT latest_topic AS topic_id, toDate(created_at, 'UTC') AS day, count() AS traces
-            FROM (
-                SELECT argMax(topic_id, (last_updated_at, source = 'run')) AS latest_topic, any(trace_created_at) AS created_at
-            %s)
-            GROUP BY topic_id, day
-            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>,
-                max_memory_usage = <max_memory_usage>, max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
-            """
-            .formatted(LATEST_ROW_PER_TRACE_IN_WINDOW);
-
-    /**
      * Traces per topic among the project's traces created in the window that Logs lists, each by its latest topic row.
      * A trace counts when any of its {@code traces} rows matches the Logs filters, as the traces list counts it (its
      * filters apply before dedup), so a topic's count is what the list shows for it. Routing reads the latest row
@@ -99,7 +65,8 @@ public class TraceTopicsDAO {
      *
      * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join, so the query streams by
      * trace id instead of holding a state per trace. Its memory still grows with the traces it covers, so
-     * {@link #countByTopic} runs it once per {@code topics.build.read.countSlice} of the window.
+     * {@link #countByTopic} runs it once per {@code topics.build.read.countSlice} of the window, and
+     * {@link #countByTopicAndDay} once per UTC day.
      */
     private static final String COUNT_BY_TOPIC = """
             SELECT t.topic_id AS topic_id, count() AS traces
@@ -163,31 +130,28 @@ public class TraceTopicsDAO {
 
     /**
      * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
-     * created in {@code [from, to)}.
+     * created in {@code [from, to)}: {@link #COUNT_BY_TOPIC} once per UTC day, one after another, under the
+     * {@code topics.read} guards. The days share {@code topics.read.budget}: each query may run for what is left of it
+     * (at least a second), so a window that does not fit trips the time guard instead of running on.
      */
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
+            @NonNull Instant from, @NonNull Instant to) {
         var read = config.getRead();
-        var template = getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY, "topics:count_by_topic_and_day", workspaceId, null,
-                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
-                .add("max_rows_to_read", read.getMaxRowsToRead())
-                .add("max_memory_usage", read.getMaxMemoryUsage())
-                .add("max_threads", read.getMaxThreads())
-                .add("max_execution_time", maxExecutionSeconds);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("project_id", projectId.toString())
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
-                        .bind("logs_sources", Source.loggingSourceDbValues())
-                        .bind("logs_visibility_mode", LOGS_VISIBILITY_MODE)
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> TopicDayCount.builder()
-                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
-                        .day(row.get("day", LocalDate.class))
-                        .traces(((Number) row.get("traces", Object.class)).longValue())
-                        .build()));
+        return Flux.defer(() -> {
+            long deadline = System.nanoTime() + read.getBudget().toNanoseconds();
+            return slices(from, to, TraceTopicsDAO::nextUtcDay)
+                    .concatMap(dayFrom -> {
+                        var day = LocalDate.ofInstant(dayFrom, ZoneOffset.UTC);
+                        long seconds = Math.max(1, Math.ceilDiv(deadline - System.nanoTime(), 1_000_000_000L));
+                        return countSlice(workspaceId, projectId, dayFrom, ObjectUtils.min(nextUtcDay(dayFrom), to),
+                                read, seconds)
+                                .map(count -> TopicDayCount.builder()
+                                        .topicId(count.topicId())
+                                        .day(day)
+                                        .traces(count.traces())
+                                        .build());
+                    });
+        });
     }
 
     /**
@@ -197,26 +161,35 @@ public class TraceTopicsDAO {
      */
     public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
-        var slice = config.getBuild().getRead().getCountSlice().toJavaDuration();
-        return Flux.<Instant, Instant>generate(() -> from, (sliceFrom, sink) -> {
-            if (!sliceFrom.isBefore(to)) {
-                sink.complete();
-                return sliceFrom;
-            }
-            sink.next(sliceFrom);
-            return sliceFrom.plus(slice);
-        })
+        var read = config.getBuild().getRead();
+        var slice = read.getCountSlice().toJavaDuration();
+        return slices(from, to, sliceFrom -> sliceFrom.plus(slice))
                 .concatMap(sliceFrom -> countSlice(workspaceId, projectId, sliceFrom,
-                        ObjectUtils.min(sliceFrom.plus(slice), to), maxExecutionSeconds))
+                        ObjectUtils.min(sliceFrom.plus(slice), to), read, maxExecutionSeconds))
                 .collect(LinkedHashMap<UUID, Long>::new,
                         (traces, count) -> traces.merge(count.topicId(), count.traces(), Long::sum))
                 .flatMapIterable(Map::entrySet)
                 .map(entry -> TopicCount.builder().topicId(entry.getKey()).traces(entry.getValue()).build());
     }
 
+    /** The starts of the slices of {@code [from, to)}, each slice ending where {@code next} puts the next one. */
+    private static Flux<Instant> slices(Instant from, Instant to, UnaryOperator<Instant> next) {
+        return Flux.generate(() -> from, (sliceFrom, sink) -> {
+            if (!sliceFrom.isBefore(to)) {
+                sink.complete();
+                return sliceFrom;
+            }
+            sink.next(sliceFrom);
+            return next.apply(sliceFrom);
+        });
+    }
+
+    private static Instant nextUtcDay(Instant instant) {
+        return LocalDate.ofInstant(instant, ZoneOffset.UTC).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
     private Flux<TopicCount> countSlice(String workspaceId, UUID projectId, Instant from, Instant to,
-            long maxExecutionSeconds) {
-        var read = config.getBuild().getRead();
+            ReadGuards read, long maxExecutionSeconds) {
         var template = getSTWithLogComment(COUNT_BY_TOPIC, "topics:count_by_topic", workspaceId, null,
                 "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
                 .add("max_rows_to_read", read.getMaxRowsToRead())
@@ -251,10 +224,6 @@ public class TraceTopicsDAO {
     /** The trace-delete cascade; workspace from the reactive context. */
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
-    }
-
-    private static long toEpochMicros(Instant instant) {
-        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
     }
 
     @Builder(toBuilder = true)
