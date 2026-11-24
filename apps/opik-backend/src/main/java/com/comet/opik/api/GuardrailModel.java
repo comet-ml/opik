@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -20,19 +21,18 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@Schema(accessMode = Schema.AccessMode.READ_ONLY)
 public record GuardrailModel(
-        UUID id,
-        @Schema(description = "Unique in the workspace, ignoring case; never changes") String name,
-        @Schema(description = "What the model flags: the question its adapter is trained and served on") String description,
+        @NotNull UUID id,
+        @Schema(description = "Unique in the workspace, ignoring case; never changes") @NotNull String name,
+        @Schema(description = "What the model flags: the question its adapter is trained and served on") @NotNull String description,
         @JsonIgnore UUID servingRunId,
         @JsonIgnore UUID latestRunId,
         @Schema(description = "The run checks with the model are served by, its latest completed one; null until one completes, and a model without one cannot be used in a rule") @Nullable GuardrailTrainingRun servingRun,
         @Schema(description = "The model's latest run, whose status is the model's") @Nullable GuardrailTrainingRun latestRun,
-        Instant createdAt,
-        String createdBy,
-        Instant lastUpdatedAt,
-        String lastUpdatedBy) {
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant createdAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String createdBy,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant lastUpdatedAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String lastUpdatedBy) {
 
     public static final int NAME_MAX_LENGTH = 255;
     public static final int DESCRIPTION_MAX_LENGTH = 1000;
