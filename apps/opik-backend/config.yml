@@ -3028,8 +3028,10 @@ topics:
   #  sets the UI toggle topics_enabled for the caller's workspace
   enabled: ${TOPICS_ENABLED:-false}
   #  Default: empty (no workspace)
-  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
-  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  #  Description: Comma-separated workspace ids topics run for, each as id or id:stage. Stages, in order: vectors,
+  #  build, arrival, nightly, ui; a workspace at a stage runs that stage and every earlier one, and an id without a
+  #  stage runs every stage. An unknown stage or an id listed twice stops the backend at startup. A listed workspace
+  #  runs only while it is also enabled in the ai_label_workspaces table. Set in Helm, so a change needs a deploy
   enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
   arrival:
     #  Default: true
