@@ -14,6 +14,8 @@ export const PRICE_LABELS: Record<PriceField, string> = {
   cache_write_price: "Cache write",
 };
 
+export type HasBuiltIn = (row: ModelPriceRow) => boolean;
+
 export const describeProvider = (provider?: string | null) =>
   provider?.trim() ? provider.trim() : "any provider";
 
@@ -44,9 +46,12 @@ export const describeRowPrice = (row: ModelPriceRow) =>
 export const describeChanges = (
   before: ModelPriceRow,
   after: ModelPriceRow,
+  hasBuiltIn: HasBuiltIn,
 ): string[] => {
   const from = toEditableRow(before);
   const to = toEditableRow(after);
+  const unsetFrom = hasBuiltIn(from) ? "built-in" : "not set";
+  const unsetTo = hasBuiltIn(to) ? "built-in" : "not set";
   const lines: string[] = [];
   if (from.model !== to.model) {
     lines.push(`model ${from.model} → ${to.model}`);
@@ -75,8 +80,8 @@ export const describeChanges = (
       if (from[field] !== to[field]) {
         lines.push(
           `${PRICE_LABELS[field].toLowerCase()} ${
-            from[field] ?? "built-in"
-          } → ${to[field] ?? "built-in"}`,
+            from[field] ?? unsetFrom
+          } → ${to[field] ?? unsetTo}`,
         );
       }
     });
@@ -87,7 +92,10 @@ export const describeChanges = (
   return lines;
 };
 
-export const describeHistoryEntry = (entry: ModelPriceHistoryEntry) => {
+export const describeHistoryEntry = (
+  entry: ModelPriceHistoryEntry,
+  hasBuiltIn: HasBuiltIn,
+) => {
   if (entry.action === "created" && entry.after) {
     return `added ${rowLabel(entry.after)}: ${describeRowPrice(entry.after)}`;
   }
@@ -95,7 +103,7 @@ export const describeHistoryEntry = (entry: ModelPriceHistoryEntry) => {
     return `removed ${rowLabel(entry.before)}`;
   }
   if (entry.before && entry.after) {
-    const changes = describeChanges(entry.before, entry.after);
+    const changes = describeChanges(entry.before, entry.after, hasBuiltIn);
     return `${rowLabel(entry.after)}: ${
       changes.length ? changes.join(", ") : "no visible change"
     }`;
@@ -112,6 +120,7 @@ export interface HistoryVersion {
 
 export const groupHistory = (
   entries: ModelPriceHistoryEntry[],
+  hasBuiltIn: HasBuiltIn,
 ): HistoryVersion[] => {
   const versions: HistoryVersion[] = [];
   entries.forEach((entry) => {
@@ -125,17 +134,20 @@ export const groupHistory = (
       };
       versions.push(current);
     }
-    current.lines.push(describeHistoryEntry(entry));
+    current.lines.push(describeHistoryEntry(entry, hasBuiltIn));
   });
   return versions;
 };
 
-export const describeReplaceResult = (result: ModelPriceReplaceResult) => ({
+export const describeReplaceResult = (
+  result: ModelPriceReplaceResult,
+  hasBuiltIn: HasBuiltIn,
+) => ({
   created: result.created.map(
     (row) => `${rowLabel(row)}: ${describeRowPrice(row)}`,
   ),
   updated: result.updated.map((change) => {
-    const changes = describeChanges(change.before, change.after);
+    const changes = describeChanges(change.before, change.after, hasBuiltIn);
     return `${rowLabel(change.after)}: ${
       changes.length ? changes.join(", ") : "no visible change"
     }`;
