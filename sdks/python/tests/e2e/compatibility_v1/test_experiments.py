@@ -100,6 +100,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "expected_model_output": {"output": "Kyiv"},
                 "id": ANY_BUT_NONE,
@@ -119,6 +120,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "expected_model_output": {"output": "Warsaw"},
                 "id": ANY_BUT_NONE,
@@ -138,6 +140,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "expected_model_output": {"output": "Berlin"},
                 "id": ANY_BUT_NONE,
@@ -229,6 +232,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "expected_model_output": {"output": "Warsaw"},
                 "id": ANY_BUT_NONE,

@@ -59,13 +59,11 @@ class TopicWindowReader {
     Mono<Window> read(@NonNull TopicRun run, long windowTraces) {
         int limit = config.getBuild().getMaxVectors();
         var readTimeout = readTimeout(config.getBuild());
-        return Mono.defer(() -> {
-            var builder = new Builder((int) Math.max(1, Math.min(windowTraces, limit)));
-            return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
-                    readTimeout.toSeconds())
-                    .doOnNext(builder::add)
-                    .then(Mono.fromCallable(() -> builder.build(windowTraces)));
-        })
+        int capacity = (int) Math.max(1, Math.min(windowTraces, limit));
+        return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
+                readTimeout.toSeconds())
+                .collect(() -> new Builder(capacity), Builder::add)
+                .map(builder -> builder.build(windowTraces))
                 .timeout(readTimeout)
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.WINDOW_READ, "the window read failed", error));

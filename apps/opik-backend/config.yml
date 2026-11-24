@@ -2849,6 +2849,14 @@ topics:
     #  Default: 500ms
     #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
     insertBackoff: ${TOPICS_BUILD_INSERT_BACKOFF:-500ms}
+    #  Default: 2
+    #  Description: Threads of the build's CPU steps (k-means, assign), shared by the pod's runs. At most 16
+    cpuThreads: ${TOPICS_BUILD_CPU_THREADS:-2}
+    #  Default: 8
+    #  Description: CPU steps that wait for a thread, at least this many in all: each thread queues its share, rounded
+    #  up. A step past that is rejected and fails its run with internal.
+    #  At most 1000
+    cpuQueue: ${TOPICS_BUILD_CPU_QUEUE:-8}
     #  The ClickHouse guards of the build's reads (window count, window read, unlabelled read, topic counts), apart
     #  from the vectors tick's: the build reads a whole window, the window read about three times
     read:
