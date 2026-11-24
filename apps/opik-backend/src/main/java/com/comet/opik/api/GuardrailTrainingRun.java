@@ -29,7 +29,7 @@ public record GuardrailTrainingRun(
         @JsonIgnore String workspaceId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull GuardrailTrainingRunStatus status,
         @Schema(description = "Why the run ended failed or cancelled; null otherwise", accessMode = Schema.AccessMode.READ_ONLY) @Nullable String statusMessage,
-        @Schema(description = "Which attempt of one training the run is, 1 for the first", accessMode = Schema.AccessMode.READ_ONLY) int attempt,
+        @Schema(description = "Which attempt of one training the run is, 1 for the first", accessMode = Schema.AccessMode.READ_ONLY) @NotNull int attempt,
         @JsonIgnore JsonNode metadata,
         @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight", accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant finishedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant createdAt,
