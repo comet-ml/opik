@@ -952,6 +952,8 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    topics_day_counts: PT5M
+    topics_vector_counts: PT1M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1139,6 +1141,9 @@ topics:
     abandonGrace: 60s
     republishAfter: 10m
     planBudget: 2m
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1166,6 +1171,13 @@ topics:
     enabled: true
     schedule: "0 0 2 * * ?"
     budget: 2h
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
