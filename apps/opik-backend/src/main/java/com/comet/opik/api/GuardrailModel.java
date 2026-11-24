@@ -22,13 +22,13 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailModel(
-        @NotNull UUID id,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID id,
         @Schema(description = "Unique in the workspace, ignoring case; never changes") @NotNull String name,
         @Schema(description = "What the model flags: the question its adapter is trained and served on") @NotNull String description,
         @JsonIgnore UUID servingRunId,
         @JsonIgnore UUID latestRunId,
-        @Schema(description = "The run checks with the model are served by, its latest completed one; null until one completes, and a model without one cannot be used in a rule") @Nullable GuardrailTrainingRun servingRun,
-        @Schema(description = "The model's latest run, whose status is the model's") @Nullable GuardrailTrainingRun latestRun,
+        @Schema(description = "The run checks with the model are served by, its latest completed one; null until one completes, and a model without one cannot be used in a rule", accessMode = Schema.AccessMode.READ_ONLY) @Nullable GuardrailTrainingRun servingRun,
+        @Schema(description = "The model's latest run, whose status is the model's", accessMode = Schema.AccessMode.READ_ONLY) @Nullable GuardrailTrainingRun latestRun,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant lastUpdatedAt,
