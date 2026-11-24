@@ -81,7 +81,7 @@ recorded as such, with the reason, because silently changing a number to look di
 | knob | traces | spans | derived from |
 |---|---|---|---|
 | `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. A resume credits what the destination already holds. See ["Blocker 1"](#blocker-1--disk-headroom). |
-| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.420** | Destination bytes per source byte under the `000116` codec set, measured at the completion of a full prod-test copy (OPIK-8380). It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. Take the figure **at completion**: `backfill.sh` logs the measured ratio after every window, and a mid-run reading drifts substantially in either direction as the copy advances, so it shows the trend, not the answer. |
+| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.420** | Destination bytes per source byte under the `000116` codec set, measured at the completion of a full prod-test copy (OPIK-8380). It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. Take the figure **at completion, once merges settle**: `backfill.sh` logs the measured ratio after every week and at the end, but a mid-run reading drifts substantially in either direction as the copy advances, so it shows the trend, not the answer, and the end-of-run reading precedes the destination's merges. Re-run `estimate.sh` once they have settled; it prints the measured ratio whenever `spans_local_v2` holds data. |
 | `backfill.sh --max-partitions-per-insert-block` (and the delta's / sweep's) | 2,000 | **20,000** | A block cannot span more partitions than the table has, so the destination's TOTAL distinct partition count is a hard upper bound on a block's spread. Same sizing rule as traces, different input. 20,000 is above the SCHEMA's own ceiling — `UUIDv7ToDateTime` is honest from the epoch to 2299, ~17,000 weekly partitions — so it cannot be too low for any estate. It is a limit check rather than an allocation, so a generous value costs nothing; confirm against `estimate.sh` audit 1 and move on. |
 | `backfill.sh --min-insert-block-size-bytes` | — (stock 256 MiB, implicit) | **256 MiB, carried explicitly** | Same value as traces, made explicit because on spans it is the ONE dial over peak insert memory and it trades against part count. Measured on spans-shaped rows: 256 MiB → ~1.1 GiB peak and the fewest parts; 32 MiB → ~315 MiB peak and ~5× the parts. Lower it only if the data nodes are memory-constrained. See ["Partition spread"](#partition-spread-and-the-one-setting-that-matters). |
 | `backfill.sh --max-insert-block-size` | 1,048,576 (stock) | **1,048,576 (unchanged, and re-derived)** | Re-derived rather than inherited, and it lands on the stock value: at spans' uncompressed row width the BYTE bound above fires long before this row count, so lowering it would be cosmetic on the backfill. It is carried explicitly only so the delta's and the sweep's lower value reads as a deliberate difference rather than drift. |
@@ -110,7 +110,8 @@ verdict and the arithmetic behind it.
 
 The traces gate was deliberately conservative: it sized from the **source**, because a driver cannot know what the
 destination will compress to. For spans the destination is substantially smaller — migration `000116`'s codec set was
-measured during OPIK-7400 at well under half the source's bytes per row. But "it should fit" is not a headroom plan for
+measured during OPIK-7400 at well under half the source's bytes per row, and at 0.420 at the completion of a full
+prod-test copy (OPIK-8380). But "it should fit" is not a headroom plan for
 a multi-day copy that also has to absorb merges.
 
 **The answer this runbook commits to: re-derive the factor from an explicit destination projection, and prove the
@@ -140,13 +141,15 @@ only guard left once the copy is running.
 **A resume is sized from the remaining work.** Free space falls as the copy writes, so a gate pinned to the full
 projection refuses a resume more firmly the further the copy has got. Whenever `spans_local_v2` already holds data
 (whatever `--from-week` says), `backfill.sh` instead requires the remaining work plus the same
-`(--min-free-factor − 1) ×` projection margin a fresh start reserves. The remaining work is the larger of the projection
-minus what the destination holds on disk, and the uncopied rows costed at the higher of the projected and the measured
-destination bytes per row — so a ratio the copy has already outgrown cannot size it at zero. The margin is deliberately not
+`(--min-free-factor − 1) ×` projection margin a fresh start reserves. The remaining work is the projection minus what
+the destination holds on disk, floored at zero. It is sized in bytes, not rows: the source keeps versions and updates the
+destination collapses, so their physical row counts never converge and a row-based estimate would refuse a finished
+copy. A destination already past the projection means the ratio is optimistic for this estate; the gate then requires
+only the margin, and `backfill.sh` warns to raise `--dest-compression-ratio` toward the measured ratio. The margin is deliberately not
 scaled down with progress: merge scratch grows with the destination rather than shrinking as the copy nears its end, and
 the same figure is the per-week floor, so a resumed run keeps the protection a fresh one has. On an empty destination the
 requirement is exactly `--min-free-factor ×` the projection, as before. A resume abort therefore means the remaining work
-genuinely does not fit, and the levers are the same as for a fresh start.
+does not fit at the projected ratio, and the levers are the same as for a fresh start.
 
 **On tiered storage the whole-node figure is necessary and not sufficient.** New parts land on the hot volume before
 they tier, so validate per-volume headroom out of band; `backfill.sh` refuses a tiered or mismatched `storage_policy`
@@ -2999,9 +3002,10 @@ floor.
   crediting what `spans_local_v2` holds, that a forced abort gives the resume form of the message, and that
   `--from-week` over an empty destination still sizes as a fresh start. Resumed with `--dest-compression-ratio 0.01`,
   the projection falls below what the destination holds: confirm it logs the WARNING that the destination already holds
-  the whole projection and sizes the remaining work from the uncopied rows. Confirm the measured ratio is logged
-  after every window, and that the run stopped by `--to-week` labels its final reading a mid-run sample while the run
-  reaching the last week labels it the completion figure;
+  the whole projection and that the gate requires only the margin. Confirm the measured ratio is logged after every
+  week, that the run stopped by `--to-week` labels its final reading a mid-run sample while the run reaching the last
+  week labels it the completion figure, and that `estimate.sh` then notes the destination holds data and prints the
+  measured ratio. Confirm `--from-week` past `--to-week` is refused;
 - **`reconcile.sh`'s reverse usage-range precheck.** Plant a `usage` value above `2^31` in the parked successor and
   confirm the reverse direction REFUSES rather than importing it wrapped, and that `--report-only` reports it rather
   than staying silent.

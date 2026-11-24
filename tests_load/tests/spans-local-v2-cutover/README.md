@@ -160,7 +160,8 @@ python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 2 --durat
 # 4. Backfill, in two runs so every rehearsal takes the resume path. A small --max-rows-per-insert exercises the
 #    adaptive sub-window splitting on modest data. Record the backfill_start the first run prints; the second reuses it
 #    from the state file. The first run ends with a ratio line labelled a mid-run sample. The second logs
-#    "Capacity (resume)", crediting what spans_local_v2 already holds, and ends with the ratio "at completion".
+#    "Capacity (resume)", crediting what spans_local_v2 already holds, and ends with the ratio "at completion". The
+#    split needs at least four seeded weeks (step 1's --weeks), or the second run has nothing left to copy.
 $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1 \
     --max-partitions-per-insert-block 20000 --to-week 2
 $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1 \
