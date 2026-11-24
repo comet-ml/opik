@@ -21,7 +21,7 @@ class Prompt(UniversalBaseModel):
 
     project_name: typing.Optional[str] = pydantic.Field(default=None)
     """
-    For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.
+    For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created in the Default Project.
     """
 
     description: typing.Optional[str] = None

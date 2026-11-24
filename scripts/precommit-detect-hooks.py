@@ -12,14 +12,14 @@ Each emitted leg is one hook, so CI runs one job per linter that actually has
 work — independent reporting, retry, and visibility, with no skip-spam jobs for
 the linters that match nothing.
 
-Hook ids are not unique in this config (trailing-whitespace, ruff, mypy, etc.
-recur once per scope), so a leg is targeted by `pre-commit run <id> --files
+Hook ids are not unique in this config (mypy recurs once per project, since
+each needs its own config), so a leg is targeted by `pre-commit run <id> --files
 <its matched files>` rather than by id alone — id + files isolates exactly one
 hook (siblings sharing the id report "no files to check"). `files` therefore
 carries that hook's matched paths.
 
 `toolchain` tells the matrix job which heavy runtime to provision (java/node-fe/
-node-ts) or none (python hooks self-provision in pre-commit's isolated envs).
+node-ts/node-genui) or none (python hooks self-provision in pre-commit's isolated envs).
 
 Usage:
     git diff --name-only BASE..HEAD | precommit-detect-hooks.py <config>
@@ -54,6 +54,8 @@ TOOLCHAIN_BY_ID = {
     "no-private-fe-plugins": "none",  # plain bash, but gated to FE paths
     "ts-sdk-eslint": "node-ts",
     "ts-sdk-typecheck": "node-ts",
+    "genui-lint": "node-genui",
+    "genui-typecheck": "node-genui",
 }
 
 # Some hooks carry a `types:` filter (often defined upstream in the hook repo's

@@ -36,7 +36,7 @@ In addition, you will need to set the following environment variables to configu
     <Tab value="Opik Cloud" title="Opik Cloud">
         If you are using Opik Cloud, you will need to set the following
         environment variables:
-            
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'

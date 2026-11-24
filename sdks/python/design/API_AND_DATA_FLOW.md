@@ -46,6 +46,7 @@ client = opik.Opik(
 #### Configuration Priority
 
 Configuration is resolved in this order (highest to lowest):
+
 1. **Direct parameters** to `Opik()` constructor
 2. **Environment variables** (`OPIK_PROJECT_NAME`, `OPIK_WORKSPACE`, etc.)
 3. **Configuration file** (`~/.opik.config`)
@@ -263,6 +264,7 @@ The SDK is organized into 3 layers:
 ```
 
 **Key Points**:
+
 - **Layer 1 (Public API)**: What users interact with directly (`opik.Opik`, `@opik.track`)
 - **Layer 2 (Message Processing)**: Background workers - **only for observability operations** (trace/span/feedback)
 - **API Object Clients**: Intermediate layer for resource management - handle state and complex logic
@@ -282,12 +284,14 @@ The SDK is organized into 3 layers:
 **API Object Clients** (`opik/api_objects/`):
 
 For complex resource types, intermediate client classes provide:
+
 - **State management**: Dataset items, experiment state, prompt versions
 - **Business logic**: Item insertion, versioning, validation
 - **Convenience methods**: `dataset.insert()`, `experiment.get_items()`, `prompt.format()`
 - **REST abstraction**: Wrap multiple REST calls into higher-level operations
 
 **Examples**:
+
 - `Dataset` (`dataset/dataset.py`) - Manages dataset items, handles insertion/deletion
 - `Experiment` (`experiment/experiment.py`) - Tracks experiment items, links to dataset
 - `Prompt` (`prompt/prompt.py`) - Manages prompt versions and templating
@@ -316,6 +320,7 @@ The Opik client provides two types of operations with different execution paths:
 **Flow**: API → **Message** → **Streamer** → **Queue** → **Consumer** → REST Client → Backend
 
 **Characteristics**:
+
 - ⚡ Non-blocking (returns immediately)
 - 📦 Supports batching (Create messages batch together)
 - 🔁 Automatic retries
@@ -335,6 +340,7 @@ The Opik client provides two types of operations with different execution paths:
 | **Delete** | `delete_traces()`, `delete_*_feedback_score()` | Direct REST |
 
 **Flow (with API Object Client)**:
+
 ```
 client.create_dataset(name) → Dataset.__init__() → REST Client → Backend
                               ↓
@@ -342,11 +348,13 @@ client.create_dataset(name) → Dataset.__init__() → REST Client → Backend
 ```
 
 **Flow (direct REST)**:
+
 ```
 client.search_traces() → REST Client → Backend → Returns List[TracePublic]
 ```
 
 **Characteristics**:
+
 - 🔒 Blocking (waits for response)
 - ✅ Returns data immediately
 - 🚫 No batching
@@ -355,12 +363,14 @@ client.search_traces() → REST Client → Backend → Returns List[TracePublic]
 #### Why Different Paths?
 
 **Async path** (observability):
+
 - High frequency (100s-1000s per second)
 - Performance-critical (shouldn't slow down user code)
 - Can be batched (many traces/spans combined)
 - Fire-and-forget (no immediate result needed)
 
 **Sync path** (resources):
+
 - Low frequency (setup/teardown operations)
 - Returns objects needed for further operations
 - Can't be batched (unique operations)
@@ -393,6 +403,7 @@ class OpikContextStorage:
 ```
 
 **Why contextvars?**
+
 - Automatic isolation across threads
 - Works with async/await
 - No manual cleanup needed
@@ -627,6 +638,7 @@ def put(self, message: BaseMessage) -> None:
 ```
 
 **Decision Tree**:
+
 ```
 Message arrives
     │
@@ -640,6 +652,7 @@ Message arrives
 If batching is enabled, certain message types accumulate before sending.
 
 **Messages that support batching** (current implementation):
+
 - `CreateSpanMessage` → batched into `CreateSpansBatchMessage`
 - `CreateTraceMessage` → batched into `CreateTraceBatchMessage`
 - `AddTraceFeedbackScoresBatchMessage` → already a batch message
@@ -647,6 +660,7 @@ If batching is enabled, certain message types accumulate before sending.
 - `CreateExperimentItemsBatchMessage` → already a batch message
 
 **Messages that don't support batching** (sent individually):
+
 - `UpdateSpanMessage` - Updates sent immediately
 - `UpdateTraceMessage` - Updates sent immediately
 - Other message types
@@ -678,6 +692,7 @@ class BatchManager:
 ```
 
 **Flush Triggers**:
+
 1. **Time-based**: Periodic timer (e.g., every 1 second)
 2. **Size-based**: Batch reaches size limit (e.g., 100 messages)
 3. **Memory-based**: Batch reaches memory limit (e.g., 50MB)
@@ -751,6 +766,7 @@ def create_trace(self, request: TraceWrite) -> TracePublic:
 #### Step 8: Backend Storage
 
 Backend receives request and stores in database:
+
 - MySQL: Metadata, relationships
 - ClickHouse: Time-series data, spans
 
@@ -915,6 +931,7 @@ T15   │ Pop trace, send message │ []             │ []
 ```
 
 **Resulting Tree**:
+
 ```
 Trace-A
   └─ Span-1 (outer)
@@ -1128,6 +1145,7 @@ Trace/Span Lifecycle:
 ```
 
 **Performance Impact**:
+
 - For 1000 concurrent traces: 50% reduction in attachment processing
 - Avoids duplicate extraction (create + update)
 - Only processes messages with final data
@@ -1259,6 +1277,7 @@ trace_input = {
 ```
 
 **Supported Formats**:
+
 - Images: PNG, JPEG, GIF, WebP, SVG
 - Documents: PDF, JSON
 - Pattern: `data:<mime-type>;base64,<base64-data>`
@@ -1429,6 +1448,7 @@ def process(self, message: BaseMessage) -> None:
 ### Why Batching?
 
 Batching reduces overhead by:
+
 1. **Fewer HTTP requests**: 100 spans → 1 request
 2. **Lower latency**: Amortized network cost
 3. **Better throughput**: More efficient use of connections
@@ -1654,6 +1674,7 @@ def _process_create_spans_batch_message(
 ```
 
 **Benefits**:
+
 - 100 individual spans → 1 API call
 - Reduced network overhead
 - Better backend performance
@@ -1946,6 +1967,7 @@ The Opik Python SDK provides:
 5. **Observable**: Comprehensive logging and monitoring
 
 For more information, see:
+
 - [Integrations](INTEGRATIONS.md) - LLM framework integrations
 - [Evaluation](EVALUATION.md) - Evaluation framework
 - [Testing](TESTING.md) - Testing guide

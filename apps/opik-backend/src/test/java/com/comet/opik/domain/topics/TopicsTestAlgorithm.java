@@ -39,6 +39,15 @@ final class TopicsTestAlgorithm {
         config.setAuthorMaxExamples(10);
         config.setAssignMinCosine(0.75);
         config.setOtherGate(0.95);
+        config.setNightlyMinCandidate(20);
+        config.setNightlyMinGroups(2);
+        config.setNightlyMaxGroups(20);
+        config.setNightlyTextsPerGroup(40);
+        config.setNightlyFrequent(3);
+        config.setNightlyExamples(5);
+        config.setRecentDays(7);
+        config.setRetireShare(0.005);
+        config.setRetireNights(3);
         return config;
     }
 

@@ -1,6 +1,7 @@
 # ClickHouse Patterns
 
 ## Schema First
+
 - **Never invent schema** - check migrations: `src/main/resources/liquibase/db-app-analytics/migrations/`
 - Find similar queries before writing new ones
 
@@ -67,6 +68,7 @@ Add a migration comment explaining why the indexed field is safe.
 ### Skip indexes + FINAL
 
 Skip indexes are **ignored** with `FINAL` by default (up to CH 25.3). Enable with:
+
 ```sql
 SETTINGS use_skip_indexes_if_final=1
 ```
@@ -146,6 +148,7 @@ row silently bumps `system.errors` codes 26 / 27 / 43 / 70 and writes to pod std
 flooding logs.
 
 Bind the right shape:
+
 - `DateTime64(P)` → `String` formatted via `ClickHouseDateTimeFormat.formatNanos/formatMicros`
   (not `Instant.toString()` — its `T`/`Z` form trips the fast-path).
 - `Map(K,V)` → bind a Java `Map`.
@@ -157,6 +160,7 @@ Bind the right shape:
 ## Numeric Gotchas
 
 ### Handle NaN/Infinity
+
 ```sql
 toDecimal64(
     greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999),
@@ -165,6 +169,7 @@ toDecimal64(
 ```
 
 ### Correct Decimal Precision
+
 - Feedback scores: `Decimal64(9)`
 - Cost fields: `Decimal(38, 12)` → use `toDecimal128(..., 12)`
 
@@ -176,6 +181,7 @@ Large `SELECT ... BY project` queries (traces/spans) use a two-phase shape: a li
 are deferred (dropped via `EXCEPT`) unless needed.
 
 Invariants to preserve when editing these queries:
+
 - **The pagination pre-filter (`page_ids`) must carry the sort key.** Render `<sort_fields>`
   into `page_ids`' `ORDER BY` (and the final `ORDER BY`), or pagination returns the wrong page
   for custom sorting. `page_wide` is id-bounded + `LIMIT 1 BY id`, so its own order is
@@ -199,7 +205,9 @@ spans and traces. See `testing.md` → "Sorting / Pagination / Field-Exclusion S
 - Use `LEFT ANY JOIN` when the right table has at most one match per key
 
 ## Query Logging
+
 Always add log comment:
+
 ```sql
 SETTINGS log_comment = '<log_comment>'
 ```

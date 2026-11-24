@@ -148,12 +148,12 @@ jobs:
           cache: maven
 
       - name: Set up Node.js
-        if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
+        if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts' || matrix.leg.toolchain == 'node-genui'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "26"
           cache: npm
-          cache-dependency-path: ${{ matrix.leg.toolchain == 'node-fe' && 'apps/opik-frontend/package-lock.json' || 'sdks/typescript/package-lock.json' }}
+          cache-dependency-path: ${{ matrix.leg.toolchain == 'node-fe' && 'apps/opik-frontend/package-lock.json' || matrix.leg.toolchain == 'node-genui' && 'sdks/genui/package-lock.json' || 'sdks/typescript/package-lock.json' }}
 
       - name: Install frontend deps
         if: matrix.leg.toolchain == 'node-fe'
@@ -164,6 +164,11 @@ jobs:
         if: matrix.leg.toolchain == 'node-ts'
         run: npm ci
         working-directory: sdks/typescript
+
+      - name: Install generative UI engine deps
+        if: matrix.leg.toolchain == 'node-genui'
+        run: npm ci
+        working-directory: sdks/genui
 
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
