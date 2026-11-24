@@ -8,7 +8,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
-import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -59,7 +58,7 @@ import static org.assertj.core.api.Assertions.within;
 /**
  * The topics DAOs against real ClickHouse and MySQL: the {@code topic_vectors} window count and reads, the
  * {@code trace_topics} read shape, writes, counts and deletes, and the label-state reads of
- * {@code topic_project_states}. Tests seed vectors and rows
+ * {@code topic_projects}. Tests seed vectors and rows
  * directly and call the DAOs; no service runs here.
  */
 @DisplayName("topics DAO storage")
@@ -411,8 +410,8 @@ class TopicsDaoStorageTest {
         insertRunRows(workspaceId, projectId, newId(), ids, topics);
         data.insertTraceTopic(workspaceId, projectId, tombstoned, TRACES.createdAt().get(4), topicId,
                 Instant.now().plus(Duration.ofHours(1)), 1);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, ids.size())
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, ids.get(i),
+        PostCutoverTraces.insertTraces(connectionFactory, IntStream.range(0, ids.size())
+                .mapToObj(i -> PostCutoverTraces.TraceRow.shown(workspaceId, projectId, ids.get(i),
                         TRACES.createdAt().get(i)))
                 .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
                 .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
@@ -442,8 +441,8 @@ class TopicsDaoStorageTest {
                         .runId(newId())
                         .build())
                 .toList()).block();
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, SPREAD)
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, SPREAD_TRACES.traceIds().get(i),
+        PostCutoverTraces.insertTraces(connectionFactory, IntStream.range(0, SPREAD)
+                .mapToObj(i -> PostCutoverTraces.TraceRow.shown(workspaceId, projectId, SPREAD_TRACES.traceIds().get(i),
                         SPREAD_TRACES.createdAt().get(i)))
                 .toList());
         var to = to().minus(Duration.ofHours(30));
@@ -474,8 +473,8 @@ class TopicsDaoStorageTest {
                 stamped, 0);
         data.insertTraceTopic(workspaceId, projectId, traceId, createdAt, runTopic, TraceTopic.Source.RUN, stamped,
                 0);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD,
-                List.of(TopicsTraces.TraceRow.shown(workspaceId, projectId, traceId, createdAt)));
+        PostCutoverTraces.insertTraces(connectionFactory,
+                List.of(PostCutoverTraces.TraceRow.shown(workspaceId, projectId, traceId, createdAt)));
 
         var counts = traceTopicsDAO.countByTopic(workspaceId, projectId, from(), to(), 60).collectList().block();
 
