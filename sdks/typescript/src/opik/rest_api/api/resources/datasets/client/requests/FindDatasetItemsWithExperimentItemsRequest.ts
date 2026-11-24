@@ -8,7 +8,7 @@ export interface FindDatasetItemsWithExperimentItemsRequest {
     page?: number;
     size?: number;
     experimentIds?: string;
-    datasetVersion?: string;
+    datasetVersions?: string;
     filters?: string;
     sorting?: string;
     search?: string;
