@@ -5,11 +5,13 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.PostCutoverTraces.TraceRow;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TopicsTraces;
-import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -73,13 +75,16 @@ class TopicsReadDAOTest {
         Startables.deepStart(redis, clickHouse, mysql, zookeeper).join();
         var wireMock = WireMockUtils.startWireMock();
         MigrationUtils.runMysqlDbMigration(mysql);
-        MigrationUtils.runClickhouseDbMigration(clickHouse);
+        PostCutoverTraces.migrate(clickHouse);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
                 .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
                         DATABASE_NAME))
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(redis.getRedisURI())
+                .customConfigs(List.of(
+                        new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
+                        new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true")))
                 .build());
     }
 
@@ -188,7 +193,7 @@ class TopicsReadDAOTest {
             traces.add(new TraceRow(workspaceId, projectId, row.traceId(), NOON, kind.get(0), kind.get(1)));
         }
         traceTopicsDAO.insert(rows).block();
-        TopicsTraces.insert(connectionFactory, "traces", traces);
+        PostCutoverTraces.insertTraces(connectionFactory, traces);
 
         assertThat(count(workspaceId, projectId))
                 .containsExactly(TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build());
@@ -215,7 +220,7 @@ class TopicsReadDAOTest {
         var experiment = arrival(workspaceId, projectId, NOON, topicId);
         var hidden = arrival(workspaceId, projectId, yesterday, TraceTopic.OTHER);
         traceTopicsDAO.insert(List.of(experiment, hidden)).block();
-        TopicsTraces.insert(connectionFactory, "traces", List.of(
+        PostCutoverTraces.insertTraces(connectionFactory, List.of(
                 new TraceRow(workspaceId, projectId, experiment.traceId(), NOON, Source.EXPERIMENT.getValue(),
                         VisibilityMode.DEFAULT.getValue()),
                 new TraceRow(workspaceId, projectId, hidden.traceId(), yesterday, Source.SDK.getValue(),
@@ -258,7 +263,7 @@ class TopicsReadDAOTest {
     /** The rows, and a trace Logs shows for each: only those count. */
     private void insert(TraceTopic... rows) {
         traceTopicsDAO.insert(List.of(rows)).block();
-        TopicsTraces.insert(connectionFactory, "traces", Stream.of(rows)
+        PostCutoverTraces.insertTraces(connectionFactory, Stream.of(rows)
                 .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
                 .toList());
     }

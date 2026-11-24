@@ -1143,6 +1143,9 @@ topics:
     priority: 0
     maxBlockSize: 8192
     budget: 10s
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.PostCutoverTraces.TraceRow;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -27,7 +28,6 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
 import com.comet.opik.api.resources.utils.TopicsTraces;
-import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -225,7 +225,7 @@ class TracesFilterByTopicResourceTest {
         var seed = seed();
         var deleted = ID_GENERATOR.generateId();
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, List.of(TraceRow.shown(
+        PostCutoverTraces.insertTraces(connectionFactory, List.of(TraceRow.shown(
                 seed.caller().workspaceId(), seed.projectId(), deleted, now.minus(Duration.ofMinutes(5)))));
         traceTopicsDAO.insert(List.of(TraceTopic.builder()
                 .workspaceId(seed.caller().workspaceId())
@@ -542,7 +542,7 @@ class TracesFilterByTopicResourceTest {
                     .runId(seed.saved())
                     .build());
         }
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces);
+        PostCutoverTraces.insertTraces(connectionFactory, traces);
         traceTopicsDAO.insert(rows).block();
         return rows.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
     }

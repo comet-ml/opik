@@ -8,6 +8,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.PostCutoverTraces.TraceRow;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -15,8 +16,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
-import com.comet.opik.api.resources.utils.TopicsTraces;
-import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.IdGenerator;
@@ -523,7 +522,7 @@ class TopicsReadResourceTest {
         }
     }
 
-    /** A ready project: one live topic with three traces in the window. */
+    /** A ready project: one live topic with three of today's traces, created through the API. */
     private UUID readyProject(Caller caller) {
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
@@ -535,14 +534,27 @@ class TopicsReadResourceTest {
             saveRun(handle, caller.workspaceId(), projectId, saved, Instant.now().truncatedTo(ChronoUnit.MICROS));
             return null;
         });
-        insertShown(run(caller.workspaceId(), projectId, live.id(), today, 3, saved));
+        traceTopicsDAO.insert(topics.createTraces(caller, projectId, 3).stream()
+                .map(trace -> TraceTopic.builder()
+                        .workspaceId(caller.workspaceId())
+                        .projectId(projectId)
+                        .traceId(trace.id())
+                        .traceCreatedAt(trace.createdAt())
+                        .topicId(live.id())
+                        .source(TraceTopic.Source.RUN)
+                        .runId(saved)
+                        .build())
+                .toList()).block();
         return projectId;
     }
 
-    /** The rows, and a trace Logs shows for each of their traces: the API counts only those. */
+    /**
+     * The rows, and a trace Logs shows for each of their traces: the API counts only those. Written straight into the
+     * table, as the rows fall on past days and the API sets {@code created_at} itself.
+     */
     private void insertShown(List<TraceTopic> rows) {
         traceTopicsDAO.insert(rows).block();
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, rows.stream()
+        PostCutoverTraces.insertTraces(connectionFactory, rows.stream()
                 .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
                 .distinct()
                 .toList());
