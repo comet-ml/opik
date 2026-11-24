@@ -107,11 +107,15 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Size of the v2 client's connection pool, which every JSONEachRow bulk insert and v2 query leases from for the
-     * whole request, so it caps how many of them one backend instance runs at once. Applied in {@link #buildClient()}
-     * only when set; unset leaves the library default of 10. Unlike {@code max_open_connections} in
-     * {@code queryParameters}, which only reaches the R2DBC driver.
+     * whole request, so it caps how many of them one backend instance runs at once. Unlike {@code max_open_connections}
+     * in {@code queryParameters}, which only reaches the R2DBC driver.
+     *
+     * <p>A primitive with no initializer, like {@link #httpHeadersProgressIntervalMs}: the default lives in
+     * {@code config.yml}, a missing key fails {@link Min} at startup, and {@link Max} stops a mistyped value from
+     * opening that many connections from every instance. A factory built in code is not validated, so it must set it:
+     * httpclient5 ignores a pool size below 1 and falls back to its own default of 5.
      */
-    private @Min(1) Integer clientMaxOpenConnections;
+    private @Min(1) @Max(100) int clientMaxOpenConnections;
 
     /**
      * Gates the {@code clickhouse-cluster} health check. Off for single-shard / non-Distributed
@@ -197,11 +201,7 @@ public class DatabaseAnalyticsFactory {
             builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
         }
 
-        if (clientMaxOpenConnections != null) {
-            builder.setMaxConnections(clientMaxOpenConnections);
-        }
-
-        return builder;
+        return builder.setMaxConnections(clientMaxOpenConnections);
     }
 
     /**

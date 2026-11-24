@@ -81,6 +81,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         factory.setHost(main.getHost());
         factory.setPort(main.getPort());
         factory.setDatabaseName(main.getDatabaseName());
+        factory.setClientMaxOpenConnections(main.getClientMaxOpenConnections());
         factory.setUsername(readOnlyConfig.getUsername());
         factory.setPassword(readOnlyConfig.getPassword());
         factory.setClientSocketTimeout(readOnlyConfig.getSocketTimeout());

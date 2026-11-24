@@ -59,7 +59,7 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     @Test
     @DisplayName("clientMaxOpenConnections sizes the v2 client's connection pool")
     void clientMaxOpenConnectionsSizesTheV2Pool() {
-        var maxOpenConnections = RandomUtils.secure().randomInt(11, 129);
+        var maxOpenConnections = RandomUtils.secure().randomInt(11, 101);
         var factory = factoryWith("");
         factory.setClientMaxOpenConnections(maxOpenConnections);
 
