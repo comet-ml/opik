@@ -58,6 +58,17 @@ public class OpenTelemetryMapper {
      * @return a converted Opik Span
      */
     public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName) {
+        return toOpikSpan(otelSpan, opikTraceId, integrationName, null);
+    }
+
+    /**
+     * Same as {@link #toOpikSpan(Span, UUID, String)} but with the instrumentation scope of the span, which decides
+     * scope-specific mapping (e.g. agentgateway's unmapped attributes go to metadata).
+     *
+     * @param scopeName the instrumentation scope name of the span (may be null)
+     */
+    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName,
+            String scopeName) {
         var traceTimestamp = extractTimestampFromUUIDv7(opikTraceId);
 
         var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
@@ -114,7 +125,7 @@ public class OpenTelemetryMapper {
 
         List<Span.Event> events = otelSpan.getEventsList();
         enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events,
-                otelSpan.getName());
+                otelSpan.getName(), scopeName);
 
         extractErrorInfo(otelSpan).ifPresent(spanBuilder::errorInfo);
 
@@ -149,6 +160,11 @@ public class OpenTelemetryMapper {
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events, String spanName) {
+        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, spanName, null);
+    }
+
+    private static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
+            String integrationName, List<Span.Event> events, String spanName, String scopeName) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
@@ -161,7 +177,10 @@ public class OpenTelemetryMapper {
         // batch can mix scopes from more than one integration, so gating this on the batch-wide
         // value could misroute a non-Claude span or skip routing for a real Claude Code span.
         boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
-        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+        // agentgateway adds its routing and HTTP attributes (gateway, route, http.*, url.*) to every span; they
+        // describe the proxy, not the LLM call, so the input holds only the explicitly mapped prompt attributes.
+        boolean isAgentgateway = OpenTelemetryMappingRuleFactory.isAgentgatewayScope(scopeName);
+        ObjectNode defaultBucket = isClaudeCode || isAgentgateway ? metadata : input;
 
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.

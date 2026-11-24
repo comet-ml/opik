@@ -8,6 +8,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.protobuf.ByteString;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+import io.opentelemetry.proto.common.v1.AnyValue;
+import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
@@ -31,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -123,6 +126,57 @@ class OpenTelemetryServiceUnitTest {
                 .verifyError(IllegalStateException.class);
 
         verify(spanService, never()).create(any(SpanBatch.class));
+    }
+
+    @Test
+    void childSpanJoinsTheProjectAndTraceOfItsParent() {
+        when(bucket.getAndExpire(TTL)).thenReturn(Mono.empty());
+        when(bucket.set(any(), eq(TTL))).thenReturn(Mono.empty());
+        var sdkTraceId = idGenerator.generateId();
+        var parent = span("POST /v1/chat/completions", ByteString.EMPTY).toBuilder()
+                .addAttributes(attribute("opik.project_name", projectName))
+                .addAttributes(attribute("opik.trace_id", sdkTraceId.toString()))
+                .build();
+        var child = span("llm", parent.getSpanId());
+
+        StepVerifier.create(store(parent, child, "fallback-project"))
+                .expectNext(2L)
+                .verifyComplete();
+
+        var batchCaptor = ArgumentCaptor.forClass(SpanBatch.class);
+        verify(spanService).create(batchCaptor.capture());
+        var spans = batchCaptor.getValue().spans();
+        var storedParent = spans.stream().filter(span -> span.parentSpanId() == null).findFirst().orElseThrow();
+        var storedChild = spans.stream().filter(span -> span.parentSpanId() != null).findFirst().orElseThrow();
+        assertThat(storedChild.projectName()).isEqualTo(projectName);
+        assertThat(storedChild.traceId()).isEqualTo(sdkTraceId);
+        assertThat(storedChild.parentSpanId()).isEqualTo(storedParent.id());
+        verify(traceService, never()).create(any(Trace.class));
+    }
+
+    private Span span(String name, ByteString parentSpanId) {
+        var startNanos = System.currentTimeMillis() * 1_000_000L;
+        return Span.newBuilder()
+                .setName(name)
+                .setTraceId(ByteString.copyFrom(otelTraceId))
+                .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                .setParentSpanId(parentSpanId)
+                .setStartTimeUnixNano(startNanos)
+                .setEndTimeUnixNano(startNanos + 1_000_000L)
+                .build();
+    }
+
+    private KeyValue attribute(String key, String value) {
+        return KeyValue.newBuilder().setKey(key).setValue(AnyValue.newBuilder().setStringValue(value)).build();
+    }
+
+    private Mono<Long> store(Span first, Span second, String fallbackProjectName) {
+        var request = ExportTraceServiceRequest.newBuilder()
+                .addResourceSpans(ResourceSpans.newBuilder()
+                        .addScopeSpans(ScopeSpans.newBuilder().addSpans(first).addSpans(second)))
+                .build();
+        return service.parseAndStoreSpans(request, fallbackProjectName)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId));
     }
 
     /**

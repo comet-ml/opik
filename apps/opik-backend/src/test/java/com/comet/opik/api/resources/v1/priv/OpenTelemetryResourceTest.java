@@ -1603,8 +1603,8 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
-        @DisplayName("opik.project_name on the root span only: the child falls back to the header project with its own trace id")
-        void opikProjectNameOnRootSpanOnlySplitsRootAndChildAcrossProjects() {
+        @DisplayName("opik.project_name on the root span only: the child joins the root's project and trace")
+        void opikProjectNameOnRootSpanOnlyKeepsTheChildWithItsRoot() {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
 
@@ -1618,16 +1618,10 @@ class OpenTelemetryResourceTest {
             sendBatch(Entity.entity(exportRequest(List.of(root, child)).toByteArray(), "application/x-protobuf"),
                     "application/x-protobuf", headerProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
 
-            assertTraceStoredInProject(List.of(root), rootProject, workspaceName);
-
-            var childTraceId = opikTraceIdOf(child);
-            assertThat(childTraceId).isNotEqualTo(opikTraceIdOf(root));
-            assertSpansStoredInProject(List.of(child), childTraceId, headerProject, workspaceName);
+            assertTraceStoredInProject(List.of(root, child), rootProject, workspaceName);
 
             assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, rootProject, List.of(),
                     List.of(), 1, 10).content()).extracting(Trace::id).containsExactly(opikTraceIdOf(root));
-            assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, headerProject, List.of(),
-                    List.of(), 1, 10).content()).isEmpty();
         }
 
         private ExportTraceServiceRequest exportRequest(List<Span> spans) {
