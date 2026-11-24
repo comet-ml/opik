@@ -6,7 +6,6 @@ import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
-import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -168,13 +167,23 @@ class TopicRunStore {
         })).doOnNext(code -> code.ifPresent(value -> countFailed(workspaceId, value)));
     }
 
-    /**
-     * {@code queued -> failed} with {@code cancelled}: its project or workspace left (the reason), or a run by hand was
-     * not published (no reason).
-     */
+    /** {@code queued -> failed} with {@code cancelled}: its project or workspace left. */
     Mono<Boolean> dropQueued(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
-            @Nullable TopicProject.CancelReason reason) {
+            @NonNull TopicProject.CancelReason reason) {
         return write(dao -> dao.dropQueued(workspaceId, projectId, runId, reason, Instant.now()))
+                .doOnNext(dropped -> {
+                    if (dropped) {
+                        countFailed(workspaceId, RunError.CANCELLED);
+                    }
+                });
+    }
+
+    /**
+     * {@code queued -> failed} with {@code cancelled}, for a run by hand that was not published: false when a pod
+     * claimed it meanwhile, which stays true for the run even after a requeue ({@link #isClaimed}).
+     */
+    Mono<Boolean> dropUnclaimed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+        return write(dao -> dao.dropUnclaimed(workspaceId, projectId, runId, Instant.now()))
                 .doOnNext(dropped -> {
                     if (dropped) {
                         countFailed(workspaceId, RunError.CANCELLED);
@@ -228,7 +237,7 @@ class TopicRunStore {
                 .cancelProjects(workspaceId, projectIds, reason, Instant.now())));
     }
 
-    /** True when the project's attempt is still {@code runId} and a pod claimed it. */
+    /** True when the project's attempt is still {@code runId} and a pod claimed it, even if it was requeued since. */
     Mono<Boolean> isClaimed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
         return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .isClaimed(workspaceId, projectId, runId)));

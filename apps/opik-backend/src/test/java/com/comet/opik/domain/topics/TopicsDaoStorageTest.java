@@ -8,7 +8,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
-import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -61,7 +60,7 @@ import static org.assertj.core.api.Assertions.within;
 /**
  * The topics DAOs against real ClickHouse and MySQL: the {@code topic_vectors} window count and reads, the
  * {@code trace_topics} read shape, writes, counts and deletes, and the label-state reads of
- * {@code topic_project_states}. Tests seed vectors and rows
+ * {@code topic_projects}. Tests seed vectors and rows
  * directly and call the DAOs; no service runs here.
  */
 @DisplayName("topics DAO storage")
@@ -413,8 +412,8 @@ class TopicsDaoStorageTest {
         insertRunRows(workspaceId, projectId, newId(), ids, topics);
         data.insertTraceTopic(workspaceId, projectId, tombstoned, TRACES.createdAt().get(4), topicId,
                 Instant.now().plus(Duration.ofHours(1)), 1);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, ids.size())
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, ids.get(i),
+        PostCutoverTraces.insertTraces(connectionFactory, IntStream.range(0, ids.size())
+                .mapToObj(i -> PostCutoverTraces.TraceRow.shown(workspaceId, projectId, ids.get(i),
                         TRACES.createdAt().get(i)))
                 .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
                 .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
@@ -444,8 +443,8 @@ class TopicsDaoStorageTest {
                         .runId(newId())
                         .build())
                 .toList()).block();
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, SPREAD)
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, SPREAD_TRACES.traceIds().get(i),
+        PostCutoverTraces.insertTraces(connectionFactory, IntStream.range(0, SPREAD)
+                .mapToObj(i -> PostCutoverTraces.TraceRow.shown(workspaceId, projectId, SPREAD_TRACES.traceIds().get(i),
                         SPREAD_TRACES.createdAt().get(i)))
                 .toList());
         var to = to().minus(Duration.ofHours(30));
@@ -476,8 +475,8 @@ class TopicsDaoStorageTest {
                 stamped, 0);
         data.insertTraceTopic(workspaceId, projectId, traceId, createdAt, runTopic, TraceTopic.Source.RUN, stamped,
                 0);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD,
-                List.of(TopicsTraces.TraceRow.shown(workspaceId, projectId, traceId, createdAt)));
+        PostCutoverTraces.insertTraces(connectionFactory,
+                List.of(PostCutoverTraces.TraceRow.shown(workspaceId, projectId, traceId, createdAt)));
 
         var counts = traceTopicsDAO.countByTopic(workspaceId, projectId, from(), to(), 60).collectList().block();
 
@@ -652,8 +651,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the missing-projects sweep deletes the topics of the listed workspaces' deleted projects only")
-    void sweepDeletesTopicsOfMissingProjectsOnly() {
+    @DisplayName("the missing-projects read finds the listed workspaces' deleted projects that have topics only")
+    void findsTopicProjectsOfMissingProjectsOnly() {
         var workspaceId = newId().toString();
         var otherWorkspaceId = newId().toString();
         var live = newId();
@@ -663,16 +662,11 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, deleted, NIGHT, BUILT);
         data.savedList(otherWorkspaceId, otherDeleted, NIGHT, BUILT);
         data.project(workspaceId, live);
-        var liveTopics = data.topics(live);
-        var otherTopics = data.topics(otherDeleted);
 
-        int swept = template.inTransaction(WRITE,
-                handle -> handle.attach(TopicDAO.class).deleteTopicsOfMissingProjects(List.of(workspaceId)));
+        var missing = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(List.of(workspaceId)));
 
-        assertThat(swept).isEqualTo(1);
-        assertThat(data.topics(live)).isEqualTo(liveTopics);
-        assertThat(data.topics(deleted)).isEmpty();
-        assertThat(data.topics(otherDeleted)).isEqualTo(otherTopics);
+        assertThat(missing).containsExactly(new TopicProjectKey(workspaceId, deleted));
     }
 
     @Test
@@ -762,7 +756,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("a run counts as claimed once a pod claimed it, and no longer once it is requeued")
+    @DisplayName("a run counts as claimed once a pod claimed it, still after a requeue, and then cannot be dropped as "
+            + "unclaimed; a run no pod claimed can")
     void isClaimedFollowsTheClaim() {
         var workspaceId = newId().toString();
         var projectId = newId();
@@ -778,10 +773,18 @@ class TopicsDaoStorageTest {
             var running = dao.isClaimed(workspaceId, projectId, runId);
             var otherRun = dao.isClaimed(workspaceId, projectId, newId());
             dao.requeue(workspaceId, projectId, runId, claimedAt.plusSeconds(10));
-            return List.of(queued, running, otherRun, dao.isClaimed(workspaceId, projectId, runId));
+            var requeued = dao.isClaimed(workspaceId, projectId, runId);
+            var droppedClaimed = dao.dropUnclaimed(workspaceId, projectId, runId, claimedAt.plusSeconds(20)) == 1;
+            var neverClaimedProject = newId();
+            var neverClaimed = newId();
+            dao.ensureRow(workspaceId, neverClaimedProject);
+            dao.queue(workspaceId, neverClaimedProject, neverClaimed, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            var droppedUnclaimed = dao.dropUnclaimed(workspaceId, neverClaimedProject, neverClaimed,
+                    claimedAt.plusSeconds(20)) == 1;
+            return List.of(queued, running, otherRun, requeued, droppedClaimed, droppedUnclaimed);
         });
 
-        assertThat(claimed).containsExactly(false, true, false, false);
+        assertThat(claimed).containsExactly(false, true, false, true, false, true);
     }
 
     @Test

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000118_add_projects_workspace_last_updated_trace_at_idx
+--changeset yaroslavb:000119_add_projects_workspace_last_updated_trace_at_idx
 --comment: Index the topics first build's read of recently active projects (OPIK-8987)
 
 -- The first build reads a workspace's projects with a trace since a cutoff; most projects of a large workspace are
@@ -8,7 +8,7 @@ CREATE INDEX projects_workspace_last_updated_trace_at_idx ON projects (workspace
 
 --rollback DROP INDEX projects_workspace_last_updated_trace_at_idx ON projects;
 
---changeset yaroslavb:000118_add_topic_projects_workspace_labels_idx
+--changeset yaroslavb:000119_add_topic_projects_workspace_labels_idx
 --comment: Index the topics first build's read of saved lists whose labels are not complete (OPIK-8987)
 
 -- labels_complete defaults to FALSE, so it also matches every row without a list; list_run_id narrows to saved lists.
@@ -16,7 +16,7 @@ CREATE INDEX topic_projects_workspace_labels_idx ON topic_projects (workspace_id
 
 --rollback DROP INDEX topic_projects_workspace_labels_idx ON topic_projects;
 
---changeset yaroslavb:000118_replace_topics_workspace_project_idx
+--changeset yaroslavb:000119_replace_topics_workspace_project_idx
 --comment: Serve a project's topics in their order from the index (OPIK-8987)
 
 -- The project's topics are read ORDER BY born, id; InnoDB appends id, so this index serves the order with no sort.
