@@ -2,8 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
-import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
-import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,17 +62,15 @@ class ExperimentItemPublisherOrganizationTest {
     }
 
     @Test
-    @DisplayName("Stamps the organization of the request that started the run")
+    @DisplayName("Stamps the run's organization onto items that carry none")
     void stampsTheRunsOrganization() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
         var messages = List.of(message(null), message(null));
 
-        publisher(resolver).publish(UUID.randomUUID(), messages).block();
+        publisher().publish(UUID.randomUUID(), messages, organizationId).block();
 
         assertThat(published()).containsExactlyInAnyOrderElementsOf(messages.stream()
                 .map(message -> message.toBuilder().organizationId(organizationId).build())
                 .toList());
-        assertThat(resolver.lookups()).isOne();
     }
 
     @Test
@@ -82,21 +78,19 @@ class ExperimentItemPublisherOrganizationTest {
     void stampsOverABlankOrganization() {
         var message = message("   ");
 
-        publisher(FixedOrganizationResolver.of(organizationId)).publish(UUID.randomUUID(), List.of(message)).block();
+        publisher().publish(UUID.randomUUID(), List.of(message), organizationId).block();
 
         assertThat(published()).containsExactly(message.toBuilder().organizationId(organizationId).build());
     }
 
     @Test
-    @DisplayName("Keeps the organization an item already carries, without a lookup")
+    @DisplayName("Keeps the organization an item already carries")
     void keepsTheItemsOwnOrganization() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
         var message = message(UUID.randomUUID().toString());
 
-        publisher(resolver).publish(UUID.randomUUID(), List.of(message)).block();
+        publisher().publish(UUID.randomUUID(), List.of(message), organizationId).block();
 
         assertThat(published()).containsExactly(message);
-        assertThat(resolver.lookups()).isZero();
     }
 
     @Test
@@ -104,14 +98,14 @@ class ExperimentItemPublisherOrganizationTest {
     void publishesWithoutAnOrganization() {
         var message = message(null);
 
-        publisher(FixedOrganizationResolver.none()).publish(UUID.randomUUID(), List.of(message)).block();
+        publisher().publish(UUID.randomUUID(), List.of(message), null).block();
 
         assertThat(published()).containsExactly(message);
     }
 
-    private ExperimentItemPublisher publisher(OrganizationResolver organizationResolver) {
+    private ExperimentItemPublisher publisher() {
         return new ExperimentItemPublisher(redisClient, config, testSuiteAssertionCounterService,
-                cancellationService, itemLedger, organizationResolver);
+                cancellationService, itemLedger);
     }
 
     private List<ExperimentItemToProcess> published() {

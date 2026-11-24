@@ -4,7 +4,6 @@ import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
-import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -85,7 +84,7 @@ class ExperimentCancellationServiceTest {
         ledger = new ExperimentItemLedger(redissonClient, config);
         service = new ExperimentCancellationService(redissonClient, config, ledger);
         publisher = new ExperimentItemPublisher(redissonClient, config,
-                mock(TestSuiteAssertionCounterService.class), service, ledger, FixedOrganizationResolver.none());
+                mock(TestSuiteAssertionCounterService.class), service, ledger);
     }
 
     @Test
@@ -132,7 +131,7 @@ class ExperimentCancellationServiceTest {
 
         var batch = new ArrayList<>(messages(cancelled, 3));
         batch.addAll(messages(sibling, 2));
-        publisher.startTrackingRun(batch, false).then(publisher.publish(batchId, batch)).block();
+        publisher.startTrackingRun(batch, false).then(publisher.publish(batchId, batch, null)).block();
 
         assertThat(itemCounter(cancelled).get().block()).isEqualTo(3L);
         assertThat(itemCounter(sibling).get().block()).isEqualTo(2L);
@@ -406,7 +405,7 @@ class ExperimentCancellationServiceTest {
     @SafeVarargs
     private void publish(List<ExperimentItemToProcess>... batches) {
         for (var batch : batches) {
-            publisher.startTrackingRun(batch, false).then(publisher.publish(UUID.randomUUID(), batch)).block();
+            publisher.startTrackingRun(batch, false).then(publisher.publish(UUID.randomUUID(), batch, null)).block();
         }
     }
 

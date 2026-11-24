@@ -19,7 +19,9 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -71,6 +73,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private final ProjectService projectService;
     private final TraceThreadService traceThreadService;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OrganizationResolver organizationResolver;
 
     @Inject
     public ManualEvaluationServiceImpl(@NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
@@ -79,7 +82,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             @NonNull SpanService spanService,
             @NonNull ProjectService projectService,
             @NonNull TraceThreadService traceThreadService,
-            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
+            @NonNull OrganizationResolver organizationResolver) {
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.traceService = traceService;
@@ -87,6 +91,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         this.projectService = projectService;
         this.traceThreadService = traceThreadService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.organizationResolver = organizationResolver;
     }
 
     @Override
@@ -97,7 +102,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                 "Starting manual evaluation for '{}' entities of type '{}' with '{}' rules in project '{}', workspace '{}'",
                 request.entityIds().size(), request.entityType(), request.ruleIds().size(), projectId, workspaceId);
 
-        return Mono.fromCallable(() -> {
+        // First in the zip, so it runs while findByIds blocks the thread instead of after it
+        return Mono.zip(organizationResolver.organizationId().singleOptional(), Mono.fromCallable(() -> {
             Set<UUID> ruleIdSet = new HashSet<>(request.ruleIds());
             List<?> rawRules = automationRuleEvaluatorService.findByIds(ruleIdSet, Set.of(projectId), workspaceId);
             @SuppressWarnings("unchecked")
@@ -120,12 +126,16 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             }
 
             return rules;
-        })
-                .flatMap(rules -> {
+        }))
+                .flatMap(tuple -> {
+                    String organizationId = tuple.getT1().orElse(null);
+                    var rules = tuple.getT2();
                     // Process based on entity type
                     return switch (request.entityType()) {
-                        case TRACE -> evaluateTraces(request.entityIds(), rules, projectId, workspaceId, userName);
-                        case THREAD -> evaluateThreads(request.entityIds(), rules, projectId, workspaceId, userName);
+                        case TRACE -> evaluateTraces(request.entityIds(), rules, projectId, workspaceId, userName,
+                                organizationId);
+                        case THREAD -> evaluateThreads(request.entityIds(), rules, projectId, workspaceId, userName,
+                                organizationId);
                         case SPAN -> evaluateSpans(request.entityIds(), rules, projectId, workspaceId, userName);
                     };
                 })
@@ -142,7 +152,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
      * Handles both span-level evaluators (which need full trace objects) and trace-thread evaluators (which need only IDs).
      */
     private Mono<Integer> evaluateTraces(List<UUID> traceIds, List<AutomationRuleEvaluator<?, ?>> rules, UUID projectId,
-            String workspaceId, String userName) {
+            String workspaceId, String userName, @Nullable String organizationId) {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
         // Separate rules by type - only trace-level rules are valid for trace evaluation
@@ -174,7 +184,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         Mono<Void> spanLevelMono = Mono.empty();
         if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
             spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules,
-                    spanLevelPythonRules, projectId, workspaceId, userName);
+                    spanLevelPythonRules, projectId, workspaceId, userName, organizationId);
         }
 
         // Handle trace-thread evaluators - can use IDs directly. Compose the enqueues into the returned chain so
@@ -188,7 +198,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
                             traceIdStrings.size());
                     return onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule, projectId, workspaceId,
-                            userName);
+                            userName, organizationId);
                 })
                 .then();
 
@@ -201,7 +211,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private Mono<Void> enqueueSpanLevelEvaluations(List<UUID> traceIds,
             List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
             List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
-            UUID projectId, String workspaceId, String userName) {
+            UUID projectId, String workspaceId, String userName, @Nullable String organizationId) {
 
         log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
 
@@ -236,7 +246,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .toList();
                                 log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'",
                                         messages.size(), rule.getId());
-                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType(), organizationId);
                             })
                             .then();
 
@@ -260,7 +270,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .toList();
                                 log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
                                         rule.getId());
-                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType(), null);
                             })
                             .then();
 
@@ -326,7 +336,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .toList();
                                 log.info("Enqueued '{}' span LLM as Judge messages for rule '{}'", messages.size(),
                                         rule.getId());
-                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType(), null);
                             })
                             .then();
 
@@ -349,7 +359,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .toList();
                                 log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
                                         rule.getId());
-                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType(), null);
                             })
                             .then();
 
@@ -363,7 +373,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
      */
     private Mono<Integer> evaluateThreads(List<UUID> threadModelIds, List<AutomationRuleEvaluator<?, ?>> rules,
             UUID projectId,
-            String workspaceId, String userName) {
+            String workspaceId, String userName, @Nullable String organizationId) {
         log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
 
         // Fetch thread IDs from thread model IDs
@@ -387,7 +397,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                 log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
                                         threadIds.size());
                                 return onlineScorePublisher.enqueueThreadMessage(threadIds, rule, projectId,
-                                        workspaceId, userName);
+                                        workspaceId, userName, organizationId);
                             })
                             .then(Mono.just(threadModelIds.size()));
                 });

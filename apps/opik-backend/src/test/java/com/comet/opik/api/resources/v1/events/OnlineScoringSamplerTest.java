@@ -59,6 +59,7 @@ import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtil
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -111,7 +112,7 @@ class OnlineScoringSamplerTest {
                 projectService);
 
         // enqueueMessage is reactive now; the sampler chains .contextWrite(...).subscribe() on the result.
-        lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+        lenient().when(onlineScorePublisher.enqueueMessage(any(), any(), any())).thenReturn(Mono.empty());
 
         projectId = UUID.randomUUID();
         workspaceId = UUID.randomUUID().toString();
@@ -138,7 +139,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, null);
         }
 
         @Test
@@ -150,7 +151,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
     }
 
@@ -168,7 +169,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @ParameterizedTest
@@ -179,7 +180,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -210,7 +211,7 @@ class OnlineScoringSamplerTest {
                     .onTracesCreated(new TracesCreated(List.of(sdkTrace, expTrace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, sdkTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -224,7 +225,7 @@ class OnlineScoringSamplerTest {
                     .onTracesCreated(new TracesCreated(List.of(sdkTrace, expTrace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, expTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -239,7 +240,7 @@ class OnlineScoringSamplerTest {
 
             verify(onlineScorePublisher).enqueueMessage(
                     List.of(toLlmMessage(evaluator, sdkTrace), toLlmMessage(evaluator, expTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
     }
@@ -258,7 +259,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -278,7 +279,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -293,7 +294,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, null);
         }
 
         @Test
@@ -307,7 +308,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -322,8 +323,8 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(picked, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any());
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
+            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -339,7 +340,7 @@ class OnlineScoringSamplerTest {
 
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
                     List.of(toLlmMessage(picked, trace)),
@@ -357,8 +358,8 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any());
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
+            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -381,7 +382,7 @@ class OnlineScoringSamplerTest {
             // evalA enqueues traceA only; evalB enqueues traceB only; unrelated never enqueues.
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
                     List.of(toLlmMessage(evalA, traceA)),
@@ -402,9 +403,9 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(picked, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(unpicked, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -420,7 +421,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -433,7 +434,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -446,7 +447,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -462,7 +463,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
     }
 
@@ -477,7 +478,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -493,7 +494,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -510,7 +511,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
     }
 
@@ -525,7 +526,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -537,7 +538,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -551,7 +552,7 @@ class OnlineScoringSamplerTest {
 
             verify(onlineScorePublisher).enqueueMessage(
                     List.of(toLlmMessage(evaluator, trace1), toLlmMessage(evaluator, trace2)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -563,7 +564,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -577,7 +578,7 @@ class OnlineScoringSamplerTest {
                     .onTracesCreated(new TracesCreated(List.of(sdkTrace, experimentTrace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, experimentTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -591,7 +592,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -604,7 +605,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, null);
         }
 
         @Test
@@ -621,7 +622,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -632,7 +633,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
     }
 
@@ -658,9 +659,9 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace1, trace2), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator1, trace1)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator2, trace2)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
     }
 
@@ -672,7 +673,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -686,7 +687,7 @@ class OnlineScoringSamplerTest {
                     new TracesCreated(List.of(partialTrace, completeTrace), workspaceId, userName));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, completeTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -696,7 +697,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
     }
 
@@ -715,8 +716,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(tracesCreated(trace));
 
             verify(onlineScorePublisher).enqueueMessage(
-                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    List.of(toLlmMessage(evaluator, trace)), AutomationRuleEvaluatorType.LLM_AS_JUDGE, organizationId);
             assertThat(resolver.lookups()).isOne();
         }
 
@@ -738,8 +738,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verify(onlineScorePublisher).enqueueMessage(
-                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    List.of(toLlmMessage(evaluator, trace)), AutomationRuleEvaluatorType.LLM_AS_JUDGE, organizationId);
             assertThat(resolver.lookups()).isOne();
         }
 
@@ -749,7 +748,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             assertThat(resolver.lookups()).isZero();
         }
 
@@ -759,7 +758,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             assertThat(resolver.lookups()).isZero();
         }
 
@@ -773,7 +772,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(tracesCreated(trace));
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, null);
             assertThat(resolver.lookups()).isZero();
         }
 
@@ -783,7 +782,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(tracesCreated(createThreadTrace()));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             assertThat(resolver.lookups()).isOne();
         }
 
@@ -817,8 +816,7 @@ class OnlineScoringSamplerTest {
                     .build());
 
             verify(onlineScorePublisher).enqueueMessage(
-                    List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    List.of(toLlmMessage(evaluator, trace)), AutomationRuleEvaluatorType.LLM_AS_JUDGE, organizationId);
             assertThat(resolver.lookups()).isOne();
         }
 
@@ -901,7 +899,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, null);
         }
 
         @Test
@@ -914,7 +912,7 @@ class OnlineScoringSamplerTest {
 
             verifyNoInteractions(traceService);
             verifyNoInteractions(ruleEvaluatorService);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -929,7 +927,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verifyNoInteractions(ruleEvaluatorService);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @ParameterizedTest
@@ -945,7 +943,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verifyNoInteractions(ruleEvaluatorService);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
     }
 
@@ -971,7 +969,7 @@ class OnlineScoringSamplerTest {
             var captor = (ArgumentCaptor<List<TraceToScoreLlmAsJudge>>) (ArgumentCaptor<?>) ArgumentCaptor
                     .forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
             assertThat(captor.getValue()).hasSize(1);
             assertThat(captor.getValue().get(0).trace().projectName()).isEqualTo("resolved-project-name");
         }
@@ -995,7 +993,7 @@ class OnlineScoringSamplerTest {
             var captor = (ArgumentCaptor<List<TraceToScoreLlmAsJudge>>) (ArgumentCaptor<?>) ArgumentCaptor
                     .forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
             assertThat(captor.getValue()).hasSize(1);
             assertThat(captor.getValue().get(0).trace().projectName()).isNull();
         }
