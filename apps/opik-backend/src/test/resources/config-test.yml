@@ -1077,6 +1077,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
@@ -1137,6 +1138,9 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:
