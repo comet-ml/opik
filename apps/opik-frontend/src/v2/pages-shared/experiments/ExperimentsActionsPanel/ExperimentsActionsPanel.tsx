@@ -3,7 +3,7 @@ import { Split, Trash, Tag } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
-import { Experiment } from "@/types/datasets";
+import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import CompareExperimentsDialog from "@/v2/pages-shared/experiments/CompareExperimentsDialog/CompareExperimentsDialog";
@@ -16,8 +16,14 @@ import { Separator } from "@/ui/separator";
 import AddTagDialog from "@/v2/pages-shared/experiments/AddTagDialog/AddTagDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-const MIXED_ITEM_SOURCES_TOOLTIP =
-  "Select experiments from the same test suite to compare them";
+// Legacy experiments carry no evaluation_method; like the Datasets tab, treat
+// anything that isn't a test suite as a dataset.
+const getMixedItemSourcesTooltip = (experiment: Experiment) =>
+  `Select experiments from the same ${
+    experiment.evaluation_method === EVALUATION_METHOD.TEST_SUITE
+      ? "test suite"
+      : "dataset"
+  } to compare them`;
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
@@ -87,6 +93,10 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       size={buttonSize}
       onClick={handleCompareClick}
       disabled={compareDisabled}
+      // ghostInverted's disabled:text-white/40 is a no-op (Tailwind's `white`
+      // is a CSS var, so opacity modifiers don't apply); fade the whole
+      // button so a blocked Compare doesn't read as clickable on the dark bar.
+      className={cn(isInverted && "disabled:opacity-40")}
     >
       <Split className={leadIconClassName} />
       Compare
@@ -137,7 +147,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       )}
       <div className="inline-flex items-center gap-2">
         {hasMixedItemSources ? (
-          <TooltipWrapper content={MIXED_ITEM_SOURCES_TOOLTIP}>
+          <TooltipWrapper content={getMixedItemSourcesTooltip(experiments[0])}>
             <span className="inline-block cursor-not-allowed">
               {compareButton}
             </span>

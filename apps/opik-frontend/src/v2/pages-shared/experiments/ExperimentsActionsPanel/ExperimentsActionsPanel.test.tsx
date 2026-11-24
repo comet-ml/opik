@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
-import { Experiment } from "@/types/datasets";
+import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
 import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
 import ExperimentsActionsPanel from "./ExperimentsActionsPanel";
 
@@ -142,20 +142,33 @@ describe("ExperimentsActionsPanel mixed item sources", () => {
     expect(getCompareButton()).toBeDisabled();
   });
 
-  it("explains why Compare is disabled in its tooltip", async () => {
-    renderPanel([
-      buildExperiment("exp-1", "dataset-1"),
-      buildExperiment("exp-2", "dataset-2"),
-    ]);
+  it.each([
+    [EVALUATION_METHOD.TEST_SUITE, "test suite"],
+    [EVALUATION_METHOD.DATASET, "dataset"],
+    [undefined, "dataset"],
+  ])(
+    "names the item source type in the tooltip (%s → %s)",
+    async (evaluationMethod, label) => {
+      renderPanel([
+        {
+          ...buildExperiment("exp-1", "dataset-1"),
+          evaluation_method: evaluationMethod,
+        },
+        {
+          ...buildExperiment("exp-2", "dataset-2"),
+          evaluation_method: evaluationMethod,
+        },
+      ]);
 
-    fireEvent.focus(getCompareButton().parentElement!);
+      fireEvent.focus(getCompareButton().parentElement!);
 
-    expect(
-      await screen.findAllByText(
-        "Select experiments from the same test suite to compare them",
-      ),
-    ).not.toHaveLength(0);
-  });
+      expect(
+        await screen.findAllByText(
+          `Select experiments from the same ${label} to compare them`,
+        ),
+      ).not.toHaveLength(0);
+    },
+  );
 
   it("keeps tag and delete enabled for a mixed selection", () => {
     renderPanel([
