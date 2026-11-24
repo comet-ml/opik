@@ -14,7 +14,9 @@ import java.util.Map;
 /** The vectors tick's per-workspace watermark and long-window pass progress, {@code topic_vector_watermarks}. */
 interface TopicVectorWatermarkDAO {
 
-    @SqlQuery("SELECT workspace_id, watermark FROM topic_vector_watermarks WHERE workspace_id IN (<workspaceIds>)")
+    @SqlQuery("""
+            SELECT workspace_id, watermark FROM topic_vector_watermarks WHERE workspace_id IN (<workspaceIds>)
+            """)
     @KeyColumn("workspace_id")
     @ValueColumn("watermark")
     Map<String, Instant> watermarks(@BindList("workspaceIds") Collection<String> workspaceIds);
@@ -37,6 +39,8 @@ interface TopicVectorWatermarkDAO {
      * Only a workspace with a watermark row: one the pass reads before its first fresh read gets its long read again
      * on the pass's next tick.
      */
-    @SqlUpdate("UPDATE topic_vector_watermarks SET long_window_read_at = :readAt WHERE workspace_id = :workspaceId")
+    @SqlUpdate("""
+            UPDATE topic_vector_watermarks SET long_window_read_at = :readAt WHERE workspace_id = :workspaceId
+            """)
     void setLongWindowRead(@Bind("workspaceId") String workspaceId, @Bind("readAt") Instant readAt);
 }

@@ -145,14 +145,16 @@ class TopicVectorBackfiller {
             Duration interval) {
         return Mono.defer(() -> {
             var reserve = config.getVectors().getEmbedTimeout().toJavaDuration();
-            if (!hasTimeForDiscovery(budget, reserve)) {
+            var discoveryReserve = discoveryReserve(budget, reserve);
+            if (!budget.hasTimeForRead(discoveryReserve)) {
                 return Mono.empty();
             }
             var maxExecutionTime = config.getVectors().getFind().getMaxExecutionTime().toJavaDuration();
             var discovery = discoveries.computeIfAbsent(workspaceId,
                     __ -> new Discovery(budget.start(), lowerBound, dao.slices(createdAfter)));
-            return Mono.defer(() -> readSlice(workspaceId, discovery, budget.readSeconds(maxExecutionTime, reserve)))
-                    .repeat(() -> !discovery.done() && hasTimeForDiscovery(budget, reserve))
+            return Mono.defer(() -> readSlice(workspaceId, discovery,
+                    budget.readSeconds(maxExecutionTime, discoveryReserve)))
+                    .repeat(() -> !discovery.done() && budget.hasTimeForRead(discoveryReserve))
                     .then(Mono.defer(() -> discovery.done() ? save(workspaceId, discovery, interval) : Mono.empty()))
                     .onErrorResume(exception -> {
                         discoveries.remove(workspaceId);
@@ -166,12 +168,15 @@ class TopicVectorBackfiller {
     }
 
     /**
-     * A discovery slice starts only while half of the tick budget is left, so a long discovery (a 365d backfill window
-     * is over 100 reads per workspace) leaves the fresh and backfill phases the other half; the next tick resumes it.
+     * What a discovery slice leaves for after it: half of the tick budget, and at least what one more read needs. A
+     * slice starts only with that plus a read's minimum left, and its {@code max_execution_time} ends before it, so a
+     * long discovery (a 365d backfill window is over 100 reads per workspace) leaves the fresh and backfill phases the
+     * other half; the next tick resumes it.
      */
-    private static boolean hasTimeForDiscovery(TickBudget budget, Duration reserve) {
-        return budget.hasTimeForRead(reserve)
-                && budget.hasTimeFor(Duration.between(budget.start(), budget.deadline()).dividedBy(2));
+    private static Duration discoveryReserve(TickBudget budget, Duration reserve) {
+        var half = Duration.between(budget.start(), budget.deadline()).dividedBy(2);
+        var oneRead = TickBudget.MIN_READ_TIME.plus(reserve);
+        return half.compareTo(oneRead) > 0 ? half : oneRead;
     }
 
     /** The next slice: the projects' slices first, then their vector counts. */
@@ -398,7 +403,9 @@ class TopicVectorBackfiller {
                                 boolean cut = written.leftForLater(candidates);
                                 boolean drained = read.complete() && !cut;
                                 if (!drained && result.written() == 0) {
-                                    if (!read.complete() && !cut && !candidates.isEmpty()) {
+                                    // Full: the read stopped at the limit, not for want of time.
+                                    if (read.candidates().size() >= window.limit() && !cut
+                                            && !candidates.isEmpty()) {
                                         metrics.backfillStuck(workspace);
                                         log.warn("Topic vectors backfill read came back full of traces that can "
                                                 + "never get a vector, the project does not advance, workspace '{}', "
