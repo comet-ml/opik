@@ -14,6 +14,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.math.BigDecimal;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -290,6 +292,18 @@ class TruncationUtilsTest {
             JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
 
             assertThat(actual.slim()).isSameAs(actual.json());
+        }
+
+        @Test
+        @DisplayName("should keep a decimal as the node renders it, where reparsing renders it as a double")
+        void shouldKeepTheNodesDecimalWhereReparsingDiffers() {
+            JsonNode node = JsonUtils.valueToTree(Map.of("value", new BigDecimal("10")));
+
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            var expected = JsonWithSlim.builder().json("{\"value\":1E+1}").slim("{\"value\":1E+1}").build();
+            assertThat(actual).isEqualTo(expected);
+            assertThat(expectedFromReparse(node)).isEqualTo(expected.toBuilder().slim("{\"value\":10.0}").build());
         }
     }
 

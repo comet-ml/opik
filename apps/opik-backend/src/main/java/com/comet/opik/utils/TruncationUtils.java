@@ -156,7 +156,13 @@ public final class TruncationUtils {
      * <p>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
      * {@code String} instance. Otherwise it is {@link #slimJsonSerializable(JsonNode)}, written in one walk of the
      * node. For a node parsed from JSON, both match {@code toJsonString(node)} and
-     * {@code createSlimJsonString(toJsonString(node))}.
+     * {@code createSlimJsonString(toJsonString(node))}, the string path's columns.
+     *
+     * <p>Only for a node parsed from JSON. In a node built in code, a value can render differently once reparsed, so
+     * the slim copy can differ from the string path's while the full JSON matches. A {@code BigDecimal} of 10, as
+     * {@code valueToTree} builds online-evaluation scores, renders as {@code 1E+1}: kept here, {@code 10.0} once
+     * reparsed. Float, binary and POJO values differ the same way. Reads parse the slim JSON, so they get the same
+     * value either way.
      *
      * @param node the payload node (may be null)
      * @return the full and slim JSON strings, both empty if the node is null
