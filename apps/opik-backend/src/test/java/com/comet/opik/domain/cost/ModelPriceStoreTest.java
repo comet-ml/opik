@@ -95,6 +95,20 @@ class ModelPriceStoreTest {
     }
 
     @Test
+    void replaceAllSavesNamesThatDifferOnlyByAnAccentAsTwoRows() {
+        var organizationId = UUID.randomUUID().toString();
+
+        var result = replace(organizationId, """
+                [{"model": "modèle", "provider": "openai", "kind": "fixed", "input_price": "1.00"},
+                 {"model": "modele", "provider": "openai", "kind": "fixed", "input_price": "2.00"}]
+                """, null);
+
+        assertThat(result.saved()).isTrue();
+        assertThat(load(organizationId).rows()).extracting(CustomModelPrice::modelName)
+                .containsExactlyInAnyOrder("modèle", "modele");
+    }
+
+    @Test
     void replaceAllWithTheSameRowsKeepsTheVersion() {
         var organizationId = UUID.randomUUID().toString();
         replace(organizationId, TWO_ROWS, null);
