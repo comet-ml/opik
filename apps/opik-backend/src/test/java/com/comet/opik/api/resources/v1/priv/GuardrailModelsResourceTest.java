@@ -528,6 +528,7 @@ class GuardrailModelsResourceTest {
         }
         assertThat(cancelled.status()).isEqualTo(CANCELLED);
         assertThat(cancelled.statusMessage()).isEqualTo("Cancelled by " + USER);
+        assertThat(cancelled.finishedAt()).isNotNull();
 
         try (var response = request(workspace, "/" + id + "/runs/" + secondId + "/cancel").post(Entity.json(""))) {
             assertErrors(response, HttpStatus.SC_CONFLICT, "Guardrail training run has already ended");
