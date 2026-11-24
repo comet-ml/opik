@@ -138,21 +138,21 @@ class TopicVectorBackfiller {
     }
 
     /**
-     * One workspace's discovery, a slice at a time while the tick has time for a read; the next tick resumes it. Its
+     * One workspace's discovery, a slice at a time while half the tick budget is left; the next tick resumes it. Its
      * rows are written once every slice of both reads is read.
      */
     private Mono<Void> discover(String workspaceId, Instant lowerBound, Instant createdAfter, TickBudget budget,
             Duration interval) {
         return Mono.defer(() -> {
             var reserve = config.getVectors().getEmbedTimeout().toJavaDuration();
-            if (!budget.hasTimeForRead(reserve)) {
+            if (!hasTimeForDiscovery(budget, reserve)) {
                 return Mono.empty();
             }
             var maxExecutionTime = config.getVectors().getFind().getMaxExecutionTime().toJavaDuration();
             var discovery = discoveries.computeIfAbsent(workspaceId,
                     __ -> new Discovery(budget.start(), lowerBound, dao.slices(createdAfter)));
             return Mono.defer(() -> readSlice(workspaceId, discovery, budget.readSeconds(maxExecutionTime, reserve)))
-                    .repeat(() -> !discovery.done() && budget.hasTimeForRead(reserve))
+                    .repeat(() -> !discovery.done() && hasTimeForDiscovery(budget, reserve))
                     .then(Mono.defer(() -> discovery.done() ? save(workspaceId, discovery, interval) : Mono.empty()))
                     .onErrorResume(exception -> {
                         discoveries.remove(workspaceId);
@@ -163,6 +163,15 @@ class TopicVectorBackfiller {
                                 .then(Mono.empty());
                     });
         });
+    }
+
+    /**
+     * A discovery slice starts only while half of the tick budget is left, so a long discovery (a 365d backfill window
+     * is over 100 reads per workspace) leaves the fresh and backfill phases the other half; the next tick resumes it.
+     */
+    private static boolean hasTimeForDiscovery(TickBudget budget, Duration reserve) {
+        return budget.hasTimeForRead(reserve)
+                && budget.hasTimeFor(Duration.between(budget.start(), budget.deadline()).dividedBy(2));
     }
 
     /** The next slice: the projects' slices first, then their vector counts. */
@@ -389,6 +398,13 @@ class TopicVectorBackfiller {
                                 boolean cut = written.leftForLater(candidates);
                                 boolean drained = read.complete() && !cut;
                                 if (!drained && result.written() == 0) {
+                                    if (!read.complete() && !cut && !candidates.isEmpty()) {
+                                        metrics.backfillStuck(workspace);
+                                        log.warn("Topic vectors backfill read came back full of traces that can "
+                                                + "never get a vector, the project does not advance, workspace '{}', "
+                                                + "project '{}', traces '{}'", workspaceId, project.projectId(),
+                                                candidates.size());
+                                    }
                                     return new Turn(result, Optional.empty(), false, written.settled());
                                 }
                                 return new Turn(result, Optional.of(TopicBackfillProgress.builder()
