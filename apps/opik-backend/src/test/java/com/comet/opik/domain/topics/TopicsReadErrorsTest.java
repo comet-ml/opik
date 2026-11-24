@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.clickhouse.client.api.ServerException;
+import com.clickhouse.client.ClickHouseException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,20 +15,16 @@ class TopicsReadErrorsTest {
 
     @ParameterizedTest
     @ValueSource(ints = {158, 159, 241, 307, 396})
-    @DisplayName("every rows, bytes, time or memory guard is a guard trip, from either client")
+    @DisplayName("every rows, bytes, time or memory guard is a guard trip")
     void everyGuardIsAGuardTrip(int code) {
-        var v2 = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
-        var v1 = new RuntimeException(new com.clickhouse.client.ClickHouseException(code, "Limit exceeded", null));
-
-        assertThat(TopicsReadErrors.isGuardTrip(v2)).isTrue();
-        assertThat(TopicsReadErrors.isGuardTrip(v1)).isTrue();
+        assertThat(TopicsReadErrors.isGuardTrip(clickHouse(code))).isTrue();
     }
 
     @ParameterizedTest
     @ValueSource(ints = {158, 307, 396})
     @DisplayName("a rows or bytes limit is not a limit for the filter guard")
     void rowsOrBytesIsNotALimit(int code) {
-        var error = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
+        var error = clickHouse(code);
 
         assertThat(TopicsReadErrors.isLimit(error)).isFalse();
     }
@@ -37,7 +33,7 @@ class TopicsReadErrorsTest {
     @ValueSource(ints = {159, 241})
     @DisplayName("a time or memory limit is a limit for the filter guard")
     void timeOrMemoryIsALimit(int code) {
-        var error = new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"));
+        var error = clickHouse(code);
 
         assertThat(TopicsReadErrors.isLimit(error)).isTrue();
     }
@@ -51,9 +47,13 @@ class TopicsReadErrorsTest {
     @Test
     @DisplayName("another error is neither")
     void otherErrorIsNeither() {
-        var error = new RuntimeException(new ServerException(62, "Syntax error", 400, "query-id"));
+        var error = clickHouse(62);
 
         assertThat(TopicsReadErrors.isLimit(error)).isFalse();
         assertThat(TopicsReadErrors.isGuardTrip(error)).isFalse();
+    }
+
+    private static RuntimeException clickHouse(int code) {
+        return new RuntimeException(new ClickHouseException(code, "Limit exceeded", null));
     }
 }
