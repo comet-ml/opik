@@ -16,6 +16,8 @@ const GPT_4O: ModelPriceRow = {
   output_price: "8.5",
 };
 
+const hasBuiltIn = () => true;
+
 const ALIAS: ModelPriceRow = {
   model: "bifrost/gpt-4o",
   provider: "",
@@ -41,28 +43,66 @@ describe("describe", () => {
 
   it("lists each changed field", () => {
     expect(
-      describeChanges(GPT_4O, {
-        ...GPT_4O,
-        output_price: "8",
-        cache_read_price: "1.25",
-        note: "new",
-      }),
+      describeChanges(
+        GPT_4O,
+        {
+          ...GPT_4O,
+          output_price: "8",
+          cache_read_price: "1.25",
+          note: "new",
+        },
+        hasBuiltIn,
+      ),
     ).toEqual(["output 8.5 → 8", "cache read built-in → 1.25", "note changed"]);
-    expect(describeChanges(GPT_4O, { ...GPT_4O, input_price: "2.00" })).toEqual(
-      [],
-    );
+    expect(
+      describeChanges(GPT_4O, { ...GPT_4O, input_price: "2.00" }, hasBuiltIn),
+    ).toEqual([]);
+  });
+
+  it("says a custom model's missing price is not set, not built-in", () => {
+    const custom: ModelPriceRow = {
+      model: "qa-chat-model",
+      provider: "qa-acme",
+      kind: "fixed",
+      input_price: "1",
+      output_price: "3",
+    };
+    const noBuiltIn = () => false;
+
+    expect(
+      describeChanges(
+        custom,
+        { ...custom, output_price: "4", cache_read_price: "0.1" },
+        noBuiltIn,
+      ),
+    ).toEqual(["output 3 → 4", "cache read not set → 0.1"]);
+    expect(
+      describeChanges(
+        { ...custom, cache_write_price: "20" },
+        custom,
+        noBuiltIn,
+      ),
+    ).toEqual(["cache write 20 → not set"]);
   });
 
   it("describes a switch between own prices and an alias", () => {
     expect(
-      describeChanges(GPT_4O, {
-        ...GPT_4O,
-        kind: "alias",
-        alias_of: { model: "gpt-4.1", provider: "openai" },
-      }),
+      describeChanges(
+        GPT_4O,
+        {
+          ...GPT_4O,
+          kind: "alias",
+          alias_of: { model: "gpt-4.1", provider: "openai" },
+        },
+        hasBuiltIn,
+      ),
     ).toEqual(["now priced like gpt-4.1 on openai"]);
     expect(
-      describeChanges(ALIAS, { ...ALIAS, kind: "fixed", input_price: "1" }),
+      describeChanges(
+        ALIAS,
+        { ...ALIAS, kind: "fixed", input_price: "1" },
+        hasBuiltIn,
+      ),
     ).toEqual(["now has its own prices: input 1"]);
   });
 
@@ -82,11 +122,14 @@ describe("describe", () => {
       created_by: version === 3 ? "maria" : "daniel",
     });
 
-    const versions = groupHistory([
-      entry(3, "updated", GPT_4O, { ...GPT_4O, output_price: "8" }),
-      entry(3, "deleted", ALIAS, null),
-      entry(2, "created", null, ALIAS),
-    ]);
+    const versions = groupHistory(
+      [
+        entry(3, "updated", GPT_4O, { ...GPT_4O, output_price: "8" }),
+        entry(3, "deleted", ALIAS, null),
+        entry(2, "created", null, ALIAS),
+      ],
+      hasBuiltIn,
+    );
 
     expect(versions).toEqual([
       {
@@ -111,15 +154,20 @@ describe("describe", () => {
 
   it("describes a dry-run result", () => {
     expect(
-      describeReplaceResult({
-        version: 7,
-        saved: false,
-        created: [ALIAS],
-        updated: [{ before: GPT_4O, after: { ...GPT_4O, input_price: "1.9" } }],
-        deleted: [{ model: "old", provider: "openai", kind: "fixed" }],
-        unchanged: 4,
-        warnings: [],
-      }),
+      describeReplaceResult(
+        {
+          version: 7,
+          saved: false,
+          created: [ALIAS],
+          updated: [
+            { before: GPT_4O, after: { ...GPT_4O, input_price: "1.9" } },
+          ],
+          deleted: [{ model: "old", provider: "openai", kind: "fixed" }],
+          unchanged: 4,
+          warnings: [],
+        },
+        hasBuiltIn,
+      ),
     ).toEqual({
       created: [
         "bifrost/gpt-4o on any provider: priced like gpt-4o on the span's own provider",

@@ -2,6 +2,7 @@ import type { ModelPriceRow, PriceField } from "./types";
 import { PRICE_FIELDS } from "./types";
 import type { BuiltInPrice } from "./litellm";
 import { canonicalPrice, identityOf } from "./rows";
+import type { HasBuiltIn } from "./describe";
 
 export type CatalogType = "default" | "override" | "custom";
 
@@ -30,7 +31,7 @@ const EXTRA_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
 const identityOfPrice = (price: BuiltInPrice) =>
   identityOf({ model: price.model, provider: price.provider, kind: "fixed" });
 
-const effectivePrices = (
+export const effectivePrices = (
   builtIn: BuiltInPrice | undefined,
   row: ModelPriceRow | undefined,
 ): Partial<Record<PriceField, string>> => {
@@ -102,6 +103,11 @@ export const findBuiltIn = (
 ): BuiltInPrice | undefined => {
   const identity = identityOf({ model, provider, kind: "fixed" });
   return builtIns.find((price) => identityOfPrice(price) === identity);
+};
+
+export const builtInLookup = (builtIns: BuiltInPrice[]): HasBuiltIn => {
+  const identities = new Set(builtIns.map(identityOfPrice));
+  return (row) => identities.has(identityOf(row));
 };
 
 export const extraFields = (entry: CatalogEntry): PriceField[] =>

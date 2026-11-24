@@ -22,9 +22,11 @@ import { Textarea } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import {
+  BuiltInPrice,
   ModelPriceList,
   ModelPriceReplace,
   ModelPriceReplaceResult,
+  builtInLookup,
   describeBatchProblem,
   describeReplaceResult,
   parseLiteLlmUpload,
@@ -38,6 +40,7 @@ type BatchUpdateDrawerProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   list: ModelPriceList;
+  builtIns: BuiltInPrice[];
 };
 
 const EXAMPLE = `{
@@ -146,6 +149,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   open,
   setOpen,
   list,
+  builtIns,
 }) => {
   const { send, isSaving } = useSaveModelPrices();
   const [text, setText] = useState("");
@@ -222,7 +226,9 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
     }
   };
 
-  const described = preview ? describeReplaceResult(preview.result) : undefined;
+  const described = preview
+    ? describeReplaceResult(preview.result, builtInLookup(builtIns))
+    : undefined;
   const changeCount = described
     ? described.created.length + described.updated.length
     : 0;

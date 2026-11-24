@@ -24,6 +24,7 @@ import {
   CatalogEntry,
   buildCatalog,
   filterCatalog,
+  builtInLookup,
   groupHistory,
   identityOf,
   providersOf,
@@ -59,8 +60,9 @@ const CostCenterTab: React.FC = () => {
   const { data: builtIns, isPending: isBuiltInPending } = useBuiltInPrices();
   const { data: historyPage } = useModelPriceHistory(HISTORY_PAGE);
   const history = useMemo(
-    () => groupHistory(historyPage?.content ?? []),
-    [historyPage],
+    () =>
+      groupHistory(historyPage?.content ?? [], builtInLookup(builtIns ?? [])),
+    [historyPage, builtIns],
   );
 
   const [search, setSearch] = useState("");
@@ -405,6 +407,7 @@ const CostCenterTab: React.FC = () => {
           open={isBatchOpen}
           setOpen={setIsBatchOpen}
           list={list}
+          builtIns={builtIns ?? []}
         />
       )}
     </div>

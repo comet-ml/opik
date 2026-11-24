@@ -15,83 +15,90 @@ import {
   ModelPricesAccessProvider,
 } from "@/contexts/ModelPricesAccessContext";
 
-const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch } = vi.hoisted(() => {
-  const gpt4o = {
-    id: "row-1",
-    model: "gpt-4o",
-    provider: "openai",
-    kind: "fixed" as const,
-    input_price: "2",
-    note: "Contract rate",
-  };
-  return {
-    LIST: {
-      version: 3,
-      rows: [
-        gpt4o,
+const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch, listState } =
+  vi.hoisted(() => {
+    const gpt4o = {
+      id: "row-1",
+      model: "gpt-4o",
+      provider: "openai",
+      kind: "fixed" as const,
+      input_price: "2",
+      note: "Contract rate",
+    };
+    return {
+      LIST: {
+        version: 3,
+        rows: [
+          gpt4o,
+          {
+            id: "row-2",
+            model: "acme-llama-70b",
+            provider: "",
+            kind: "fixed" as const,
+            input_price: "0.6",
+            output_price: "0.6",
+          },
+          {
+            id: "row-3",
+            model: "team-model",
+            provider: "gateway",
+            kind: "alias" as const,
+            alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
+          },
+        ],
+      },
+      HISTORY: {
+        page: 1,
+        size: 100,
+        total: 1,
+        content: [
+          {
+            list_version: 3,
+            row_id: "row-1",
+            action: "created" as const,
+            after: gpt4o,
+            created_at: "2026-11-01T10:00:00Z",
+            created_by: "maria",
+          },
+        ],
+      },
+      BUILT_INS: [
         {
-          id: "row-2",
-          model: "acme-llama-70b",
-          provider: "",
-          kind: "fixed" as const,
-          input_price: "0.6",
+          model: "gpt-4o",
+          provider: "openai",
+          mode: "chat",
+          input_price: "2.5",
+          output_price: "10",
+          cache_read_price: "1.25",
+        },
+        {
+          model: "gpt-4o-mini",
+          provider: "openai",
+          mode: "chat",
+          input_price: "0.15",
           output_price: "0.6",
         },
         {
-          id: "row-3",
-          model: "team-model",
-          provider: "gateway",
-          kind: "alias" as const,
-          alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
+          model: "claude-sonnet-4-5",
+          provider: "anthropic",
+          mode: "chat",
+          input_price: "3",
+          output_price: "15",
         },
       ],
-    },
-    HISTORY: {
-      page: 1,
-      size: 100,
-      total: 1,
-      content: [
-        {
-          list_version: 3,
-          row_id: "row-1",
-          action: "created" as const,
-          after: gpt4o,
-          created_at: "2026-11-01T10:00:00Z",
-          created_by: "maria",
-        },
-      ],
-    },
-    BUILT_INS: [
-      {
-        model: "gpt-4o",
-        provider: "openai",
-        mode: "chat",
-        input_price: "2.5",
-        output_price: "10",
-        cache_read_price: "1.25",
-      },
-      {
-        model: "gpt-4o-mini",
-        provider: "openai",
-        mode: "chat",
-        input_price: "0.15",
-        output_price: "0.6",
-      },
-      {
-        model: "claude-sonnet-4-5",
-        provider: "anthropic",
-        mode: "chat",
-        input_price: "3",
-        output_price: "15",
-      },
-    ],
-    mutateAsync: vi.fn(),
-    refetch: vi.fn(),
-  };
-});
+      mutateAsync: vi.fn(),
+      refetch: vi.fn(),
+      listState: { current: undefined as unknown },
+    };
+  });
 
 vi.mock("@/api/model-prices/useModelPrices", () => ({
-  default: () => ({ data: LIST, isPending: false, isError: false, refetch }),
+  default: () => ({
+    data: listState.current ?? LIST,
+    isPending: false,
+    isError: false,
+    refetch,
+  }),
 }));
 
 vi.mock("@/api/model-prices/useModelPriceHistory", () => ({
@@ -108,20 +115,21 @@ vi.mock("@/api/model-prices/useBuiltInPrices", () => ({
 
 import CostCenterTab from "./CostCenterTab";
 
-const renderTab = (access?: ModelPricesAccess) =>
-  render(
-    <QueryParamProvider adapter={WindowHistoryAdapter}>
-      <TooltipProvider>
-        {access ? (
-          <ModelPricesAccessProvider value={access}>
-            <CostCenterTab />
-          </ModelPricesAccessProvider>
-        ) : (
+const tabTree = (access?: ModelPricesAccess) => (
+  <QueryParamProvider adapter={WindowHistoryAdapter}>
+    <TooltipProvider>
+      {access ? (
+        <ModelPricesAccessProvider value={access}>
           <CostCenterTab />
-        )}
-      </TooltipProvider>
-    </QueryParamProvider>,
-  );
+        </ModelPricesAccessProvider>
+      ) : (
+        <CostCenterTab />
+      )}
+    </TooltipProvider>
+  </QueryParamProvider>
+);
+
+const renderTab = (access?: ModelPricesAccess) => render(tabTree(access));
 
 const withFilters = (filters: object[]) =>
   window.history.replaceState(
@@ -174,6 +182,7 @@ describe("CostCenterTab", () => {
     refetch.mockReset();
     window.history.replaceState({}, "", "/");
     window.localStorage.clear();
+    listState.current = undefined;
   });
 
   describe("access", () => {
@@ -728,6 +737,121 @@ describe("CostCenterTab", () => {
       expect(
         screen.getByRole("button", { name: "Save changes" }),
       ).toBeVisible();
+    });
+
+    describe("when someone else changes the open model", () => {
+      const withAcme = (version: number, changes: object) => ({
+        version,
+        rows: LIST.rows.map((row) =>
+          row.model === "acme-llama-70b" ? { ...row, ...changes } : row,
+        ),
+      });
+      const sentAcme = () =>
+        sentRows().find(
+          (row: { model: string }) => row.model === "acme-llama-70b",
+        );
+
+      it("loads their change and keeps only my edit on top when the list reloads", async () => {
+        mutateAsync.mockImplementation(async ({ dryRun }) =>
+          replaceResult(dryRun),
+        );
+        const view = renderTab(ADMIN);
+
+        openRow("acme-llama-70b");
+        fireEvent.change(priceInput("Output"), { target: { value: "5" } });
+        listState.current = withAcme(4, { input_price: "2" });
+        view.rerender(tabTree(ADMIN));
+
+        expect(priceInput("Input")).toHaveValue("2");
+        expect(priceInput("Output")).toHaveValue("5");
+        expect(
+          screen.getByTestId("model-price-changed-elsewhere"),
+        ).toHaveTextContent("version 4");
+
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+        await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+        expect(mutateAsync.mock.lastCall![0].request.expected_version).toBe(4);
+        expect(sentAcme()).toEqual({
+          model: "acme-llama-70b",
+          provider: "",
+          kind: "fixed",
+          input_price: "2",
+          output_price: "5",
+        });
+      });
+
+      it("after a conflict, shows their prices with only my edit on top and saves that", async () => {
+        mutateAsync.mockRejectedValueOnce({ response: { status: 409 } });
+        refetch.mockResolvedValue({});
+        const view = renderTab(ADMIN);
+
+        openRow("acme-llama-70b");
+        fireEvent.change(screen.getByLabelText("Note"), {
+          target: { value: "Q4 contract" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+        await waitFor(() => expect(refetch).toHaveBeenCalled());
+        listState.current = withAcme(4, { output_price: "6" });
+        view.rerender(tabTree(ADMIN));
+
+        expect(priceInput("Output")).toHaveValue("6");
+        expect(screen.getByLabelText("Note")).toHaveValue("Q4 contract");
+
+        mutateAsync.mockImplementation(async ({ dryRun }) =>
+          replaceResult(dryRun),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+        await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+        expect(mutateAsync.mock.lastCall![0].request.expected_version).toBe(4);
+        expect(sentAcme()).toEqual({
+          model: "acme-llama-70b",
+          provider: "",
+          kind: "fixed",
+          input_price: "0.6",
+          output_price: "6",
+          note: "Q4 contract",
+        });
+      });
+
+      it("says so when someone removed the open model", () => {
+        const view = renderTab(ADMIN);
+
+        openRow("acme-llama-70b");
+        listState.current = {
+          version: 4,
+          rows: LIST.rows.filter((row) => row.model !== "acme-llama-70b"),
+        };
+        view.rerender(tabTree(ADMIN));
+
+        expect(
+          screen.getByTestId("model-price-changed-elsewhere"),
+        ).toHaveTextContent("removed");
+        expect(
+          screen.queryByRole("button", { name: /Remove model/ }),
+        ).toBeNull();
+      });
+
+      it("leaves the open model alone when another model changes", () => {
+        const view = renderTab(ADMIN);
+
+        openRow("acme-llama-70b");
+        fireEvent.change(priceInput("Output"), { target: { value: "5" } });
+        listState.current = {
+          version: 4,
+          rows: LIST.rows.map((row) =>
+            row.model === "gpt-4o" ? { ...row, input_price: "3" } : row,
+          ),
+        };
+        view.rerender(tabTree(ADMIN));
+
+        expect(priceInput("Input")).toHaveValue("0.6");
+        expect(priceInput("Output")).toHaveValue("5");
+        expect(
+          screen.queryByTestId("model-price-changed-elsewhere"),
+        ).toBeNull();
+      });
     });
 
     it("won't add a second row for a model the organization already prices", () => {
