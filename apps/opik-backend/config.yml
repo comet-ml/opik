@@ -2887,6 +2887,12 @@ topics:
     #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
     #  traces without a vector. Never before the task's applies_from
     window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 15m
+    #  Description: How far before its watermark each workspace's fresh read starts. Covers a done status that becomes
+    #  visible after a later one was read: a write to a lagging replica, or a status visible before its output row.
+    #  Each tick re-reads this much of the window, less the traces that have a vector. A status visible later than this
+    #  is left to the daily pass. At most window
+    watermarkOverlap: ${TOPICS_VECTORS_WATERMARK_OVERLAP:-15m}
     #  Default: 7d
     #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
     #  window
@@ -2902,8 +2908,7 @@ topics:
     backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
     #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
-    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read, and
-    #  summaries are read 1000 at a time
+    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
     #  Default: 256 (inference.limits.maxEmbedInputs)
     #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
@@ -2914,8 +2919,8 @@ topics:
     #  longer, toward embedTimeout, and a call over the service's queue is answered with quota_exceeded (429)
     embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
-    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
-    #  tickBudget, at most inference.limits.maxEmbedDeadline
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. At
+    #  least 1s under tickBudget, at most inference.limits.maxEmbedDeadline
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
     find:
       #  Default: 30000000
@@ -2925,7 +2930,7 @@ topics:
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
-      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      #  Description: Per window read, cut to the time left in the tick. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
       #  Default: 2
       #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
