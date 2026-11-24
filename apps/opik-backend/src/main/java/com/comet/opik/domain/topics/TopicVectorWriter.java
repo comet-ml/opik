@@ -76,6 +76,14 @@ class TopicVectorWriter {
 
         static final ChunkWrite EMPTY = new ChunkWrite(TickResult.EMPTY, Set.of());
 
+        /**
+         * Whether some of {@code candidates} were left for a later tick: neither written nor settled, for want of time,
+         * a back-off, an insert, or an answer of the wrong dimensions.
+         */
+        boolean leftForLater(@NonNull List<Candidate> candidates) {
+            return candidates.stream().map(VectorKey::of).anyMatch(key -> !settled.contains(key));
+        }
+
         ChunkWrite plus(@NonNull ChunkWrite other) {
             var union = new HashSet<>(settled);
             union.addAll(other.settled);

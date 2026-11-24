@@ -70,6 +70,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -97,9 +98,11 @@ import static com.comet.opik.domain.topics.TopicVectorsFixtures.rawVector;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -370,6 +373,49 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a long-window pass that takes two ticks reads each workspace's long window once: the second tick "
+            + "reads only the workspace the first left at the cap, and drains the pass")
+    void longWindowAcrossTicks() {
+        config().setMaxTracesPerTick(2);
+        var capped = enabledWorkspace();
+        var cappedProject = ID_GENERATOR.generateId();
+        var read = enabledWorkspace();
+        var readProject = ID_GENERATOR.generateId();
+        // Drained projects: their old statuses are the long-window pass's, not the backfill's.
+        markDrained(capped, cappedProject);
+        markDrained(read, readProject);
+        var cappedTraces = oldStatuses(capped, cappedProject, 3);
+        var readTraces = oldStatuses(read, readProject, 1);
+
+        makeLongWindowPassDue();
+        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
+        assertThat(tick()).isEqualTo(passTick.written(3).build());
+
+        // Found only by a long read of the workspace the first tick already read in full.
+        var lateTraces = oldStatuses(read, readProject, 1);
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(passTick.written(1).build());
+        // Drained: not due again for longWindowInterval.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+
+        assertVectors(tables.vectors(capped, cappedTraces), expectedVectors(capped, cappedProject, cappedTraces, 1));
+        assertVectors(tables.vectors(read, readTraces), expectedVectors(read, readProject, readTraces, 1));
+        assertThat(tables.vectors(read, lateTraces)).isEmpty();
+    }
+
+    /** {@code count} traces with output rows and done statuses written two days ago, older than the short window. */
+    private List<UUID> oldStatuses(String workspaceId, UUID projectId, int count) {
+        var traceIds = IntStream.range(0, count).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1)).toList())
+                .block();
+        for (int i = 0; i < count; i++) {
+            tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
+                    Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
+        }
+        return traceIds;
+    }
+
+    @Test
     @DisplayName("a workspace's old traces are embedded project by project in one tick, and each project is marked "
             + "drained with its counts; a new trace of a drained project is the next tick's workspace read's")
     void backfillByProject() {
@@ -471,26 +517,72 @@ class TopicVectorsTickTest {
         assertThat(watermark(workspaceId)).isEqualTo(second);
     }
 
+    @Test
+    @DisplayName("a workspace read the budget cuts short after the turn's own budget check reads nothing and leaves "
+            + "the watermark as it is, so the next tick still finds a status older than the overlap")
+    void budgetEndsBeforeTheRead() {
+        // The turn starts with at least 1s + embedTimeout (3s) left; the 6s name lookup leaves the read under that.
+        config().setTickBudget(io.dropwizard.util.Duration.seconds(8));
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(2));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        // Drained, so its traces are the workspace read's, which keeps the watermark.
+        markDrained(workspaceId, projectId);
+        var traceId = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        // Inside the short window, older than the overlap before the next tick's start.
+        tables.insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(1, ChronoUnit.HOURS));
+        wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+                .willReturn(aResponse().withStatus(200).withBody("slow-name").withFixedDelay(6_000)));
+
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(watermark(workspaceId)).isNull();
+
+        config().setTickBudget(defaults.getTickBudget());
+        config().setEmbedTimeout(defaults.getEmbedTimeout());
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, projectId, traceId, 1)));
+    }
+
     private Instant watermark(String workspaceId) {
         return workspaceService.vectorsWatermarks(List.of(workspaceId)).get(workspaceId);
     }
 
     @Test
-    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk is "
-            + "still sent, and the watermark moves past the refused traces")
+    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk, its "
+            + "backfill and its next project are still sent, the watermark moves past the refused traces, and the "
+            + "projects drain")
     void rejectedChunk() {
         config().setEmbedBatchSize(2);
         var workspaceId = enabledWorkspace();
-        labelTraces(workspaceId, 4, 1);
+        // Drained, so its traces are the workspace read's; the two new projects are the backfill's.
+        var drained = ID_GENERATOR.generateId();
+        markDrained(workspaceId, drained);
+        labelTraces(workspaceId, drained, 4, 1);
+        labelTraces(workspaceId, 2, 1);
+        labelTraces(workspaceId, 2, 1);
         embedStub.fail(workspaceId, 400, "{\"error\":{\"code\":\"invalid_request\",\"message\":\"m\"}}");
 
         // MySQL keeps microseconds.
         var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var result = tickService.tick(start).block();
 
-        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(2);
-        assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_FAILED, 4));
+        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(4);
+        assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_REFUSED, 8));
         assertThat(watermark(workspaceId)).isEqualTo(start);
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an answer of the wrong dimensions leaves the traces for a later tick: the project stays in backfill")
+    void wrongDimensions() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 2, 1);
+        embedStub.dimensions = 8;
+
+        assertThat(tick()).isEqualTo(TickResult.skipped(SkipReason.INVALID_VECTOR, 2));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isNotEmpty();
     }
 
     @Test
@@ -576,6 +668,26 @@ class TopicVectorsTickTest {
         assertThat(tick()).isEqualTo(new TickResult(2, Map.of(SkipReason.INVALID_VECTOR, 1)));
         assertThat(tables.vectors(workspaceId, List.of(zero))).isEmpty();
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("a backfill project read page by page sends an invalid vector's trace once: the next page's read "
+            + "returns it again, as it has no row, and the turn leaves it out")
+    void backfillPagesSkipSettledKeys() {
+        config().setMaxTracesPerTick(2);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var zero = ID_GENERATOR.generateId();
+        embedStub.zeroText = "a summary the stub embeds as zeros";
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, zero, 1, embedStub.zeroText))).block();
+        // The oldest status, so every page of the project's read starts with it.
+        tables.insertStatusAt(workspaceId, projectId, zero, 1, Instant.now().minus(3, ChronoUnit.DAYS));
+        var traceIds = oldStatuses(workspaceId, projectId, 2);
+
+        assertThat(tick()).isEqualTo(new TickResult(2, Map.of(SkipReason.INVALID_VECTOR, 1)));
+        assertThat(embedStub.calls.get()).isEqualTo(2);
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
     }
 
     @Test
@@ -799,6 +911,7 @@ class TopicVectorsTickTest {
         volatile int throttleCall;
         volatile Duration delay = Duration.ZERO;
         volatile String zeroText;
+        volatile int dimensions = TopicEmbedding.DIMENSIONS;
         volatile Runnable beforeAnswer;
         private volatile String failOrg;
         private volatile int failStatus;
@@ -810,6 +923,7 @@ class TopicVectorsTickTest {
             throttleCall = 0;
             delay = Duration.ZERO;
             zeroText = null;
+            dimensions = TopicEmbedding.DIMENSIONS;
             beforeAnswer = null;
             failOrg = null;
         }
@@ -851,11 +965,14 @@ class TopicVectorsTickTest {
             body.put("request_id", "r").put("cache_hit", false).put("latency_ms", 1);
             body.putObject("usage").put("input_tokens", 1).put("output_tokens", 0);
             var result = body.putObject("result");
-            result.put("dimensions", TopicEmbedding.DIMENSIONS);
+            result.put("dimensions", dimensions);
             var embeddings = result.putArray("embeddings");
             for (var input : request.path("inputs")) {
                 var text = input.asText();
                 var raw = text.equals(zeroText) ? new float[TopicEmbedding.DIMENSIONS] : rawVector(text);
+                if (dimensions != TopicEmbedding.DIMENSIONS) {
+                    raw = Arrays.copyOf(raw, dimensions);
+                }
                 var vector = embeddings.addArray();
                 for (float value : raw) {
                     vector.add(value);

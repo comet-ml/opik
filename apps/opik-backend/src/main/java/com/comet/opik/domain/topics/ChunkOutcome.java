@@ -22,7 +22,7 @@ record ChunkOutcome(@NonNull List<TopicVector> vectors, @NonNull Map<SkipReason,
 
     /** A chunk whose inputs the service refused: a later tick would send the same inputs and get the same answer. */
     static ChunkOutcome refused(@NonNull List<Candidate> chunk) {
-        return new ChunkOutcome(List.of(), Map.of(SkipReason.EMBED_FAILED, chunk.size()), keys(chunk));
+        return new ChunkOutcome(List.of(), Map.of(SkipReason.EMBED_REFUSED, chunk.size()), keys(chunk));
     }
 
     static Set<VectorKey> keys(@NonNull List<Candidate> candidates) {
