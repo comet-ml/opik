@@ -5,6 +5,7 @@ import functools
 import json
 import logging
 import threading
+import uuid
 import weakref
 from typing import (
     Any,
@@ -48,7 +49,7 @@ from .attachment import converters as attachment_converters
 from .dataset import test_suite
 from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
-from .experiment import experiments_client
+from .experiment import experiment_item, experiments_client
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
@@ -1297,6 +1298,53 @@ class Opik:
 
         return experiments
 
+    def get_dataset_item_experiment_results(
+        self,
+        dataset_name: str,
+        dataset_item_id: str,
+        dataset_versions: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[experiment_item.ExperimentItemContent]:
+        """
+        Returns one dataset item's results across every experiment run on the dataset.
+
+        Use it to see how a single test case scored over time. Each result is one
+        experiment's run of the item, with its ``experiment_id``, feedback scores,
+        output and trace. Results span every version of the item unless
+        ``dataset_versions`` narrows them.
+
+        Args:
+            dataset_name: The name of the dataset.
+            dataset_item_id: The dataset item's id. Must be a UUID.
+            dataset_versions: Dataset version hashes or tags. Only experiments run
+                against one of these versions are included. Defaults to every version.
+            project_name: The name of the project the dataset belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            max_results: The maximum number of results to return.
+
+        Returns:
+            List[ExperimentItemContent]: The item's results, one per experiment (one
+            per run when an experiment runs the item more than once). Optimizer trial,
+            mini-batch and mutation experiments are excluded.
+
+        Raises:
+            ValueError: If ``dataset_item_id`` is not a UUID.
+            DatasetVersionNotFound: If a version in ``dataset_versions`` does not exist.
+
+        Note:
+            For several items at once, such as every item with a tag, use
+            ``get_experiments_client().find_experiment_items_for_dataset`` with a
+            ``filter_string`` such as ``'tags contains "team-x"'``.
+        """
+        analytics.track_event("client", "get_dataset_item_experiment_results")
+        return self._get_item_experiment_results(
+            dataset_name=dataset_name,
+            item_id=dataset_item_id,
+            dataset_versions=dataset_versions,
+            project_name=project_name,
+            max_results=max_results,
+        )
+
     def delete_dataset(self, name: str, project_name: Optional[str] = None) -> None:
         """
         Delete dataset by name
@@ -1793,6 +1841,70 @@ class Opik:
             max_results=max_results,
             streamer=self._streamer,
             experiments_client=experiments_client,
+        )
+
+    def get_test_suite_item_experiment_results(
+        self,
+        name: str,
+        item_id: str,
+        dataset_versions: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[experiment_item.ExperimentItemContent]:
+        """
+        Returns one test suite item's results across every experiment run on the suite.
+
+        Use it to see how a single test case scored over time. Each result is one
+        experiment's run of the item, with its ``experiment_id``, feedback scores,
+        assertion results, output and trace. Results span every version of the item
+        unless ``dataset_versions`` narrows them.
+
+        Args:
+            name: The name of the test suite.
+            item_id: The test suite item's id. Must be a UUID.
+            dataset_versions: Test suite version hashes or tags. Only experiments run
+                against one of these versions are included. Defaults to every version.
+            project_name: The name of the project the suite belongs to.
+            max_results: The maximum number of results to return.
+
+        Returns:
+            List[ExperimentItemContent]: The item's results, one per run: an
+            experiment with ``runs_per_item`` above 1 contributes several.
+
+        Raises:
+            ValueError: If ``item_id`` is not a UUID.
+            DatasetVersionNotFound: If a version in ``dataset_versions`` does not exist.
+        """
+        analytics.track_event("client", "get_test_suite_item_experiment_results")
+        return self._get_item_experiment_results(
+            dataset_name=name,
+            item_id=item_id,
+            dataset_versions=dataset_versions,
+            project_name=project_name,
+            max_results=max_results,
+        )
+
+    def _get_item_experiment_results(
+        self,
+        dataset_name: str,
+        item_id: str,
+        dataset_versions: Optional[List[str]],
+        project_name: Optional[str],
+        max_results: int,
+    ) -> List[experiment_item.ExperimentItemContent]:
+        # Validated before it goes into the filter string, so a stray quote can't
+        # change the filter.
+        try:
+            item_id = str(uuid.UUID(item_id))
+        except (ValueError, AttributeError, TypeError):
+            raise ValueError(f"Item id must be a UUID, got {item_id!r}") from None
+
+        return self.get_experiments_client().find_experiment_items_for_dataset(
+            dataset_name=dataset_name,
+            filter_string=f'id = "{item_id}"',
+            project_name=self._resolve_project_name(project_name),
+            max_results=max_results,
+            dataset_versions=dataset_versions,
         )
 
     def create_experiment(
