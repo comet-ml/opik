@@ -240,6 +240,14 @@ public class OpikConfiguration extends JobConfiguration {
                 || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
     }
 
+    // Every guardrail models endpoint passes the guardrails gate, which needs the validations toggle: training alone
+    // would only make each of them a 403.
+    @JsonIgnore
+    @AssertTrue(message = "serviceToggles.guardrailsTrainingEnabled (TOGGLE_GUARDRAILS_TRAINING_ENABLED) requires serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED): guardrail models are used by guardrail checks")
+    public boolean isGuardrailsValidationsEnabledForTraining() {
+        return !serviceToggles.isGuardrailsTrainingEnabled() || serviceToggles.isGuardrailsValidationsEnabled();
+    }
+
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
     public boolean isAiLabelsInferenceConfigured() {

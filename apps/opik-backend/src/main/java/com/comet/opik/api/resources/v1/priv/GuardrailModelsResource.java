@@ -70,7 +70,7 @@ public class GuardrailModelsResource {
     private static final String FORBIDDEN_READ = "Guardrail model training is not enabled for this deployment, or guardrails are not enabled for the workspace's organization";
     private static final String UNAVAILABLE = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later";
     private static final String NOT_WIRED = "Guardrail models are not available yet";
-    private static final String FILE_DESCRIPTION = "JSON Lines, one {\"text\": \"...\", \"label\": \"yes\" | \"no\"} object per line, yes meaning the text violates: 20 to 50,000 rows, at least 5 per label, up to 12,000 characters each, 50 MB";
+    private static final String FILE_DESCRIPTION = "JSON Lines in UTF-8, one {\"text\": \"...\", \"label\": \"yes\" | \"no\"} object per line, yes meaning the text violates: 20 to 50,000 rows, at least 5 per label, up to 12,000 characters each, 50 MB";
 
     private final @NonNull GuardrailsAccess guardrailsAccess;
     private final @NonNull FeatureFlags featureFlags;
