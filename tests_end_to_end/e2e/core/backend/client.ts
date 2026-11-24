@@ -4735,6 +4735,24 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       page?: number;
       size?: number;
       datasetVersions?: string[];
+      /**
+       * The SINGULAR, pre-opik#9448 spelling — `dataset_version=<hash>`, one
+       * bare hash rather than a JSON array — sent instead of the plural one.
+       *
+       * Here so a spec can assert what a caller left on the old name actually
+       * gets, which is the one thing no other helper can express: JAX-RS has no
+       * `@QueryParam("dataset_version")` on this resource any more, so the
+       * value is DISCARDED rather than refused and the read answers 200 with
+       * every version's experiment items. That is not reachable through
+       * `datasetVersions` (which sends the name the server knows) nor through
+       * omitting it (which is an honestly unscoped read) — and the difference
+       * between "I asked for v1 and got everything" and "I asked for nothing
+       * and got everything" is invisible in the response body alone.
+       *
+       * Mutually exclusive with `datasetVersions` in practice; sending both
+       * would be asserting about neither, so a caller picks one.
+       */
+      legacyDatasetVersion?: string;
     }): Promise<CompareExperimentSetRef> {
       const query = new URLSearchParams({
         page: String(args.page ?? 1),
@@ -4743,6 +4761,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.datasetVersions === undefined
           ? {}
           : { dataset_versions: JSON.stringify(args.datasetVersions) }),
+        ...(args.legacyDatasetVersion === undefined
+          ? {}
+          : { dataset_version: args.legacyDatasetVersion }),
       });
       const { status, message, json } = await rawFetch(
         'GET',
@@ -4752,7 +4773,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (status !== 200) {
         throw new Error(
           `compareItemsAllExperiments(${args.datasetId}` +
-            `${args.datasetVersions === undefined ? '' : `, versions=${JSON.stringify(args.datasetVersions)}`}) ` +
+            `${args.datasetVersions === undefined ? '' : `, versions=${JSON.stringify(args.datasetVersions)}`}` +
+            `${args.legacyDatasetVersion === undefined ? '' : `, dataset_version=${args.legacyDatasetVersion}`}) ` +
             `-> ${status}: ${message}`,
         );
       }
@@ -9687,6 +9709,23 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the product's decision rather than the seed's.
        */
       status?: 'running' | 'completed' | 'cancelled' | 'failed';
+      /**
+       * The dataset VERSION this experiment ran against —
+       * `DatasetVersionRef.id`, the version's own row id, NOT its
+       * `versionHash`. Sending the hash here is accepted-looking and wrong: the
+       * column is a UUID, so a hash is rejected outright, and a run that
+       * silently omitted the field is linked to whatever is latest instead.
+       *
+       * Omitted rather than nulled when absent, because absent is a distinct
+       * state the backend acts on: "If not provided at creation, experiment
+       * will be automatically linked to the latest version" (`Experiment.java`).
+       * That default is why a fixture pinning a version must read the link back
+       * before asserting anything about a version-scoped query — an ignored pin
+       * leaves every experiment on `latest`, where a scoped read and an
+       * unscoped one answer the same rows and the scoping assertion cannot
+       * fail.
+       */
+      datasetVersionId?: string;
     }): Promise<string> {
       if (args.evaluationMethod !== undefined || args.status !== undefined) {
         await postSeedWrite(
@@ -9707,6 +9746,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(args.promptVersionIds?.length
               ? { prompt_versions: args.promptVersionIds.map((id) => ({ id })) }
               : {}),
+            ...(args.datasetVersionId === undefined
+              ? {}
+              : { dataset_version_id: args.datasetVersionId }),
           },
         );
         return args.id;
@@ -9722,6 +9764,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.promptVersionIds?.length
           ? { promptVersions: args.promptVersionIds.map((id) => ({ id })) }
           : {}),
+        ...(args.datasetVersionId === undefined
+          ? {}
+          : { datasetVersionId: args.datasetVersionId }),
       });
       return args.id;
     },

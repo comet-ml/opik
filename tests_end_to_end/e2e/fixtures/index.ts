@@ -1,4 +1,4 @@
-export { test, expect } from './widget-edit-traces.fixture';
+export { test, expect } from './version-scoped-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -839,3 +839,12 @@ export {
   WET_MATCHING_TRACES,
   WET_TOTAL_TRACES,
 } from './widget-edit-traces.fixture';
+export type {
+  VersionScopedExperimentRef,
+  VersionScopedExperimentsRef,
+  VersionScopedExperimentsFixtures,
+} from './version-scoped-experiments.fixture';
+export {
+  VSE_V1_ITEM_COUNT,
+  VSE_V2_ITEM_COUNT,
+} from './version-scoped-experiments.fixture';
