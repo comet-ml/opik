@@ -45,7 +45,10 @@ class MessageQueue(Generic[T]):
             return self._delivery_paused_until
 
     def set_delivery_paused_until(self, until: float) -> None:
-        """Extend the shared pause. A later, shorter retry must not end an active pause early."""
+        """Extend the shared pause.
+
+        A later, shorter retry must not end an active pause early.
+        """
         with self._cond:
             if until > self._delivery_paused_until:
                 self._delivery_paused_until = until
