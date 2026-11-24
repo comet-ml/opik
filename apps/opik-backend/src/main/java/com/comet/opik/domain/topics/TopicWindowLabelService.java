@@ -30,7 +30,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * The labelling pass: gives every trace of a saved run's window its {@code trace_topics} row. A run finds its topics on
- * a sample of the window when the window is larger than {@code topics.build.maxVectors}, and its own insert labels
+ * a sample of the window when the window is larger than {@code topics.run.maxVectors}, and its own insert labels
  * only the sample; this pass labels the rest, by the same rule: the {@link TopicAlgorithm#labeller} of the saved
  * prototypes. A list with no topic labels every trace Other, as its run did. The rows carry
  * {@code source = 'run'} and the run's id, as the run's own rows do: they are the run's labels.
@@ -38,11 +38,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * <p>Resumable: what is left is read from ClickHouse each time, as the window's traces without a row of the run. A pass
  * cut by its deadline or its subscriber, or stopped by a failed read or insert, loses nothing: the list stays saved,
  * the rows written stay, and a later pass goes on from there. No cursor is kept: the project's {@code labels_complete}
- * is false from the save until a pass ends complete, and the first-build job calls the pass again while it is false.
+ * is false from the save until a pass ends complete, and the discovery job calls the pass again while it is false.
  *
- * <p>Bounded: the window is cut at every {@code topics.build.labelSliceTraces}-th trace creation time, so each
+ * <p>Bounded: the window is cut at every {@code topics.run.labelSliceTraces}-th trace creation time, so each
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
- * in pages of at most {@code topics.build.labelPageTraces} traces, each read, assigned and inserted before the next, so
+ * in pages of at most {@code topics.run.labelPageTraces} traces, each read, assigned and inserted before the next, so
  * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
  * pass ends at the caller's deadline.
  *
@@ -138,8 +138,8 @@ public class TopicWindowLabelService {
      */
     Mono<PassOutcome> labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
             @NonNull Trigger trigger) {
-        int chunk = config.getBuild().getLabelPageTraces();
-        int sliceTraces = config.getBuild().getLabelSliceTraces();
+        int chunk = config.getRun().getLabelPageTraces();
+        int sliceTraces = config.getRun().getLabelSliceTraces();
         return jdbi(() -> workspace(workspaceId)).flatMap(workspace -> jdbi(() -> readSaved(workspaceId, projectId))
                 .flatMap(saved -> saved
                         .map(found -> pass(workspace, projectId, found, deadline, trigger, chunk, sliceTraces))
@@ -202,7 +202,7 @@ public class TopicWindowLabelService {
 
     private Mono<Totals> label(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, int chunk,
             int sliceTraces, AtomicReference<Totals> done, AtomicReference<Long> windowTraces) {
-        var build = config.getBuild();
+        var build = config.getRun();
         var countTimeout = build.getCountTimeout().toJavaDuration();
         // A full slice takes ceil(sliceTraces / chunk) pages and one empty page; the rest is margin for ties on a
         // bound and for traces that got their vector after the count.
@@ -250,7 +250,7 @@ public class TopicWindowLabelService {
 
     private Mono<Page> page(String workspaceId, UUID projectId, Saved saved, Slice slice, int number, String after,
             int chunk) {
-        var readTimeout = config.getBuild().getReadTimeout().toJavaDuration();
+        var readTimeout = config.getRun().getReadTimeout().toJavaDuration();
         return windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
                 readTimeout.toSeconds())
                 .collectList()
@@ -309,7 +309,7 @@ public class TopicWindowLabelService {
         if (rows.isEmpty()) {
             return Mono.empty();
         }
-        var build = config.getBuild();
+        var build = config.getRun();
         var backoff = build.getInsertBackoff().toJavaDuration();
         return traceTopicsDAO.insert(rows)
                 .timeout(build.getReadTimeout().toJavaDuration())
@@ -370,7 +370,7 @@ public class TopicWindowLabelService {
         });
         return rows.map(saved -> {
             var to = saved.project().windowUntil();
-            var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
+            var from = to.minus(Duration.ofDays(config.getRun().getWindowDays()));
             return new Saved(saved.project().listRunId(), from, to,
                     algorithm.labeller(saved.topics(), saved.project().otherVectors()));
         });

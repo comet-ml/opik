@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * The fixture under {@code src/test/resources/topics/fixture/}: one small window of synthetic trace summaries and,
- * for it, the expected output of each step of the first build. {@code generate.py} there regenerates the expected
+ * for it, the expected output of each step of the discovery run. {@code generate.py} there regenerates the expected
  * outputs; its docstring lists the inputs.
  */
 final class TopicsFixture {
@@ -31,12 +31,12 @@ final class TopicsFixture {
     final float[] vectors;
     final float[] centres;
     /** The unit centres of the backend's grouping ({@code java_kmeans.json}). */
-    final float[] firstBuildCentres;
+    final float[] discoveryCentres;
     final JsonNode expected;
     /** The recorded author answer on scikit-learn's grouping, in the per-cluster form the service reads. */
     final JsonNode answer;
     /** The same answer on the backend's grouping, in the per-cluster form. */
-    final JsonNode firstBuildAnswer;
+    final JsonNode discoveryAnswer;
     /** The backend's k-means grouping of the window, per unique text, that {@code expected.json} was built on. */
     final int[] javaGroups;
 
@@ -52,10 +52,10 @@ final class TopicsFixture {
         }
         vectors = floats("window.f32");
         centres = floats("centres.f32");
-        firstBuildCentres = floats("first_build_centres.f32");
+        discoveryCentres = floats("discovery_centres.f32");
         expected = json("expected.json");
         answer = assignment(expected.get("answer"));
-        firstBuildAnswer = assignment(expected.get("first_build").get("answer"));
+        discoveryAnswer = assignment(expected.get("discovery").get("answer"));
         javaGroups = ints(json("java_kmeans.json").get("groups"));
     }
 

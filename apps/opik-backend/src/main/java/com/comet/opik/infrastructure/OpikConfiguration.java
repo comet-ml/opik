@@ -295,11 +295,11 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.build.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
-        var build = topics.getBuild();
+    @AssertTrue(message = "topics.run.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
+        var run = topics.getRun();
         var limits = inference.getLimits();
-        return build == null || limits == null
-                || notAbove(build.getLlmDeadline(), limits.getMaxGenerateBatchDeadline());
+        return run == null || limits == null
+                || notAbove(run.getLlmDeadline(), limits.getMaxGenerateBatchDeadline());
     }
 
     @JsonIgnore

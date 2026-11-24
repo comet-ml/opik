@@ -4,6 +4,7 @@ import com.comet.opik.domain.ailabels.AiLabelSweepDAO.Candidate;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.WorkspaceHealth;
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.db.ClickHouseErrorCodes;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.google.common.hash.Hashing;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -43,9 +44,9 @@ public class AiLabelSweepService {
 
     // ClickHouse error codes of the sweep's guards: max_rows_to_read, max_execution_time, max_memory_usage.
     private static final Map<Integer, String> GUARD_CODES = Map.of(
-            158, "TOO_MANY_ROWS",
-            159, "TIMEOUT_EXCEEDED",
-            241, "MEMORY_LIMIT_EXCEEDED");
+            ClickHouseErrorCodes.TOO_MANY_ROWS, "TOO_MANY_ROWS",
+            ClickHouseErrorCodes.TIMEOUT_EXCEEDED, "TIMEOUT_EXCEEDED",
+            ClickHouseErrorCodes.MEMORY_LIMIT_EXCEEDED, "MEMORY_LIMIT_EXCEEDED");
 
     private final AiLabelSweepDAO sweepDAO;
     private final TransactionTemplate template;

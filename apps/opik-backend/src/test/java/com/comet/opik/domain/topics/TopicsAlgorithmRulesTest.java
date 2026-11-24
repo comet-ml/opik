@@ -23,8 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-/** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
-@DisplayName("topics first build: rules")
+/** The small rules of the discovery run: number formats, text order and strip, the answer, apply and assignment. */
+@DisplayName("topics discovery run: rules")
 class TopicsAlgorithmRulesTest {
 
     private static final int MAX_ITERATIONS = 150;
@@ -647,7 +647,7 @@ class TopicsAlgorithmRulesTest {
         }
     }
 
-    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the first build merges them. */
+    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the discovery run merges them. */
     private static List<List<String>> authorExamples(String[] texts, float[] vectors, int[] traceLabels,
             float[] centres, int frequent, int extra) {
         var merged = IntentMerger.merge(texts, vectors, 2);

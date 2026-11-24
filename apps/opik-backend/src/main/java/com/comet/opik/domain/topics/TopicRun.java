@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * Who a run is (the workspace name resolved once, for its metrics) and its window. {@code born} is the day the window
- * ends on, but never after the UTC day the run started: the first-build job's window ends at tomorrow's start (it holds
+ * ends on, but never after the UTC day the run started: the discovery job's window ends at tomorrow's start (it holds
  * today's traces), and its topics are born today.
  */
 record TopicRun(@NonNull UUID runId, @NonNull String workspaceId, @NonNull String workspaceName,

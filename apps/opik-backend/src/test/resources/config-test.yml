@@ -1093,7 +1093,7 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
-  build:
+  run:
     projectTimeout: 15m
     minVectors: 100
     windowDays: 30
@@ -1136,6 +1136,13 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2

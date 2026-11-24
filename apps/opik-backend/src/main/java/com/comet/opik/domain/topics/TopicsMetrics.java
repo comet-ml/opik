@@ -15,7 +15,7 @@ import java.time.Duration;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics, on the global meter. Every metric carries {@code workspace_id} and {@code workspace_name}:
+ * The topic runs' metrics, on the global meter. Every metric carries {@code workspace_id} and {@code workspace_name}:
  * the caller resolves the name once, at its boundary, so recording never blocks.
  */
 @Singleton
@@ -68,7 +68,7 @@ public class TopicsMetrics {
                 .build();
         this.labelPasses = meter.counterBuilder("topics.label.passes")
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
-                        + "resume: the first-build job going on with a pass that did not finish) and outcome "
+                        + "resume: the discovery job going on with a pass that did not finish) and outcome "
                         + "(complete; cut by its deadline or its caller; failed)")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
