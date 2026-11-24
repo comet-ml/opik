@@ -136,3 +136,62 @@ describe("trackOpenAI streaming", () => {
     });
   });
 });
+
+describe("trackOpenAI streaming that does not finish", () => {
+  const trackedStream = async (
+    create: (params: unknown) => AsyncGenerator<unknown>
+  ) => {
+    const trace = { span: vi.fn(), update: vi.fn(), end: vi.fn() };
+    const client = { flush: vi.fn(), trace: vi.fn(() => trace) };
+    const tracked = trackOpenAI(
+      { chat: { completions: { create } } },
+      { client: client as unknown as Opik }
+    );
+
+    const stream = await tracked.chat.completions.create({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+    });
+
+    return { trace, stream: stream as AsyncIterable<unknown> };
+  };
+
+  it("records the error and ends the trace when the stream fails", async () => {
+    const message = `reset_${crypto.randomUUID()}`;
+    const { trace, stream } = await trackedStream(async function* () {
+      yield chunk({ content: "partial" });
+      throw new Error(message);
+    });
+
+    const consume = async () => {
+      for await (const item of stream) {
+        expect(item).toBeDefined();
+      }
+    };
+
+    await expect(consume()).rejects.toThrow(message);
+    expect(trace.span).toHaveBeenCalledTimes(1);
+    expect(trace.span.mock.calls[0][0].errorInfo).toMatchObject({ message });
+    expect(trace.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("records the output read so far when the consumer stops early", async () => {
+    const first = crypto.randomUUID();
+    const { trace, stream } = await trackedStream(async function* () {
+      yield chunk({ content: first });
+      yield chunk({ content: crypto.randomUUID() });
+    });
+
+    for await (const item of stream) {
+      expect(item).toBeDefined();
+      break;
+    }
+
+    expect(trace.span).toHaveBeenCalledTimes(1);
+    expect(trace.span.mock.calls[0][0].output).toEqual({ message: first });
+    expect(trace.update).toHaveBeenCalledWith(
+      expect.objectContaining({ output: { message: first } })
+    );
+  });
+});

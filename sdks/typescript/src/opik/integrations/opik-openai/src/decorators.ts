@@ -224,46 +224,57 @@ function wrapAsyncIterable<T>(
     let usage: ChunkUsage = undefined;
     let outputFromChunks = null;
     let observationData = { ...initialObservationData };
+    let failed = false;
 
-    for await (const rawChunk of iterable) {
-      completionStartTime = completionStartTime ?? new Date();
+    try {
+      for await (const rawChunk of iterable) {
+        completionStartTime = completionStartTime ?? new Date();
 
-      const {
-        output,
-        usage: chunkUsage,
-        chunkData,
-        updatedObservationData,
-      } = processResponseChunk(rawChunk, observationData);
+        const {
+          output,
+          usage: chunkUsage,
+          chunkData,
+          updatedObservationData,
+        } = processResponseChunk(rawChunk, observationData);
 
-      if (output) outputFromChunks = output;
-      if (chunkUsage) usage = chunkUsage;
-      observationData = updatedObservationData;
+        if (output) outputFromChunks = output;
+        if (chunkUsage) usage = chunkUsage;
+        observationData = updatedObservationData;
 
-      if (chunkData.isToolCall) {
-        toolCallChunks = [...toolCallChunks, ...chunkData.data];
-        if (chunkData.text) textChunks = [...textChunks, chunkData.text];
-      } else {
-        textChunks = [...textChunks, chunkData.data as string];
+        if (chunkData.isToolCall) {
+          toolCallChunks = [...toolCallChunks, ...chunkData.data];
+          if (chunkData.text) textChunks = [...textChunks, chunkData.text];
+        } else {
+          textChunks = [...textChunks, chunkData.data as string];
+        }
+
+        yield rawChunk;
       }
+    } catch (error) {
+      failed = true;
+      handleError(error as Error, rootTracer, observationData);
+      throw error;
+    } finally {
+      // Also runs when the caller stops reading early (`break`), so the span
+      // keeps what was streamed up to that point.
+      if (!failed) {
+        const finalOutput =
+          outputFromChunks ?? buildStreamOutput(textChunks, toolCallChunks);
 
-      yield rawChunk;
-    }
+        const usageData = parseUsage({ usage });
 
-    const finalOutput =
-      outputFromChunks ?? buildStreamOutput(textChunks, toolCallChunks);
+        rootTracer.span({
+          ...observationData,
+          output: finalOutput,
+          endTime: new Date(),
+          type: OpikSpanType.General,
+          usage: usageData,
+        });
 
-    const usageData = parseUsage({ usage });
-
-    rootTracer.span({
-      ...observationData,
-      output: finalOutput,
-      endTime: new Date(),
-      type: OpikSpanType.General,
-      usage: usageData,
-    });
-
-    if (!hasUserProvidedParent) {
-      rootTracer.update({ output: finalOutput, endTime: new Date() });
+        if (!hasUserProvidedParent) {
+          rootTracer.update({ output: finalOutput, endTime: new Date() });
+        }
+      }
     }
   }
 
