@@ -1,9 +1,13 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("prototype vectors")
 class PrototypeVectorsTest {
@@ -31,5 +35,25 @@ class PrototypeVectorsTest {
         infinite[2] = Float.POSITIVE_INFINITY;
         assertThat(PrototypeVectors.isUnit(infinite)).isFalse();
         assertThat(PrototypeVectors.isUnit(new float[]{0.6f, 0.8f})).isFalse();
+    }
+
+    @Test
+    @DisplayName("a new topic and a first list can only be built from unit prototypes, and a topic from at least one")
+    void constructorsRejectInvalidPrototypes() {
+        var unit = new float[TopicEmbedding.DIMENSIONS];
+        unit[0] = 1;
+        var notUnit = unit.clone();
+        notUnit[1] = 1;
+
+        assertThat(NewTopic.builder().name("n").definition("d").prototypes(List.of(unit)).build().prototypes())
+                .hasSize(1);
+        assertThatThrownBy(() -> NewTopic.builder().name("n").definition("d").prototypes(List.of(unit, notUnit))
+                .build()).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("prototype vector '1'");
+        assertThatThrownBy(() -> NewTopic.builder().name("n").definition("d").prototypes(List.of()).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("owns no prototype");
+        assertThatThrownBy(() -> FirstBuild.builder().topics(List.of()).labels(new int[0])
+                .otherPrototypes(List.of(new float[]{1f})).stats(JsonUtils.createObjectNode()).build())
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

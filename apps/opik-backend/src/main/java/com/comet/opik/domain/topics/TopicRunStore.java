@@ -38,7 +38,6 @@ class TopicRunStore {
     private final ProjectService projectService;
     private final IdGenerator idGenerator;
     private final TopicsMetrics metrics;
-    private final Scheduler jdbi = Schedulers.boundedElastic();
 
     @Inject
     TopicRunStore(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
@@ -164,15 +163,18 @@ class TopicRunStore {
 
     /**
      * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
-     * the labelling pass gives the window's traces their topics.
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt
+     * stops after {@code topics.build.readTimeout}; the timeouts and backoffs run on {@code compute}. False when it
+     * still failed: the labelling pass gives the window's traces their topics.
      */
-    Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
+    Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics,
+            @NonNull Scheduler compute) {
         var backoff = build.getInsertBackoff().toJavaDuration();
         return traceTopicsDAO.insert(traceTopics)
-                .timeout(build.getReadTimeout().toJavaDuration())
+                .timeout(build.getReadTimeout().toJavaDuration(), compute)
                 .retryWhen(RetryUtils.handleClickHouseErrors(build.getInsertRetries(), backoff,
                         backoff.multipliedBy(1L << build.getInsertRetries()))
+                        .scheduler(compute)
                         .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
                                 signal.totalRetries() + 2, signal.failure())))
@@ -190,6 +192,6 @@ class TopicRunStore {
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {
-        return Mono.fromCallable(call).subscribeOn(jdbi);
+        return Mono.fromCallable(call).subscribeOn(Schedulers.boundedElastic());
     }
 }

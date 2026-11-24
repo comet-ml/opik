@@ -14,4 +14,11 @@ import java.util.List;
 @Builder(toBuilder = true)
 public record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> otherPrototypes,
         @NonNull ObjectNode stats) {
+
+    /** A list's prototypes are unit vectors: its topics' check them, and this checks the known-Other ones. */
+    public FirstBuild {
+        for (int p = 0; p < otherPrototypes.size(); p++) {
+            PrototypeVectors.checkUnit(p, otherPrototypes.get(p));
+        }
+    }
 }

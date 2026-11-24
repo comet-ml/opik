@@ -1102,8 +1102,6 @@ topics:
     readTimeout: 120s
     insertRetries: 3
     insertBackoff: 500ms
-    cpuThreads: 2
-    cpuQueue: 8
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824

@@ -11,7 +11,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -36,6 +35,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -121,7 +122,6 @@ class TopicsRebuildServiceTest {
     private TopicsConfig config;
     private TraceTopicsDAO traceTopicsDAO;
     private ProjectService projectService;
-    private WorkspaceNameService workspaceNames;
     private TopicWindowDAO windowDAO;
     private InferenceClient client;
     private TransactionTemplateAsync clickHouseTemplate;
@@ -129,6 +129,8 @@ class TopicsRebuildServiceTest {
     private TopicsMetrics metrics;
     private TopicRunStore store;
     private TopicsRebuildService service;
+    /** The scheduler the entry point would hand in. */
+    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-test-compute");
     private InMemoryMetricReader metricReader;
 
     private String workspaceId;
@@ -137,7 +139,7 @@ class TopicsRebuildServiceTest {
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, IdGenerator idGenerator, ProjectService projectService,
-            WorkspaceNameService workspaceNames, @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit InferenceClient client) {
         this.template = template;
         this.idGenerator = idGenerator;
@@ -147,13 +149,13 @@ class TopicsRebuildServiceTest {
         this.config = opikConfig.getTopics();
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
-        this.workspaceNames = workspaceNames;
         this.windowDAO = windowDAO;
         this.client = client;
     }
 
     @AfterAll
     void afterAll() {
+        compute.dispose();
         wireMock.server().stop();
         clickHouse.stop();
         zookeeper.stop();
@@ -181,7 +183,7 @@ class TopicsRebuildServiceTest {
         stubAnswer(FIXTURE.firstBuildAnswer);
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, 250_000).block();
+        var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, 250_000, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(250_000);
@@ -215,7 +217,7 @@ class TopicsRebuildServiceTest {
         stubAnswer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_BAD_ANSWER);
@@ -235,7 +237,7 @@ class TopicsRebuildServiceTest {
                 .withBody("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"over quota\",\"retryable\":true}}")));
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
@@ -252,7 +254,7 @@ class TopicsRebuildServiceTest {
         try {
             var runId = start();
 
-            var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+            var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
             assertThat(outcome.errorCode()).isEqualTo("window_read");
             assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
@@ -272,7 +274,7 @@ class TopicsRebuildServiceTest {
         stubAnswer(FIXTURE.firstBuildAnswer);
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(data.topics(projectId)).usingRecursiveFieldByFieldElementComparator()
@@ -293,7 +295,7 @@ class TopicsRebuildServiceTest {
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM projects WHERE id = ?",
                 projectId.toString()));
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
@@ -377,7 +379,7 @@ class TopicsRebuildServiceTest {
         var runId = start();
 
         var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
-                .firstBuild(runId, workspaceId, projectId, NIGHT, count).block();
+                .firstBuild(runId, workspace(), projectId, NIGHT, count, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -464,7 +466,8 @@ class TopicsRebuildServiceTest {
         stubAnswer(FIXTURE.firstBuildAnswer);
         var runId = start();
 
-        var outcome = serviceWith(stub).firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = serviceWith(stub).firstBuild(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute)
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         var saved = data.topics(projectId);
@@ -495,7 +498,8 @@ class TopicsRebuildServiceTest {
 
     private TopicsRebuildService serviceWith(TopicAlgorithm algorithm) {
         return new TopicsRebuildService(config, new TopicWindowReader(config, windowDAO),
-                new TopicsLlm(config, client, metrics), store, idGenerator, metrics, workspaceNames, algorithm);
+                new TopicsLlm(config, client, metrics), store, new TopicRunOutcomes(store), idGenerator, metrics,
+                algorithm);
     }
 
     /** A topic born on the run's night, with the traces whose index is {@code label} mod 3, and one prototype. */
@@ -532,7 +536,7 @@ class TopicsRebuildServiceTest {
         return store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD, Instant.EPOCH).block();
     }
 
-    /** The workspace as the run records it: no name service runs in the test app, so the name is the id. */
+    /** The workspace as the entry point hands it in; the test names it by its id. */
     private TopicsMetrics.Workspace workspace() {
         return new TopicsMetrics.Workspace(workspaceId, workspaceId);
     }
