@@ -39,6 +39,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 public class TopicVectorsDAO {
 
     static final String TABLE = "topic_vectors";
+    static final String STATUS_TABLE = "topic_vector_status";
     private static final String QUERY_PREFIX = "topics";
 
     /**
@@ -128,6 +129,23 @@ public class TopicVectorsDAO {
                 FROM (
                     SELECT workspace_id, project_id, trace_id, task_version, is_deleted
                     FROM topic_vectors
+                    WHERE workspace_id = :workspace_id
+                    <if(project)>AND project_id = :project_id<endif>
+                    AND task = :task
+                    AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
+                    <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
+                    ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+                )
+                WHERE is_deleted = 0
+            )
+            AND (project_id, trace_id, task_version) NOT IN (
+                SELECT project_id, trace_id, task_version
+                FROM (
+                    SELECT workspace_id, project_id, trace_id, task_version, is_deleted
+                    FROM topic_vector_status
                     WHERE workspace_id = :workspace_id
                     <if(project)>AND project_id = :project_id<endif>
                     AND task = :task
@@ -285,6 +303,29 @@ public class TopicVectorsDAO {
                 });
     }
 
+    /** The status rows of traces that can never get a vector; the window read leaves their keys out. */
+    public Mono<Long> insertStatuses(List<TopicVectorStatus> rows) {
+        if (CollectionUtils.isEmpty(rows)) {
+            return Mono.just(0L);
+        }
+        return jsonBulkInsert.insert(
+                STATUS_TABLE,
+                getLogComment("topics:insert_vector_status", null, null, "rows=%d".formatted(rows.size())),
+                rows,
+                row -> {
+                    var candidate = row.candidate();
+                    var node = JsonUtils.createObjectNode();
+                    node.put("workspace_id", candidate.workspaceId());
+                    node.put("project_id", candidate.projectId().toString());
+                    node.put("task", TopicEmbedding.SUMMARY_TASK);
+                    node.put("trace_id", candidate.traceId().toString());
+                    node.put("trace_created_at", candidate.traceCreatedAt().toString());
+                    node.put("task_version", candidate.taskVersion());
+                    node.put("reason", row.reason().getValue());
+                    return node;
+                });
+    }
+
     /** The window read {@code find} describes; see {@link TopicVectorsFind}. */
     public Flux<Candidate> findUnvectored(@NonNull TopicVectorsFind find) {
         var workspaceId = find.workspaceId();
@@ -424,20 +465,28 @@ public class TopicVectorsDAO {
                 .add("max_execution_time", maxExecutionSeconds);
     }
 
-    /** Traces linked to experiments survive retention, so their vectors do too. */
+    /**
+     * Traces linked to experiments survive retention, so their vectors do too. Each delete covers both tables,
+     * {@code topic_vectors} and {@code topic_vector_status}, which share the trace's keys and partitions.
+     */
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetention(TABLE, QUERY_PREFIX, workspaceIds, cutoffId, lowerBound);
+        return deletes.deleteForRetention(TABLE, QUERY_PREFIX, workspaceIds, cutoffId, lowerBound)
+                .zipWith(deletes.deleteForRetention(STATUS_TABLE, QUERY_PREFIX, workspaceIds, cutoffId,
+                        lowerBound), Long::sum);
     }
 
     public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetentionBounded(TABLE, QUERY_PREFIX, workspaceMinIds, cutoffId, lowerBound);
+        return deletes.deleteForRetentionBounded(TABLE, QUERY_PREFIX, workspaceMinIds, cutoffId, lowerBound)
+                .zipWith(deletes.deleteForRetentionBounded(STATUS_TABLE, QUERY_PREFIX, workspaceMinIds,
+                        cutoffId, lowerBound), Long::sum);
     }
 
     /** The trace-delete cascade; workspace from the reactive context. */
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
-        return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
+        return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId)
+                .then(deletes.deleteByTraceIds(STATUS_TABLE, QUERY_PREFIX, traceIds, projectId));
     }
 
 }

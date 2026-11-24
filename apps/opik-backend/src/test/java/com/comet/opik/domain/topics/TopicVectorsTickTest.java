@@ -533,28 +533,30 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk, its "
-            + "backfill and its next project are still sent, the watermark moves past the refused traces, and the "
-            + "projects drain")
+    @DisplayName("a rejected chunk (a non-retryable 4xx) is sent again in single inputs, and costs only the inputs "
+            + "refused on their own: they get a status row, the workspace's next chunk, its backfill and its next "
+            + "project are still sent, the watermark moves past them, and the projects drain")
     void rejectedChunk() {
         config().setEmbedBatchSize(2);
         var workspaceId = enabledWorkspace();
         // Drained, so its traces are the workspace read's; the two new projects are the backfill's.
         var drained = ID_GENERATOR.generateId();
         markDrained(workspaceId, drained);
-        labelTraces(workspaceId, drained, 4, 1);
-        labelTraces(workspaceId, 2, 1);
-        labelTraces(workspaceId, 2, 1);
+        var traceIds = new ArrayList<>(labelTraces(workspaceId, drained, 4, 1));
+        traceIds.addAll(labelTraces(workspaceId, 2, 1));
+        traceIds.addAll(labelTraces(workspaceId, 2, 1));
         embedStub.fail(workspaceId, 400, "{\"error\":{\"code\":\"invalid_request\",\"message\":\"m\"}}");
 
         // MySQL keeps microseconds.
         var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var result = tickService.tick(start).block();
 
-        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(4);
+        // Each of the 4 chunks of 2: the chunk, then each input alone.
+        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(12);
         assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_REFUSED, 8));
         assertThat(watermark(workspaceId)).isEqualTo(start);
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+        assertThat(tables.statuses(workspaceId, traceIds)).hasSize(8).containsValue("embed_refused");
     }
 
     @Test
@@ -654,8 +656,8 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a backfill project read page by page sends an invalid vector's trace once: the next page's read "
-            + "returns it again, as it has no row, and the turn leaves it out")
+    @DisplayName("a backfill project read page by page sends an invalid vector's trace once: it gets a status row, "
+            + "and the next page's read leaves it out")
     void backfillPagesSkipSettledKeys() {
         config().setMaxTracesPerTick(2);
         var workspaceId = enabledWorkspace();
@@ -671,6 +673,35 @@ class TopicVectorsTickTest {
         assertThat(embedStub.calls.get()).isEqualTo(2);
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a full backfill page of traces that can never get a vector is read and sent once: they get status "
+            + "rows, the next read moves past them in the same tick, and the project drains")
+    void unembeddablePageReadOnce() {
+        config().setMaxTracesPerTick(2);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        embedStub.zeroText = "a summary the stub embeds as zeros";
+        var zeros = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+        for (int i = 0; i < zeros.size(); i++) {
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, zeros.get(i), 1, embedStub.zeroText)))
+                    .block();
+            // The oldest statuses, so the first page is only them.
+            tables.insertStatusAt(workspaceId, projectId, zeros.get(i), 1,
+                    Instant.now().minus(3, ChronoUnit.DAYS).plusSeconds(i));
+        }
+        var traceIds = oldStatuses(workspaceId, projectId, 2);
+
+        assertThat(tick()).isEqualTo(new TickResult(2, Map.of(SkipReason.INVALID_VECTOR, 2)));
+        assertThat(embedStub.calls.get()).isEqualTo(2);
+        assertThat(tables.statuses(workspaceId, zeros)).containsOnlyKeys(zeros).containsValue("invalid_vector");
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(TickResult.builder().skipped(Map.of()).longWindowPass(true).build());
+        assertThat(embedStub.calls.get()).isEqualTo(2);
     }
 
     @Test

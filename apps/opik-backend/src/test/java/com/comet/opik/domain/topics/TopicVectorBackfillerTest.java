@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -235,48 +234,6 @@ class TopicVectorBackfillerTest {
         assertThat(result.written()).isEqualTo(2);
         verify(setup.backfills).record(List.of(TopicBackfillProgress.builder().workspaceId(setup.workspaceId)
                 .projectId(project.projectId()).drainedAt(now).written(2).build()));
-    }
-
-    @Test
-    @DisplayName("a full backfill page of traces that can never get a vector is counted as stuck")
-    void stuckPage() {
-        var setup = new Setup();
-        var project = backfill(5, now).toBuilder().workspaceId(setup.workspaceId).build();
-        var candidates = IntStream.range(0, 2).mapToObj(i -> candidate(setup.workspaceId, project.projectId()))
-                .toList();
-        when(setup.dao.findUnvectored(any())).thenReturn(Flux.fromIterable(candidates));
-        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
-                TickResult.skipped(SkipReason.INVALID_VECTOR, 2),
-                candidates.stream().map(VectorKey::of).collect(Collectors.toSet()))));
-        var workspace = TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId);
-
-        var result = setup.backfiller.backfill(workspace, List.of(project), setup.window(2), setup.budget(50)).block();
-
-        assertThat(result.written()).isZero();
-        verify(setup.metrics).backfillStuck(workspace);
-    }
-
-    @Test
-    @DisplayName("a backfill read the tick budget cut short is not counted as stuck")
-    void budgetCutReadNotStuck() {
-        var setup = new Setup();
-        // Traces past one slice's count: the read goes slice by slice, and the budget ends after the first.
-        var project = backfill(TopicVectorBackfiller.ONE_SLICE_MAX_TRACES + 1, now).toBuilder()
-                .workspaceId(setup.workspaceId).build();
-        setup.config.getVectors().getFind().setSliceSize(Duration.days(1));
-        var candidate = candidate(setup.workspaceId, project.projectId());
-        when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
-            setup.clock.advance(java.time.Duration.ofSeconds(48));
-            return Flux.just(candidate);
-        });
-        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
-                TickResult.skipped(SkipReason.INVALID_VECTOR, 1), Set.of(VectorKey.of(candidate)))));
-        var workspace = TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId);
-
-        setup.backfiller.backfill(workspace, List.of(project), setup.window(10), setup.budget(50)).block();
-
-        verify(setup.metrics, never()).backfillStuck(any());
-        verify(setup.backfills).record(List.of());
     }
 
     @Test
