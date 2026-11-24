@@ -32,6 +32,7 @@ import { formatCost } from "@/lib/money";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import TagsHoverCard from "@/shared/TagsHoverCard/TagsHoverCard";
+import CostBreakdownHoverCard from "@/shared/CostBreakdown/CostBreakdownHoverCard";
 import {
   TRACE_TYPE_FOR_TREE,
   TRACE_TYPE_COLORS_MAP,
@@ -347,8 +348,18 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
         )}
         {config[TREE_DATABLOCK_TYPE.ESTIMATED_COST] &&
           !isUndefined(estimatedCost) && (
-            <TooltipWrapper
-              content={`Estimated cost ${formatCost(estimatedCost, {
+            <CostBreakdownHoverCard
+              target={
+                isTrace
+                  ? {
+                      kind: "trace",
+                      projectId: node.data.project_id,
+                      traceId: node.data.id,
+                      cost: estimatedCost,
+                    }
+                  : { kind: "span", span: node.data }
+              }
+              tooltip={`Estimated cost ${formatCost(estimatedCost, {
                 modifier: "full",
               })}`}
             >
@@ -356,7 +367,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                 <Coins className="size-3 shrink-0" />{" "}
                 {formatCost(estimatedCost)}
               </div>
-            </TooltipWrapper>
+            </CostBreakdownHoverCard>
           )}
         {config[TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS] && isNumber(tokens) && (
           <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>

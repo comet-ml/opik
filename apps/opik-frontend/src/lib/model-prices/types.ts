@@ -112,3 +112,32 @@ export interface ModelsUsed {
   truncated: boolean;
   content: ModelUsed[];
 }
+
+export interface ModelPriceResolveRequest {
+  model: string;
+  provider?: string | null;
+  usage?: Record<string, number>;
+}
+
+export interface ModelPriceResolutionLine {
+  name: string;
+  rate_per_million: string;
+  source: PriceSource;
+}
+
+export interface ModelPriceMatch {
+  provider: string;
+  name_form: string;
+  row?: ModelPriceRow | null;
+  target_row?: ModelPriceRow | null;
+}
+
+export interface ModelPriceResolution {
+  model: string;
+  provider?: string | null;
+  cost: string;
+  cost_source: PriceSource;
+  list_version: number;
+  match?: ModelPriceMatch | null;
+  lines: ModelPriceResolutionLine[];
+}

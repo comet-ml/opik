@@ -474,6 +474,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
+                    spans={allSpans}
                     isErrorExpanded={showMcpHint ? isErrorOpen : undefined}
                     onErrorExpandedChange={
                       showMcpHint ? handleErrorExpandedChange : undefined

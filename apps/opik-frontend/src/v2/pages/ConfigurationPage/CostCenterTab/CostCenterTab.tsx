@@ -38,7 +38,7 @@ import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import NoPriceBanner from "./NoPriceBanner";
 import QuickAccess from "./QuickAccess";
-import useBuiltInPrices from "./useBuiltInPrices";
+import useBuiltInPrices from "@/api/model-prices/useBuiltInPrices";
 import { MAX_QUICK_ACCESS } from "./format";
 
 const HISTORY_PAGE = { page: 1, size: 100 };

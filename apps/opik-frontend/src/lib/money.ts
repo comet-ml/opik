@@ -37,3 +37,24 @@ export const formatCost = (
 
   return `${CURRENCY}${floor(numValue, precision)}`;
 };
+
+const EXACT_COST_DIGITS = new Intl.NumberFormat("en-US", {
+  maximumSignificantDigits: 6,
+});
+
+export const formatExactCost = (
+  value: number | string | undefined | null,
+  noValue = "-",
+) => {
+  const numValue = Number(value);
+  if (isUndefined(value) || isNull(value) || !Number.isFinite(numValue)) {
+    return noValue;
+  }
+  const [integer, fraction = ""] = EXACT_COST_DIGITS.format(
+    Math.abs(numValue),
+  ).split(".");
+  return `${numValue < 0 ? "-" : ""}${CURRENCY}${integer}.${fraction.padEnd(
+    PRECISION,
+    "0",
+  )}`;
+};

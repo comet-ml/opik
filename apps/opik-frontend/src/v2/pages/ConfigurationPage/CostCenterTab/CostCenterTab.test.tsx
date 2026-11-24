@@ -110,7 +110,7 @@ vi.mock("@/api/model-prices/useModelPricesReplaceMutation", () => ({
   default: () => ({ mutateAsync, isPending: false }),
 }));
 
-vi.mock("./useBuiltInPrices", () => ({
+vi.mock("@/api/model-prices/useBuiltInPrices", () => ({
   default: () => ({ data: BUILT_INS, isPending: false }),
 }));
 

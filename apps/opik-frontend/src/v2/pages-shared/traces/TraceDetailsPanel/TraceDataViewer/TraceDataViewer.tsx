@@ -50,6 +50,7 @@ type TraceDataViewerProps = {
   search?: string;
   isErrorExpanded?: boolean;
   onErrorExpandedChange?: (expanded: boolean) => void;
+  spans?: Span[];
   /**
    * Sits at the end of the header row. A slot rather than a component, so the
    * panel keeps owning when it appears and this only decides where.
@@ -69,6 +70,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   isErrorExpanded,
   onErrorExpandedChange,
   headerSlot,
+  spans,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread, canViewPrompts },
@@ -202,6 +204,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               endTime={data.end_time}
               totalTokens={tokens}
               estimatedCost={data.total_estimated_cost}
+              costBreakdown={
+                traceData
+                  ? {
+                      kind: "trace",
+                      projectId,
+                      traceId: traceData.id,
+                      cost: traceData.total_estimated_cost,
+                      spans,
+                    }
+                  : { kind: "span", span: data }
+              }
             />
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>

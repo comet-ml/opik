@@ -121,6 +121,7 @@ export const GUARDRAIL_POLICY_KEY = "guardrail-policy";
 export const MODEL_PRICES_KEY = "model-prices";
 export const MODEL_PRICE_HISTORY_KEY = "model-price-history";
 export const MODELS_USED_KEY = "models-used";
+export const MODEL_PRICE_RESOLVE_KEY = "model-price-resolve";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

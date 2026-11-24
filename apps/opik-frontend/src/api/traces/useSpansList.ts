@@ -30,7 +30,7 @@ export type UseSpansListResponse = {
   total: number;
 };
 
-const getSpansList = async (
+export const getSpansList = async (
   { signal }: QueryFunctionContext,
   {
     projectId,

@@ -105,6 +105,10 @@ import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
+import {
+  SpanCostCell,
+  TraceCostCell,
+} from "@/shared/CostBreakdown/CostBreakdownCells";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
@@ -1182,7 +1186,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         isSpans ? buildSpanDurationTarget : buildDurationTarget,
       ),
       total_estimated_cost: withExplain(
-        CostCell as never,
+        (isSpans ? SpanCostCell : TraceCostCell) as never,
         isSpans ? buildSpanCostTarget : buildCostTarget,
       ),
     };

@@ -7,3 +7,5 @@ export * from "./saveErrors";
 export * from "./litellm";
 export * from "./catalog";
 export * from "./single";
+export * from "./spanUsage";
+export * from "./costBreakdown";

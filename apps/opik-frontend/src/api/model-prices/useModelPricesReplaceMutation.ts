@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import api, {
   MODEL_PRICE_HISTORY_KEY,
+  MODEL_PRICE_RESOLVE_KEY,
   MODELS_USED_KEY,
   MODEL_PRICES_KEY,
   MODEL_PRICES_REST_ENDPOINT,
@@ -33,6 +34,7 @@ const useModelPricesReplaceMutation = () => {
       queryClient.invalidateQueries({ queryKey: [MODEL_PRICES_KEY] });
       queryClient.invalidateQueries({ queryKey: [MODEL_PRICE_HISTORY_KEY] });
       queryClient.invalidateQueries({ queryKey: [MODELS_USED_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MODEL_PRICE_RESOLVE_KEY] });
     },
     onError: (error) => {
       if ((error as AxiosError).response?.status !== 409) return;

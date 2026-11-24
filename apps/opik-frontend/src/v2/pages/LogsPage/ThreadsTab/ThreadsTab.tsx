@@ -64,7 +64,7 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
-import CostCell from "@/shared/DataTableCells/CostCell";
+import { ThreadCostCell } from "@/shared/CostBreakdown/CostBreakdownCells";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -129,7 +129,10 @@ const DurationExplainCell = withExplain(
   DurationCell as never,
   buildThreadDurationTarget,
 );
-const CostExplainCell = withExplain(CostCell as never, buildThreadCostTarget);
+const CostExplainCell = withExplain(
+  ThreadCostCell as never,
+  buildThreadCostTarget,
+);
 
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
