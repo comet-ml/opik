@@ -132,6 +132,24 @@ class GuardrailTrainingRunDAOTest {
     }
 
     @Test
+    @DisplayName("The write that ends a run sets its finish time once; a later write in its finished status keeps it")
+    void updateStatusSetsFinishedAtOnce() {
+        var queued = createFirstRun(UUID.randomUUID().toString());
+        assertThat(queued.finishedAt()).isNull();
+        var running = move(queued, RUNNING);
+        assertThat(running.finishedAt()).isNull();
+
+        var completed = move(running, COMPLETED);
+        assertThat(completed.finishedAt()).isNotNull();
+        assertThat(runs.updateStatus(completed.id(), completed.workspaceId(), COMPLETED, COMPLETED, null,
+                json("{\"prefetch\": {\"done\": true}}"), WORKER)).isOne();
+
+        var later = find(completed.id(), completed.workspaceId());
+        assertThat(later.metadata().path("prefetch").path("done").asBoolean()).isTrue();
+        assertThat(later.finishedAt()).isEqualTo(completed.finishedAt());
+    }
+
+    @Test
     @DisplayName("A status write from a status the run has already left writes nothing")
     void updateStatusWhenRunMovedByAnotherWriterWritesNothing() {
         var queued = createFirstRun(UUID.randomUUID().toString());
@@ -164,9 +182,10 @@ class GuardrailTrainingRunDAOTest {
         assertThat(runs.failAndQueueRetry(running, "capacity", failure, nextId, CREATED_METADATA, WORKER)).isTrue();
 
         var failed = find(running.id(), running.workspaceId());
+        assertThat(failed.finishedAt()).isNotNull();
         assertThat(failed)
                 .usingRecursiveComparison()
-                .ignoringFields("lastUpdatedAt")
+                .ignoringFields("finishedAt", "lastUpdatedAt")
                 .isEqualTo(running.toBuilder()
                         .status(FAILED)
                         .statusMessage("capacity")

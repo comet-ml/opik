@@ -37,7 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The reads of {@link GuardrailTrainingRunDAO} that go through a secondary index use the one the design's "Operations
  * and indexes" table names for them. The optimizer chooses by table statistics, so the table is seeded with many
- * workspaces, models and finished runs and analysed first, on a container of this class's own.
+ * workspaces, models and finished runs, and one model with thousands of runs, and analysed first, on a container of
+ * this class's own.
  *
  * <p>A single row read by primary key shows in a plan without its table: MySQL fetches it while optimising. The writes
  * are left out, since the v2 EXPLAIN format the capture uses cannot describe them; they are by primary key or by
@@ -50,11 +51,13 @@ class GuardrailTrainingQueryPlanTest {
     private static final String RUNS = "guardrail_training_runs";
     private static final String PRIMARY = "PRIMARY";
     private static final String RUNS_MODEL = "guardrail_training_runs_model_status_created_idx";
+    private static final String RUNS_MODEL_CREATED = "guardrail_training_runs_model_created_idx";
     private static final String RUNS_STATUS = "guardrail_training_runs_status_last_updated_idx";
 
     private static final int WORKSPACES = 40;
     private static final int MODELS_PER_WORKSPACE = 10;
     private static final int RUNS_PER_MODEL = 12;
+    private static final int RUNS_OF_A_LONG_TRAINED_MODEL = 5_000;
     private static final String USER = "user";
     private static final JsonNode METADATA = JsonUtils.getJsonNodeFromString("{\"files\": {\"layout\": \"v1\"}}");
     private static final List<GuardrailTrainingRunStatus> FINISHED = List.of(GuardrailTrainingRunStatus.COMPLETED,
@@ -66,6 +69,7 @@ class GuardrailTrainingQueryPlanTest {
 
     private String workspaceId;
     private UUID modelId;
+    private UUID longTrainedModelId;
     private List<UUID> modelRunIds;
     private GuardrailTrainingRun runInFlight;
 
@@ -122,6 +126,15 @@ class GuardrailTrainingQueryPlanTest {
                     modelId = modelIds.getFirst();
                 }
             }
+            longTrainedModelId = ID_GENERATOR.generate();
+            for (int run = 0; run < RUNS_OF_A_LONG_TRAINED_MODEL; run++) {
+                runs.bind("id", ID_GENERATOR.generate().toString())
+                        .bind("modelId", longTrainedModelId.toString())
+                        .bind("workspaceId", workspaceId).bind("status", FINISHED.get(run % FINISHED.size()).name())
+                        .bind("attempt", 1).bind("metadata", METADATA.toString())
+                        .bind("createdAt", start.plus(run, ChronoUnit.MINUTES)).bind("user", USER)
+                        .add();
+            }
             runs.execute();
             handle.execute("ANALYZE TABLE guardrail_training_runs");
         });
@@ -136,6 +149,9 @@ class GuardrailTrainingQueryPlanTest {
 
     Stream<Arguments> reads() {
         var modelRuns = Map.of(RUNS, Set.of(RUNS_MODEL));
+        // The reads over all of a model's runs: while a model has a few runs MySQL takes the status index and sorts
+        // them, and as its runs grow it takes the created index, which returns them in order.
+        var allModelRuns = Map.of(RUNS, Set.of(RUNS_MODEL, RUNS_MODEL_CREATED));
         var runsInFlight = Map.of(RUNS, Set.of(RUNS_STATUS));
         return Stream.of(
                 new Read("a page's runs", dao -> dao.findByIds(modelRunIds, workspaceId),
@@ -144,9 +160,12 @@ class GuardrailTrainingQueryPlanTest {
                 new Read("run in flight", dao -> dao.findInFlight(modelId, workspaceId), modelRuns),
                 new Read("previous attempt",
                         dao -> dao.findPreviousAttempt(runInFlight.toBuilder().attempt(2).build()), modelRuns),
-                new Read("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), modelRuns),
-                new Read("run history count", dao -> dao.countByModel(modelId, workspaceId), modelRuns),
-                new Read("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), modelRuns),
+                new Read("run history", dao -> dao.findByModel(modelId, workspaceId, 10, 0), allModelRuns),
+                new Read("run history of a model with thousands of runs",
+                        dao -> dao.findByModel(longTrainedModelId, workspaceId, 10, 0),
+                        Map.of(RUNS, Set.of(RUNS_MODEL_CREATED))),
+                new Read("run history count", dao -> dao.countByModel(modelId, workspaceId), allModelRuns),
+                new Read("a model's run ids", dao -> dao.findIdsByModel(modelId, workspaceId), allModelRuns),
                 new Read("worker scan", dao -> dao.findAllInFlight(100), runsInFlight),
                 new Read("workspace's runs in flight", dao -> dao.countInFlight(workspaceId), runsInFlight))
                 .map(Arguments::of);

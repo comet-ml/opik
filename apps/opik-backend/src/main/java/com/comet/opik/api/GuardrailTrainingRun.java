@@ -29,9 +29,10 @@ public record GuardrailTrainingRun(
         @Schema(description = "Why the run ended failed or cancelled; null otherwise") String statusMessage,
         @Schema(description = "Which attempt of one training the run is, 1 for the first; a retryable failure is retried as the next attempt") int attempt,
         @JsonIgnore JsonNode metadata,
+        @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight") Instant finishedAt,
         Instant createdAt,
         String createdBy,
-        @Schema(description = "A finished run's last update is when it finished") Instant lastUpdatedAt,
+        Instant lastUpdatedAt,
         String lastUpdatedBy) {
 
     @Builder(toBuilder = true)

@@ -136,9 +136,11 @@ class GuardrailTrainingServiceTest {
 
         service.cancel(modelId, run.id());
 
-        assertThat(service.get(modelId, run.id()))
+        var cancelled = service.get(modelId, run.id());
+        assertThat(cancelled.finishedAt()).isNotNull();
+        assertThat(cancelled)
                 .usingRecursiveComparison()
-                .ignoringFields("lastUpdatedAt")
+                .ignoringFields("finishedAt", "lastUpdatedAt")
                 .isEqualTo(run.toBuilder()
                         .status(CANCELLED)
                         .statusMessage("Cancelled by " + USER)
