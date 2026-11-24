@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.JsonRowValues;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
@@ -15,6 +16,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,6 +52,29 @@ public class AiLabelsDAO {
             ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
             LIMIT 1 BY workspace_id, project_id, task, trace_id, key
             SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * A trace's latest version, as the renderer reads it. The week bound is {@code TraceDAO}'s: an {@code id IN} list
+     * alone opens every weekly partition. Sound only because a trace delete returns once every replica applied it (the
+     * server's {@code lightweight_deletes_sync} default): the cascade starts after that, so a check that reads the trace
+     * as live ran before the cascade, which then finds the rows.
+     */
+    private static final String FIND_LIVE_TRACE_IDS = """
+            SELECT id
+            FROM (
+                SELECT id, is_deleted
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN :trace_ids
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE is_deleted = 0
+            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648,
+                max_execution_time = <max_execution_time>
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -97,6 +122,30 @@ public class AiLabelsDAO {
                         .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> toLabel(row)));
+    }
+
+    /** Which of {@code traceIds} still have a row in {@code traces}, in the given workspace and project. */
+    public Mono<Set<UUID>> findLiveTraceIds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Collection<UUID> traceIds, long maxExecutionSeconds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        var idWeeks = WeeklyPartitions.weeksOf(traceIds).map(weeks -> weeks.toArray(Long[]::new));
+        var template = getSTWithLogComment(FIND_LIVE_TRACE_IDS, "ai-labels:find_live_trace_ids", workspaceId, null,
+                "trace_ids=%d".formatted(traceIds.size()))
+                .add("id_weeks", idWeeks.isPresent())
+                .add("max_execution_time", maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId.toString())
+                            .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new));
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("id", String.class))))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     public Mono<Long> deleteForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound) {
