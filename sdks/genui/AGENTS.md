@@ -55,6 +55,7 @@ Run from `sdks/genui`.
 - A new contract ships with Opik first; Ollie and opik-mcp move to it by upgrading their pin of the packages.
 
 ## Release
+
 - Both packages are published by the Opik release: `release.yaml` calls `.github/workflows/genui_publish.yml`, which builds the tag once and publishes `opik-genui` to npm and then to PyPI with the Opik version. A failed publish fails the release, as for the SDKs.
 - The same workflow runs by hand ("Run workflow" on `main`): with `is_release` and the version of a release that already happened it re-publishes that version; without `is_release` it builds and checks the branch it is started from, proves the PyPI registration and uploads nothing.
 - `js/package.json` is the only version source. The build writes it into `engine.json`, the Python package reads it from there, and the wheel build fails on data built for another version. The release commits the new version to `main`; do not edit it.
