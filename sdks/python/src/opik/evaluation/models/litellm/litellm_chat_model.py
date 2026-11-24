@@ -65,7 +65,7 @@ def _raise_if_param_refused(error: Exception, sent_params: Dict[str, Any]) -> No
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        model_name: str = "gpt-5-nano",
+        model_name: str = "gpt-5.6-luna",
         must_support_arguments: Optional[List[str]] = None,
         track: bool = True,
         **completion_kwargs: Any,

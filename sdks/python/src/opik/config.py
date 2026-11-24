@@ -121,7 +121,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
-    default_llm: str = "openai/gpt-5-nano"
+    default_llm: str = "openai/gpt-5.6-luna"
     """Default LLM model name used by evaluation model factories when model is not provided."""
 
     api_key: Optional[str] = None

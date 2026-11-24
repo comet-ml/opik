@@ -55,6 +55,7 @@ MODEL_CAPABILITIES: List[ModelCapability] = [
     # Nano-class models tend to skip tool calls per backend
     # `SupportedJudgeProvider.java`; keep them on one-shot under `auto`.
     ModelCapability("gpt-5-nano", context_window=400_000, agentic_in_auto=False),
+    ModelCapability("gpt-5.6-luna", context_window=400_000, agentic_in_auto=False),
     ModelCapability("gpt-4o", context_window=128_000, agentic_in_auto=True),
     ModelCapability("gpt-4o-mini", context_window=128_000, agentic_in_auto=True),
     ModelCapability("claude-opus-4-7", context_window=1_000_000, agentic_in_auto=True),

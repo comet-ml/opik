@@ -18,7 +18,7 @@ from typing import Any, List, Literal, Optional
 import pydantic
 
 
-DEFAULT_MODEL_NAME = "gpt-5-nano"
+DEFAULT_MODEL_NAME = "gpt-5.6-luna"
 DEFAULT_REASONING_EFFORT = "low"
 
 

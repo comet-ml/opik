@@ -43,7 +43,7 @@ const responseSchema = z.object({
  * ```typescript
  * import { Usefulness } from 'opik/evaluation/metrics';
  *
- * // Using default model (gpt-5-nano)
+ * // Using default model (gpt-5.6-luna)
  * const metric = new Usefulness();
  * const result = await metric.score({
  *   input: "What's the capital of France?",
@@ -61,7 +61,7 @@ const responseSchema = z.object({
  *
  * // Using custom model instance
  * import { openai } from '@ai-sdk/openai';
- * const customModel = openai('gpt-5-nano');
+ * const customModel = openai('gpt-5.6-luna');
  * const instanceMetric = new Usefulness({ model: customModel });
  *
  * // With advanced settings
@@ -80,7 +80,7 @@ export class Usefulness extends BaseLLMJudgeMetric {
    * Creates a new Usefulness metric.
    *
    * @param options - Configuration options
-   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5-nano'.
+   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5.6-luna'.
    * @param options.name - The name of the metric. Defaults to "usefulness_metric".
    * @param options.trackMetric - Whether to track the metric. Defaults to true.
    * @param options.temperature - Temperature setting (0.0-2.0). Controls randomness. Lower values make output more focused and deterministic. See https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#temperature

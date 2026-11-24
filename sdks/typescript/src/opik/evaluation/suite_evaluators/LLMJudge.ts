@@ -54,7 +54,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
     }
 
     this.assertions = options.assertions;
-    this.modelName = options.model ?? "gpt-5-nano";
+    this.modelName = options.model ?? "gpt-5.6-luna";
     this.seed = options.seed;
     this.temperature = options.temperature;
     this.reasoningEffort =
@@ -170,7 +170,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
       name: typeof config.name === "string" ? config.name : "llm_judge",
       model:
         options?.model ??
-        (typeof model.name === "string" ? model.name : "gpt-5-nano"),
+        (typeof model.name === "string" ? model.name : "gpt-5.6-luna"),
       temperature:
         typeof model.temperature === "number" ? model.temperature : undefined,
       seed: typeof model.seed === "number" ? model.seed : undefined,

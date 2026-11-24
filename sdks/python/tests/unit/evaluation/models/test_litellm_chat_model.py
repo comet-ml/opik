@@ -107,7 +107,7 @@ def test_models_factory_default_model(monkeypatch):
 
     default_instance = models_factory.get(None)
 
-    assert default_instance.model_name == "openai/gpt-5-nano"
+    assert default_instance.model_name == "openai/gpt-5.6-luna"
 
 
 def test_models_factory_default_model_from_env(monkeypatch):

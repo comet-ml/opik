@@ -135,7 +135,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         name: The name of the evaluator (used as prefix for score names).
             Defaults to "llm_judge".
         model: The model name to use for evaluation. If not provided,
-            uses the default model (gpt-5-nano).
+            uses the default model (gpt-5.6-luna).
         track: Whether to track the evaluator. Defaults to True.
         project_name: Optional project name for tracking.
         seed: Optional seed value for reproducible model generation.
