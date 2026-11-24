@@ -116,7 +116,7 @@ public class TopicVectorsTickService {
                                         vectors.getEmbedConcurrency())
                                 .collectList()
                                 .flatMap(visits -> finish(visits).flatMap(fresh -> {
-                                    var drained = visits.stream().allMatch(Visit::complete) && !fresh.cut();
+                                    var drained = visits.stream().allMatch(Visit::complete);
                                     return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
                                             .then(backfill(visits, undrained, backfillLowerBound, budget))
                                             .map(backfilled -> fresh.plus(backfilled).plus(passResult));
@@ -188,7 +188,8 @@ public class TopicVectorsTickService {
             var readTime = since(readStarted);
             long embedStarted = System.nanoTime();
             return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore).flatMap(written -> {
-                var visit = new Visit(workspace, true, read.complete(), written.result(), served.started(), readTime,
+                var complete = read.complete() && !written.leftForLater(served.candidates());
+                var visit = new Visit(workspace, true, complete, written.result(), served.started(), readTime,
                         since(embedStarted));
                 if (pass) {
                     return Mono.just(visit);
@@ -218,7 +219,7 @@ public class TopicVectorsTickService {
 
     /**
      * The backfill phase: each workspace's projects not drained yet, the ones its workspace read started included,
-     * except in a workspace an embed call failed for in the fresh phase.
+     * except in a workspace the embed service backed off for in the fresh phase.
      */
     private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
             Instant lowerBound, TickBudget budget) {
@@ -262,8 +263,9 @@ public class TopicVectorsTickService {
 
     /**
      * One workspace's part of the fresh phase. {@code reached} is false when the budget left no time to read it, or it
-     * has too many projects in backfill; {@code complete} when its read saw its whole window or it was left to the
-     * backfill; {@code started} the projects its read saw for the first time.
+     * has too many projects in backfill; {@code complete} when its read saw its whole window and left none of its
+     * traces for a later tick, or it was left to the backfill; {@code started} the projects its read saw for the first
+     * time.
      */
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached, boolean complete,
             @NonNull TickResult result, @NonNull List<Backfill> started, @NonNull Duration readTime,

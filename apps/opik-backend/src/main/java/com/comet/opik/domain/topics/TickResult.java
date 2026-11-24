@@ -27,15 +27,6 @@ public record TickResult(int written, @NonNull Map<SkipReason, Integer> skipped,
         return new TickResult(rows, Map.of());
     }
 
-    /**
-     * Whether some of the traces found were left for a later tick for want of time, an embed call or an insert: the read
-     * that found them did not finish its work. An invalid vector is not: the next tick would get the same answer.
-     */
-    boolean cut() {
-        return skipped.containsKey(SkipReason.OVER_BUDGET) || skipped.containsKey(SkipReason.EMBED_FAILED)
-                || skipped.containsKey(SkipReason.INSERT_FAILED);
-    }
-
     static TickResult skipped(@NonNull SkipReason reason, int traces) {
         return traces > 0 ? new TickResult(0, Map.of(reason, traces)) : EMPTY;
     }

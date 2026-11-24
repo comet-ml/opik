@@ -38,7 +38,7 @@ public interface TopicVectorBackfillDAO {
      *        until one does. Drained: the tick read the project's whole backfill window, found fewer than
      *        {@code maxTracesPerTick} traces, and left none of them for want of time, a read, a back-off or an insert.
      *        So every trace with a done status in the window up to that instant, and a usable summary, had a vector
-     *        when the tick ended, but for those the embed service refuses or answers with an invalid vector
+     *        when the tick ended, but for those the embed service refuses or answers with a zero or non-finite vector
      * @param backfillLastDoneAt the project's latest done status, as last discovered
      * @param backfillTracesTotal about how many traces of the project can get a vector: its traces created in the
      *        backfill window with a done status, as last discovered. Too high by the traces whose summary is blank or

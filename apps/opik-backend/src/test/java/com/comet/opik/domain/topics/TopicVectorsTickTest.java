@@ -61,6 +61,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -487,21 +488,39 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk is "
-            + "still sent, and the watermark moves past the refused traces")
+    @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk, its "
+            + "backfill and its next project are still sent, the watermark moves past the refused traces, and the "
+            + "projects drain")
     void rejectedChunk() {
         config().setEmbedBatchSize(2);
         var workspaceId = enabledWorkspace();
-        labelTraces(workspaceId, 4, 1);
+        // Drained, so its traces are the workspace read's; the two new projects are the backfill's.
+        var drained = ID_GENERATOR.generateId();
+        markDrained(workspaceId, drained);
+        labelTraces(workspaceId, drained, 4, 1);
+        labelTraces(workspaceId, 2, 1);
+        labelTraces(workspaceId, 2, 1);
         embedStub.fail(workspaceId, 400, "{\"error\":{\"code\":\"invalid_request\",\"message\":\"m\"}}");
 
         // MySQL keeps microseconds.
         var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var result = tickService.tick(start).block();
 
-        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(2);
-        assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_FAILED, 4));
+        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(4);
+        assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_REFUSED, 8));
         assertThat(watermark(workspaceId)).isEqualTo(start);
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an answer of the wrong dimensions leaves the traces for a later tick: the project stays in backfill")
+    void wrongDimensions() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 2, 1);
+        embedStub.dimensions = 8;
+
+        assertThat(tick()).isEqualTo(TickResult.skipped(SkipReason.INVALID_VECTOR, 2));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isNotEmpty();
     }
 
     @Test
@@ -728,6 +747,7 @@ class TopicVectorsTickTest {
         volatile int throttleCall;
         volatile Duration delay = Duration.ZERO;
         volatile String zeroText;
+        volatile int dimensions = TopicEmbedding.DIMENSIONS;
         volatile Runnable beforeAnswer;
         private volatile String failOrg;
         private volatile int failStatus;
@@ -739,6 +759,7 @@ class TopicVectorsTickTest {
             throttleCall = 0;
             delay = Duration.ZERO;
             zeroText = null;
+            dimensions = TopicEmbedding.DIMENSIONS;
             beforeAnswer = null;
             failOrg = null;
         }
@@ -780,11 +801,14 @@ class TopicVectorsTickTest {
             body.put("request_id", "r").put("cache_hit", false).put("latency_ms", 1);
             body.putObject("usage").put("input_tokens", 1).put("output_tokens", 0);
             var result = body.putObject("result");
-            result.put("dimensions", TopicEmbedding.DIMENSIONS);
+            result.put("dimensions", dimensions);
             var embeddings = result.putArray("embeddings");
             for (var input : request.path("inputs")) {
                 var text = input.asText();
                 var raw = text.equals(zeroText) ? new float[TopicEmbedding.DIMENSIONS] : rawVector(text);
+                if (dimensions != TopicEmbedding.DIMENSIONS) {
+                    raw = Arrays.copyOf(raw, dimensions);
+                }
                 var vector = embeddings.addArray();
                 for (float value : raw) {
                     vector.add(value);

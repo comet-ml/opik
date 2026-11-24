@@ -286,13 +286,14 @@ class TopicVectorBackfiller {
             if (turn.more()) {
                 queue.addFirst(project);
             }
+            // A back-off: the service would answer the next project the same way this tick.
             stopped = turn.result().skipped().containsKey(SkipReason.EMBED_FAILED);
         }
     }
 
     /**
      * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
-     * its candidates were left for a later tick ({@link TickResult#cut}). No progress when there is nothing to record:
+     * its candidates were left for a later tick ({@link TopicVectorWriter.ChunkWrite#leftForLater}). No progress when there is nothing to record:
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
      * was left and vectors were written, so another read now finds the next ones.
      */
@@ -308,9 +309,10 @@ class TopicVectorBackfiller {
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
                 .flatMap(read -> writer.embedAndWrite(workspace, read.candidates(), budget, null)
-                        .map(TopicVectorWriter.ChunkWrite::result)
-                        .map(result -> {
-                            boolean drained = read.complete() && !result.cut();
+                        .map(written -> {
+                            var result = written.result();
+                            boolean cut = written.leftForLater(read.candidates());
+                            boolean drained = read.complete() && !cut;
                             if (!drained && result.written() == 0) {
                                 return new Turn(result, Optional.empty(), false);
                             }
@@ -319,7 +321,7 @@ class TopicVectorBackfiller {
                                     .projectId(project.projectId())
                                     .drainedAt(drained ? budget.start() : null)
                                     .written(result.written())
-                                    .build()), !read.complete() && !result.cut());
+                                    .build()), !read.complete() && !cut);
                         }))
                 .onErrorResume(exception -> {
                     metrics.readFailure("backfill", workspace, exception);
