@@ -86,8 +86,8 @@ public class TraceTopicsDAO {
                 SELECT argMax(topic_id, (last_updated_at, source = 'run')) AS latest_topic, any(trace_created_at) AS created_at
             %s)
             GROUP BY topic_id, day
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
-                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>,
+                max_memory_usage = <max_memory_usage>, max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """
             .formatted(LATEST_ROW_PER_TRACE_IN_WINDOW);
 
@@ -167,11 +167,12 @@ public class TraceTopicsDAO {
      */
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
-        var find = config.getVectors().getFind();
+        var read = config.getRead();
         var template = getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY, "topics:count_by_topic_and_day", workspaceId, null,
                 "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_rows_to_read", read.getMaxRowsToRead())
+                .add("max_memory_usage", read.getMaxMemoryUsage())
+                .add("max_threads", read.getMaxThreads())
                 .add("max_execution_time", maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
