@@ -105,6 +105,17 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
+  #  Default: false
+  #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
+  #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized). false is the string path: payloads serialized to strings, slim
+  #   copies reparsed from them, and bulk insert bodies buffered before the connection is taken.
+  #   Turn it on together with a larger clientMaxOpenConnections (20 was tested), sized to ClickHouse's headroom: at
+  #   the default 10, large batches can wait past the pool's lease timeout. Watch opik.clickhouse.client.pool.pending
+  #   to see inserts waiting for a connection; turning it off again restores the string path.
+  streamPayloads: false
+  clientMaxOpenConnections: 10
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:

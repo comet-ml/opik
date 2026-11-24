@@ -38,6 +38,8 @@ class TraceJsonRowMapper {
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive means the column
      *                           is left out so its DDL default applies, matching what the binder's
      *                           {@code bindNull} achieves via {@code input_format_null_as_default}.
+     * @param streamPayloads     {@code databaseAnalytics.streamPayloads}: false writes {@code input} / {@code output}
+     *                           and their slim copies as escaped strings (the string path).
      * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
      *                           Resolved AND formatted once per batch by the caller: the helper re-runs
      *                           this mapper on every insert attempt, downstream
@@ -45,11 +47,7 @@ class TraceJsonRowMapper {
      *                           and rendering it here would reformat a batch-invariant value per row.
      */
     ObjectNode toJsonRow(@NonNull Trace trace, @NonNull String userName, @NonNull String workspaceId,
-            @NonNull String nowForBatch, boolean nonNullableColumns, int truncationSize) {
-
-        // Computed once: each is also the input to its *_slim counterpart below.
-        String inputValue = TruncationUtils.toJsonString(trace.input());
-        String outputValue = TruncationUtils.toJsonString(trace.output());
+            @NonNull String nowForBatch, boolean nonNullableColumns, int truncationSize, boolean streamPayloads) {
 
         var node = JsonUtils.createObjectNode();
 
@@ -69,8 +67,15 @@ class TraceJsonRowMapper {
             node.putNull("end_time");
         }
 
-        node.put("input", inputValue);
-        node.put("output", outputValue);
+        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise escaped
+        // strings, with their slim copies added after visibility_mode below.
+        if (streamPayloads) {
+            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", trace.input());
+            JsonRowValues.putJsonWithSlim(node, "output", "output_slim", trace.output());
+        } else {
+            node.put("input", TruncationUtils.toJsonString(trace.input()));
+            node.put("output", TruncationUtils.toJsonString(trace.output()));
+        }
         node.put("metadata", TruncationUtils.toJsonString(trace.metadata()));
 
         var tags = node.putArray("tags");
@@ -88,8 +93,10 @@ class TraceJsonRowMapper {
         node.put("visibility_mode", trace.visibilityMode() != null
                 ? trace.visibilityMode().getValue()
                 : VisibilityMode.DEFAULT.getValue());
-        node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-        node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+        if (!streamPayloads) {
+            node.put("input_slim", TruncationUtils.createSlimJsonString(node.get("input").textValue()));
+            node.put("output_slim", TruncationUtils.createSlimJsonString(node.get("output").textValue()));
+        }
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
