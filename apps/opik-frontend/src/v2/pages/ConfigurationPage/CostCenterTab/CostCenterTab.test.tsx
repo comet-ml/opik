@@ -90,10 +90,6 @@ const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch } = vi.hoisted(() => {
   };
 });
 
-const current = vi.hoisted(() => ({
-  modelsUsed: undefined as unknown,
-}));
-
 vi.mock("@/api/model-prices/useModelPrices", () => ({
   default: () => ({ data: LIST, isPending: false, isError: false, refetch }),
 }));
@@ -102,21 +98,12 @@ vi.mock("@/api/model-prices/useModelPriceHistory", () => ({
   default: () => ({ data: HISTORY }),
 }));
 
-vi.mock("@/api/model-prices/useModelsUsed", () => ({
-  default: () => ({ data: current.modelsUsed }),
-}));
-
 vi.mock("@/api/model-prices/useModelPricesReplaceMutation", () => ({
   default: () => ({ mutateAsync, isPending: false }),
 }));
 
 vi.mock("@/api/model-prices/useBuiltInPrices", () => ({
   default: () => ({ data: BUILT_INS, isPending: false }),
-}));
-
-vi.mock("@/store/AppStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/store/AppStore")>()),
-  useActiveWorkspaceName: () => "research",
 }));
 
 import CostCenterTab from "./CostCenterTab";
@@ -185,7 +172,6 @@ describe("CostCenterTab", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     refetch.mockReset();
-    current.modelsUsed = undefined;
     window.history.replaceState({}, "", "/");
     window.localStorage.clear();
   });
@@ -399,40 +385,10 @@ describe("CostCenterTab", () => {
   });
 
   describe("quick access", () => {
-    const usedModel = (
-      model: string,
-      provider: string,
-      daysUsed: number,
-      lastSeen: string,
-    ) => ({
-      model,
-      provider,
-      last_seen: lastSeen,
-      days_used: daysUsed,
-      workspaces: [{ id: "research", name: "research" }],
-      price_source: "built_in" as const,
-    });
-
-    it("shows the most used models first, newest first on a tie", () => {
-      current.modelsUsed = {
-        content: [
-          usedModel("gpt-4o-mini", "openai", 2, "2026-11-05T10:00:00Z"),
-          usedModel(
-            "claude-sonnet-4-5",
-            "anthropic",
-            9,
-            "2026-11-01T10:00:00Z",
-          ),
-          usedModel("gpt-4o", "openai", 2, "2026-11-06T10:00:00Z"),
-        ],
-      };
+    it("shows the default models the catalog knows when nothing is pinned", () => {
       renderTab(ADMIN);
 
-      expect(quickAccessModels()).toEqual([
-        "claude-sonnet-4-5",
-        "gpt-4o",
-        "gpt-4o-mini",
-      ]);
+      expect(quickAccessModels()).toEqual(["claude-sonnet-4-5"]);
     });
 
     it("puts a model pinned from the table first and remembers it", () => {
@@ -791,64 +747,8 @@ describe("CostCenterTab", () => {
     });
   });
 
-  describe("models without a price", () => {
-    const used = (
-      model: string,
-      workspace: string,
-      priceSource: "none" | "built_in",
-    ) => ({
-      model,
-      provider: "",
-      last_seen: "2026-11-05T10:00:00Z",
-      days_used: 3,
-      workspaces: [{ id: workspace, name: workspace }],
-      price_source: priceSource,
-    });
-
-    it("lists the current workspace's unpriced models and prefills a new price", async () => {
-      current.modelsUsed = {
-        content: [
-          used("acme-finetune-v3", "research", "none"),
-          used("other-model", "sales", "none"),
-          used("gpt-4o-mini", "research", "built_in"),
-        ],
-      };
-      mutateAsync.mockImplementation(async ({ dryRun }) =>
-        replaceResult(dryRun),
-      );
-      renderTab(ADMIN);
-
-      const banner = screen.getByTestId("no-price-banner");
-      expect(banner).toHaveTextContent(
-        "1 model in your workspace has no price",
-      );
-      fireEvent.click(within(banner).getByRole("button", { expanded: false }));
-      expect(within(banner).queryByText("other-model")).toBeNull();
-      fireEvent.click(
-        within(banner).getByRole("button", { name: "Add prices" }),
-      );
-
-      expect(screen.getByLabelText("Model name")).toHaveValue(
-        "acme-finetune-v3",
-      );
-      fireEvent.change(priceInput("Input"), { target: { value: "2" } });
-      fireEvent.change(priceInput("Output"), { target: { value: "8" } });
-      fireEvent.click(screen.getByRole("button", { name: "Add model" }));
-
-      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
-      expect(sentRows()[3]).toEqual({
-        model: "acme-finetune-v3",
-        provider: "",
-        kind: "fixed",
-        input_price: "2",
-        output_price: "8",
-      });
-    });
-
+  describe("adding a custom model", () => {
     it("saves a new custom price without asking about its provider", async () => {
-      current.modelsUsed = {
-        content: [used("acme-finetune-v3", "research", "none")],
-      };
       mutateAsync.mockImplementation(async ({ dryRun }) =>
         replaceResult(dryRun, [
           {
@@ -867,11 +767,10 @@ describe("CostCenterTab", () => {
       );
       renderTab(ADMIN);
 
-      const banner = screen.getByTestId("no-price-banner");
-      fireEvent.click(within(banner).getByRole("button", { expanded: false }));
-      fireEvent.click(
-        within(banner).getByRole("button", { name: "Add prices" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.change(screen.getByLabelText("Model name"), {
+        target: { value: "acme-finetune-v3" },
+      });
       fireEvent.change(priceInput("Input"), { target: { value: "2" } });
       fireEvent.change(priceInput("Output"), { target: { value: "8" } });
       fireEvent.click(screen.getByRole("button", { name: "Add model" }));
@@ -879,26 +778,6 @@ describe("CostCenterTab", () => {
       await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
       expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false);
       expect(screen.queryByTestId("model-price-warnings")).toBeNull();
-    });
-
-    it("falls back to the whole organization when this workspace has none", () => {
-      current.modelsUsed = {
-        content: [used("other-model", "sales", "none")],
-      };
-      renderTab(ADMIN);
-
-      expect(screen.getByTestId("no-price-banner")).toHaveTextContent(
-        "1 model in your organization has no price",
-      );
-    });
-
-    it("stays hidden when every model has a price", () => {
-      current.modelsUsed = {
-        content: [used("gpt-4o-mini", "research", "built_in")],
-      };
-      renderTab(ADMIN);
-
-      expect(screen.queryByTestId("no-price-banner")).toBeNull();
     });
   });
 

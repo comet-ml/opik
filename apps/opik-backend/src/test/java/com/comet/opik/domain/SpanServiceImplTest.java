@@ -9,7 +9,6 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.cost.ModelPriceService;
-import com.comet.opik.domain.cost.ModelUsageService;
 import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
@@ -97,7 +96,6 @@ class SpanServiceImplTest {
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
     private final ModelPriceService modelPriceService = mock(ModelPriceService.class,
             invocation -> Mono.just(PriceLayers.BUILT_IN_ONLY));
-    private final ModelUsageService modelUsageService = mock(ModelUsageService.class);
 
     private SpanService newSpanService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
         return newSpanService(databaseAnalyticsDataModelConfig, idGenerator);
@@ -121,8 +119,7 @@ class SpanServiceImplTest {
                 deletionEventDAO,
                 spanWeeksDAO,
                 opikConfiguration,
-                modelPriceService,
-                modelUsageService);
+                modelPriceService);
     }
 
     @Nested

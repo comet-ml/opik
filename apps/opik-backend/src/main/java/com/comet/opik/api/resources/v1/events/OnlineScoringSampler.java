@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -196,7 +197,7 @@ public class OnlineScoringSampler {
     }
 
     private void sampleAndScore(List<Trace> traces, String workspaceId, String userName, String workspaceName,
-            String organizationId) {
+            Mono<String> organizationId) {
         if (CollectionUtils.isEmpty(traces)) {
             log.info("No traces to score for workspace '{}'", workspaceId);
             return;
@@ -248,6 +249,8 @@ public class OnlineScoringSampler {
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, workspaceId);
 
+            refreshOrganizationForThreadJudges(evaluators, scorableTraces, workspaceId, organizationId);
+
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
                 // Samples traces for this rule.
@@ -258,13 +261,14 @@ public class OnlineScoringSampler {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
                                 .map(trace -> toLlmAsJudgeMessage(workspaceId, userName, workspaceName,
-                                        organizationId, (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                        (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
                             recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED, messages.size());
                             OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
-                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, workspaceId, workspaceName);
+                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, workspaceId, workspaceName,
+                                    organizationId);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
@@ -290,6 +294,23 @@ public class OnlineScoringSampler {
                 }
             });
         });
+    }
+
+    /**
+     * Thread judges are enqueued later by the closing-thread job, which has no Comet credentials and can only read the
+     * cached organization. Running the event's lookup now, with the request's credentials, keeps that cache warm.
+     */
+    private void refreshOrganizationForThreadJudges(List<? extends AutomationRuleEvaluator<?, ?>> evaluators,
+            List<Trace> traces, String workspaceId, Mono<String> organizationId) {
+        boolean hasThreadJudge = evaluators.stream()
+                .anyMatch(evaluator -> evaluator.isEnabled()
+                        && evaluator.getType() == AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE);
+        if (!hasThreadJudge || traces.stream().allMatch(trace -> StringUtils.isBlank(trace.threadId()))) {
+            return;
+        }
+        organizationId.subscribe(unused -> {
+        }, error -> log.warn("Could not look the organization up for thread judges, workspace '{}'", workspaceId,
+                error));
     }
 
     /**
@@ -394,7 +415,8 @@ public class OnlineScoringSampler {
     }
 
     private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName, String workspaceName,
-            String organizationId, AutomationRuleEvaluatorLlmAsJudge evaluator, Trace trace) {
+            AutomationRuleEvaluatorLlmAsJudge evaluator,
+            Trace trace) {
         return TraceToScoreLlmAsJudge.builder()
                 .trace(trace)
                 .ruleId(evaluator.getId())
@@ -403,7 +425,6 @@ public class OnlineScoringSampler {
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .workspaceName(workspaceName)
-                .organizationId(organizationId)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
                 .build();

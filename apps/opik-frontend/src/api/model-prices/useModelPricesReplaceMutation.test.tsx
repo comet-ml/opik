@@ -7,7 +7,6 @@ import {
   MODEL_PRICE_HISTORY_KEY,
   MODEL_PRICE_RESOLVE_KEY,
   MODEL_PRICES_KEY,
-  MODELS_USED_KEY,
 } from "@/api/api";
 
 const { put } = vi.hoisted(() => ({ put: vi.fn() }));
@@ -39,7 +38,7 @@ const invalidatedKeys = (invalidate: { mock: { calls: unknown[][] } }) =>
   );
 
 describe("useModelPricesReplaceMutation", () => {
-  it("refreshes the list, the history, the models used and the explained prices after a save", async () => {
+  it("refreshes the list, the history and the explained prices after a save", async () => {
     put.mockResolvedValueOnce({ data: { saved: true, version: 3 } });
     const { result, invalidate } = setup();
 
@@ -48,7 +47,6 @@ describe("useModelPricesReplaceMutation", () => {
     expect(invalidatedKeys(invalidate)).toEqual([
       MODEL_PRICES_KEY,
       MODEL_PRICE_HISTORY_KEY,
-      MODELS_USED_KEY,
       MODEL_PRICE_RESOLVE_KEY,
     ]);
   });

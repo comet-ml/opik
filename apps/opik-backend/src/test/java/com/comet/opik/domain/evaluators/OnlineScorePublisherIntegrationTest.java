@@ -29,6 +29,7 @@ import org.redisson.config.Config;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -51,7 +52,7 @@ class OnlineScorePublisherIntegrationTest {
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
     private final ServiceTogglesConfig serviceTogglesConfig = new ServiceTogglesConfig();
 
-    private OrganizationResolver organizationResolver = FixedOrganizationResolver.NONE;
+    private OrganizationResolver organizationResolver = FixedOrganizationResolver.none();
 
     /**
      * Required by the publisher's constructor but never exercised: these tests use the overload that takes an
@@ -183,15 +184,17 @@ class OnlineScorePublisherIntegrationTest {
     @Test
     @DisplayName("The organization a judge message carries survives the stream codec")
     void enqueueThreadMessageKeepsTheOrganizationThroughTheCodec() {
-        organizationResolver = FixedOrganizationResolver.of("organization-of-the-request");
+        var organizationId = UUID.randomUUID().toString();
+        organizationResolver = FixedOrganizationResolver.of(organizationId);
         var publisher = newPublisher();
         var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix());
 
-        publisher.enqueueThreadMessage(threadIds, llmRule(), idGenerator.generateId(), "workspace", "user").block();
-        organizationResolver = FixedOrganizationResolver.NONE;
+        publisher.enqueueThreadMessage(threadIds, llmRule(), idGenerator.generateId(), UUID.randomUUID().toString(),
+                RandomStringUtils.secure().nextAlphanumeric(10)).block();
+        organizationResolver = FixedOrganizationResolver.none();
 
         assertThat(readStream()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
-                .containsExactly("organization-of-the-request", "organization-of-the-request");
+                .containsExactly(organizationId, organizationId);
     }
 
     private AutomationRuleEvaluatorTraceThreadLlmAsJudge llmRule() {
