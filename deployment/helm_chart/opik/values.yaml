@@ -892,6 +892,8 @@ alerts:
 clickhouse:
   enabled: true
   shardsCount: 1
+  # -- Rendered as the ClickHouseInstallation's spec.taskID. Set a new value to make the operator reconcile without any other change, e.g. to apply a rotated k8s_secret_password. Must not start with `auto-`
+  taskID: ""
   # Declares that this deployment fronts its tables with Distributed tables (the Hyperscale
   # topology). While off, nothing here is rendered, so upgrading the chart never reshapes an
   # existing cluster on its own. Turning it on does two things:

@@ -1,0 +1,25 @@
+suite: clickhouse taskID
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders no taskID by default
+    asserts:
+      - notExists:
+          path: spec.taskID
+
+  - it: renders clickhouse.taskID as spec.taskID
+    set:
+      clickhouse.taskID: rotate-1
+    asserts:
+      - equal:
+          path: spec.taskID
+          value: rotate-1
+
+  - it: refuses an auto- taskID, which the operator would not reconcile on
+    set:
+      clickhouse.taskID: auto-1
+    asserts:
+      - failedTemplate:
+          errorPattern: must not start with auto-

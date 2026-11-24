@@ -237,6 +237,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.sharding.enabled | bool | `false` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.taskID | string | `""` | Rendered as the ClickHouseInstallation's spec.taskID. Set a new value to make the operator reconcile without any other change, e.g. to apply a rotated k8s_secret_password. Must not start with `auto-` |
 | clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
 | clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |

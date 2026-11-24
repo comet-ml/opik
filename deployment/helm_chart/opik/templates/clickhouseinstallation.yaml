@@ -13,6 +13,12 @@ spec:
   {{- with .Values.clickhouse.namespaceDomainPattern }}
   namespaceDomainPattern: {{ . | quote }}
   {{- end }}
+  {{- with .Values.clickhouse.taskID }}
+  {{- if hasPrefix "auto-" (toString .) }}
+  {{- fail "clickhouse.taskID must not start with auto-: the operator leaves those out of its change detection, so it would not reconcile" }}
+  {{- end }}
+  taskID: {{ . | quote }}
+  {{- end }}
   configuration:
     users:
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
