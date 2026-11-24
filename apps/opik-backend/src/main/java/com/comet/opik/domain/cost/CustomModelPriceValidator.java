@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
-import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -227,15 +226,10 @@ public class CustomModelPriceValidator {
                 .build());
     }
 
-    // A blank provider is taken from the model's prefix only when the prefix names a provider with built-in prices,
-    // as in "openai/gpt-4o". A vendor prefix, as in "meta-llama/Llama-3-8B", leaves the row for any provider:
-    // filed under the vendor, it would only match spans that send no provider.
+    // A blank provider comes from the model's prefix, the way a span with that name and no provider is looked up:
+    // "bifrost/gpt-4o" is filed under bifrost, so it doesn't reprice every provider's gpt-4o.
     private String rowProvider(Optional<String> provider, Optional<String> model) {
-        if (provider.filter(StringUtils::isNotBlank).isPresent()) {
-            return ProviderRegistry.resolve(provider.get(), model.orElse(null)).orElse(CustomModelPrice.ANY_PROVIDER);
-        }
-        return ProviderRegistry.resolve(null, model.orElse(null))
-                .filter(ModelPriceTable::isPricedProvider)
+        return ProviderRegistry.resolve(provider.orElse(null), model.orElse(null))
                 .orElse(CustomModelPrice.ANY_PROVIDER);
     }
 
