@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.Set;
@@ -24,7 +25,7 @@ public class TracesUpdated extends BaseEvent {
     // traceId -> projectId, so consumers can split traceIds per project. May be null for callers
     // that don't carry it; consumers then fall back to {@link #projectIds}.
     private final @Nullable Map<UUID, UUID> traceIdToProjectId;
-    private final @Nullable String organizationId;
+    private final @NonNull Mono<String> organizationId;
 
     public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate) {
@@ -45,13 +46,13 @@ public class TracesUpdated extends BaseEvent {
     @Builder(toBuilder = true)
     private TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate, @Nullable String workspaceName,
-            @Nullable Map<UUID, UUID> traceIdToProjectId, @Nullable String organizationId) {
+            @Nullable Map<UUID, UUID> traceIdToProjectId, @Nullable Mono<String> organizationId) {
         super(workspaceId, userName);
         this.projectIds = projectIds;
         this.traceIds = traceIds;
         this.traceUpdate = traceUpdate;
         this.workspaceName = workspaceName;
         this.traceIdToProjectId = traceIdToProjectId;
-        this.organizationId = organizationId;
+        this.organizationId = organizationId == null ? Mono.empty() : organizationId;
     }
 }

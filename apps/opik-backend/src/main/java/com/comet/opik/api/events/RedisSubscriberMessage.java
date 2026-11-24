@@ -1,7 +1,5 @@
 package com.comet.opik.api.events;
 
-import jakarta.annotation.Nullable;
-
 /**
  * Common type for every {@code BaseRedisSubscriber} stream message, carrying the workspace and user
  * the message belongs to.
@@ -49,14 +47,6 @@ public interface RedisSubscriberMessage {
      * name (resolved from the reactive context or the workspace-name service) rather than the id fallback.
      */
     default RedisSubscriberMessage withWorkspaceName(String workspaceName) {
-        return this;
-    }
-
-    default @Nullable String organizationId() {
-        return null;
-    }
-
-    default RedisSubscriberMessage withOrganizationId(@Nullable String organizationId) {
         return this;
     }
 }

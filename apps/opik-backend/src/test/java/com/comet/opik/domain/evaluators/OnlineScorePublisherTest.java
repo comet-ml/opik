@@ -3,8 +3,11 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
@@ -264,6 +267,48 @@ class OnlineScorePublisherTest {
             publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE).block();
 
             assertThat(capturePayloads()).containsExactly(message);
+        }
+
+        @Test
+        @DisplayName("Skips the lookup when no message can carry an organization")
+        void skipsTheLookupWhenNoMessageCanCarryOne() {
+            organizationResolver = FixedOrganizationResolver.of(organizationId);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            List<Object> messages = List.of(
+                    podamFactory.manufacturePojo(SpanToScoreLlmAsJudge.class),
+                    podamFactory.manufacturePojo(SpanToScoreUserDefinedMetricPython.class),
+                    podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class),
+                    podamFactory.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class));
+
+            publisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE).block();
+
+            assertThat(captureAllPayloads()).containsExactlyElementsOf(messages);
+            assertThat(organizationResolver.lookups()).isZero();
+        }
+
+        @Test
+        @DisplayName("Looks up once for a mixed batch, stamping only the messages that can carry an organization")
+        void looksUpOnceForAMixedBatch() {
+            organizationResolver = FixedOrganizationResolver.of(organizationId);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            var span = podamFactory.manufacturePojo(SpanToScoreLlmAsJudge.class);
+            var thread = threadMessage();
+            var python = podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class);
+
+            publisher.enqueueMessage(List.of(span, thread, python), AutomationRuleEvaluatorType.LLM_AS_JUDGE)
+                    .block();
+
+            assertThat(captureAllPayloads()).containsExactly(
+                    span, thread.toBuilder().organizationId(organizationId).build(), python);
+            assertThat(organizationResolver.lookups()).isOne();
+        }
+
+        private List<Object> captureAllPayloads() {
+            ArgumentCaptor<StreamAddParams<Object, Object>> captor = ArgumentCaptor.forClass(StreamAddParams.class);
+            verify(stream, atLeastOnce()).add(captor.capture());
+            return captor.getAllValues().stream()
+                    .map(params -> params.getEntries().get(OnlineScoringConfig.PAYLOAD_FIELD))
+                    .toList();
         }
 
         private AutomationRuleEvaluatorTraceThreadLlmAsJudge threadRule() {

@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.OrganizationScopedMessage;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
@@ -164,7 +165,8 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 .contextWrite(ctx -> AsyncUtils.setOrganizationId(ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                        .put(RequestContext.USER_NAME, message.userName()), message.organizationId()));
+                        .put(RequestContext.USER_NAME, message.userName()),
+                        message instanceof OrganizationScopedMessage scoped ? scoped.organizationId() : null));
     }
 
     /**

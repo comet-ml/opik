@@ -22,6 +22,7 @@ import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
@@ -248,11 +249,12 @@ class TestSuiteAssertionSamplerTest {
             var workspaceId = UUID.randomUUID().toString();
             var userName = RandomStringUtils.secure().nextAlphanumeric(10);
             var organizationId = UUID.randomUUID().toString();
+            var resolver = FixedOrganizationResolver.of(organizationId);
             var trace = traceWithOneItemEvaluator(workspaceId);
             var event = TracesCreated.builder().traces(List.of(trace)).workspaceId(workspaceId).userName(userName);
 
             sampler.onTracesCreated(event.build());
-            sampler.onTracesCreated(event.organizationId(organizationId).build());
+            sampler.onTracesCreated(event.organizationId(resolver.organizationId()).build());
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
@@ -264,6 +266,31 @@ class TestSuiteAssertionSamplerTest {
                     withoutOrganization.getFirst().toBuilder().organizationId(organizationId).build());
             assertThat(withoutOrganization).containsExactly(
                     withOrganization.getFirst().toBuilder().organizationId(null).build());
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        @DisplayName("looks the organization up only when there is a judge message to enqueue")
+        void noLookupWithoutAJudgeMessage() {
+            var workspaceId = UUID.randomUUID().toString();
+            var resolver = FixedOrganizationResolver.of(UUID.randomUUID().toString());
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .build();
+
+            sampler.onTracesCreated(TracesCreated.builder()
+                    .traces(List.of(trace))
+                    .workspaceId(workspaceId)
+                    .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .organizationId(resolver.organizationId())
+                    .build());
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
         }
 
         @Test

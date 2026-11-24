@@ -73,7 +73,7 @@ public class ExperimentItemPublisher {
 
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        var organizationIdStamper = new OrganizationIdStamper(organizationResolver);
+        var organizationIdStamper = new OrganizationIdStamper(organizationResolver.organizationId());
         return Flux.fromIterable(messages)
                 .flatMap(message -> organizationIdStamper.stamp(message)
                         .flatMap(stamped -> stream.add(RedisStreamUtils.buildAddArgs(
