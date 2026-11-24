@@ -93,10 +93,6 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       size={buttonSize}
       onClick={handleCompareClick}
       disabled={compareDisabled}
-      // ghostInverted's disabled:text-white/40 is a no-op (Tailwind's `white`
-      // is a CSS var, so opacity modifiers don't apply); fade the whole
-      // button so a blocked Compare doesn't read as clickable on the dark bar.
-      className={cn(isInverted && "disabled:opacity-40")}
     >
       <Split className={leadIconClassName} />
       Compare
