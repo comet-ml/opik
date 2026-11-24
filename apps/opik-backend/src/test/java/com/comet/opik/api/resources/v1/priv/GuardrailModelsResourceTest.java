@@ -245,8 +245,11 @@ class GuardrailModelsResourceTest {
     /** Moves the model's run in flight to the status, as its job will once training runs on opik-inference. */
     private GuardrailTrainingRun end(Workspace workspace, UUID modelId, GuardrailTrainingRunStatus status) {
         var run = runs.findInFlight(modelId, workspace.id()).orElseThrow();
-        int updated = template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
-                .updateStatus(run.id(), workspace.id(), run.status(), status, null, null, USER));
+        int updated = template.inTransaction(WRITE, handle -> handle
+                .createUpdate("UPDATE guardrail_training_runs SET status = :status WHERE id = :id")
+                .bind("status", status.name())
+                .bind("id", run.id().toString())
+                .execute());
         assertThat(updated).isOne();
         return runs.findById(run.id(), workspace.id()).orElseThrow();
     }
@@ -500,7 +503,7 @@ class GuardrailModelsResourceTest {
     }
 
     @Test
-    @DisplayName("A model's runs page newest first, one is read by id, and a run in flight is cancelled once")
+    @DisplayName("A model's runs page newest first, one is read by id, a run in flight is cancelled and stays so when cancelled again, and a completed run is not cancelled")
     void runs() {
         var workspace = newWorkspace();
         var id = create(workspace, "Toxicity");
@@ -531,6 +534,12 @@ class GuardrailModelsResourceTest {
         assertThat(cancelled.finishedAt()).isNotNull();
 
         try (var response = request(workspace, "/" + id + "/runs/" + secondId + "/cancel").post(Entity.json(""))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+        try (var response = request(workspace, "/" + id + "/runs/" + secondId).get()) {
+            assertThat(response.readEntity(GuardrailTrainingRun.class)).isEqualTo(cancelled);
+        }
+        try (var response = request(workspace, "/" + id + "/runs/" + first.id() + "/cancel").post(Entity.json(""))) {
             assertErrors(response, HttpStatus.SC_CONFLICT, "Guardrail training run has already ended");
         }
         assertThat(getStatus(workspace, "/" + id + "/runs/" + randomUUID())).isEqualTo(HttpStatus.SC_NOT_FOUND);
