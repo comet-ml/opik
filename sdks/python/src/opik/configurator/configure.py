@@ -671,13 +671,25 @@ class OpikConfigurator:
 
             user_input_opik_url = url_helpers.get_base_url(user_input_opik_url)
 
-            if opik_rest_helpers.is_instance_active(user_input_opik_url):
+            # A Comet platform serves Opik under /opik/; at its root is the web
+            # app, which answers no health check.
+            opik_url = (
+                urllib.parse.urljoin(user_input_opik_url, "opik/")
+                if self.self_hosted_comet
+                else user_input_opik_url
+            )
+            if opik_rest_helpers.is_instance_active(opik_url):
                 self.base_url = user_input_opik_url
                 return
             else:
+                example_url = (
+                    "https://comet.example.com/"
+                    if self.self_hosted_comet
+                    else OPIK_BASE_URL_LOCAL
+                )
                 LOGGER.error(
                     f"Opik is not accessible at {user_input_opik_url}. "
-                    f"Please try again, the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
+                    f"Please try again, the URL should follow a format similar to {example_url}"
                 )
                 retries -= 1
         raise ConfigurationError(

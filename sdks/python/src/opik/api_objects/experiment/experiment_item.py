@@ -115,6 +115,7 @@ class ExperimentItemContent:
     assertion_results: List[AssertionResultDict] = dataclasses.field(
         default_factory=list
     )
+    experiment_id: Optional[str] = None
 
     @classmethod
     def from_compare_dict(
@@ -177,6 +178,9 @@ class ExperimentItemContent:
         # since all three are `str` on the record they build.
         for key in ("id", "trace_id", "dataset_item_id"):
             _require_leaf_type(value[key], str, f"an experiment item's `{key}`")
+        _require_leaf_type(
+            value.get("experiment_id"), str, "an experiment item's `experiment_id`"
+        )
 
         return cls(
             # Indexed, not `.get`: a page missing these is a broken response, and a
@@ -190,6 +194,7 @@ class ExperimentItemContent:
             evaluation_task_output=value.get("output"),
             feedback_scores=feedback_scores,
             assertion_results=assertion_results,
+            experiment_id=value.get("experiment_id"),
         )
 
     @classmethod
@@ -229,4 +234,5 @@ class ExperimentItemContent:
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
             assertion_results=assertion_results,
+            experiment_id=value.experiment_id,
         )
