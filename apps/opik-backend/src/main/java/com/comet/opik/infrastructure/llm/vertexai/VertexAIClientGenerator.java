@@ -25,6 +25,7 @@ import com.google.common.hash.Hashing;
 import com.google.genai.Client;
 import com.google.genai.types.ClientOptions;
 import com.google.genai.types.HttpOptions;
+import com.google.genai.types.HttpRetryOptions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
@@ -101,13 +102,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return newVertexAIClient(apiKey, request, null);
+        return newVertexAIClient(apiKey, request, null, true);
     }
 
-    // maxRetries null keeps the model's own default.
+    // maxRetries null keeps the model's own default; sdkRetries false makes the SDK try each call once.
     private VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
-            @Nullable Integer maxRetries) {
-        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
+            @Nullable Integer maxRetries, boolean sdkRetries) {
+        return buildPerCallModel(apiKey, request, sdkRetries, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -129,7 +130,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     VertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
+        return buildPerCallModel(apiKey, request, true, (client, calls, model) -> {
             var builder = GoogleGenAiStreamingChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -166,7 +167,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     // A model on its own Client per call, on the shared transport, so that the call's own calls can be cancelled. The
     // Client is built here rather than by the model builder, which keeps its client private.
     private <T> T buildPerCallModel(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
-            PerCallModelFactory<T> factory) {
+            boolean sdkRetries, PerCallModelFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
         var modelId = registryService.findModel(request.model())
                 .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
@@ -175,7 +176,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         var calls = new CancellableCalls();
-        return factory.create(buildClient(apiKey, newHttpClient(calls)), calls, modelId);
+        return factory.create(buildClient(apiKey, newHttpClient(calls), sdkRetries), calls, modelId);
     }
 
     @FunctionalInterface
@@ -227,7 +228,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return endpoint.startsWith("http://") || endpoint.startsWith("https://") ? endpoint : "https://" + endpoint;
     }
 
-    private Client buildClient(LlmProviderClientApiConfig config, OkHttpClient httpClient) {
+    private Client buildClient(LlmProviderClientApiConfig config, OkHttpClient httpClient, boolean sdkRetries) {
         var location = Optional.ofNullable(config.configuration().get("location"))
                 .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::canonicalLocation);
@@ -251,6 +252,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         Optional.ofNullable(clientConfig.getCallTimeout())
                 .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
                 .ifPresent(httpOptions::timeout);
+
+        // The SDK retries on its own, even on a client of ours: by default up to 5 attempts on 408, 429 and 5xx.
+        if (!sdkRetries) {
+            httpOptions.retryOptions(HttpRetryOptions.builder().attempts(1).build());
+        }
 
         return builder.httpOptions(httpOptions.build())
                 .clientOptions(ClientOptions.builder().customHttpClient(httpClient).build())
@@ -313,6 +319,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                         }))
                 .ifPresent(requestBuilder::customParameters);
 
-        return newVertexAIClient(apiKey, requestBuilder.build(), JUDGE_MAX_RETRIES);
+        // The SDK's retries sit under the model's, so they would multiply; the judge's retries are the model's alone.
+        return newVertexAIClient(apiKey, requestBuilder.build(), clientConfig.getJudgeMaxRetries(), false);
     }
 }

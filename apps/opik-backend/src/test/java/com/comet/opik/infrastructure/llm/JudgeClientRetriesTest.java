@@ -36,9 +36,10 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 
 /**
- * A judge's chat model must not retry on its own: {@code ChatCompletionService.scoreTrace} retries each judge call and
- * the scoring stream redelivers it, so a client's retries would multiply the attempts against a provider that hangs.
- * Gemini and Vertex AI take no base URL from the provider configuration, so they can't be pointed at the mock here.
+ * A judge's chat model retries only as configured: {@code ChatCompletionService.scoreTrace} retries each judge call and
+ * the scoring stream redelivers it, so a client's own retries multiply the attempts against a provider that hangs.
+ * Gemini takes no base URL from the provider configuration, so it can't be pointed at the mock; Vertex AI is covered in
+ * {@code VertexAIClientGeneratorTest}, which has its credentials and endpoint set up.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class JudgeClientRetriesTest {
@@ -67,43 +68,50 @@ class JudgeClientRetriesTest {
     }
 
     Stream<Arguments> judgeChatModels() {
-        var openAi = new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+        return Stream.of(0, 1).flatMap(this::judgeChatModels);
+    }
+
+    private Stream<Arguments> judgeChatModels(int judgeMaxRetries) {
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setJudgeMaxRetries(judgeMaxRetries);
+        var openAi = new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT,
                 LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        var customLlm = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(ProviderBaseUrlGuard.class),
+        var customLlm = new CustomLlmClientGenerator(clientConfig, mock(ProviderBaseUrlGuard.class),
                 mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        var anthropic = new AnthropicClientGenerator(new LlmProviderClientConfig(), bundledRegistry(),
+        var anthropic = new AnthropicClientGenerator(clientConfig, bundledRegistry(),
                 LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var freeModelConfig = new FreeModelConfig();
         freeModelConfig.setEnabled(true);
         var freeModel = new FreeModelServiceProvider(openAi, mock(LlmProviderFactory.class), freeModelConfig,
-                new LlmProviderClientConfig(), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
+                clientConfig, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         return Stream.of(
-                Arguments.of("OpenAI chat completions", (Function<String, ChatModel>) baseUrl -> openAi
+                Arguments.of("OpenAI chat completions", judgeMaxRetries, (Function<String, ChatModel>) baseUrl -> openAi
                         .generateChat(config(baseUrl + "/v1", Map.of()), JUDGE)),
-                Arguments.of("OpenAI Responses API", (Function<String, ChatModel>) baseUrl -> openAi
+                Arguments.of("OpenAI Responses API", judgeMaxRetries, (Function<String, ChatModel>) baseUrl -> openAi
                         .generateChat(config(baseUrl + "/v1", Map.of("openai_pipeline_mode", "responses_api")),
                                 JUDGE)),
-                Arguments.of("custom LLM", (Function<String, ChatModel>) baseUrl -> customLlm
+                Arguments.of("custom LLM", judgeMaxRetries, (Function<String, ChatModel>) baseUrl -> customLlm
                         .generateChat(config(baseUrl + "/v1", Map.of()),
                                 LlmAsJudgeModelParameters.builder().name("custom-llm/judge-model").build())),
-                Arguments.of("Anthropic", (Function<String, ChatModel>) baseUrl -> anthropic
+                Arguments.of("Anthropic", judgeMaxRetries, (Function<String, ChatModel>) baseUrl -> anthropic
                         .generateChat(config(baseUrl + "/v1/", Map.of()), JUDGE)),
-                Arguments.of("Opik free model", (Function<String, ChatModel>) baseUrl -> freeModel
+                Arguments.of("Opik free model", judgeMaxRetries, (Function<String, ChatModel>) baseUrl -> freeModel
                         .getLanguageModel(config(baseUrl + "/v1", Map.of()),
                                 LlmAsJudgeModelParameters.builder().name(FreeModelConfig.FREE_MODEL).build())));
     }
 
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{0}, {1} retries")
     @MethodSource("judgeChatModels")
-    void aJudgeCallReachesTheProviderOnce(String provider, Function<String, ChatModel> judgeFor) {
-        var judge = judgeFor.apply(LlmTestClients.baseUrlOf(this.provider));
+    void aJudgeCallReachesTheProviderOncePlusItsRetries(String providerName, int judgeMaxRetries,
+            Function<String, ChatModel> judgeFor) {
+        var judge = judgeFor.apply(LlmTestClients.baseUrlOf(provider));
 
         var failure = catchThrowable(() -> judge.chat(ChatRequest.builder()
                 .messages(UserMessage.from("Is the answer correct?"))
                 .build()));
 
         assertThat(failure).isNotNull();
-        assertThat(this.provider.findAll(anyRequestedFor(anyUrl()))).hasSize(1);
+        assertThat(provider.findAll(anyRequestedFor(anyUrl()))).hasSize(1 + judgeMaxRetries);
     }
 
     private static LlmProviderClientApiConfig config(String baseUrl, Map<String, String> configuration) {

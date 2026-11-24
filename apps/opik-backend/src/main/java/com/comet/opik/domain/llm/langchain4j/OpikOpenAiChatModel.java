@@ -45,10 +45,10 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.validate;
 @Slf4j
 public class OpikOpenAiChatModel extends OpenAiChatModel {
 
-    // Hardcoded defaults for fields we need (matching OpenAiChatModel defaults)
+    // The parent keeps these private, so they are held again here
     private final OpenAiClient client;
-    // The builder's value, read from the parent like the client, so a judge that retries on its own can turn it off
-    private final Integer maxRetries;
+    private final int maxRetries;
+    // Hardcoded defaults (matching OpenAiChatModel defaults)
     private final Boolean strictTools = false;
     private final Boolean strictJsonSchema = false;
     private final Boolean returnThinking = false;
@@ -64,10 +64,13 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
      *
      * @param builder The OpenAI chat model builder with standard parameters
      * @param customParameters Additional parameters as JsonNode (will be converted to Map<String,Object> at request time)
+     * @param maxRetries The retries set on the builder, which the parent keeps private
      */
-    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
+    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters,
+            int maxRetries) {
         super(builder);
         this.customParameters = customParameters;
+        this.maxRetries = maxRetries;
         // Checked while the judge model is built, so the scorer gets the 400 as is. Thrown from doChat, it would be
         // retried and then reported as a 500, which the online scoring queue redelivers.
         CustomParametersOverrides.rejectOpikManagedKeys(convertCustomParameters());
@@ -77,9 +80,6 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
             var clientField = OpenAiChatModel.class.getDeclaredField("client");
             clientField.setAccessible(true);
             this.client = (OpenAiClient) clientField.get(this);
-            var maxRetriesField = OpenAiChatModel.class.getDeclaredField("maxRetries");
-            maxRetriesField.setAccessible(true);
-            this.maxRetries = (Integer) maxRetriesField.get(this);
         } catch (Exception e) {
             log.error("Failed to extract client from OpenAiChatModel", e);
             throw new RuntimeException("Failed to initialize OpikOpenAiChatModel", e);

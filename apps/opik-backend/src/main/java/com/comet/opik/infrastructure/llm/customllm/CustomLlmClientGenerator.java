@@ -68,9 +68,10 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
                 modelParameters.name(), actualModelName, providerName);
 
+        var maxRetries = llmProviderClientConfig.getJudgeMaxRetries();
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
-                .maxRetries(JUDGE_MAX_RETRIES)
+                .maxRetries(maxRetries)
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .modelName(actualModelName)
                 .apiKey(clientApiKey(config))
@@ -85,7 +86,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly
-        return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
+        return new OpikOpenAiChatModel(builder, modelParameters.customParameters(), maxRetries);
     }
 
     /**

@@ -28,6 +28,13 @@ public class LlmProviderClientConfig {
 
     @NotNull @Min(1) private Integer maxAttempts;
 
+    /**
+     * Retries a judge's provider client makes on its own. {@code ChatCompletionService.scoreTrace} already retries every
+     * judge call and the scoring stream redelivers it, so a client's own retries multiply the attempts, holding a scoring
+     * slot that much longer while a provider hangs.
+     */
+    @NotNull @Min(0) private Integer judgeMaxRetries;
+
     @Min(1) private int delayMillis = 500;
 
     @Positive private Double jitterScale;

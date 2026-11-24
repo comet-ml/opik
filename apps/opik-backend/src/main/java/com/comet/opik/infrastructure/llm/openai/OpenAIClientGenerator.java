@@ -131,9 +131,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
-                .maxRetries(JUDGE_MAX_RETRIES)
-                // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
-                // internal retry nor the outer retry policy keeps hitting an exhausted key.
+                .maxRetries(llmProviderClientConfig.getJudgeMaxRetries())
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable so the judge's retries do not keep
+                // hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder(
                         ProviderHeadersHttpClient.builder(httpClientBuilders.builder(), config.headers())))
                 .logRequests(llmProviderClientConfig.getLogRequests())
@@ -190,7 +190,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                         OpenAiResponsesExtraBody.fromJudgeCustomParameters(modelParameters.customParameters()))
                 .build());
         var builder = newResponsesApiChatModelBuilder(config, modelParameters, false,
-                judgeRequest.customParameters(), JUDGE_MAX_RETRIES);
+                judgeRequest.customParameters(), llmProviderClientConfig.getJudgeMaxRetries());
         // A judge sets its own response_format on every request, which wins over a model default, so of the moved
         // settings only these two can apply.
         Optional.ofNullable(judgeRequest.maxCompletionTokens()).ifPresent(builder::maxOutputTokens);
