@@ -43,7 +43,7 @@ class TopicsNightlyRulesTest {
 
     private static final AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
 
-    private static final LocalDate FIRST_BUILD = LocalDate.parse("2026-10-01");
+    private static final LocalDate DISCOVERY = LocalDate.parse("2026-10-01");
     private static final LocalDate NIGHT = LocalDate.parse("2026-10-20");
     private static final Instant NIGHT_START = Instant.parse("2026-10-20T00:00:00Z");
     /** Inside the night's last 7 days. */
@@ -140,7 +140,7 @@ class TopicsNightlyRulesTest {
                 "an unknown cluster|{\"name\": \"Weather\", \"definition\": \"x\", \"clusters\": [7]}"
                         + "|OTHER_NAME||1|",
                 "no new topic||OTHER_NAME||1|",
-                "a catch-all word inside, as in the first build"
+                "a catch-all word inside, as in the discovery run"
                         + "|{\"name\": \"General Job Search\", \"definition\": \"F.\", \"clusters\": [0]}"
                         + "|BORN|1|2|General Job Search",
                 "a live topic's name"
@@ -310,9 +310,9 @@ class TopicsNightlyRulesTest {
         }
     }
 
-    private final LocalDate firstBuild = LocalDate.now(ZoneOffset.UTC)
+    private final LocalDate discoveredOn = LocalDate.now(ZoneOffset.UTC)
             .minusDays(RandomUtils.secure().randomInt(20, 365));
-    private final LocalDate night = firstBuild.plusDays(RandomUtils.secure().randomInt(1, 30));
+    private final LocalDate night = discoveredOn.plusDays(RandomUtils.secure().randomInt(1, 30));
     private final Instant nightStart = night.atStartOfDay(ZoneOffset.UTC).toInstant();
     /** Inside the night's recent days. */
     private final Instant recentDay = nightStart.minus(Duration.ofHours(
@@ -368,7 +368,7 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a topic born after the first build is measured on the whole window, as any other")
+        @DisplayName("a topic born after the discovery run is measured on the whole window, as any other")
         void newborn() {
             var state = state(topic().build(), topic().born(night.minusDays(2)).build());
             var labels = new int[300];
@@ -582,8 +582,8 @@ class TopicsNightlyRulesTest {
         @DisplayName("a night on which every live topic retires saves an empty list: all traces are Other, and the "
                 + "invariants hold")
         void allLiveRetire() {
-            // The next night the job finds no live topic and runs a first build (TopicsNightlyService.modeOf): it saves
-            // rebuilds 1 and a new first build night, and replaces every prototype, so these topics cannot come back.
+            // The next night the job finds no live topic and starts a discovery run (TopicsNightlyService.modeOf): it saves
+            // rebuilds 1 and a new first_built_at night, and replaces every prototype, so these topics cannot come back.
             var east = topic("East", EAST).toBuilder().lowNights(2).build();
             var north = topic("North", NORTH).toBuilder().lowNights(2).build();
             var state = state(3, east, north);
@@ -1077,13 +1077,13 @@ class TopicsNightlyRulesTest {
                 topics);
     }
 
-    /** A topic born on the first build, with a random id, name and definition and no prototypes. */
+    /** A topic born on the discovery run, with a random id, name and definition and no prototypes. */
     private NightTopic.NightTopicBuilder topic() {
         return NightTopic.builder()
                 .id(TopicsTestAlgorithm.ID_GENERATOR.generateId())
                 .name(RandomStringUtils.secure().nextAlphanumeric(10))
                 .definition(RandomStringUtils.secure().nextAlphanumeric(30))
-                .born(firstBuild)
+                .born(discoveredOn)
                 .prototypes(List.of());
     }
 
@@ -1103,7 +1103,7 @@ class TopicsNightlyRulesTest {
     }
 
     private static NightTopic topic(String name, float[]... prototypes) {
-        return topic(name, FIRST_BUILD, prototypes);
+        return topic(name, DISCOVERY, prototypes);
     }
 
     private static NightTopic topic(String name, LocalDate born, float[]... prototypes) {
@@ -1175,7 +1175,7 @@ class TopicsNightlyRulesTest {
         JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens);
     }
 
-    /** Answers each ask of {@code step} with {@code llm}, as the rebuild service does, until the step is done. */
+    /** Answers each ask of {@code step} with {@code llm}, as the run service does, until the step is done. */
     private static <T> T drive(NightStep<T> step, NightLlm llm) {
         while (step instanceof NightStep.Ask<T>(var request, var next)) {
             step = next.apply(llm.generate(request.tag(), request.prompt(), request.schema(), request.maxTokens()));

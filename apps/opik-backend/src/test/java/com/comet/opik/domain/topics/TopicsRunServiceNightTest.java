@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.GenerateRequest;
@@ -12,7 +11,9 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -41,12 +43,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * The rebuild service driving a nightly update's {@link NightStep}s, with opik-inference stubbed: the calls in the
+ * The run service driving a nightly update's {@link NightStep}s, with opik-inference stubbed: the calls in the
  * order the algorithm asks, each with its kind's deadline and its own request id, a bad answer handed on as null, a
  * failed call ending the night.
  */
-@DisplayName("topics rebuild service: nightly update steps")
-class TopicsRebuildServiceNightTest {
+@DisplayName("topics run service: nightly update steps")
+class TopicsRunServiceNightTest {
 
     private static final TimeBasedEpochGenerator IDS = Generators.timeBasedEpochGenerator();
     private static final LocalDate NIGHT = LocalDate.parse("2026-10-20");
@@ -60,7 +62,7 @@ class TopicsRebuildServiceNightTest {
     private InferenceClient client;
     private TopicsConfig config;
     private TopicRun run;
-    private TopicsRebuildService.RunStats stats;
+    private ObjectNode stats;
     /** What the client got, in order: the request and its deadline. */
     private final List<Map.Entry<GenerateRequest, Instant>> calls = Collections.synchronizedList(new ArrayList<>());
     /** What the stub algorithm's steps got, in order; an empty Optional for a null answer. */
@@ -71,8 +73,8 @@ class TopicsRebuildServiceNightTest {
         metricReader = InMemoryMetricReader.create();
         client = mock(InferenceClient.class);
         config = TestConfigUtils.loadConfigTest().getTopics();
-        run = TopicRun.of(runId, workspaceId, workspaceName, projectId, NIGHT, config.getBuild().getWindowDays());
-        stats = TopicsRebuildService.RunStats.of(run);
+        run = TopicRun.of(runId, workspaceId, workspaceName, projectId, NIGHT, config.getRun().getWindowDays());
+        stats = JsonUtils.createObjectNode();
     }
 
     @Test
@@ -85,25 +87,26 @@ class TopicsRebuildServiceNightTest {
                 "naming_new", Mono.just(object("{\"step\": 3}"))));
         var started = Instant.now();
 
-        var update = service().update(run, stats, state(), window()).block();
+        var update = service().update(run, stats, state(), window(), Schedulers.immediate()).block();
         var ended = Instant.now();
 
         assertThat(calls).extracting(call -> call.getKey().requestId())
                 .containsExactly(runId + ":naming", runId + ":verify_naming", runId + ":naming_new");
         assertThat(calls).extracting(call -> call.getKey().maxTokens()).containsExactly(11, 12, 13);
-        deadline(calls.getFirst().getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
-        deadline(calls.get(1).getValue(), started, ended, config.getBuild().getVerifyDeadline().toJavaDuration());
-        deadline(calls.get(2).getValue(), started, ended, config.getBuild().getNamingDeadline().toJavaDuration());
+        deadline(calls.getFirst().getValue(), started, ended, config.getRun().getNamingDeadline().toJavaDuration());
+        deadline(calls.get(1).getValue(), started, ended, config.getRun().getVerifyDeadline().toJavaDuration());
+        deadline(calls.get(2).getValue(), started, ended, config.getRun().getNamingDeadline().toJavaDuration());
         assertThat(answers).containsExactly(Optional.of(object("{\"step\": 1}")), Optional.empty(),
                 Optional.of(object("{\"step\": 3}")));
         assertThat(update.labels()).containsExactly(0, TopicAlgorithm.OTHER);
         assertThat(sum(metricReader, "topics.llm.calls", "call", "naming", "outcome", "ok")).isEqualTo(2);
         assertThat(sum(metricReader, "topics.llm.calls", "call", "verify", "outcome", "bad_answer")).isEqualTo(1);
         assertThat(sum(metricReader, "topics.llm.calls")).isEqualTo(3);
-        assertThat(stats.stats().get("night_stat").asInt()).isEqualTo(3);
-        assertThat(stats.stats().get("llm_calls").asInt()).isEqualTo(3);
-        assertThat(stats.stats().get("llm_input_tokens").asInt()).isEqualTo(3_000);
-        assertThat(stats.seconds().has("llm")).isTrue();
+        assertThat(stats.get("night_stat").asInt()).isEqualTo(3);
+        assertThat(stats.get("llm_calls").asInt()).isEqualTo(3);
+        assertThat(stats.get("llm_input_tokens").asInt()).isEqualTo(3_000);
+        assertThat(TopicsMetricsReader.points(metricReader, "topics.run.duration_seconds"))
+                .anyMatch(point -> "llm".equals(point.get("phase")));
     }
 
     @Test
@@ -116,14 +119,14 @@ class TopicsRebuildServiceNightTest {
                 "verify_naming", Mono.error(failure),
                 "naming_new", Mono.just(object("{\"step\": 3}"))));
 
-        assertThatThrownBy(() -> service().update(run, stats, state(), window()).block())
+        assertThatThrownBy(() -> service().update(run, stats, state(), window(), Schedulers.immediate()).block())
                 .isInstanceOfSatisfying(TopicsRunException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_ERROR));
         assertThat(calls).extracting(call -> call.getKey().requestId())
                 .containsExactly(runId + ":naming", runId + ":verify_naming");
         assertThat(answers).containsExactly(Optional.of(object("{\"step\": 1}")));
         assertThat(sum(metricReader, "topics.llm.calls", "call", "verify", "outcome", "error")).isEqualTo(1);
-        assertThat(stats.stats().has("night_stat")).isFalse();
+        assertThat(stats.has("night_stat")).isFalse();
     }
 
     @Test
@@ -134,7 +137,7 @@ class TopicsRebuildServiceNightTest {
         when(failure.isOutOfTime()).thenReturn(true);
         answer(Map.of("naming", Mono.error(failure)));
 
-        assertThatThrownBy(() -> service().update(run, stats, state(), window()).block())
+        assertThatThrownBy(() -> service().update(run, stats, state(), window(), Schedulers.immediate()).block())
                 .isInstanceOfSatisfying(TopicsRunException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
         assertThat(answers).isEmpty();
@@ -147,7 +150,7 @@ class TopicsRebuildServiceNightTest {
             GenerateRequest request = invocation.getArgument(0);
             calls.add(Map.entry(request, invocation.getArgument(1)));
             var tag = request.requestId().substring(request.requestId().indexOf(':') + 1);
-            return byTag.get(tag).map(TopicsRebuildServiceNightTest::response);
+            return byTag.get(tag).map(TopicsRunServiceNightTest::response);
         });
     }
 
@@ -155,11 +158,11 @@ class TopicsRebuildServiceNightTest {
         assertThat(deadline).isBetween(started.plus(expected), ended.plus(expected));
     }
 
-    private TopicsRebuildService service() {
+    private TopicsRunService service() {
         var metrics = TopicsMetricsReader.metrics(metricReader);
-        return new TopicsRebuildService(config, mock(TopicWindowReader.class), new TopicsLlm(config, client, metrics),
-                mock(TopicRunStore.class), mock(IdGenerator.class), metrics, mock(WorkspaceNameService.class),
-                new ThreeCalls());
+        var store = mock(TopicRunStore.class);
+        return new TopicsRunService(config, mock(TopicWindowReader.class), new TopicsLlm(config, client, metrics),
+                store, new TopicRunOutcomes(store), mock(IdGenerator.class), metrics, new ThreeCalls());
     }
 
     /** A night of three calls, naming, verify, naming_new, whatever they answer; it records each answer. */

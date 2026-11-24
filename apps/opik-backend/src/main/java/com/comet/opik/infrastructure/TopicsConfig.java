@@ -33,7 +33,10 @@ public class TopicsConfig {
     private AlgorithmConfig algorithm;
 
     @Valid @NotNull @JsonProperty
-    private BuildConfig build;
+    private RunConfig run;
+
+    @Valid @NotNull @JsonProperty
+    private ReadConfig read;
 
     @Valid @NotNull @JsonProperty
     private StorageConfig storage;
@@ -82,7 +85,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100) private int maxTopics;
 
-        /** A first build over fewer traces is marked provisional in its stats. */
+        /** A discovery run over fewer traces is marked provisional in its stats. */
         @JsonProperty
         @Min(0) @Max(100_000) private int provisionalBelow;
 
@@ -148,12 +151,12 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
-    public static class BuildConfig {
+    public static class RunConfig {
 
         @Valid @NotNull @JsonProperty
-        private BuildReadConfig read;
+        private RunReadConfig read;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
@@ -161,7 +164,7 @@ public class TopicsConfig {
         @MaxDuration(value = 2, unit = TimeUnit.HOURS)
         private Duration projectTimeout;
 
-        /** A project is built when its window holds at least this many traces with a vector. */
+        /** A project gets a discovery run when its window holds at least this many traces with a vector. */
         @JsonProperty
         @Min(2) @Max(100_000) private int minVectors;
 
@@ -214,36 +217,36 @@ public class TopicsConfig {
         private Duration insertBackoff;
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
+        @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+        @AssertTrue(message = "topics.run.namingDeadline must be shorter than topics.run.projectTimeout") public boolean isNamingDeadlineValid() {
             return namingDeadline == null || projectTimeout == null
                     || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+        @AssertTrue(message = "topics.run.verifyDeadline must be shorter than topics.run.projectTimeout") public boolean isVerifyDeadlineValid() {
             return verifyDeadline == null || projectTimeout == null
                     || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
         @JsonIgnore
-        @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
+        @AssertTrue(message = "topics.run.maxVectors must be at least topics.run.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
     }
 
     /**
-     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
-     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     * The ClickHouse guards of the run's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the run reads a whole window, the window read about three times.
      */
     @Data
-    public static class BuildReadConfig {
+    public static class RunReadConfig implements ReadGuards {
 
         @JsonProperty
         @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
@@ -267,6 +270,51 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration countSlice;
+    }
+
+    /** The ClickHouse guards a topics read binds: the run's and the read API's are two sets of them. */
+    public interface ReadGuards {
+
+        long getMaxRowsToRead();
+
+        long getMaxMemoryUsage();
+
+        int getMaxThreads();
+
+        int getPriority();
+
+        int getMaxBlockSize();
+    }
+
+    /**
+     * The read API's ClickHouse guards, apart from the run's: a page request, not a background job. Its reads (the
+     * per topic and day counts, the collecting count) share one time budget.
+     */
+    @Data
+    public static class ReadConfig implements ReadGuards {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse priority of the collecting count; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the collecting count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** A request's ClickHouse reads end within this; a read that does not is a guard trip. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration budget;
     }
 
     /** The topics state's MySQL writes. */
@@ -361,6 +409,12 @@ public class TopicsConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration embedTimeout;
 
+        /** How much longer than the rest the leader lock lasts, for the insert after the last embed call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
         @Valid @NotNull @JsonProperty
         private FindConfig find;
 
@@ -416,7 +470,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick; adds to the leader lock's lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;

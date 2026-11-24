@@ -21,7 +21,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 /**
- * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has the LLM name
+ * The topic algorithm in use. A discovery run merges identical texts, k-means them into fine groups, has the LLM name
  * topics over the groups ({@link TopicTasks#author()}), and assigns every trace to its nearest prototype with
  * {@link PrototypeAssigner}: the topic prototypes are the centres of each topic's groups, the known-Other ones the
  * centres of the Other groups. A nightly update is {@link NightlyUpdate}. The labeller applies the same assigner to a
@@ -97,7 +97,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         }
 
         @Override
-        public FirstBuild finish(@NonNull AuthorAnswer answer) {
+        public DiscoveredTopics finish(@NonNull AuthorAnswer answer) {
             var applied = AuthorApplier.apply(answer, groups, maxTopics);
             var topics = applied.topics().stream()
                     .map(topic -> NewTopic.builder()
@@ -115,7 +115,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
             // near it is saved, so it would assign no trace.
-            return FirstBuild.builder()
+            return DiscoveredTopics.builder()
                     .topics(topics)
                     .labels(assigner.assign(vectors))
                     .otherPrototypes(assigner.keptOther())
@@ -145,7 +145,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     }
 
     /**
-     * The {@link PrototypeAssigner} over the saved list, as the build made it: each topic's vectors in topic order,
+     * The {@link PrototypeAssigner} over the saved list, as the run made it: each topic's vectors in topic order,
      * owned by the topic's index, then the known-Other ones.
      */
     @Override

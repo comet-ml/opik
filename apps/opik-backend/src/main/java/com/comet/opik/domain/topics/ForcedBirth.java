@@ -28,7 +28,7 @@ import java.util.function.Supplier;
  * The naming call shows the live topics and may assign a group to one, put same-kind groups into one new topic, or
  * leave a group in Other. An assign passes one batched verify; a rejected group goes to a second call that offers new
  * and other only. A new topic's groups are de-duplicated; a blank name or a name that is a catch-all as a whole
- * ({@link AuthorApplier#isCatchAllName}, the first build's rule) is skipped; a name equal to a live topic's (by
+ * ({@link AuthorApplier#isCatchAllName}, the discovery run's rule) is skipped; a name equal to a live topic's (by
  * {@link AuthorApplier#nameKey}) joins that topic in the first call and is known Other in the second (the verify may
  * just have rejected that topic for it), and equal new names are one topic. New topics are created largest first; one
  * whose groups' share of the window is below {@value #MIN_NEW_SHARE} is not born, its groups are known Other

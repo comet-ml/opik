@@ -21,7 +21,7 @@ import java.util.Set;
 @EagerSingleton
 public class TopicTasks {
 
-    /** Names topics over a first build's groups: {@link TopicPrompts#author}. */
+    /** Names topics over a discovery run's groups: {@link TopicPrompts#author}. */
     public static final String AUTHOR = LlmCall.AUTHOR.getValue();
     public static final String MAX_TOPICS_PLACEHOLDER = "{{max_topics}}";
     public static final String CLUSTERS_PLACEHOLDER = "{{clusters}}";

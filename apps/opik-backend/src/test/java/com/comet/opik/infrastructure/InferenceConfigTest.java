@@ -149,7 +149,7 @@ class InferenceConfigTest {
         var config = TestConfigUtils.loadConfigTest();
         var max = config.getInference().getLimits().getMaxGenerateBatchDeadline();
         var aboveMax = Duration.milliseconds(max.toMilliseconds() + 1);
-        var build = config.getTopics().getBuild();
+        var build = config.getTopics().getRun();
         build.setLlmDeadline("llmDeadline".equals(overLimitDeadline) ? aboveMax : max);
         build.setNamingDeadline("namingDeadline".equals(overLimitDeadline) ? aboveMax : max);
         build.setVerifyDeadline("verifyDeadline".equals(overLimitDeadline) ? aboveMax : max);

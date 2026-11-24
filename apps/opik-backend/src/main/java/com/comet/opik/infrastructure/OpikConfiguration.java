@@ -128,6 +128,9 @@ public class OpikConfiguration extends JobConfiguration {
     private GuardrailsConfig guardrails = new GuardrailsConfig();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsTrainingDatasetConfig guardrailsTrainingDataset = new GuardrailsTrainingDatasetConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
@@ -243,6 +246,14 @@ public class OpikConfiguration extends JobConfiguration {
                 || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
     }
 
+    // Every guardrail models endpoint passes the guardrails gate, which needs the validations toggle: training alone
+    // would only make each of them a 403.
+    @JsonIgnore
+    @AssertTrue(message = "serviceToggles.guardrailsTrainingEnabled (TOGGLE_GUARDRAILS_TRAINING_ENABLED) requires serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED): guardrail models are used by guardrail checks")
+    public boolean isGuardrailsValidationsEnabledForTraining() {
+        return !serviceToggles.isGuardrailsTrainingEnabled() || serviceToggles.isGuardrailsValidationsEnabled();
+    }
+
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
     public boolean isAiLabelsInferenceConfigured() {
@@ -309,8 +320,8 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.build.llmDeadline, namingDeadline and verifyDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlinesWithinLimits() {
-        var build = topics.getBuild();
+    @AssertTrue(message = "topics.run.llmDeadline, namingDeadline and verifyDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlinesWithinLimits() {
+        var build = topics.getRun();
         var limits = inference.getLimits();
         return build == null || limits == null
                 || Stream.of(build.getLlmDeadline(), build.getNamingDeadline(), build.getVerifyDeadline())

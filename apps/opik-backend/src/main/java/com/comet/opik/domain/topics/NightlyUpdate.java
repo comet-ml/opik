@@ -31,7 +31,7 @@ import java.util.stream.IntStream;
  * <li>decisions become prototypes: the centre of every group given to a live topic is appended to its prototypes. The
  * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
  * in Other (not a loose one), unless one kept is within {@value #SAME_MEMORY} of it;</li>
- * <li>the final assignment, as the first build's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
+ * <li>the final assignment, as the discovery run's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
  * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
  * reassignment when one happened, then the sizes;</li>
  * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
