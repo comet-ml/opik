@@ -1233,6 +1233,9 @@ serviceToggles:
   # Description: Whether or not the backend runs guardrails itself
   guardrailsValidationsEnabled: "false"
   # Default: false
+  # Description: Whether or not workspaces can train their own guardrail models
+  guardrailsTrainingEnabled: "false"
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
   # Default: true
@@ -1638,3 +1641,10 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
+guardrailsTrainingDataset:
+  maxFileSizeMb: 50
+  minRows: 20
+  maxRows: 50000
+  minRowsPerLabel: 5
+  maxTextLength: 12000

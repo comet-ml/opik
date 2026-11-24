@@ -32,4 +32,21 @@ class FeatureFlagsTest {
         assertThat(featureFlags.isGuardrailsValidationsEnabled()).isTrue();
         assertThatCode(featureFlags::checkGuardrailsValidationsEnabled).doesNotThrowAnyException();
     }
+
+    @Test
+    void guardrailsTrainingOffIsForbiddenEvenWithValidationsOn() {
+        var featureFlags = featureFlags(true);
+
+        assertThatThrownBy(featureFlags::checkGuardrailsTrainingEnabled)
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage("Guardrail model training is not enabled");
+    }
+
+    @Test
+    void guardrailsTrainingOnPasses() {
+        var configuration = new OpikConfiguration();
+        configuration.getServiceToggles().setGuardrailsTrainingEnabled(true);
+
+        assertThatCode(new FeatureFlags(configuration)::checkGuardrailsTrainingEnabled).doesNotThrowAnyException();
+    }
 }
