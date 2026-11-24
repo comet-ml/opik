@@ -330,9 +330,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ;
             """;
 
-    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
-    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
-
     // A thread's source is carried forward by every write that follows the first, so the latest row is
     // the authoritative one — taken with argMax, as the other thread reads here do.
     private static final String SELECT_LOGGING_SOURCE_IDS = """
@@ -751,7 +748,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(UUID[]::new))
                     .bind("ids", threadModelIds.toArray(UUID[]::new))
-                    .bind("sources", LOGGING_SOURCES);
+                    .bind("sources", Source.loggingSourceDbValues());
 
             Segment segment = startSegment("trace_threads", "Clickhouse", "get_logging_source_ids");
 
