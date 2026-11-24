@@ -2895,6 +2895,12 @@ topics:
     #  Default: 10s
     #  Description: A request's ClickHouse reads end within this. From 1s to 60s
     budget: ${TOPICS_READ_BUDGET:-10s}
+  #  The topics state's MySQL writes
+  storage:
+    #  Default: 100
+    #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
+    #  bounded however many projects went at once. From 1 to 10000
+    deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it

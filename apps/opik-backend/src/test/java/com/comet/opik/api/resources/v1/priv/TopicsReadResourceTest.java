@@ -8,6 +8,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.PostCutoverTraces.TraceRow;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -15,8 +16,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
-import com.comet.opik.api.resources.utils.TopicsTraces;
-import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.IdGenerator;
@@ -542,7 +541,7 @@ class TopicsReadResourceTest {
     /** The rows, and a trace Logs shows for each of their traces: the API counts only those. */
     private void insertShown(List<TraceTopic> rows) {
         traceTopicsDAO.insert(rows).block();
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, rows.stream()
+        PostCutoverTraces.insertTraces(connectionFactory, rows.stream()
                 .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
                 .distinct()
                 .toList());
