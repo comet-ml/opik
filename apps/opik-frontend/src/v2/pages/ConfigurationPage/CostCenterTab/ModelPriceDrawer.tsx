@@ -21,6 +21,7 @@ import {
   CATALOG_TYPE_LABELS,
   CatalogEntry,
   CatalogType,
+  DrawerValues,
   LITELLM_KEYS,
   ModelPriceList,
   ModelPriceProblem,
@@ -31,10 +32,13 @@ import {
   blockingWarnings,
   canonicalPrice,
   describePerToken,
+  drawerValuesOf,
   findBuiltIn,
   identityOf,
+  isSameSavedRow,
   overrideFields,
   problemsForRow,
+  rebaseValues,
   replaceOne,
   validateRow,
 } from "@/lib/model-prices";
@@ -99,6 +103,42 @@ const initialLines = (entry?: CatalogEntry): Line[] => {
   );
 };
 
+const rebaseLines = (
+  lines: Line[],
+  prices: DrawerValues["prices"],
+  newId: () => number,
+): Line[] => {
+  const kept = lines.flatMap((line) => {
+    const value = prices[line.field];
+    if (value !== undefined) return [{ ...line, value }];
+    return line.locked ? [] : [{ ...line, value: "" }];
+  });
+  const shown = new Set(kept.map((line) => line.field));
+  const added = PRICE_FIELDS.filter(
+    (field) => prices[field] !== undefined && !shown.has(field),
+  ).map((field) => ({
+    id: newId(),
+    field,
+    value: prices[field] ?? "",
+    locked: true,
+  }));
+  return [...kept, ...added];
+};
+
+type Loaded = { row?: ModelPriceRow; values: DrawerValues };
+
+type ChangedElsewhere = { version: number; removed: boolean };
+
+const typeOf = (
+  entry: CatalogEntry | undefined,
+  loadedRow: ModelPriceRow | undefined,
+  builtIn: BuiltInPrice | undefined,
+): CatalogType => {
+  if (!entry) return builtIn ? "override" : "custom";
+  if (!entry.builtIn) return "custom";
+  return loadedRow ? "override" : "default";
+};
+
 const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   open,
   setOpen,
@@ -132,6 +172,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirming, setConfirming] = useState<"discard" | "remove">();
+  const [loaded, setLoaded] = useState<Loaded>(() => ({
+    row: entry?.row,
+    values: drawerValuesOf(entry?.row, entry?.builtIn),
+  }));
+  const [changedElsewhere, setChangedElsewhere] = useState<ChangedElsewhere>();
 
   const builtIn = useMemo(
     () =>
@@ -139,7 +184,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
       (kind === "fixed" ? findBuiltIn(builtIns, model, provider) : undefined),
     [entry, builtIns, model, provider, kind],
   );
-  const type: CatalogType = entry?.type ?? (builtIn ? "override" : "custom");
+  const type = typeOf(entry, loaded.row, builtIn);
   const keepsBuiltIn = Boolean(builtIn);
   const isCustomPrice = !keepsBuiltIn && kind === "fixed";
   const readOnly = !canEdit;
@@ -151,6 +196,40 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
     });
     return result;
   }, [lines]);
+
+  const identity = entry
+    ? identityOf(
+        entry.row ?? {
+          model: entry.model,
+          provider: entry.provider,
+          kind: "fixed",
+        },
+      )
+    : undefined;
+  const latestRow = identity
+    ? list.rows.find((row) => identityOf(row) === identity)
+    : undefined;
+  // The list refetches in the background (window focus, after a 409), so someone else's save can land while
+  // the drawer is open. Rebase in render, not in an effect, so the stale values are never shown or saved.
+  if (identity && !isSameSavedRow(latestRow, loaded.row)) {
+    const theirs = drawerValuesOf(latestRow, entry?.builtIn);
+    const merged = rebaseValues(
+      loaded.values,
+      { kind, aliasModel, aliasProvider, note, prices: values },
+      theirs,
+    );
+    setKind(merged.kind);
+    setAliasModel(merged.aliasModel);
+    setAliasProvider(merged.aliasProvider);
+    setNote(merged.note);
+    setLines((current) =>
+      rebaseLines(current, merged.prices, () => (nextId.current += 1)),
+    );
+    setLoaded({ row: latestRow, values: theirs });
+    setChangedElsewhere({ version: list.version, removed: !latestRow });
+    setProblems([]);
+    setWarnings([]);
+  }
 
   const buildRow = (): ModelPriceRow => {
     const base: ModelPriceRow = {
@@ -249,11 +328,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
         return;
       }
     }
-    if (!rowToSave && !entry?.row) {
+    if (!rowToSave && !loaded.row) {
       setOpen(false);
       return;
     }
-    const { request, index } = replaceOne(list, entry?.row, rowToSave);
+    const { request, index } = replaceOne(list, loaded.row, rowToSave);
     if (!warnings.length) {
       const preview = await send(request, true);
       if (preview.kind === "invalid") {
@@ -387,6 +466,17 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
           </div>
         </div>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-4 pt-2">
+          {changedElsewhere && (
+            <div
+              role="status"
+              className="comet-body-s rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
+              data-testid="model-price-changed-elsewhere"
+            >
+              {changedElsewhere.removed
+                ? `Someone else removed this model's organization price (version ${changedElsewhere.version}). Saving adds it back with the values below.`
+                : `Someone else saved version ${changedElsewhere.version} while you were editing. Their prices are loaded below and your changes are kept on top. Review them before saving.`}
+            </div>
+          )}
           {isNew && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -709,7 +799,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 <Button size="sm" variant="ghost" onClick={requestClose}>
                   Cancel
                 </Button>
-                {type === "override" && entry?.row && (
+                {type === "override" && loaded.row && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -721,7 +811,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                     Restore all defaults
                   </Button>
                 )}
-                {type === "custom" && entry?.row && (
+                {type === "custom" && loaded.row && (
                   <Button
                     size="sm"
                     variant="outline"

@@ -30,7 +30,7 @@ const EXTRA_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
 const identityOfPrice = (price: BuiltInPrice) =>
   identityOf({ model: price.model, provider: price.provider, kind: "fixed" });
 
-const effectivePrices = (
+export const effectivePrices = (
   builtIn: BuiltInPrice | undefined,
   row: ModelPriceRow | undefined,
 ): Partial<Record<PriceField, string>> => {

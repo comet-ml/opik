@@ -1,4 +1,5 @@
 import type {
+  ModelPriceKind,
   ModelPriceList,
   ModelPriceProblem,
   ModelPriceReplace,
@@ -8,7 +9,8 @@ import type {
 import { PRICE_FIELDS } from "./types";
 import type { BuiltInPrice } from "./litellm";
 import { perMillionToPerToken } from "./litellm";
-import { canonicalPrice, identityOf, toEditableRow } from "./rows";
+import { canonicalPrice, identityOf, isSameRow, toEditableRow } from "./rows";
+import { effectivePrices } from "./catalog";
 import { PRICE_LABELS, rowLabel } from "./describe";
 import { MAX_PRICE_PER_MILLION } from "./validation";
 
@@ -38,6 +40,61 @@ export const replaceOne = (
     rows.push(toEditableRow(next));
   }
   return { request: { rows, expected_version: list.version }, index };
+};
+
+export interface DrawerValues {
+  kind: ModelPriceKind;
+  aliasModel: string;
+  aliasProvider: string;
+  note: string;
+  prices: Partial<Record<PriceField, string>>;
+}
+
+export const drawerValuesOf = (
+  row: ModelPriceRow | undefined,
+  builtIn: BuiltInPrice | undefined,
+): DrawerValues => ({
+  kind: row?.kind ?? "fixed",
+  aliasModel: row?.alias_of?.model ?? "",
+  aliasProvider: row?.alias_of?.provider ?? "",
+  note: row?.note ?? "",
+  prices: effectivePrices(builtIn, row),
+});
+
+export const isSameSavedRow = (
+  left: ModelPriceRow | undefined,
+  right: ModelPriceRow | undefined,
+) => (left && right ? isSameRow(left, right) : left === right);
+
+const sameText = (left: string, right: string) => left.trim() === right.trim();
+
+// Three-way merge: a field the user edited since `base` keeps the user's value, every other field takes
+// `theirs`. Sending the drawer's values as they were would silently revert someone else's save.
+export const rebaseValues = (
+  base: DrawerValues,
+  mine: DrawerValues,
+  theirs: DrawerValues,
+): DrawerValues => {
+  const prices: Partial<Record<PriceField, string>> = {};
+  PRICE_FIELDS.forEach((field) => {
+    const edited =
+      canonicalPrice(mine.prices[field]) !== canonicalPrice(base.prices[field]);
+    const value = edited ? mine.prices[field] : theirs.prices[field];
+    if (value !== undefined) {
+      prices[field] = value;
+    }
+  });
+  return {
+    kind: mine.kind !== base.kind ? mine.kind : theirs.kind,
+    aliasModel: sameText(mine.aliasModel, base.aliasModel)
+      ? theirs.aliasModel
+      : mine.aliasModel,
+    aliasProvider: sameText(mine.aliasProvider, base.aliasProvider)
+      ? theirs.aliasProvider
+      : mine.aliasProvider,
+    note: sameText(mine.note, base.note) ? theirs.note : mine.note,
+    prices,
+  };
 };
 
 export interface BatchSave {
