@@ -16,7 +16,14 @@ const GPT_4O: ModelPriceRow = {
   output_price: "8.5",
 };
 
-const hasBuiltIn = () => true;
+const hasBuiltIn = () => ({
+  model: "gpt-4o",
+  provider: "openai",
+  input_price: "2.5",
+  output_price: "10",
+  cache_read_price: "1.25",
+  cache_write_price: "3",
+});
 
 const ALIAS: ModelPriceRow = {
   model: "bifrost/gpt-4o",
@@ -67,7 +74,7 @@ describe("describe", () => {
       input_price: "1",
       output_price: "3",
     };
-    const noBuiltIn = () => false;
+    const noBuiltIn = () => undefined;
 
     expect(
       describeChanges(
@@ -83,6 +90,24 @@ describe("describe", () => {
         noBuiltIn,
       ),
     ).toEqual(["cache write 20 → not set"]);
+  });
+
+  it("says not set for a field the built-in price doesn't have either", () => {
+    const builtInGpt4o = () => ({
+      model: "gpt-4o",
+      provider: "openai",
+      input_price: "2.5",
+      output_price: "10",
+      cache_read_price: "1.25",
+    });
+
+    expect(
+      describeChanges(
+        { ...GPT_4O, cache_read_price: "1" },
+        { ...GPT_4O, cache_write_price: "20" },
+        builtInGpt4o,
+      ),
+    ).toEqual(["cache read 1 → built-in", "cache write not set → 20"]);
   });
 
   it("describes a switch between own prices and an alias", () => {
