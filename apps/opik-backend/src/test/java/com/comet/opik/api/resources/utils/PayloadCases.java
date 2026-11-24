@@ -56,7 +56,17 @@ public class PayloadCases {
                 TextNode.valueOf(randomAlphanumeric(max + 1)),
                 IntNode.valueOf(RandomUtils.secure().randomInt()),
                 NullNode.getInstance(),
-                nestedArrays(NESTED_ARRAYS_DEPTH));
+                nestedArrays(NESTED_ARRAYS_DEPTH),
+                parse(JsonUtils.writeValueAsString(Map.of("text", randomUnicode(max + 500)))),
+                parse(JsonUtils.writeValueAsString(Map.of("emoji", emojiAtBoundary()))),
+                parse("[%s]".formatted(String.join(",",
+                        Stream.generate(() -> "\"%s\"".formatted(randomAlphanumeric(max + 7))).limit(50).toList()))));
+    }
+
+    /** A string whose emoji is split by the slim limit: the cut keeps only its high surrogate. */
+    private static String emojiAtBoundary() {
+        return "%s\uD83D\uDE00%s".formatted("a".repeat(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH - 1),
+                randomAlphanumeric(10));
     }
 
     /** A payload with strings past the slim limit, and its slim copy: each such string cut to the limit, then marked. */
@@ -86,7 +96,6 @@ public class PayloadCases {
      */
     public static Stream<JsonNode> parsedPayloads() {
         int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
-        var emojiAtBoundary = "%s\uD83D\uDE00%s".formatted("a".repeat(max - 1), randomAlphanumeric(10));
         return Stream.of(
                 parse("{}"),
                 parse("[]"),
@@ -100,7 +109,7 @@ public class PayloadCases {
                         RandomUtils.secure().randomInt())),
                 parse(JsonUtils.writeValueAsString(Map.of("text", randomUnicode(max + 500)))),
                 parse(JsonUtils.writeValueAsString(Map.of("text", randomUnicode(max - 1)))),
-                parse(JsonUtils.writeValueAsString(Map.of("emoji", emojiAtBoundary))),
+                parse(JsonUtils.writeValueAsString(Map.of("emoji", emojiAtBoundary()))),
                 parse(JsonUtils.writeValueAsString(Map.of(
                         "escapes", "quote \" backslash \\ newline \n tab \t control \u0001 %s"
                                 .formatted(randomAlphanumeric(max))))),
