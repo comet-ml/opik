@@ -173,7 +173,7 @@ public class TopicVectorsDAO {
      */
     private static final String FIND_BACKFILL_PROJECTS = """
             SELECT project_id,
-                uniqIf(trace_id, trace_created_at >= parseDateTime64BestEffort(:lower_bound, 6, 'UTC')) AS traces,
+                uniq(trace_id) AS traces,
                 max(updated_at) AS last_done_at
             FROM ai_label_status
             WHERE workspace_id = :workspace_id
@@ -238,8 +238,9 @@ public class TopicVectorsDAO {
     }
 
     /**
-     * A project the backfill's discovery found: about how many traces created in the backfill window have a done
-     * status, and the latest done status written in it.
+     * A project the backfill's discovery found: about how many traces have a done status written in the backfill
+     * window, created within the window read's {@code trace_created_at} bound, and the latest such status. The same
+     * traces the window read returns, so the count bounds a read of the project.
      */
     @Builder(toBuilder = true)
     public record BackfillProject(@NonNull UUID projectId, long traces, @NonNull Instant lastDoneAt) {

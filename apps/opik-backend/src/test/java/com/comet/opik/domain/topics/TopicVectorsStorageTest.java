@@ -472,10 +472,10 @@ class TopicVectorsStorageTest {
                 Instant.now().plusSeconds(1)));
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
         assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
-        // A window that starts after the traces were created counts none of them, but still finds the projects.
+        // A status window that starts after the traces were created still counts them: the window read returns them.
         assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, window, 10)
                 .collectList().block()))
-                .isEqualTo(Map.of(first, 0L, second, 0L));
+                .isEqualTo(Map.of(first, 3L, second, 1L));
     }
 
     @Test
