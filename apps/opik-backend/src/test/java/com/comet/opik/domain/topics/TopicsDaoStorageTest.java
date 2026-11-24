@@ -650,8 +650,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the missing-projects sweep deletes the topics of the listed workspaces' deleted projects only")
-    void sweepDeletesTopicsOfMissingProjectsOnly() {
+    @DisplayName("the missing-projects read finds the listed workspaces' deleted projects that have topics only")
+    void findsTopicProjectsOfMissingProjectsOnly() {
         var workspaceId = newId().toString();
         var otherWorkspaceId = newId().toString();
         var live = newId();
@@ -661,16 +661,11 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, deleted, NIGHT, BUILT);
         data.savedList(otherWorkspaceId, otherDeleted, NIGHT, BUILT);
         data.project(workspaceId, live);
-        var liveTopics = data.topics(live);
-        var otherTopics = data.topics(otherDeleted);
 
-        int swept = template.inTransaction(WRITE,
-                handle -> handle.attach(TopicDAO.class).deleteTopicsOfMissingProjects(List.of(workspaceId)));
+        var missing = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(List.of(workspaceId)));
 
-        assertThat(swept).isEqualTo(1);
-        assertThat(data.topics(live)).isEqualTo(liveTopics);
-        assertThat(data.topics(deleted)).isEmpty();
-        assertThat(data.topics(otherDeleted)).isEqualTo(otherTopics);
+        assertThat(missing).containsExactly(new TopicProjectKey(workspaceId, deleted));
     }
 
     @Test
