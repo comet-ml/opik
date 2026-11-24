@@ -29,6 +29,9 @@ import java.util.TreeMap;
  * {@code {"text": "...", "label": "yes" | "no"}} object per line, yes meaning the text violates. The whole file is
  * checked before anything is created, so a bad file is a 400 that lists its problems and leaves nothing behind. The
  * trainer checks the same rules again.
+ *
+ * <p>A UTF-8 byte-order mark at the start, which Notepad and some exports write, is not part of the first row. The file
+ * stored for the trainer drops it too, so the trainer reads plain UTF-8.</p>
  */
 @UtilityClass
 public class GuardrailTrainingDataset {
@@ -40,6 +43,7 @@ public class GuardrailTrainingDataset {
     public static final int MAX_TEXT_LENGTH = 12_000;
     private static final List<String> LABELS = List.of("yes", "no");
     private static final int MAX_PROBLEMS_LISTED = 20;
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
 
     /**
      * @throws BadRequestException listing the file's problems: the file's own first, then the first
@@ -68,6 +72,9 @@ public class GuardrailTrainingDataset {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     lineNumber++;
+                    if (lineNumber == 1 && line.startsWith(BYTE_ORDER_MARK)) {
+                        line = line.substring(BYTE_ORDER_MARK.length());
+                    }
                     if (line.isBlank()) {
                         continue;
                     }

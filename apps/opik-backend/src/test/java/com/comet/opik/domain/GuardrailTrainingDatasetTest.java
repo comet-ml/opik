@@ -38,6 +38,18 @@ class GuardrailTrainingDatasetTest {
     }
 
     @Test
+    @DisplayName("A byte-order mark at the start is not part of the first row; anywhere else it is")
+    void validateWhenByteOrderMarkFirstSkipsIt() {
+        assertThatCode(() -> GuardrailTrainingDataset.validate(lines("\uFEFF" + rows(5, "yes"), rows(15, "no"))))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> GuardrailTrainingDataset.validate(lines(rows(5, "yes"), rows(15, "no"),
+                "\uFEFF{\"text\": \"t\", \"label\": \"no\"}")))
+                .isInstanceOfSatisfying(BadRequestException.class,
+                        exception -> assertThat(((ErrorMessage) exception.getResponse().getEntity()).errors())
+                                .containsExactly("not a JSON object, line '21'"));
+    }
+
+    @Test
     @DisplayName("A file over 50 MB is refused for its size alone, read no further than the limit")
     void validateWhenTooLargeReportsOnlyTheSize() {
         var line = "{\"text\": \"a violating text\", \"label\": \"yes\"}\n".getBytes(StandardCharsets.UTF_8);
