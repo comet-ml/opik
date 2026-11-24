@@ -17,20 +17,21 @@ import java.util.UUID;
 /**
  * One attempt to train a guardrail model. It carries its workspace because the run worker reads runs across
  * workspaces and needs each run's workspace for its writes and its S3 keys. Neither the workspace nor the metadata,
- * which holds opik-inference's job details, is part of the API.
+ * which holds opik-inference's job details, is part of the API. The API only returns runs, so every field it shows is
+ * read-only; OpenAPI marks properties, not schemas, so each field says so.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailTrainingRun(
-        @NotNull UUID id,
-        @NotNull UUID modelId,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID id,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID modelId,
         @JsonIgnore String workspaceId,
-        @NotNull GuardrailTrainingRunStatus status,
-        @Schema(description = "Why the run ended failed or cancelled; null otherwise") @Nullable String statusMessage,
-        @Schema(description = "Which attempt of one training the run is, 1 for the first") int attempt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull GuardrailTrainingRunStatus status,
+        @Schema(description = "Why the run ended failed or cancelled; null otherwise", accessMode = Schema.AccessMode.READ_ONLY) @Nullable String statusMessage,
+        @Schema(description = "Which attempt of one training the run is, 1 for the first", accessMode = Schema.AccessMode.READ_ONLY) int attempt,
         @JsonIgnore JsonNode metadata,
-        @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight") @Nullable Instant finishedAt,
+        @Schema(description = "When the run reached completed, failed or cancelled; null while it is in flight", accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant finishedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull Instant lastUpdatedAt,
