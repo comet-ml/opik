@@ -654,6 +654,23 @@ class TopicVectorsStorageTest {
                 .containsOnlyKeys(kept);
     }
 
+    @Test
+    @DisplayName("recording a tick's progress counts the rows it updated: 0 for a project whose row is gone")
+    void recordBackfillsCountsTheRowsUpdated() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var kept = ID_GENERATOR.generateId();
+        var gone = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        backfillService.start(List.of(TopicBackfill.builder().workspaceId(workspaceId).projectId(kept)
+                .backfillStartedAt(t0).backfillLastDoneAt(t0).backfillTracesTotal(5).build()));
+        var progress = TopicBackfillProgress.builder().workspaceId(workspaceId).written(1);
+
+        int[] updated = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .recordBackfills(List.of(progress.projectId(kept).build(), progress.projectId(gone).build())));
+
+        assertThat(updated).containsExactly(1, 0);
+    }
+
     private Instant vectorsCheckedAt(String workspaceId) {
         return template.inTransaction(READ_ONLY, handle -> handle.createQuery(
                 "SELECT vectors_checked_at FROM topic_workspaces WHERE workspace_id = :workspaceId")

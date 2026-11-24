@@ -46,7 +46,8 @@ public interface TopicProjectDAO {
 
     /**
      * Starts {@code runId}, creating the project's row when it has none. The caller holds the project's lock and has
-     * recorded an attempt its pod left {@code running} first ({@link #recordAbandoned}).
+     * recorded an attempt its pod left {@code running} first ({@link #recordAbandoned}). MySQL's count for the
+     * upsert: 1 for a new row, 2 for an updated one, never 0.
      */
     @SqlUpdate("""
             INSERT INTO topic_projects (workspace_id, project_id, run_id, run_mode, run_status, run_started_at)
@@ -54,7 +55,7 @@ public interface TopicProjectDAO {
             ON DUPLICATE KEY UPDATE run_id = :runId, run_mode = :mode, run_status = 'running',
                 run_started_at = :startedAt, run_finished_at = NULL, run_error_code = NULL
             """)
-    void startRun(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId, @Bind("runId") UUID runId,
+    int startRun(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId, @Bind("runId") UUID runId,
             @Bind("mode") TopicProject.RunMode mode, @Bind("startedAt") Instant startedAt);
 
     /** In the save transaction: 0 when the run ended meanwhile, by its timeout, so the save rolls back. */
@@ -212,7 +213,10 @@ public interface TopicProjectDAO {
             """)
     void discoverBackfills(@BindMethods List<TopicBackfill> backfills);
 
-    /** What a tick's backfill did: marks the drained projects and adds the vectors written, up to the total. */
+    /**
+     * What a tick's backfill did: marks the drained projects and adds the vectors written, up to the total. Per
+     * progress, the rows updated: 0 when the project's row is gone, its project deleted meanwhile.
+     */
     @SqlBatch("""
             UPDATE topic_projects
             SET backfill_drained_at = COALESCE(:drainedAt, backfill_drained_at),
@@ -220,7 +224,7 @@ public interface TopicProjectDAO {
                     GREATEST(backfill_traces_total, backfill_traces_done))
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
-    void recordBackfills(@BindMethods List<TopicBackfillProgress> progress);
+    int[] recordBackfills(@BindMethods List<TopicBackfillProgress> progress);
 
     /** The projects' whole rows: a deleted project has no topics state left. */
     @SqlUpdate("DELETE FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
