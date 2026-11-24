@@ -14,6 +14,7 @@ export {
   type DatasetItemWithTagsRef,
   type ComparePairedRowRef,
   type CompareExperimentSetRef,
+  type DatasetExperimentItemStreamRowRef,
   type TraceEnrichmentOptions,
   type SpanEnrichmentOptions,
   type DatasetSummaryRef,

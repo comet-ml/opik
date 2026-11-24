@@ -540,6 +540,78 @@ class ExperimentReadItemsResponse(BaseModel):
     items: list[ExperimentItemFingerprint]
 
 
+class DatasetExperimentItemsReadRequest(BaseModel):
+    """One `ExperimentsClient.find_experiment_items_for_dataset` call.
+
+    Every knob is `None` by default and only forwarded when set, for the reason
+    `ExperimentReadItemsRequest` gives: the behaviour under test is what the
+    method does when `experiment_ids` is OMITTED, and a route that sent an
+    explicit `None` through a different code path — or a hardcoded copy of a
+    default — would be testing itself.
+
+    `experiment_ids` is therefore the discriminator between the two reads this
+    one method dispatches over, not merely an optional filter: omitted it takes
+    the cursor stream opik#9588 added, supplied it takes the pre-existing paged
+    read.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str | None = None
+    experiment_ids: list[str] | None = None
+    dataset_versions: list[str] | None = None
+    filter_string: str | None = None
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    truncate: bool | None = None
+    workspace: str | None = None
+
+
+class DatasetExperimentItemResult(BaseModel):
+    """One `ExperimentItemContent` from the dataset-wide read.
+
+    `experiment_id` is `| None` because the dataclass declares it so, and that
+    optionality is the whole point of the no-`experiment_ids` read: the caller
+    never named the experiments, so the only thing that says which experiment a
+    result belongs to is this field. Defaulting it to anything here would make a
+    build that stopped populating it read as correct.
+
+    `dataset_item_input` is the seeded item's own `input`, lifted out of
+    `dataset_item_data` so a caller can tell WHICH item a result is about
+    without transferring the whole record. `None` when the key is absent, never
+    `""`: an empty `dataset_item_data` is how a broken join would present, and a
+    blank string would make it indistinguishable from an item seeded with one.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    experiment_id: str | None
+    dataset_item_input: str | None
+
+
+class DatasetExperimentItemsReadResponse(BaseModel):
+    """What the read returned, or the exception it refused with.
+
+    Both in one shape because one of the method's documented behaviours IS a
+    refusal — `experiment_ids` together with `dataset_versions` raises
+    `ValueError` — and a route that let that escape as a 500 would make the
+    caller assert on an HTTP error body instead of on the exception the SDK
+    promises.
+
+    `error_type` is the exception's class name rather than a boolean, so the
+    caller pins WHICH error it got: a `ValueError` and a `DatasetVersionNotFound`
+    are different claims, and only the name separates them.
+    """
+
+    count: int
+    items: list[DatasetExperimentItemResult]
+    error_type: str | None = None
+    error_message: str | None = None
+
+
 class ExperimentItemScore(BaseModel):
     dataset_item_id: str
     input: str

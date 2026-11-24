@@ -213,6 +213,28 @@ export interface CompareExperimentSetRef {
 }
 
 /**
+ * One row of `POST /v1/private/datasets/{id}/items/experiments/items/stream`,
+ * the cursor-paged experiment-item read opik#9588 (OPIK-9047) added.
+ *
+ * Only the sort key and the identity triple, because what a cursor can get
+ * wrong is which rows come back and in what order — not what is in them. The
+ * stream orders by `(experiment_id, dataset_item_id, id)` DESC and resumes
+ * strictly after the row whose `id` the caller echoes back, so those three
+ * fields are exactly the state a resumption bug disturbs.
+ *
+ * Every field is typed non-null and the reader throws on a line missing any of
+ * them, rather than modelling them as optional: a row that arrived without its
+ * `experiment_id` cannot be placed in the order under test, and letting it
+ * through as `undefined` would turn a corrupt line into a row that merely
+ * sorted oddly.
+ */
+export interface DatasetExperimentItemStreamRowRef {
+  id: string;
+  experimentId: string;
+  datasetItemId: string;
+}
+
+/**
  * One column the dataset-items endpoint derives from the stored items' keys —
  * the `columns` half of `GET /v1/private/datasets/{id}/items`, which no other
  * helper here keeps.
@@ -4847,6 +4869,133 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         { query },
       );
       return { status, message };
+    },
+
+    /**
+     * `POST /v1/private/datasets/items/experiments/items/stream` — the
+     * cursor-paged experiment-item read opik#9588 (OPIK-9047) added, and the
+     * path the Python SDK's `find_experiment_items_for_dataset` takes when
+     * `experiment_ids` is omitted.
+     *
+     * A different endpoint from the all-experiments `GET` above, not a streaming
+     * flavour of it: that one is offset-paged, capped at 100 rows and returns
+     * one row per DATASET ITEM carrying a result per experiment, while this one
+     * is keyset-paged, capped at 2,000 and returns one row per EXPERIMENT ITEM.
+     * They also disagree about what a page is, which is why the two have
+     * separate readers rather than a shared one with a flag.
+     *
+     * The dataset is named in the BODY, not in the path — the path carries no
+     * `{id}` segment at all — which is what makes the `dataset_name` form
+     * expressible and is why every rejection below is a body-validation 422
+     * rather than a routing 404.
+     *
+     * Written by hand rather than through `rawFetch`, for the reason
+     * `searchSpanIds` is: the endpoint answers `application/octet-stream` as
+     * one JSON object per line, so `JSON.parse` over the whole body fails and
+     * `rawFetch` would hand the raw NDJSON back as an error "message".
+     *
+     * A line that carries no `id` is thrown rather than skipped. The streamer
+     * really does emit its error object mid-stream, and swallowing it would
+     * turn a truncated answer into a SHORT PAGE — which is precisely the signal
+     * a cursor-paging caller reads as "this was the last page", so a dropped
+     * tail would present as a complete read that silently lost rows.
+     *
+     * Returns the status and the body's own error message instead of throwing on
+     * a non-200, so the 404 (unknown dataset or version) and the 422 validation
+     * shapes are assertable; `rows` is empty in that case rather than partial.
+     */
+    async streamDatasetExperimentItems(args: {
+      /** Omitted from the body entirely when absent, so `dataset_name` can be the identifier. */
+      datasetId?: string;
+      datasetName?: string;
+      projectName?: string;
+      limit?: number;
+      lastRetrievedId?: string;
+      lastRetrievedExperimentId?: string;
+      datasetVersions?: string[];
+      filters?: string;
+    }): Promise<RawApiResult & { rows: DatasetExperimentItemStreamRowRef[] }> {
+      const headers: Record<string, string> = {
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      // Draining a dataset by cursor is by definition a burst of reads against
+      // one workspace, the same shape `searchSpanIds` backs off for.
+      const { status, text } = await withRateLimitRetry(async () => {
+        const res = await fetch(
+          `${env.apiBaseUrl}/v1/private/datasets/items/experiments/items/stream`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...(args.datasetId === undefined ? {} : { dataset_id: args.datasetId }),
+              ...(args.datasetName === undefined ? {} : { dataset_name: args.datasetName }),
+              ...(args.projectName === undefined ? {} : { project_name: args.projectName }),
+              ...(args.limit === undefined ? {} : { limit: args.limit }),
+              ...(args.lastRetrievedId === undefined
+                ? {}
+                : { last_retrieved_id: args.lastRetrievedId }),
+              ...(args.lastRetrievedExperimentId === undefined
+                ? {}
+                : { last_retrieved_experiment_id: args.lastRetrievedExperimentId }),
+              ...(args.datasetVersions === undefined
+                ? {}
+                : { dataset_versions: args.datasetVersions }),
+              ...(args.filters === undefined ? {} : { filters: args.filters }),
+              truncate: true,
+            }),
+          },
+        );
+        const body = await res.text();
+        if (res.status === 429) {
+          // Thrown so `withRateLimitRetry` can see it; every other status is a
+          // value the caller asserts on.
+          throw Object.assign(new Error(`stream experiment items -> 429`), { statusCode: 429 });
+        }
+        return { status: res.status, text: body };
+      });
+
+      if (status !== 200) {
+        let message = text;
+        try {
+          const m = (JSON.parse(text) as { message?: unknown } | null)?.message;
+          if (typeof m === 'string') message = m;
+        } catch {
+          // Not JSON — keep the raw text, as `rawFetch` does.
+        }
+        return { status, message, rows: [] };
+      }
+
+      const rows: DatasetExperimentItemStreamRowRef[] = [];
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = JSON.parse(trimmed) as {
+          id?: unknown;
+          experiment_id?: unknown;
+          dataset_item_id?: unknown;
+        };
+        if (
+          typeof parsed.id !== 'string' ||
+          typeof parsed.experiment_id !== 'string' ||
+          typeof parsed.dataset_item_id !== 'string'
+        ) {
+          throw new Error(
+            'streamDatasetExperimentItems: the stream emitted a line that is not a placeable ' +
+              `experiment item (it must carry id, experiment_id and dataset_item_id): ${trimmed.slice(0, 300)}`,
+          );
+        }
+        rows.push({
+          id: parsed.id,
+          experimentId: parsed.experiment_id,
+          datasetItemId: parsed.dataset_item_id,
+        });
+      }
+      return { status, message: '', rows };
     },
 
     /**

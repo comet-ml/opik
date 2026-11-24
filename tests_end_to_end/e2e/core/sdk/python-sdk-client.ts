@@ -458,6 +458,45 @@ export interface PythonSdkClient {
     }>;
   }>;
   /**
+   * `ExperimentsClient.find_experiment_items_for_dataset` — a DATASET-wide
+   * experiment-item read, and a different method from `readExperimentItems`
+   * above (`Experiment.get_items()`, one experiment, a different endpoint).
+   *
+   * `experiment_ids` is the discriminator rather than a filter: omit it and the
+   * SDK resolves the dataset's own regular experiments and reads them through
+   * the cursor stream opik#9588 added, grouped by dataset item; supply it and
+   * the pre-existing paged read runs. The field is therefore optional here so a
+   * caller can express "omitted", which is the arm under test.
+   *
+   * `error_type` carries the exception's class name when the call was REFUSED
+   * — `experiment_ids` together with `dataset_versions` raises `ValueError`,
+   * and an unknown version raises `DatasetVersionNotFound`. Both are documented
+   * behaviours, so they come back as values to assert on rather than as a 500.
+   */
+  readDatasetExperimentItems(args: {
+    dataset_name: string;
+    project_name?: string;
+    experiment_ids?: string[];
+    dataset_versions?: string[];
+    filter_string?: string;
+    max_results?: number;
+    page_size?: number;
+    num_threads?: number;
+    truncate?: boolean;
+    workspace?: string;
+  }): Promise<{
+    count: number;
+    items: Array<{
+      id: string;
+      dataset_item_id: string;
+      trace_id: string;
+      experiment_id: string | null;
+      dataset_item_input: string | null;
+    }>;
+    error_type: string | null;
+    error_message: string | null;
+  }>;
+  /**
    * `cancel_experiments(ids=[...])`, one of the bindings opik#9211 regenerated.
    *
    * Answers what the SDK call answered — nothing — rather than the experiments'
@@ -1078,6 +1117,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         // A full read of a multi-page experiment against a cloud backend is
         // several round trips deep, and the sequential arms (num_threads=1 at
         // a small page size) are deliberately the slowest way to do it.
+        timeoutMs: 300_000,
+      });
+    },
+    async readDatasetExperimentItems(args) {
+      return request<{
+        count: number;
+        items: Array<{
+          id: string;
+          dataset_item_id: string;
+          trace_id: string;
+          experiment_id: string | null;
+          dataset_item_input: string | null;
+        }>;
+        error_type: string | null;
+        error_message: string | null;
+      }>('POST', '/experiments/read-dataset-items', args, {
+        // The no-`experiment_ids` arm drains a server-side cursor experiment by
+        // experiment, so one call here is as many round trips as the dataset has
+        // pages — past the default on a cloud backend under a rate limit.
         timeoutMs: 300_000,
       });
     },
