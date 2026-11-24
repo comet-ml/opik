@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.UncheckedIOException;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Iterator;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -205,18 +206,27 @@ public final class TruncationUtils {
     }
 
     /**
-     * Whether any string value is longer than the max length; stops at the first one. Walks with an explicit stack,
-     * as {@code JsonNode.toString()} does, so depth costs heap rather than call stack.
+     * Whether any string value is longer than the max length; stops at the first one. Walks with a stack of child
+     * iterators rather than recursion, so depth costs heap rather than call stack, in the same order and with the same
+     * early exit.
      */
     private static boolean hasLongString(JsonNode node, int maxStringLength) {
-        Deque<JsonNode> pending = new ArrayDeque<>();
-        pending.push(node);
+        if (!node.isContainerNode()) {
+            return node.isTextual() && node.textValue().length() > maxStringLength;
+        }
+        Deque<Iterator<JsonNode>> pending = new ArrayDeque<>();
+        pending.push(node.iterator());
         while (!pending.isEmpty()) {
-            JsonNode current = pending.pop();
-            switch (current.getNodeType()) {
-                case OBJECT, ARRAY -> current.forEach(pending::push);
+            Iterator<JsonNode> children = pending.peek();
+            if (!children.hasNext()) {
+                pending.pop();
+                continue;
+            }
+            JsonNode child = children.next();
+            switch (child.getNodeType()) {
+                case OBJECT, ARRAY -> pending.push(child.iterator());
                 case STRING -> {
-                    if (current.textValue().length() > maxStringLength) {
+                    if (child.textValue().length() > maxStringLength) {
                         return true;
                     }
                 }
