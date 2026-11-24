@@ -19,6 +19,8 @@ import com.comet.opik.domain.topics.TraceTopicsDAO.TopicCount;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
@@ -45,6 +47,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The reads behind the topics read API against real ClickHouse: the per topic and day counts of
@@ -90,11 +93,29 @@ class TopicsReadDAOTest {
 
     private TraceTopicsDAO traceTopicsDAO;
     private ConnectionFactory connectionFactory;
+    private TopicsConfig.ReadConfig read;
 
     @BeforeAll
     void setUpAll(Injector injector) {
         traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         connectionFactory = injector.getInstance(ConnectionFactory.class);
+        read = injector.getInstance(OpikConfiguration.class).getTopics().getRead();
+    }
+
+    @Test
+    @DisplayName("a spent budget fails the next day's query before it starts, as busy")
+    void spentBudgetIsBusy() {
+        var workspaceId = workspaceId();
+        var projectId = ID_GENERATOR.generateId();
+        insert(arrival(workspaceId, projectId, NOON, ID_GENERATOR.generateId()));
+        var budget = read.getBudget();
+        read.setBudget(io.dropwizard.util.Duration.milliseconds(1));
+        try {
+            assertThatThrownBy(() -> count(workspaceId, projectId))
+                    .satisfies(error -> assertThat(TopicsReadErrors.isBusy(error)).isTrue());
+        } finally {
+            read.setBudget(budget);
+        }
     }
 
     @Test
@@ -102,8 +123,8 @@ class TopicsReadDAOTest {
             + "microsecond of a day counts on that day")
     void windowEdges() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var topicId = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, FROM, topicId),
                 arrival(workspaceId, projectId, FROM.minusNanos(1_000), topicId),
                 arrival(workspaceId, projectId, TO, topicId),
@@ -118,10 +139,10 @@ class TopicsReadDAOTest {
     @DisplayName("a trace counts once, by its latest row: a run after an arrival wins, an arrival after a run wins")
     void latestRowWins() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var arrivalTopic = UUID.randomUUID();
-        var runTopic = UUID.randomUUID();
-        var runId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var arrivalTopic = ID_GENERATOR.generateId();
+        var runTopic = ID_GENERATOR.generateId();
+        var runId = ID_GENERATOR.generateId();
         var arrivalThenRun = ID_GENERATOR.generateId();
         var runThenArrival = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, arrivalThenRun, NOON, arrivalTopic),
@@ -139,14 +160,14 @@ class TopicsReadDAOTest {
             + "wins over an earlier one's, and a trace only an earlier run labelled keeps its topic")
     void everyRunRowCounts() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var earlierTopic = UUID.randomUUID();
-        var laterTopic = UUID.randomUUID();
-        var earlierRun = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var earlierTopic = ID_GENERATOR.generateId();
+        var laterTopic = ID_GENERATOR.generateId();
+        var earlierRun = ID_GENERATOR.generateId();
         var traceId = ID_GENERATOR.generateId();
         insert(run(workspaceId, projectId, traceId, NOON, earlierTopic, earlierRun),
                 run(workspaceId, projectId, ID_GENERATOR.generateId(), NOON, earlierTopic, earlierRun));
-        insert(run(workspaceId, projectId, traceId, NOON, laterTopic, UUID.randomUUID()));
+        insert(run(workspaceId, projectId, traceId, NOON, laterTopic, ID_GENERATOR.generateId()));
 
         assertThat(count(workspaceId, projectId)).containsExactlyInAnyOrder(
                 TopicDayCount.builder().topicId(earlierTopic).day(TODAY).traces(1).build(),
@@ -157,9 +178,9 @@ class TopicsReadDAOTest {
     @DisplayName("a trace whose latest row is a tombstone counts nowhere: not in its topic, not in Other")
     void tombstoneCountsNowhere() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
-        var runId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var topicId = ID_GENERATOR.generateId();
+        var runId = ID_GENERATOR.generateId();
         var deleted = ID_GENERATOR.generateId();
         insert(run(workspaceId, projectId, deleted, NOON, topicId, runId),
                 run(workspaceId, projectId, ID_GENERATOR.generateId(), NOON, topicId, runId));
@@ -174,8 +195,8 @@ class TopicsReadDAOTest {
             + "default; experiment, playground, optimization, evaluator and hidden traces have rows but do not count")
     void onlyTracesLogsShows() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var topicId = ID_GENERATOR.generateId();
         var kinds = List.of(
                 List.of(Source.SDK.getValue(), VisibilityMode.DEFAULT.getValue()),
                 List.of(Source.UNKNOWN_VALUE, VisibilityMode.DEFAULT.getValue()),
@@ -205,9 +226,9 @@ class TopicsReadDAOTest {
             + "own row, and the all-zeros id is a topic id like any other")
     void countByTopicIsTheSumOfTheDays() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
-        var runId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var topicId = ID_GENERATOR.generateId();
+        var runId = ID_GENERATOR.generateId();
         var yesterday = NOON.minus(Duration.ofDays(1));
         var deleted = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, NOON, topicId),
@@ -246,8 +267,8 @@ class TopicsReadDAOTest {
     @DisplayName("the same project id under another workspace is not counted")
     void otherWorkspace() {
         var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
+        var topicId = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, NOON, topicId),
                 arrival(workspaceId(), projectId, NOON, topicId));
 
@@ -296,6 +317,6 @@ class TopicsReadDAOTest {
     }
 
     private static String workspaceId() {
-        return "ws-" + UUID.randomUUID();
+        return "ws-" + ID_GENERATOR.generateId();
     }
 }
