@@ -762,7 +762,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("a run counts as claimed once a pod claimed it, and no longer once it is requeued")
+    @DisplayName("a run counts as claimed once a pod claimed it, still after a requeue, and then cannot be dropped as "
+            + "unclaimed; a run no pod claimed can")
     void isClaimedFollowsTheClaim() {
         var workspaceId = newId().toString();
         var projectId = newId();
@@ -778,10 +779,18 @@ class TopicsDaoStorageTest {
             var running = dao.isClaimed(workspaceId, projectId, runId);
             var otherRun = dao.isClaimed(workspaceId, projectId, newId());
             dao.requeue(workspaceId, projectId, runId, claimedAt.plusSeconds(10));
-            return List.of(queued, running, otherRun, dao.isClaimed(workspaceId, projectId, runId));
+            var requeued = dao.isClaimed(workspaceId, projectId, runId);
+            var droppedClaimed = dao.dropUnclaimed(workspaceId, projectId, runId, claimedAt.plusSeconds(20)) == 1;
+            var neverClaimedProject = newId();
+            var neverClaimed = newId();
+            dao.ensureRow(workspaceId, neverClaimedProject);
+            dao.queue(workspaceId, neverClaimedProject, neverClaimed, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            var droppedUnclaimed = dao.dropUnclaimed(workspaceId, neverClaimedProject, neverClaimed,
+                    claimedAt.plusSeconds(20)) == 1;
+            return List.of(queued, running, otherRun, requeued, droppedClaimed, droppedUnclaimed);
         });
 
-        assertThat(claimed).containsExactly(false, true, false, false);
+        assertThat(claimed).containsExactly(false, true, false, true, false, true);
     }
 
     @Test

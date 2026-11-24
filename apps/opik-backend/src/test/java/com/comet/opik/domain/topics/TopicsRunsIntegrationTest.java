@@ -27,11 +27,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -250,6 +252,37 @@ class TopicsRunsIntegrationTest {
         var runId = planner.runByHand(workspaceId, failedRecently, tomorrow(), false).block();
 
         assertThat(awaitBuilt(failedRecently)).isEqualTo(runId);
+    }
+
+    @Test
+    @DisplayName("a run by hand whose publish fails after a pod claimed it and then stopped is reported as started, "
+            + "and stays queued for another pod")
+    void runByHandClaimedThenRequeuedDuringAFailedPublish(RedissonReactiveClient redisson,
+            @Jit TopicWorkspaceService workspaceService, @Jit TopicsRunReconciler reconciler,
+            @Jit TopicsFirstBuildCandidates candidates) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        var config = opikConfig.getTopics();
+        // The stream took the run and a pod claimed it, then that pod stopped, before the publish call failed.
+        var publisher = new TopicsRunPublisher(redisson, config) {
+            @Override
+            Mono<Void> publish(TopicsRunMessage message) {
+                return store.claim(message, Instant.now().plus(Duration.ofMinutes(30)))
+                        .then(store.requeue(message))
+                        .then(Mono.error(new IllegalStateException("publish timed out")));
+            }
+        };
+        var planner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates,
+                publisher, new TopicsBackfillGate(config));
+
+        var runId = planner.runByHand(workspaceId, projectId, tomorrow(), true).block();
+
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(runId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.QUEUED);
+            assertThat(project.runStartedAt()).isNotNull();
+        });
     }
 
     @Test

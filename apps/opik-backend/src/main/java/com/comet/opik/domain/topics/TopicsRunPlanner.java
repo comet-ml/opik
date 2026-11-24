@@ -139,15 +139,15 @@ public class TopicsRunPlanner {
      * Queues a run started by hand and publishes it. When the publish fails, the run is dropped and the caller gets an
      * error to retry on: a run left queued would block the project's next run by hand until a plan publishes it again.
      * A run that a pod already claimed was published after all, for example by a publish that timed out after the
-     * stream took it, so the caller gets its id.
+     * stream took it, so the caller gets its id. The drop is one compare-and-set on "never claimed", and a requeue
+     * keeps the claim, so a pod that stops meanwhile cannot turn a claimed run into a 503.
      */
     private Mono<UUID> queueByHand(Planned run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run by hand not published, dropping it, run '{}', project '{}'", runId,
                     run.projectId(), error);
-            // No reason: nothing cancelled the run, no pod ever had it.
-            return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
-                    // Not dropped: the run left the queue, claimed by a pod or cancelled by a plan.
+            return store.dropUnclaimed(run.workspaceId(), run.projectId(), runId)
+                    // Not dropped: a pod claimed the run, or a plan cancelled it.
                     .flatMap(dropped -> dropped
                             ? Mono.just(false)
                             : store.isClaimed(run.workspaceId(), run.projectId(), runId))

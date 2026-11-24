@@ -126,11 +126,13 @@ public interface TopicProjectDAO {
     int heartbeat(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("now") Instant now);
 
-    /** {@code running -> queued}: its pod is stopping, so another pod runs it again. Not a failure. */
+    /**
+     * {@code running -> queued}: its pod is stopping, so another pod runs it again. Not a failure. It keeps
+     * {@code run_started_at}, so the run still counts as claimed ({@link #isClaimed}); the next claim sets it again.
+     */
     @SqlUpdate("""
             UPDATE topic_projects
-            SET run_status = 'queued', run_queued_at = :now, run_started_at = NULL, deadline_at = NULL,
-                heartbeat_at = NULL
+            SET run_status = 'queued', run_queued_at = :now, deadline_at = NULL, heartbeat_at = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
             AND run_status = 'running'
             """)
@@ -164,6 +166,16 @@ public interface TopicProjectDAO {
             """)
     int dropQueued(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("reason") TopicProject.CancelReason reason, @Bind("now") Instant now);
+
+    /** {@code queued -> failed} with {@code cancelled}, only when no pod ever claimed the run. Not counted. */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET run_finished_at = :now, run_error_code = 'cancelled', run_status = 'failed'
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'queued' AND run_started_at IS NULL
+            """)
+    int dropUnclaimed(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("now") Instant now);
 
     /**
      * Cancels the in-flight runs of the projects: queued ones fail at once, running ones go to {@code cancelling}.
@@ -244,7 +256,7 @@ public interface TopicProjectDAO {
     Optional<TopicProject.RunStatus> findRunStatus(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId, @Bind("runId") UUID runId);
 
-    /** True when the project's attempt is {@code runId} and a pod claimed it. */
+    /** True when the project's attempt is {@code runId} and a pod claimed it, even if it was requeued since. */
     @SqlQuery("""
             SELECT COUNT(*) > 0 FROM topic_projects
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
