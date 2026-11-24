@@ -355,7 +355,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** ClickHouse query priority; a higher number yields to lower ones. 0 is none. */
+        /** ClickHouse priority of the collecting count; a higher number yields to lower ones. 0 is none. */
         @JsonProperty
         @Min(0) @Max(1000) private int priority;
 

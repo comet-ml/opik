@@ -134,7 +134,9 @@ public class TraceTopicsDAO {
      * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
      * created in {@code [from, to)}: {@link #COUNT_BY_TOPIC} once per UTC day, one after another, under the
      * {@code topics.read} guards. The days share {@code topics.read.budget}: each query may run for what is left of it
-     * (at least a second), so a window that does not fit trips the time guard instead of running on.
+     * (at least a second), and a day that would start after the budget ran out fails with
+     * {@link TopicsReadErrors.BudgetExceededException} instead, so a window that does not fit trips a guard instead of
+     * running on.
      */
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to) {
@@ -144,7 +146,12 @@ public class TraceTopicsDAO {
             return slices(from, to, TraceTopicsDAO::nextUtcDay)
                     .concatMap(dayFrom -> {
                         var day = LocalDate.ofInstant(dayFrom, ZoneOffset.UTC);
-                        long seconds = Math.max(1, Math.ceilDiv(deadline - System.nanoTime(), 1_000_000_000L));
+                        long left = deadline - System.nanoTime();
+                        if (left <= 0) {
+                            return Flux.error(new TopicsReadErrors.BudgetExceededException(
+                                    "topics.read.budget ran out before day %s".formatted(day)));
+                        }
+                        long seconds = Math.max(1, Math.ceilDiv(left, 1_000_000_000L));
                         return countSlice(workspaceId, projectId, dayFrom, ObjectUtils.min(nextUtcDay(dayFrom), to),
                                 read, seconds)
                                 .map(count -> TopicDayCount.builder()
