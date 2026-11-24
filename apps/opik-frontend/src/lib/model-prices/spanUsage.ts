@@ -8,7 +8,10 @@ export const COST_LINE_NAMES: CostLineName[] = [
 ];
 
 export type UsageHint =
-  "audio" | "reasoning" | "one_hour_cache_write" | "long_prompt";
+  | "audio"
+  | "reasoning"
+  | "one_hour_cache_write"
+  | "long_prompt";
 
 export interface UsageBucket {
   name: CostLineName;
