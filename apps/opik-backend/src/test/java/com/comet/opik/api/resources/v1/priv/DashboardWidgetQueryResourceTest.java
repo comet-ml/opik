@@ -21,9 +21,11 @@ import com.comet.opik.api.resources.utils.resources.InsightsViewResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.validation.InRangeValidator;
+import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -55,7 +57,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -89,6 +93,8 @@ class DashboardWidgetQueryResourceTest {
     private static final String WINDOWED_QUERY = "SELECT toJSONString(map('id', toString(id))) AS result FROM traces"
             + " WHERE start_time >= {{window_start}} AND start_time <= {{window_end}}";
 
+    private static final int MAX_CONCURRENT_QUERIES = 2;
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -118,7 +124,9 @@ class DashboardWidgetQueryResourceTest {
                         // The read-only ClickHouse users come from users.xml on the container and config-test.yml.
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
-                                new CustomConfig("customCharts.enabled", "true")))
+                                new CustomConfig("customCharts.enabled", "true"),
+                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
+                                        String.valueOf(MAX_CONCURRENT_QUERIES))))
                         .build());
     }
 
@@ -129,6 +137,7 @@ class DashboardWidgetQueryResourceTest {
     private DashboardResourceClient dashboardClient;
     private InsightsViewResourceClient insightsViewClient;
     private TraceResourceClient traceResourceClient;
+    private LockService lockService;
 
     private UUID projectIdA;
     private UUID projectIdB;
@@ -136,8 +145,9 @@ class DashboardWidgetQueryResourceTest {
     private Instant traceStartA;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, LockService lockService) {
         this.client = client;
+        this.lockService = lockService;
         baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -237,6 +247,36 @@ class DashboardWidgetQueryResourceTest {
                 API_KEY_A, WORKSPACE_NAME_A), Response.Status.NOT_FOUND);
         assertStatus(dashboardClient.callRunWidgetQuery(UUID.randomUUID(), widgetId, window(null, null), API_KEY_A,
                 WORKSPACE_NAME_A), Response.Status.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("with every workspace slot taken returns 429 with Retry-After, and runs once a slot is freed")
+    void runWidgetQuery__whenWorkspaceSlotsTaken__thenTooManyRequestsUntilOneFrees() {
+        String widgetId = UUID.randomUUID().toString();
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
+                API_KEY_A, WORKSPACE_NAME_A);
+        var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_A, MAX_CONCURRENT_QUERIES);
+        var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
+                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(1)).block())
+                .toList();
+        try {
+            assertThat(permits).doesNotContainNull();
+
+            try (Response response = dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
+                    API_KEY_A, WORKSPACE_NAME_A)) {
+                assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+                assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNotBlank();
+            }
+
+            lockService.releaseSlot(lock, permits.getFirst()).block();
+
+            run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null), API_KEY_A,
+                    WORKSPACE_NAME_A));
+        } finally {
+            // Workspace A is shared with the other tests: free every slot this one took.
+            permits.stream().filter(Objects::nonNull).forEach(permit -> lockService.releaseSlot(lock, permit).block());
+        }
     }
 
     @Test

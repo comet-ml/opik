@@ -65,10 +65,10 @@ public class CustomChartsConfig {
     private @Min(1) @Max(50) int maxConcurrentQueriesPerWorkspace = 4;
 
     /**
-     * The longest a query holds its slot. It only matters when a pod dies mid-query; keep it above the ClickHouse
-     * profile's max_execution_time so a live query never loses its slot.
+     * The longest a query holds its slot. It only matters when a pod dies mid-query. The minimum is above the ClickHouse
+     * profile's 180s max_execution_time, so a live query never loses its slot.
      */
     @JsonProperty
-    private @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration concurrencySlotLease = Duration
-            .seconds(200);
+    private @NotNull @MinDuration(value = 181, unit = TimeUnit.SECONDS) Duration concurrencySlotLease = Duration
+            .seconds(300);
 }

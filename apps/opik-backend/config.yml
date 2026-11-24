@@ -323,10 +323,11 @@ customCharts:
   #   public analytics-queries endpoint and the dashboard and Insights Views widget queries; above it they answer 429
   #   with Retry-After. Keep it below the EXTENDED account's per-replica max_concurrent_queries_for_user.
   maxConcurrentQueriesPerWorkspace: ${CUSTOM_CHARTS_MAX_CONCURRENT_QUERIES_PER_WORKSPACE:-4}
-  #  Default: 200s
-  #  Description: The longest a query holds its slot; frees the slot of a pod that died mid-query. Keep it above the
-  #   read-only profile's max_execution_time (180s).
-  concurrencySlotLease: ${CUSTOM_CHARTS_CONCURRENCY_SLOT_LEASE:-200s}
+  #  Default: 300s
+  #  Description: The longest a query holds its slot; frees the slot of a pod that died mid-query. It covers the whole
+  #   request, not just the query: the read-only profile's max_execution_time (180s) plus the EXPLAINs, the enforced
+  #   post-run check's log reads and the name lookup. At least 181s.
+  concurrencySlotLease: ${CUSTOM_CHARTS_CONCURRENCY_SLOT_LEASE:-300s}
 
 # Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
 #   query's system.query_log entries and plan that every table it read was read under a row policy.

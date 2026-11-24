@@ -85,7 +85,7 @@ public class FreeFormSqlConcurrencyLimiter {
                     return Mono.error(tooManyQueries());
                 }))
                 .onErrorResume(error -> !(error instanceof WebApplicationException), error -> {
-                    log.warn("Free-form SQL slot unavailable for '{}', running without the workspace limit",
+                    log.warn("Free-form SQL slot unavailable, running without the workspace limit: '{}'",
                             lock.key(), error);
                     outcomes.add(1, LIMIT_UNAVAILABLE);
                     return Mono.just(Optional.empty());
@@ -109,7 +109,7 @@ public class FreeFormSqlConcurrencyLimiter {
     private void release(LockService.Lock lock, String permitId) {
         lockService.releaseSlot(lock, permitId)
                 .subscribe(released -> {
-                }, error -> log.warn("Failed to release free-form SQL slot '{}'; it frees when its lease ends",
+                }, error -> log.warn("Failed to release free-form SQL slot, it frees when its lease ends: '{}'",
                         lock.key(), error));
     }
 
