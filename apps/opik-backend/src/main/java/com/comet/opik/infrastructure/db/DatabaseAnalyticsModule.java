@@ -36,11 +36,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
-        clickHouseClient = databaseAnalyticsFactory.buildClient(new ClickHouseClientPoolMetrics());
+        // The client itself is built by getClickHouseClient, so it gets the container's pool metrics.
         environment().lifecycle().manage(new Managed() {
             @Override
             public void stop() {
-                clickHouseClient.close();
+                if (clickHouseClient != null) {
+                    clickHouseClient.close();
+                }
             }
         });
 
@@ -96,7 +98,14 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    public Client getClickHouseClient() {
+    public ClickHouseClientPoolMetrics getClickHouseClientPoolMetrics() {
+        return new ClickHouseClientPoolMetrics();
+    }
+
+    @Provides
+    @Singleton
+    public Client getClickHouseClient(ClickHouseClientPoolMetrics poolMetrics) {
+        clickHouseClient = databaseAnalyticsFactory.buildClient(poolMetrics);
         return clickHouseClient;
     }
 

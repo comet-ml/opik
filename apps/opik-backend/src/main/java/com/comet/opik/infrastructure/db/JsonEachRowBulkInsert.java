@@ -77,7 +77,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * the exception as its cause — never the rows.
  *
  * <p>The client is the shared Dropwizard-managed singleton from
- * {@link DatabaseAnalyticsModule#getClickHouseClient()}; this class never closes it.
+ * {@link DatabaseAnalyticsModule#getClickHouseClient}; this class never closes it.
  */
 @Singleton
 @Slf4j
