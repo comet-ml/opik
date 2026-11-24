@@ -15,6 +15,7 @@ def _engine() -> dict[str, Any]:
     return json.loads(_read_text("engine.json"))
 
 
+__version__: str = _engine()["version"]
 ENGINE_VERSION: int = _engine()["engine_version"]
 AREAS: tuple[str, ...] = tuple(_engine()["areas"])
 LIBRARIES: tuple[str, ...] = tuple(_engine()["libraries"])
@@ -34,5 +35,6 @@ __all__ = [
     "LIBRARIES",
     "MAX_HTML_LENGTH",
     "TOKENS",
+    "__version__",
     "prompt",
 ]

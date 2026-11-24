@@ -12,8 +12,8 @@ Each emitted leg is one hook, so CI runs one job per linter that actually has
 work — independent reporting, retry, and visibility, with no skip-spam jobs for
 the linters that match nothing.
 
-Hook ids are not unique in this config (trailing-whitespace, ruff, mypy, etc.
-recur once per scope), so a leg is targeted by `pre-commit run <id> --files
+Hook ids are not unique in this config (mypy recurs once per project, since
+each needs its own config), so a leg is targeted by `pre-commit run <id> --files
 <its matched files>` rather than by id alone — id + files isolates exactly one
 hook (siblings sharing the id report "no files to check"). `files` therefore
 carries that hook's matched paths.
