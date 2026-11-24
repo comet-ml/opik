@@ -8,6 +8,7 @@ import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.google.common.collect.Lists;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -47,6 +48,7 @@ public class RetentionPolicyService {
     private final SpanDAO spanDAO;
     private final AiLabelsDAO aiLabelsDAO;
     private final AiLabelStatusDAO aiLabelStatusDAO;
+    private final TopicVectorsDAO topicVectorsDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
@@ -60,6 +62,7 @@ public class RetentionPolicyService {
             @NonNull SpanDAO spanDAO,
             @NonNull AiLabelsDAO aiLabelsDAO,
             @NonNull AiLabelStatusDAO aiLabelStatusDAO,
+            @NonNull TopicVectorsDAO topicVectorsDAO,
             @NonNull InstantToUUIDMapper uuidMapper,
             @NonNull @Config("retention") RetentionConfig config) {
         this.template = template;
@@ -67,6 +70,7 @@ public class RetentionPolicyService {
         this.spanDAO = spanDAO;
         this.aiLabelsDAO = aiLabelsDAO;
         this.aiLabelStatusDAO = aiLabelStatusDAO;
+        this.topicVectorsDAO = topicVectorsDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
 
@@ -196,6 +200,8 @@ public class RetentionPolicyService {
                         .onErrorResume(e -> logAndSkip("ai_labels", batch.size(), e)),
                 aiLabelStatusDAO.deleteForRetention(batch, cutoffId, lowerBound)
                         .onErrorResume(e -> logAndSkip("ai_label_status", batch.size(), e)),
+                topicVectorsDAO.deleteForRetention(batch, cutoffId, lowerBound)
+                        .onErrorResume(e -> logAndSkip("topic_vectors", batch.size(), e)),
                 spanDAO.deleteForRetention(batch, cutoffId, lowerBound)
                         .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
                 traceDAO.deleteForRetention(batch, cutoffId, lowerBound)
@@ -243,6 +249,8 @@ public class RetentionPolicyService {
                                     .onErrorResume(e -> logAndSkip("ai_labels", batch.size(), e)),
                             aiLabelStatusDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
                                     .onErrorResume(e -> logAndSkip("ai_label_status", batch.size(), e)),
+                            topicVectorsDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
+                                    .onErrorResume(e -> logAndSkip("topic_vectors", batch.size(), e)),
                             spanDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
                                     .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
                             traceDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
