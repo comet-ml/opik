@@ -87,7 +87,7 @@ public class ModelPriceTable {
                 // Per-image rows such as 1024-x-1024/gpt-image-1.5 share their model's key: a row that prices no token
                 // never replaces one that does.
                 parsedModelPrices.merge(runtimeKey, price,
-                        (kept, row) -> hasTokenPrices(kept) && !hasTokenPrices(row) ? kept : row);
+                        (kept, row) -> kept.hasTokenPrices() && !row.hasTokenPrices() ? kept : row);
             }
         });
 
@@ -382,16 +382,11 @@ public class ModelPriceTable {
             return SpanCostCalculator::textGenerationCost;
         }
 
-        return SpanCostCalculator::defaultCost;
+        return SpanCostCalculator.DEFAULT_COST_CALCULATOR;
     }
 
     private static boolean isPositive(BigDecimal value) {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
-    }
-
-    private static boolean hasTokenPrices(ModelPrice price) {
-        return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
-                || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
     }
 
     @RequiredArgsConstructor

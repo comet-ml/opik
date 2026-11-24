@@ -19,9 +19,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * A model's state is two correlated reads on its runs, both on the runs' (model_id, status, created_at) index: its
- * serving run, the most recent COMPLETED one, and its latest run, whose order across statuses is a sort over the
- * model's few runs. The runs need no workspace check of their own: they are reached through a model already checked.
+ * A model's state is two correlated reads on its runs: its serving run, the most recent COMPLETED one, on the runs'
+ * (model_id, status, created_at) index, and its latest run, across statuses, which MySQL sorts from that index while a
+ * model has a few runs and reads in order from (model_id, created_at, id) as they grow. Both break a tie in created_at
+ * by id. The runs need no workspace check of their own: they are reached through a model already checked.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(GuardrailModel.class)
@@ -37,9 +38,9 @@ public interface GuardrailModelDAO {
     @SqlQuery("""
             SELECT m.id, m.name, m.description,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id AND r.status = 'COMPLETED'
-                    ORDER BY r.created_at DESC LIMIT 1) AS serving_run_id,
+                    ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS serving_run_id,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id
-                    ORDER BY r.created_at DESC LIMIT 1) AS latest_run_id,
+                    ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_run_id,
                 m.created_at, m.created_by, m.last_updated_at, m.last_updated_by
             FROM guardrail_models m
             WHERE m.id = :id AND m.workspace_id = :workspaceId
@@ -67,7 +68,7 @@ public interface GuardrailModelDAO {
             <if(usable_only)> AND EXISTS (SELECT 1 FROM guardrail_training_runs r
                 WHERE r.model_id = m.id AND r.status = 'COMPLETED') <endif>
             <if(latest_run_status)> AND (SELECT r.status FROM guardrail_training_runs r WHERE r.model_id = m.id
-                ORDER BY r.created_at DESC LIMIT 1) = :latestRunStatus <endif>
+                ORDER BY r.created_at DESC, r.id DESC LIMIT 1) = :latestRunStatus <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -86,7 +87,7 @@ public interface GuardrailModelDAO {
             <if(usable_only)> AND EXISTS (SELECT 1 FROM guardrail_training_runs r
                 WHERE r.model_id = m.id AND r.status = 'COMPLETED') <endif>
             <if(latest_run_status)> AND (SELECT r.status FROM guardrail_training_runs r WHERE r.model_id = m.id
-                ORDER BY r.created_at DESC LIMIT 1) = :latestRunStatus <endif>
+                ORDER BY r.created_at DESC, r.id DESC LIMIT 1) = :latestRunStatus <endif>
             ORDER BY <if(sort_fields)> <sort_fields>, <endif> m.id DESC
             LIMIT :limit OFFSET :offset
             """)
@@ -100,9 +101,9 @@ public interface GuardrailModelDAO {
     @SqlQuery("""
             SELECT m.id, m.name, m.description,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id AND r.status = 'COMPLETED'
-                    ORDER BY r.created_at DESC LIMIT 1) AS serving_run_id,
+                    ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS serving_run_id,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id
-                    ORDER BY r.created_at DESC LIMIT 1) AS latest_run_id,
+                    ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_run_id,
                 m.created_at, m.created_by, m.last_updated_at, m.last_updated_by
             FROM guardrail_models m
             WHERE m.workspace_id = :workspaceId AND m.id IN (<ids>)

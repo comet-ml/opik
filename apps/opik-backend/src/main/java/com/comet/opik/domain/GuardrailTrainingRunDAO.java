@@ -120,11 +120,14 @@ public interface GuardrailTrainingRunDAO {
     // Conditional on the status the caller read: zero rows means another writer moved the run first, and the caller
     // drops its write. A write that keeps the status and only adds metadata, such as the job's stage, passes the same
     // status twice. The patch is merged into the metadata (RFC 7396), so each write adds its own sub-objects; a null
-    // patch leaves it as it is.
+    // patch leaves it as it is. The write that ends the run sets finished_at, and a later write in its finished status
+    // keeps it, which last_updated_at would not.
     @SqlUpdate("""
             UPDATE guardrail_training_runs
             SET status = :newStatus, status_message = :statusMessage,
                 metadata = JSON_MERGE_PATCH(metadata, COALESCE(:metadataPatch, JSON_OBJECT())),
+                finished_at = IF(:newStatus IN ('COMPLETED', 'FAILED', 'CANCELLED'),
+                    COALESCE(finished_at, CURRENT_TIMESTAMP(6)), finished_at),
                 last_updated_by = :userName
             WHERE id = :id AND workspace_id = :workspaceId AND status = :expectedStatus
             """)
