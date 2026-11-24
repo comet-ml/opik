@@ -952,6 +952,9 @@ navigation:
               - page: Kong AI Gateway
                 path: ./docs-v2/integrations/kong-ai-gateway.mdx
                 slug: kong-ai-gateway
+              - page: agentgateway
+                path: ./docs-v2/integrations/agentgateway.mdx
+                slug: agentgateway
               - page: AISuite
                 path: ./docs-v2/integrations/aisuite.mdx
                 slug: aisuite
