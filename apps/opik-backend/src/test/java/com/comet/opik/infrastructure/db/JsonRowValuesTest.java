@@ -4,9 +4,9 @@ import com.clickhouse.client.api.DataStreamWriter;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.OpikApplication;
+import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
-import com.comet.opik.utils.TruncationUtilsTest.ToJsonWithSlimTests;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadConstraints;
@@ -16,7 +16,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.jackson.Jackson;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -145,19 +144,16 @@ class JsonRowValuesTest {
         return body.toString(StandardCharsets.UTF_8).stripTrailing();
     }
 
-    private static String randomText(int length) {
-        return RandomStringUtils.secure().nextAlphanumeric(length);
-    }
-
     static Stream<JsonNode> containerPayloads() {
         int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
         return Stream.of(
                 JsonUtils.getJsonNodeFromString("{}"),
                 JsonUtils.getJsonNodeFromString("[]"),
                 JsonUtils.getJsonNodeFromString("{\"short\":\"%s\",\"n\":%d,\"none\":null}"
-                        .formatted(randomText(20), RandomUtils.secure().randomInt())),
+                        .formatted(PayloadCases.randomAlphanumeric(20), RandomUtils.secure().randomInt())),
                 JsonUtils.getJsonNodeFromString("[{\"long\":\"%s\"},\"%s\",%d]"
-                        .formatted(randomText(max + 1), randomText(max * 2), RandomUtils.secure().randomInt())));
+                        .formatted(PayloadCases.randomAlphanumeric(max + 1), PayloadCases.randomAlphanumeric(max * 2),
+                                RandomUtils.secure().randomInt())));
     }
 
     @ParameterizedTest
@@ -174,7 +170,7 @@ class JsonRowValuesTest {
     }
 
     private static JsonNode nestedArrays(int depth) {
-        JsonNode node = JsonNodeFactory.instance.arrayNode().add(randomText(10));
+        JsonNode node = JsonNodeFactory.instance.arrayNode().add(PayloadCases.randomAlphanumeric(10));
         for (int level = 1; level < depth; level++) {
             node = JsonNodeFactory.instance.arrayNode().add(node);
         }
@@ -207,7 +203,7 @@ class JsonRowValuesTest {
                 JsonUtils.getJsonNodeFromString("null"),
                 JsonUtils.getJsonNodeFromString(String.valueOf(RandomUtils.secure().randomInt())),
                 JsonUtils.getJsonNodeFromString("\"%s\"".formatted(
-                        randomText(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH + 1))));
+                        PayloadCases.randomAlphanumeric(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH + 1))));
     }
 
     @ParameterizedTest
@@ -257,7 +253,7 @@ class JsonRowValuesTest {
 
     static Stream<Arguments> payloadsWithRedaction() {
         return Stream.of(containerPayloads(), deepPayloads(), textPayloads(),
-                ToJsonWithSlimTests.parsedPayloads(), ToJsonWithSlimTests.builtPayloads())
+                PayloadCases.parsedPayloads(), PayloadCases.builtPayloads())
                 .flatMap(Function.identity())
                 .flatMap(payload -> Stream.of(
                         Arguments.of(payload, false),
