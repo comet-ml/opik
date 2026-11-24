@@ -25,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -305,20 +307,27 @@ public final class TruncationUtils {
         }
     }
 
-    /** Whether any string value is longer than the max length; stops at the first one. */
+    /**
+     * Whether any string value is longer than the max length; stops at the first one. Walks with an explicit stack,
+     * as {@code JsonNode.toString()} does, so depth costs heap rather than call stack.
+     */
     private static boolean hasLongString(JsonNode node, int maxStringLength) {
-        return switch (node.getNodeType()) {
-            case OBJECT, ARRAY -> {
-                for (JsonNode child : node) {
-                    if (hasLongString(child, maxStringLength)) {
-                        yield true;
+        Deque<JsonNode> pending = new ArrayDeque<>();
+        pending.push(node);
+        while (!pending.isEmpty()) {
+            JsonNode current = pending.pop();
+            switch (current.getNodeType()) {
+                case OBJECT, ARRAY -> current.forEach(pending::push);
+                case STRING -> {
+                    if (current.textValue().length() > maxStringLength) {
+                        return true;
                     }
                 }
-                yield false;
+                case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> {
+                }
             }
-            case STRING -> node.textValue().length() > maxStringLength;
-            case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> false;
-        };
+        }
+        return false;
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {
