@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.SpanWeeksBackfillJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
+import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -72,6 +73,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setProjectLastUpdatedFlushJob();
                 setAnnotationQueueRoutingFlushJob();
                 setAiLabelsJob();
+                setTopicVectorsJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setOptimizationStalledReaperJob();
@@ -189,6 +191,18 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(AiLabelsJob.class, aiLabelsConfig.getTickInterval().toJavaDuration(), null);
+    }
+
+    private void setTopicVectorsJob() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+
+        if (!topicsConfig.isEnabled()) {
+            log.info("Topic vectors are disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(TopicVectorsJob.class, topicsConfig.getVectors().getTickInterval().toJavaDuration(),
+                null);
     }
 
     private void setLocalRunnerReaperJob() {
@@ -376,6 +390,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             log.info("GuiceJobManager instance already cleared, nothing to shutdown");
             return;
         }
+        interruptTopicsJobs();
         var scheduler = jobManager.getScheduler();
         try {
             log.info("Attempting to delete all jobs from the scheduler...");
@@ -393,6 +408,22 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
+    }
+
+    /**
+     * A topics job runs detached from its Quartz fire, so the scheduler's shutdown never reaches it: interrupt it here,
+     * which cancels its run in flight and frees its lock. The checks match {@link #setTopicVectorsJob()}, so a disabled
+     * job is never created at shutdown. Each job has its own try: a failure is logged, and the next job and the rest of
+     * the shutdown still run.
+     */
+    private void interruptTopicsJobs() {
+        try {
+            if (injector.get().getInstance(OpikConfiguration.class).getTopics().isEnabled()) {
+                injector.get().getInstance(TopicVectorsJob.class).interrupt();
+            }
+        } catch (Exception exception) {
+            log.warn("Error interrupting TopicVectorsJob during scheduler shutdown", exception);
+        }
     }
 
     private void setLlmModelRegistryRefreshJob() {

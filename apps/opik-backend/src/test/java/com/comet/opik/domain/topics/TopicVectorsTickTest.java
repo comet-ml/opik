@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.events.ProjectsDeleted;
+import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -8,6 +10,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
@@ -28,7 +31,9 @@ import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Response;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
+import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jobs.GuiceJobManager;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -41,6 +46,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.quartz.JobKey;
+import org.quartz.SchedulerException;
+import org.quartz.SimpleTrigger;
+import org.quartz.impl.matchers.GroupMatcher;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -104,7 +113,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * The topic vectors tick against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/embed} stubbed in
  * WireMock by {@link EmbedStub}, which answers every input with a deterministic vector of its text. Tests seed
  * {@code ai_label_status} and {@code ai_labels} directly and call {@link TopicVectorsTickService#tick(Instant)}. A
- * project with no drained backfill row has its traces embedded by the backfill, in the same tick.
+ * project with no drained backfill row has its traces embedded by the backfill, in the same tick. The scheduled job
+ * fires once at startup and then only every hour.
  */
 @DisplayName("topic vectors tick")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -151,6 +161,7 @@ class TopicVectorsTickTest {
                         new CustomConfig("aiLabels.tickInterval", "1h"),
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
+                        new CustomConfig("topics.vectors.tickInterval", "1h"),
                         new CustomConfig("topics.vectors.tickBudget", "30s")))
                 .build());
     }
@@ -167,13 +178,15 @@ class TopicVectorsTickTest {
     private LockService lockService;
     private TopicVectorBackfillService backfillService;
     private TopicsConfig.VectorsConfig defaults;
+    private GuiceJobManager jobManager;
+    private EventBus eventBus;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
             @Jit TopicWorkspaceService workspaceService, @Jit LockService lockService,
-            @Jit TopicVectorBackfillService backfillService) {
+            @Jit TopicVectorBackfillService backfillService, GuiceJobManager jobManager, EventBus eventBus) {
         this.opikConfig = opikConfig;
         this.template = template;
         this.templateAsync = templateAsync;
@@ -185,6 +198,8 @@ class TopicVectorsTickTest {
         this.tables = new TopicVectorsTables(template, templateAsync);
         this.lockService = lockService;
         this.backfillService = backfillService;
+        this.jobManager = jobManager;
+        this.eventBus = eventBus;
         var vectors = config();
         this.defaults = new TopicsConfig.VectorsConfig();
         defaults.setTickBudget(vectors.getTickBudget());
@@ -193,6 +208,10 @@ class TopicVectorsTickTest {
         defaults.setMaxTracesPerTick(vectors.getMaxTracesPerTick());
         defaults.setTickInterval(vectors.getTickInterval());
         defaults.setEmbedConcurrency(vectors.getEmbedConcurrency());
+
+        // The job fires once at startup: wait for that tick to release the leader lock, so it can't race the tests.
+        lockService.bestEffortLock(new LockService.Lock("topics:vectors:leader"), Mono.just(true), Mono.empty(),
+                Duration.ofSeconds(5), Duration.ofSeconds(60)).block();
     }
 
     @AfterAll
@@ -793,6 +812,88 @@ class TopicVectorsTickTest {
 
         assertThat(second).isEqualTo(TickResult.written(100 - first.written()));
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("enabled, the tick job is scheduled every tickInterval")
+    void jobIsScheduled() throws SchedulerException {
+        var scheduler = jobManager.getScheduler();
+        var jobKeys = new ArrayList<JobKey>();
+        for (var key : scheduler.getJobKeys(GroupMatcher.anyGroup())) {
+            if (scheduler.getJobDetail(key).getJobClass() == TopicVectorsJob.class) {
+                jobKeys.add(key);
+            }
+        }
+
+        assertThat(jobKeys).singleElement().satisfies(key -> assertThat(scheduler.getTriggersOfJob(key))
+                .singleElement()
+                .isInstanceOfSatisfying(SimpleTrigger.class, trigger -> assertThat(trigger.getRepeatInterval())
+                        .isEqualTo(Duration.ofHours(1).toMillis())));
+    }
+
+    @Test
+    @DisplayName("a project delete removes that project's backfill row, in its workspace only")
+    void backfillRowsOfDeletedProject() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var otherWorkspaceId = ID_GENERATOR.generateId().toString();
+        var deleted = ID_GENERATOR.generateId();
+        var kept = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        var row = TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0)
+                .backfillLastDoneAt(t0);
+        backfillService.start(List.of(row.projectId(deleted).build(), row.projectId(kept).build(),
+                row.workspaceId(otherWorkspaceId).projectId(deleted).build()));
+
+        eventBus.post(new ProjectsDeleted(Set.of(deleted), workspaceId, "user"));
+
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> assertThat(backfillService.findByKeys(workspaceId, List.of(deleted, kept)))
+                        .containsOnlyKeys(kept));
+        assertThat(backfillService.findByKeys(otherWorkspaceId, List.of(deleted))).containsOnlyKeys(deleted);
+    }
+
+    @Test
+    @DisplayName("the trace-delete event deletes the traces' vectors and leaves other traces, projects and workspaces")
+    void traceDeleteCascade() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var otherWorkspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var otherProjectId = ID_GENERATOR.generateId();
+        var deleted = ID_GENERATOR.generateId();
+        var kept = ID_GENERATOR.generateId();
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, deleted, 1),
+                vector(workspaceId, projectId, kept, 1),
+                vector(workspaceId, otherProjectId, deleted, 1),
+                vector(otherWorkspaceId, projectId, deleted, 1))).block();
+
+        eventBus.post(new TracesDeleted(Set.of(deleted), projectId, workspaceId, "user"));
+
+        // The same trace id under another project of the workspace keeps its vector.
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> assertVectors(tables.vectors(workspaceId, Set.of(deleted, kept)),
+                        List.of(vector(workspaceId, projectId, kept, 1),
+                                vector(workspaceId, otherProjectId, deleted, 1))));
+        assertVectors(tables.vectors(otherWorkspaceId, List.of(deleted)),
+                List.of(vector(otherWorkspaceId, projectId, deleted, 1)));
+        // Scoped to the trace's partition, so the mutation does not visit every part.
+        assertThat(partitionScopedDeletes(workspaceId)).isPositive();
+    }
+
+    private long partitionScopedDeletes(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS cnt
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish'
+                        AND log_comment LIKE concat('topics:delete_by_trace_ids_topic_vectors:', :workspace_id, ':%')
+                        AND query LIKE '%IN PARTITION%'
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                .block();
     }
 
     private TickResult tick() {
