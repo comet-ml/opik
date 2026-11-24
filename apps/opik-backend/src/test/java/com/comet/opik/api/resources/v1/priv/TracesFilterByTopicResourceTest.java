@@ -51,7 +51,6 @@ import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -85,10 +84,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -223,21 +220,11 @@ class TracesFilterByTopicResourceTest {
             + "is not in the KPI or metrics count of a topic filter")
     void tombstoneInNoOperator() {
         var seed = seed();
-        var deleted = ID_GENERATOR.generateId();
-        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        PostCutoverTraces.insertTraces(connectionFactory, List.of(TraceRow.shown(
-                seed.caller().workspaceId(), seed.projectId(), deleted, now.minus(Duration.ofMinutes(5)))));
-        traceTopicsDAO.insert(List.of(TraceTopic.builder()
-                .workspaceId(seed.caller().workspaceId())
-                .projectId(seed.projectId())
-                .traceId(deleted)
-                .traceCreatedAt(now.minus(Duration.ofMinutes(5)))
-                .topicId(seed.labelled().id())
-                .source(TraceTopic.Source.RUN)
-                .runId(seed.saved())
-                .build())).block();
-        TopicsTraces.tombstone(connectionFactory, seed.caller().workspaceId(), seed.projectId(), deleted,
-                now.minus(Duration.ofMinutes(5)), seed.labelled().id());
+        var deleted = topics.createTraces(seed.caller(), seed.projectId(), 1).getFirst();
+        traceTopicsDAO.insert(List.of(row(seed.caller(), seed.projectId(), deleted, seed.labelled().id(),
+                seed.saved()))).block();
+        TopicsTraces.tombstone(connectionFactory, seed.caller().workspaceId(), seed.projectId(), deleted.id(),
+                deleted.createdAt(), seed.labelled().id());
         var labelled = seed.labelled().id().toString();
         var arrived = seed.arrived().id().toString();
 
@@ -301,7 +288,7 @@ class TracesFilterByTopicResourceTest {
     void workspaceWithoutTopics() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
-        createTraces(caller, projectId, 2);
+        topics.createTraces(caller, projectId, 2);
         var topicId = UUID.randomUUID().toString();
 
         for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
@@ -490,7 +477,7 @@ class TracesFilterByTopicResourceTest {
         var later = ID_GENERATOR.generateId();
         var cases = List.of("labelled", "labelled again", "arrival over a run", "relabelled by a later run",
                 "retired topic", "other", "no row");
-        var created = createTraces(caller, projectId, cases.size());
+        var created = topics.createTraces(caller, projectId, cases.size());
         var traces = new HashMap<String, Trace>();
         for (int i = 0; i < cases.size(); i++) {
             traces.put(cases.get(i), created.get(i));
@@ -558,31 +545,6 @@ class TracesFilterByTopicResourceTest {
                 .source(runId == null ? TraceTopic.Source.ARRIVAL : TraceTopic.Source.RUN)
                 .runId(runId)
                 .build();
-    }
-
-    /** {@code count} traces in the project, read back for their {@code created_at}, in creation order. */
-    private List<Trace> createTraces(Caller caller, UUID projectId, int count) {
-        var projectName = projectClient.getProject(projectId, caller.apiKey(), caller.workspaceName()).name();
-        var traces = IntStream.range(0, count)
-                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
-                        .id(ID_GENERATOR.generateId())
-                        .projectId(null)
-                        .projectName(projectName)
-                        // As the SDK logs it, so the Logs filters keep it.
-                        .source(Source.SDK)
-                        .usage(null)
-                        .feedbackScores(null)
-                        .comments(null)
-                        .build())
-                .toList();
-        traceClient.batchCreateTraces(traces, caller.apiKey(), caller.workspaceName());
-        // After the cut-over the API writes through the Distributed traces table, which ships rows in the
-        // background (prefer_localhost_replica = 0 in users.xml): wait until the list shows every trace.
-        var byId = Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
-                .until(() -> list(caller, projectId, List.of()).content().stream()
-                        .collect(Collectors.toMap(Trace::id, trace -> trace)),
-                        listed -> listed.keySet().containsAll(traces.stream().map(Trace::id).toList()));
-        return traces.stream().map(trace -> byId.get(trace.id())).toList();
     }
 
     private void assertFilter(Seed seed, Operator operator, String value, Set<UUID> expected) {
