@@ -102,8 +102,7 @@ public class TopicsMetrics {
         traceTopicsInserts.add(1, attributes(workspace).put(RESULT, success ? "success" : "error").build());
     }
 
-    void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger,
-            @NonNull TopicWindowLabelService.PassOutcome outcome) {
+    void labelPass(@NonNull Workspace workspace, @NonNull LabelTrigger trigger, @NonNull LabelPassOutcome outcome) {
         labelPasses.add(1, attributes(workspace).put(TRIGGER, trigger.getValue()).put(OUTCOME, outcome.getValue())
                 .build());
     }

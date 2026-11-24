@@ -48,11 +48,15 @@ class TopicRunOutcomes {
 
     /**
      * Marks the run failed with the error's code ({@code internal} when it has none); the outcome and the log carry
-     * {@code stats}, what the run had read. When the run had ended already, a timeout raced its commit: the run is
+     * the window bounds and what the error says the run had read. When the run had ended already, a timeout raced its commit: the run is
      * saved, without its trace_topics, which the labelling pass gives.
      */
-    Mono<TopicRunOutcome> failed(@NonNull TopicRun run, @NonNull Throwable error, @NonNull ObjectNode stats) {
+    Mono<TopicRunOutcome> failed(@NonNull TopicRun run, @NonNull Throwable error) {
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
+        var stats = bounds(run);
+        if (error instanceof TopicsRunException exception) {
+            stats.setAll(exception.getStats());
+        }
         return store.fail(run.runId(), run.workspace(), run.projectId(), code)
                 .flatMap(marked -> marked ? Mono.just(false) : store.isSaved(run))
                 .onErrorResume(markError -> {

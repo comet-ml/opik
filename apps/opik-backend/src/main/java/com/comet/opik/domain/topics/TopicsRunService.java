@@ -3,7 +3,6 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -16,12 +15,11 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
- * It owns the run's time limit and its cancel; the scheduler its CPU steps and timers run on is the caller's.
+ * It owns the run's time limit and its cancel; the scheduler its CPU steps run on is the caller's.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -58,8 +56,8 @@ public class TopicsRunService {
 
     /**
      * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces. The CPU steps and the timeouts run on {@code compute}, the
-     * caller's scheduler. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
+     * caller counted as {@code windowTraces} traces. The CPU steps, clustering and assignment, run on {@code compute},
+     * the caller's scheduler. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
      * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
      * one cancelled by its subscriber is failed with {@code timeout} too.
      */
@@ -74,35 +72,38 @@ public class TopicsRunService {
     private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces, Scheduler compute) {
         int maxTopics = config.getAlgorithm().getMaxTopics();
         var timeout = config.getRun().getProjectTimeout().toJavaDuration();
-        // What the run has read so far: a failed run's outcome and log carry it. Each step adds to a copy.
-        var read = new AtomicReference<>(TopicRunOutcomes.bounds(run));
-        return timed(run, "window", reader.read(run, windowTraces, compute))
-                .doOnNext(window -> add(read, window.stats()))
+        // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
+        // carries the bounds, and the phase metric shows how far the run got.
+        return timed(run, "window", reader.read(run, windowTraces))
                 .flatMap(window -> compute(run, "cluster", compute,
                         () -> algorithm.cluster(window.topicWindow(), maxTopics))
-                        .doOnNext(clustering -> add(read, clustering.stats()))
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .doOnNext(answer -> add(read, answer.stats()))
                                 .flatMap(answer -> compute(run, "assign", compute,
-                                        () -> rows(run, window, clustering, answer, read.get())))))
+                                        () -> rows(run, window, clustering, answer)))
+                                .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
+                        .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
-                        .map(kept -> kept ? rows : rows.discarded()))
-                .timeout(timeout, Mono.error(this::timedOut), compute)
-                .flatMap(rows -> saved(run, rows, compute))
-                .onErrorResume(error -> outcomes.failed(run, error, read.get()));
+                        .map(kept -> kept ? rows : rows.discarded())
+                        .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
+                .timeout(timeout, Mono.error(this::timedOut))
+                .flatMap(rows -> saved(run, rows))
+                .onErrorResume(error -> outcomes.failed(run, error));
     }
 
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
     private TopicRunRows rows(TopicRun run, RunWindow window, Clustering clustering,
-            TopicsLlm.Answer<AuthorAnswer> answer, ObjectNode read) {
+            TopicsLlm.Answer<AuthorAnswer> answer) {
         TopicRunRows rows;
         try {
             rows = TopicRunRows.of(run, window.traces(), clustering.finish(answer.value()), idGenerator::generateId);
         } catch (IllegalArgumentException exception) {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
-        var stats = read.deepCopy();
+        var stats = TopicRunOutcomes.bounds(run);
+        stats.setAll(window.stats());
+        stats.setAll(clustering.stats());
+        stats.setAll(answer.stats());
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
@@ -110,12 +111,16 @@ public class TopicsRunService {
         return rows.toBuilder().stats(stats).build();
     }
 
-    private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows, Scheduler compute) {
+    private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows) {
         metrics.otherShare(run.workspace(), rows.otherShare());
-        var insert = rows.traceTopics().isEmpty()
-                ? Mono.just(false)
-                : store.insertTraceTopics(run, rows.traceTopics(), compute);
-        return insert.map(inserted -> outcomes.saved(run, rows, inserted));
+        return store.insertTraceTopics(run.workspace(), rows.traceTopics())
+                .thenReturn(!rows.traceTopics().isEmpty())
+                .onErrorResume(exception -> {
+                    log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
+                            + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
+                    return Mono.just(false);
+                })
+                .map(inserted -> outcomes.saved(run, rows, inserted));
     }
 
     private TopicsRunException timedOut() {
@@ -137,11 +142,4 @@ public class TopicsRunService {
         });
     }
 
-    private static void add(AtomicReference<ObjectNode> read, ObjectNode stats) {
-        read.updateAndGet(previous -> {
-            var next = previous.deepCopy();
-            next.setAll(stats);
-            return next;
-        });
-    }
 }

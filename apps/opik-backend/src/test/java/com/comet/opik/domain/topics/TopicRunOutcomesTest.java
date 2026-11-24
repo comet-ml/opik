@@ -31,7 +31,7 @@ class TopicRunOutcomesTest {
                 .thenReturn(Mono.just(true));
 
         var outcome = outcomes
-                .failed(run, new TopicsRunException(RunError.LLM_BAD_ANSWER, "no JSON"), TopicRunOutcomes.bounds(run))
+                .failed(run, new TopicsRunException(RunError.LLM_BAD_ANSWER, "no JSON"))
                 .block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.FAILED);
@@ -41,12 +41,26 @@ class TopicRunOutcomesTest {
     }
 
     @Test
+    @DisplayName("a failed run's outcome carries what its error says the run had read, next to the window bounds")
+    void failureCarriesWhatTheRunRead() {
+        when(store.fail(run.runId(), run.workspace(), run.projectId(), RunError.LLM_ERROR))
+                .thenReturn(Mono.just(true));
+        var read = TopicRunOutcomes.bounds(run).removeAll().put("window_traces", 120);
+
+        var outcome = outcomes.failed(run, TopicsRunException.withStats(
+                new TopicsRunException(RunError.LLM_ERROR, "down"), read)).block();
+
+        assertThat(outcome.stats().get("window_traces").asInt()).isEqualTo(120);
+        assertThat(outcome.stats().has("window_from")).isTrue();
+    }
+
+    @Test
     @DisplayName("any other error fails the run with internal")
     void otherErrorIsInternal() {
         when(store.fail(run.runId(), run.workspace(), run.projectId(), RunError.INTERNAL))
                 .thenReturn(Mono.just(true));
 
-        var outcome = outcomes.failed(run, new IllegalStateException("bug"), TopicRunOutcomes.bounds(run)).block();
+        var outcome = outcomes.failed(run, new IllegalStateException("bug")).block();
 
         assertThat(outcome.errorCode()).isEqualTo("internal");
     }
@@ -59,7 +73,7 @@ class TopicRunOutcomesTest {
         when(store.isSaved(run)).thenReturn(Mono.just(true));
 
         var outcome = outcomes
-                .failed(run, new TopicsRunException(RunError.TIMEOUT, "late"), TopicRunOutcomes.bounds(run)).block();
+                .failed(run, new TopicsRunException(RunError.TIMEOUT, "late")).block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.SAVED);
         assertThat(outcome.errorCode()).isNull();
@@ -72,7 +86,7 @@ class TopicRunOutcomesTest {
                 .thenReturn(Mono.error(new IllegalStateException("MySQL down")));
 
         var outcome = outcomes
-                .failed(run, new TopicsRunException(RunError.SAVE, "conflict"), TopicRunOutcomes.bounds(run)).block();
+                .failed(run, new TopicsRunException(RunError.SAVE, "conflict")).block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("save");

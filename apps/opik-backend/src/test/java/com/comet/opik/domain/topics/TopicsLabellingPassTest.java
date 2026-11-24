@@ -9,8 +9,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -30,6 +30,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -62,17 +63,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
- * The labelling pass's storage against real ClickHouse and MySQL: the rows a pass writes and its slice bounds. No run
- * builds here: tests seed vectors and a saved list directly and call the label service. {@link TopicsDaoStorageTest}
- * covers the DAO reads.
+ * The labelling pass against real ClickHouse and MySQL: the rows a pass writes and its slice bounds. No run builds
+ * here: tests seed vectors and a saved list directly and call the label service. {@link TopicsDaoStorageTest} covers
+ * the DAO reads.
  */
-@DisplayName("topics storage")
+@DisplayName("topics labelling pass")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class TopicsStorageTest {
+class TopicsLabellingPassTest {
 
     private static final int BUILT = 120;
     /** The pass's page and slice in config-test.yml. */
@@ -170,10 +170,10 @@ class TopicsStorageTest {
 
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
-        var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RUN).block();
+        var pass = labelService.labelWindow(workspace(workspaceId), projectId,
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RUN, Schedulers.boundedElastic()).block();
 
-        assertThat(pass).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+        assertThat(pass).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
         assertThat(rowsOfRun(workspaceId, projectId, runId))
                 .containsOnlyKeys(TRACES.traceIds())
@@ -194,10 +194,10 @@ class TopicsStorageTest {
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId))).isEqualTo(expected);
 
         var rowsBefore = data.traceTopics(workspaceId, projectId).size();
-        var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RESUME).block();
+        var again = labelService.labelWindow(workspace(workspaceId), projectId,
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME, Schedulers.boundedElastic()).block();
 
-        assertThat(again).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+        assertThat(again).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
@@ -249,7 +249,7 @@ class TopicsStorageTest {
                 createdAt(traceId), id(), TraceTopic.Source.ARRIVAL, Instant.now(), 0));
 
         assertThat(label(labelService, workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+                .isEqualTo(LabelPassOutcome.COMPLETE);
 
         var live = Stream.concat(TRACES.traceIds().stream().filter(traceId -> !tombstoned.contains(traceId)),
                 tied.stream()).toList();
@@ -275,13 +275,13 @@ class TopicsStorageTest {
                 : invocation.callRealMethod()).when(failing).insert(any());
 
         assertThat(label(service(windowDAO, failing), workspaceId, projectId,
-                Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+                Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(LabelPassOutcome.FAILED);
 
         assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(2 * PAGE);
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         assertThat(label(labelService, workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+                .isEqualTo(LabelPassOutcome.COMPLETE);
 
         assertThat(rowsOfRun(workspaceId, projectId, runId))
                 .containsOnlyKeys(TRACES.traceIds())
@@ -300,7 +300,7 @@ class TopicsStorageTest {
         saveList(workspaceId, projectId, runId, id());
 
         assertThat(label(labelService, workspaceId, projectId, Instant.now().minusSeconds(1)))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.CUT);
+                .isEqualTo(LabelPassOutcome.CUT);
         assertThat(rowsOfRun(workspaceId, projectId, runId)).isEmpty();
 
         // From here, the second page's insert of each pass outlasts the pass.
@@ -312,11 +312,12 @@ class TopicsStorageTest {
         var service = service(windowDAO, slow);
 
         assertThat(label(service, workspaceId, projectId, Instant.now().plusSeconds(3)))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.CUT);
+                .isEqualTo(LabelPassOutcome.CUT);
         assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(PAGE);
 
-        var cancelled = service.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RESUME).timeout(Duration.ofSeconds(3)).onErrorResume(
+        var cancelled = service.labelWindow(workspace(workspaceId), projectId,
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME, Schedulers.boundedElastic())
+                .timeout(Duration.ofSeconds(3)).onErrorResume(
                         error -> Mono.empty())
                 .block();
         assertThat(cancelled).isNull();
@@ -345,7 +346,7 @@ class TopicsStorageTest {
 
         assertThat(
                 label(service(stuck, noopInserts), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+                .isEqualTo(LabelPassOutcome.FAILED);
 
         // Every page is full of traces the slice never had.
         var next = new AtomicLong();
@@ -358,7 +359,7 @@ class TopicsStorageTest {
 
         assertThat(
                 label(service(endless, noopInserts), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
-                .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+                .isEqualTo(LabelPassOutcome.FAILED);
         // A bound at every 20th trace: the last slice holds the window's last trace alone.
         int slices = BUILT / SLICE + 1;
         int maxPages = (SLICE + PAGE - 1) / PAGE + 2;
@@ -443,17 +444,22 @@ class TopicsStorageTest {
                 .toList()).block();
     }
 
-    private TopicWindowLabelService.PassOutcome label(TopicWindowLabelService service, String workspaceId,
-            UUID projectId, Instant deadline) {
-        return service.labelWindow(workspaceId, projectId, deadline, TopicWindowLabelService.Trigger.RUN).block();
+    private LabelPassOutcome label(TopicWindowLabelService service, String workspaceId, UUID projectId,
+            Instant deadline) {
+        return service.labelWindow(workspace(workspaceId), projectId, deadline, LabelTrigger.RUN,
+                Schedulers.boundedElastic()).block();
+    }
+
+    private static TopicsMetrics.Workspace workspace(String workspaceId) {
+        return new TopicsMetrics.Workspace(workspaceId, "Acme");
     }
 
     /** The label service on the given stores, as the app builds it. */
     private TopicWindowLabelService service(TopicWindowDAO windowDAO, TraceTopicsDAO traceTopicsDAO) {
-        var names = mock(WorkspaceNameService.class);
-        when(names.nameOrId(any())).thenReturn("Acme");
-        return new TopicWindowLabelService(opikConfig.getTopics(), template, windowDAO, traceTopicsDAO,
-                TopicsMetricsReader.metrics(InMemoryMetricReader.create()), names, algorithm);
+        var metrics = TopicsMetricsReader.metrics(InMemoryMetricReader.create());
+        var store = new TopicRunStore(opikConfig.getTopics(), template, traceTopicsDAO, mock(ProjectService.class),
+                ID_GENERATOR, metrics);
+        return new TopicWindowLabelService(opikConfig.getTopics(), windowDAO, store, metrics, algorithm);
     }
 
     private static UUID id() {
