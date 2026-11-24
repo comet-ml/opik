@@ -126,6 +126,9 @@ public class OpikConfiguration extends JobConfiguration {
     private GuardrailsConfig guardrails = new GuardrailsConfig();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsTrainingDatasetConfig guardrailsTrainingDataset = new GuardrailsTrainingDatasetConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
@@ -239,6 +242,14 @@ public class OpikConfiguration extends JobConfiguration {
     public boolean isGuardrailsInferenceConfigured() {
         return !serviceToggles.isGuardrailsValidationsEnabled()
                 || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+    }
+
+    // Every guardrail models endpoint passes the guardrails gate, which needs the validations toggle: training alone
+    // would only make each of them a 403.
+    @JsonIgnore
+    @AssertTrue(message = "serviceToggles.guardrailsTrainingEnabled (TOGGLE_GUARDRAILS_TRAINING_ENABLED) requires serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED): guardrail models are used by guardrail checks")
+    public boolean isGuardrailsValidationsEnabledForTraining() {
+        return !serviceToggles.isGuardrailsTrainingEnabled() || serviceToggles.isGuardrailsValidationsEnabled();
     }
 
     @JsonIgnore

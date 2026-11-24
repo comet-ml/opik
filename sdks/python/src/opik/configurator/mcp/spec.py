@@ -9,7 +9,8 @@ Two transports are supported:
 
 - :class:`RemoteServerSpec` — the Opik-hosted MCP server reached over HTTP, with
   the AI host handling browser-based OAuth. Used when the configured deployment
-  advertises an MCP auth server (see ``detection.detect_hosted_mcp_server``).
+  advertises an MCP auth server and serves the MCP endpoint (see
+  ``detection.detect_hosted_mcp_server``).
 - :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp`` and
   authenticated with an API key passed through the environment. Used as the
   fallback when no hosted server is available.

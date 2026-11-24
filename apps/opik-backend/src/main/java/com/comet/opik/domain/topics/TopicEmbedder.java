@@ -21,17 +21,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Embeds one workspace's summaries with {@code /v1/embed}, in chunks of {@code embedBatchSize}, one call at a time and in
  * order, and turns the answers into unit-length vectors. A chunk starts only with at least {@code embedTimeout} left in
  * the tick, so a call never ends on the tick's deadline. A 429, a 5xx, a timeout, a retryable error, a 401 or a 403
- * ends the workspace's calls for the tick: the failed chunk and every chunk after it are {@code embed_failed}.
+ * ends the workspace's calls for the tick: the failed chunk and every chunk after it are {@code embed_failed}. A refused
+ * chunk is narrowed down to the inputs refused on their own.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TopicEmbedder {
+
+    /**
+     * The calls one refused chunk may add to find its bad inputs: two per halving, so 16 isolate one bad input among
+     * {@code embedBatchSize} 256.
+     */
+    static final int MAX_SPLIT_CALLS = 16;
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull InferenceClient client;
@@ -50,41 +58,59 @@ class TopicEmbedder {
 
     private Mono<ChunkOutcome> embedChunk(TopicVectorsMetrics.Workspace workspace, int index, List<Candidate> chunk,
             TickBudget budget) {
+        return embedPart(workspace, index, chunk, budget, new AtomicInteger(MAX_SPLIT_CALLS));
+    }
+
+    /**
+     * One call for {@code part}. A refusal of more than one input says only that some input is bad: the part is sent
+     * again in halves, down to single inputs, and only an input refused on its own is final. {@code splitsLeft} bounds
+     * the calls one refused chunk adds; a part past it is refused for this tick only, and every call needs
+     * {@code embedTimeout} left in the tick.
+     */
+    private Mono<ChunkOutcome> embedPart(TopicVectorsMetrics.Workspace workspace, int index, List<Candidate> part,
+            TickBudget budget, AtomicInteger splitsLeft) {
         return Mono.defer(() -> {
             var workspaceId = workspace.id();
             var timeout = config.getVectors().getEmbedTimeout().toJavaDuration();
             if (!budget.hasTimeFor(timeout)) {
-                return Mono.just(ChunkOutcome.skipped(SkipReason.OVER_BUDGET, chunk.size()));
+                return Mono.just(ChunkOutcome.skipped(SkipReason.OVER_BUDGET, part.size()));
             }
             var request = EmbedRequest.builder()
                     .orgId(workspaceId)
                     // opik-inference's own default for embed: vectors are large and a summary is embedded once, so a
                     // cached answer would only take cache space.
                     .cache(false)
-                    .inputs(chunk.stream().map(Candidate::summary).toList())
+                    .inputs(part.stream().map(Candidate::summary).toList())
                     .build();
             long started = System.nanoTime();
             return client.embed(request, budget.clock().instant().plus(timeout))
                     .map(response -> {
                         metrics.embedCall(workspace, Duration.ofNanos(System.nanoTime() - started), null);
-                        return vectors(workspaceId, chunk, response);
+                        return vectors(workspaceId, part, response);
                     })
                     .onErrorResume(InferenceException.class, exception -> {
                         metrics.embedCall(workspace, Duration.ofNanos(System.nanoTime() - started), exception);
                         if (backsOff(exception)) {
                             log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}'; no more "
                                     + "calls for it this tick", workspaceId, exception.getCode(),
-                                    exception.getHttpStatus(), chunk.size(), exception);
+                                    exception.getHttpStatus(), part.size(), exception);
                             return Mono.error(new BackedOff(index));
                         }
                         // What is left is invalid_request or input_too_long, a refusal of the inputs. The window read
                         // sends no blank summary, trace_summary caps one at 160 characters, and /v1/embed has no
-                        // per-input length limit, so this is a service-side change that needs a look. Sending the same
-                        // chunk every tick would get the same answer, so the watermark passes it; the daily pass tries
-                        // it again.
-                        log.error("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'",
-                                workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), exception);
-                        return Mono.just(ChunkOutcome.refused(chunk));
+                        // per-input length limit, so this is a service-side change that needs a look.
+                        log.error("Topic embed rejected inputs, workspace '{}', code '{}', status '{}', traces '{}'",
+                                workspaceId, exception.getCode(), exception.getHttpStatus(), part.size(), exception);
+                        if (part.size() == 1) {
+                            return Mono.just(ChunkOutcome.refused(part.getFirst()));
+                        }
+                        if (splitsLeft.addAndGet(-2) < 0) {
+                            return Mono.just(ChunkOutcome.skipped(SkipReason.EMBED_REFUSED, part.size()));
+                        }
+                        int half = part.size() / 2;
+                        return Flux.just(part.subList(0, half), part.subList(half, part.size()))
+                                .concatMap(halfPart -> embedPart(workspace, index, halfPart, budget, splitsLeft))
+                                .reduce(ChunkOutcome.EMPTY, ChunkOutcome::plus);
                     });
         });
     }
@@ -149,9 +175,10 @@ class TopicEmbedder {
             log.error("Topic vectors embed answered '{}' zero or non-finite vectors, workspace '{}'", invalid,
                     workspaceId);
         }
-        // The same summary gets the same vector, so these keys are settled.
+        // The same summary gets the same vector, so these traces get a status row.
         return new ChunkOutcome(vectors, invalid > 0 ? Map.of(SkipReason.INVALID_VECTOR, invalid) : Map.of(),
-                ChunkOutcome.keys(invalidCandidates));
+                invalidCandidates.stream().map(candidate -> new TopicVectorStatus(candidate, SkipReason.INVALID_VECTOR))
+                        .toList());
     }
 
     /** Scaled to length 1, so the nightly job's dot product is the cosine; empty for a zero or non-finite vector. */
