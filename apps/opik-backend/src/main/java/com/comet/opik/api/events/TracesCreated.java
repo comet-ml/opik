@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Set;
@@ -21,7 +22,7 @@ public class TracesCreated extends BaseEvent {
     // for callers that don't carry it; consumers fall back to workspaceId.
     private final @Nullable String workspaceName;
     private final @Nullable String cipxDeviceId;
-    private final @Nullable String organizationId;
+    private final @NonNull Mono<String> organizationId;
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName) {
         this(traces, workspaceId, userName, null);
@@ -39,12 +40,12 @@ public class TracesCreated extends BaseEvent {
 
     @Builder(toBuilder = true)
     private TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
-            @Nullable String workspaceName, @Nullable String cipxDeviceId, @Nullable String organizationId) {
+            @Nullable String workspaceName, @Nullable String cipxDeviceId, @Nullable Mono<String> organizationId) {
         super(workspaceId, userName);
         this.traces = traces;
         this.workspaceName = workspaceName;
         this.cipxDeviceId = cipxDeviceId;
-        this.organizationId = organizationId;
+        this.organizationId = organizationId == null ? Mono.empty() : organizationId;
     }
 
     public Set<UUID> projectIds() {

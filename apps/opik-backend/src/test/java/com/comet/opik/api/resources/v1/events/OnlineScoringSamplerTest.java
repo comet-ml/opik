@@ -22,6 +22,7 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -699,6 +700,7 @@ class OnlineScoringSamplerTest {
     class OrganizationTests {
 
         private final String organizationId = UUID.randomUUID().toString();
+        private final FixedOrganizationResolver resolver = FixedOrganizationResolver.of(organizationId);
 
         @Test
         void judgeMessageCarriesTheOrganizationOfTheCreatedTraces() {
@@ -706,16 +708,12 @@ class OnlineScoringSamplerTest {
             var evaluator = createLlmEvaluator(true, 1.0f, List.of());
             whenFindAllLlmEvaluators(evaluator);
 
-            onlineScoringSampler.onTracesCreated(TracesCreated.builder()
-                    .traces(List.of(trace))
-                    .workspaceId(workspaceId)
-                    .userName(userName)
-                    .organizationId(organizationId)
-                    .build());
+            onlineScoringSampler.onTracesCreated(tracesCreated(trace));
 
             verify(onlineScorePublisher).enqueueMessage(
                     List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            assertThat(resolver.lookups()).isOne();
         }
 
         @Test
@@ -727,7 +725,7 @@ class OnlineScoringSamplerTest {
                     .workspaceId(workspaceId)
                     .userName(userName)
                     .traceUpdate(TraceUpdate.builder().endTime(Instant.now()).build())
-                    .organizationId(organizationId)
+                    .organizationId(resolver.organizationId())
                     .build();
             var evaluator = createLlmEvaluator(true, 1.0f, List.of());
             when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
@@ -738,6 +736,50 @@ class OnlineScoringSamplerTest {
             verify(onlineScorePublisher).enqueueMessage(
                     List.of(toLlmMessage(evaluator, trace).toBuilder().organizationId(organizationId).build()),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            assertThat(resolver.lookups()).isOne();
+        }
+
+        @Test
+        void noLookupWhenTheProjectHasNoRules() {
+            whenFindAllLlmEvaluators();
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupWhenNoTraceIsSampled() {
+            whenFindAllLlmEvaluators(createLlmEvaluator(false, 1.0f, List.of()));
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(createTrace(Source.SDK)));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        @Test
+        void noLookupForPythonMetricMessages() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var trace = createTrace(Source.SDK);
+            var evaluator = createPythonEvaluator(1.0f);
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(tracesCreated(trace));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            assertThat(resolver.lookups()).isZero();
+        }
+
+        private TracesCreated tracesCreated(Trace trace) {
+            return TracesCreated.builder()
+                    .traces(List.of(trace))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .organizationId(resolver.organizationId())
+                    .build();
         }
     }
 

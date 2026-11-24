@@ -1,6 +1,11 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
+import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.DisplayName;
@@ -8,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import reactor.core.publisher.Flux;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
@@ -31,7 +35,7 @@ class OrganizationIdStamperTest {
         var resolver = FixedOrganizationResolver.of(organizationId);
         var message = message(carried);
 
-        var stamped = new OrganizationIdStamper(resolver).stamp(message).block();
+        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
 
         assertThat(stamped).isEqualTo(message.toBuilder().organizationId(organizationId).build());
     }
@@ -42,7 +46,7 @@ class OrganizationIdStamperTest {
         var resolver = FixedOrganizationResolver.of(organizationId);
         var message = message(UUID.randomUUID().toString());
 
-        var stamped = new OrganizationIdStamper(resolver).stamp(message).block();
+        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
 
         assertThat(stamped).isEqualTo(message);
         assertThat(resolver.lookups()).isZero();
@@ -53,7 +57,8 @@ class OrganizationIdStamperTest {
     void leavesTheMessageWhenNoneIsKnown() {
         var message = message(null);
 
-        var stamped = new OrganizationIdStamper(FixedOrganizationResolver.none()).stamp(message).block();
+        var stamped = new OrganizationIdStamper(FixedOrganizationResolver.none().organizationId()).stamp(message)
+                .block();
 
         assertThat(stamped).isEqualTo(message);
     }
@@ -64,24 +69,49 @@ class OrganizationIdStamperTest {
         var resolver = FixedOrganizationResolver.of(organizationId);
         var message = UUID.randomUUID().toString();
 
-        var stamped = new OrganizationIdStamper(resolver).stamp(message).block();
+        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
 
         assertThat(stamped).isEqualTo(message);
         assertThat(resolver.lookups()).isZero();
     }
 
     @Test
-    @DisplayName("Looks the organization up once for all the messages it stamps")
+    @DisplayName("Skips the lookup for messages that can't carry an organization")
+    void skipsTheLookupForMessagesThatCannotCarryOne() {
+        var resolver = FixedOrganizationResolver.of(organizationId);
+        var messages = List.of(
+                PODAM_FACTORY.manufacturePojo(SpanToScoreLlmAsJudge.class),
+                PODAM_FACTORY.manufacturePojo(SpanToScoreUserDefinedMetricPython.class),
+                PODAM_FACTORY.manufacturePojo(TraceToScoreUserDefinedMetricPython.class),
+                PODAM_FACTORY.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class));
+
+        var stamped = new OrganizationIdStamper(resolver.organizationId()).stampAll(messages).block();
+
+        assertThat(stamped).containsExactlyElementsOf(messages);
+        assertThat(resolver.lookups()).isZero();
+    }
+
+    @Test
+    @DisplayName("Looks the organization up once for all the messages it stamps, skipping the ones that can't carry it")
     void looksUpOnce() {
         var resolver = FixedOrganizationResolver.of(organizationId);
-        var messages = List.of(message(null), message(null), message(null));
-        var stamper = new OrganizationIdStamper(resolver);
+        var span = PODAM_FACTORY.manufacturePojo(SpanToScoreLlmAsJudge.class);
+        var trace = PODAM_FACTORY.manufacturePojo(TraceToScoreLlmAsJudge.class).toBuilder()
+                .organizationId(null)
+                .build();
+        var python = PODAM_FACTORY.manufacturePojo(TraceToScoreUserDefinedMetricPython.class);
+        var threads = List.of(message(null), message(null));
 
-        var stamped = Flux.fromIterable(messages).concatMap(stamper::stamp).collectList().block();
+        var stamped = new OrganizationIdStamper(resolver.organizationId())
+                .stampAll(List.of(span, trace, python, threads.getFirst(), threads.getLast()))
+                .block();
 
-        assertThat(stamped).containsExactlyElementsOf(messages.stream()
-                .map(message -> message.toBuilder().organizationId(organizationId).build())
-                .toList());
+        assertThat(stamped).containsExactly(
+                span,
+                trace.toBuilder().organizationId(organizationId).build(),
+                python,
+                threads.getFirst().toBuilder().organizationId(organizationId).build(),
+                threads.getLast().toBuilder().organizationId(organizationId).build());
         assertThat(resolver.lookups()).isOne();
     }
 

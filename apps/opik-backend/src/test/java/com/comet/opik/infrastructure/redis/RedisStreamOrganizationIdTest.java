@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.api.events.ExperimentItemToProcess;
-import com.comet.opik.api.events.RedisSubscriberMessage;
+import com.comet.opik.api.events.OrganizationScopedMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -39,8 +39,8 @@ class RedisStreamOrganizationIdTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("messages")
     @DisplayName("A message keeps its organization through the stream mapper")
-    void organizationSurvivesTheRoundTrip(Class<? extends RedisSubscriberMessage> type,
-            RedisSubscriberMessage message) throws Exception {
+    void organizationSurvivesTheRoundTrip(Class<? extends OrganizationScopedMessage> type,
+            OrganizationScopedMessage message) throws Exception {
         var decoded = mapper.readValue(mapper.writeValueAsString(message), type);
 
         assertThat(decoded.organizationId()).isEqualTo(ORGANIZATION_ID);
@@ -50,8 +50,8 @@ class RedisStreamOrganizationIdTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("messages")
     @DisplayName("A message from a producer that predates the field decodes with no organization")
-    void messageWithoutTheFieldDecodesWithNoOrganization(Class<? extends RedisSubscriberMessage> type,
-            RedisSubscriberMessage message) throws Exception {
+    void messageWithoutTheFieldDecodesWithNoOrganization(Class<? extends OrganizationScopedMessage> type,
+            OrganizationScopedMessage message) throws Exception {
         var json = (ObjectNode) mapper.readTree(mapper.writeValueAsString(message));
         var field = json.has("organization_id") ? "organization_id" : "organizationId";
         assertThat(json.path(field).asText()).isEqualTo(ORGANIZATION_ID);

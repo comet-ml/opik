@@ -28,7 +28,7 @@ public record TraceToScoreLlmAsJudge(
         @Nullable UUID experimentId,
         @Nullable String workspaceName,
         @Nullable List<String> judgeFallbackModels,
-        @Nullable String organizationId) implements RedisSubscriberMessage {
+        @Nullable String organizationId) implements OrganizationScopedMessage {
 
     public TraceToScoreLlmAsJudge {
         judgeFallbackModels = judgeFallbackModels == null ? null : List.copyOf(judgeFallbackModels);
@@ -40,7 +40,7 @@ public record TraceToScoreLlmAsJudge(
     }
 
     @Override
-    public RedisSubscriberMessage withOrganizationId(String organizationId) {
+    public OrganizationScopedMessage withOrganizationId(String organizationId) {
         return toBuilder().organizationId(organizationId).build();
     }
 }

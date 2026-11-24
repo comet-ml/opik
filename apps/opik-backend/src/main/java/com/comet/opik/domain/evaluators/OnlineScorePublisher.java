@@ -144,7 +144,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
-            var organizationIdStamper = new OrganizationIdStamper(organizationResolver);
+            var organizationIdStamper = new OrganizationIdStamper(organizationResolver.organizationId());
             return Flux.fromIterable(messages)
                     // Stamp the workspace name resolved from the reactive context onto messages that don't
                     // already carry one, so async consumers and their per-workspace metrics get a real name.

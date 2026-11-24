@@ -54,6 +54,7 @@ import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.ContextView;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
@@ -63,7 +64,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -183,17 +183,18 @@ class TraceServiceImpl implements TraceService {
                             .flatMap(processedTrace -> lockService.executeWithLock(
                                     new LockService.Lock(id, TRACE_KEY),
                                     Mono.defer(() -> insertTrace(processedTrace, project, id)))
-                                    .flatMap(traceId -> postWithOrganizationId(organizationId -> TracesCreated
-                                            .builder()
-                                            .traces(List.of(processedTrace.toBuilder().projectId(project.id())
-                                                    .projectName(projectName).build()))
-                                            .workspaceId(workspaceId)
-                                            .userName(userName)
-                                            .workspaceName(workspaceName)
-                                            .cipxDeviceId(cipxDeviceId)
-                                            .organizationId(organizationId)
-                                            .build())
-                                            .thenReturn(traceId)));
+                                    .doOnSuccess(__ -> {
+                                        var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                                .projectName(projectName).build();
+                                        eventBus.post(TracesCreated.builder()
+                                                .traces(List.of(savedTrace))
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .workspaceName(workspaceName)
+                                                .cipxDeviceId(cipxDeviceId)
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build());
+                                    }));
                 }));
     }
 
@@ -252,16 +253,16 @@ class TraceServiceImpl implements TraceService {
                             // connection only if it needs one. The JSONEachRow path uses the v2 client's
                             // own pool, and nonTransaction does not close what it hands out.
                             .flatMap(traces -> dao.batchInsert(traces)
-                                    .flatMap(count -> postWithOrganizationId(organizationId -> TracesCreated
-                                            .builder()
-                                            .traces(traces)
-                                            .workspaceId(workspaceId)
-                                            .userName(userName)
-                                            .workspaceName(workspaceName)
-                                            .cipxDeviceId(cipxDeviceId)
-                                            .organizationId(organizationId)
-                                            .build())
-                                            .thenReturn(count)));
+                                    .doOnSuccess(__ -> {
+                                        eventBus.post(TracesCreated.builder()
+                                                .traces(traces)
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .workspaceName(workspaceName)
+                                                .cipxDeviceId(cipxDeviceId)
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build());
+                                    }));
                 }));
     }
 
@@ -381,22 +382,21 @@ class TraceServiceImpl implements TraceService {
                                         .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
                                                 .thenReturn(id))
                                         .onErrorResume(this::handleDBError)
+                                        .doOnSuccess(__ -> eventBus.post(TracesUpdated.builder()
+                                                .projectIds(Set.of(project.id()))
+                                                .traceIds(Set.of(id))
+                                                .workspaceId(ctx.get(RequestContext.WORKSPACE_ID))
+                                                .userName(ctx.get(RequestContext.USER_NAME))
+                                                .traceUpdate(traceUpdate)
+                                                .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))
+                                                .traceIdToProjectId(Map.of(id, project.id()))
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build()))
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
-                                                ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, ""))))))
-                                // After the lock, so a slow organization lookup never holds it.
-                                .flatMap(__ -> postWithOrganizationId(organizationId -> TracesUpdated.builder()
-                                        .projectIds(Set.of(project.id()))
-                                        .traceIds(Set.of(id))
-                                        .workspaceId(ctx.get(RequestContext.WORKSPACE_ID))
-                                        .userName(ctx.get(RequestContext.USER_NAME))
-                                        .traceUpdate(traceUpdate)
-                                        .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))
-                                        .traceIdToProjectId(Map.of(id, project.id()))
-                                        .organizationId(organizationId)
-                                        .build())))
+                                                ctx.getOrDefault(RequestContext.CIPX_DEVICE_ID, "")))))))
                         .then()));
     }
 
@@ -418,33 +418,30 @@ class TraceServiceImpl implements TraceService {
                                 .onErrorResume(TagOperations::mapTagLimitError)
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
+                                    eventBus.post(TracesUpdated.builder()
+                                            .projectIds(projectIds)
+                                            .traceIds(batchUpdate.ids())
+                                            .workspaceId(workspaceId)
+                                            .userName(userName)
+                                            .traceUpdate(batchUpdate.update())
+                                            .workspaceName(workspaceName)
+                                            .traceIdToProjectId(traceToProjectMap)
+                                            .organizationId(organizationIdLookup(ctx))
+                                            .build());
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
                                             batchUpdate.update(), workspaceId, userName, cipxDeviceId));
-                                })
-                                .then(postWithOrganizationId(organizationId -> TracesUpdated.builder()
-                                        .projectIds(projectIds)
-                                        .traceIds(batchUpdate.ids())
-                                        .workspaceId(workspaceId)
-                                        .userName(userName)
-                                        .traceUpdate(batchUpdate.update())
-                                        .workspaceName(workspaceName)
-                                        .traceIdToProjectId(traceToProjectMap)
-                                        .organizationId(organizationId)
-                                        .build()));
+                                });
                     });
         });
     }
 
     /**
-     * Looks the organization up while the request's credentials are still in the context: the event's listeners run
-     * on the EventBus thread, where a lookup could only read the cache.
+     * Lazy so the response never waits for it: only a listener that needs the organization subscribes. It keeps the
+     * request's context because listeners run on the EventBus thread, where the request's Comet credentials are gone
+     * and the lookup could only read the cache. Cached so all listeners share one lookup.
      */
-    private Mono<Void> postWithOrganizationId(Function<String, Object> event) {
-        return organizationResolver.organizationId()
-                .map(Optional::of)
-                .defaultIfEmpty(Optional.empty())
-                .doOnNext(organizationId -> eventBus.post(event.apply(organizationId.orElse(null))))
-                .then();
+    private Mono<String> organizationIdLookup(ContextView requestContext) {
+        return organizationResolver.organizationId().contextWrite(requestContext).cache();
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {

@@ -21,7 +21,7 @@ public record TraceThreadToScoreLlmAsJudge(
         @NotNull String workspaceId,
         @NotNull String userName,
         @Nullable String workspaceName,
-        @Nullable String organizationId) implements RedisSubscriberMessage {
+        @Nullable String organizationId) implements OrganizationScopedMessage {
 
     @Override
     public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
@@ -29,7 +29,7 @@ public record TraceThreadToScoreLlmAsJudge(
     }
 
     @Override
-    public RedisSubscriberMessage withOrganizationId(String organizationId) {
+    public OrganizationScopedMessage withOrganizationId(String organizationId) {
         return toBuilder().organizationId(organizationId).build();
     }
 }
