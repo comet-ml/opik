@@ -67,6 +67,9 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     private static final GenericType<ChunkedInput<String>> CHUNKED_INPUT_STRING_GENERIC_TYPE = new GenericType<>() {
     };
 
+    // Default page size for legacy stream helpers, matching TraceThreadSearchStreamRequest's default (500).
+    private static final int DEFAULT_TRACE_THREAD_STREAM_LIMIT = 500;
+
     public TraceResourceClient(ClientSupport client, String baseURI) {
         super("%s/v1/private/traces", client, baseURI);
     }
@@ -700,7 +703,14 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public List<TraceThread> searchTraceThreadsStream(String projectName, UUID projectId, String apiKey,
             String workspaceName, List<TraceThreadFilter> filters) {
-        try (var actualResponse = callSearchTraceThreadStream(projectName, projectId, apiKey, workspaceName, filters)) {
+        return searchTraceThreadsStream(projectName, projectId, apiKey, workspaceName, filters, null,
+                DEFAULT_TRACE_THREAD_STREAM_LIMIT);
+    }
+
+    public List<TraceThread> searchTraceThreadsStream(String projectName, UUID projectId, String apiKey,
+            String workspaceName, List<TraceThreadFilter> filters, UUID lastRetrievedThreadModelId, int limit) {
+        try (var actualResponse = callSearchTraceThreadStream(projectName, projectId, apiKey, workspaceName, filters,
+                lastRetrievedThreadModelId, limit)) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
@@ -710,6 +720,12 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public Response callSearchTraceThreadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
             List<TraceThreadFilter> filters) {
+        return callSearchTraceThreadStream(projectName, projectId, apiKey, workspaceName, filters, null,
+                DEFAULT_TRACE_THREAD_STREAM_LIMIT);
+    }
+
+    public Response callSearchTraceThreadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters, UUID lastRetrievedThreadModelId, int limit) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("search")
@@ -720,6 +736,8 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .filters(filters)
                         .projectName(projectName)
                         .projectId(projectId)
+                        .lastRetrievedThreadModelId(lastRetrievedThreadModelId)
+                        .limit(limit)
                         .build()));
     }
 

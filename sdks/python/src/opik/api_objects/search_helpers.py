@@ -92,6 +92,7 @@ def search_threads_with_filters(
     filters: Optional[OptionalFilterParsedItemList] = None,
     max_results: Optional[int] = None,
     truncate: bool = True,
+    max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
 ) -> List[trace_thread.TraceThread]:
     def fetch_page(
         current_batch_size: int, last_retrieved_id: Optional[str]
@@ -114,6 +115,10 @@ def search_threads_with_filters(
         read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=trace_thread.TraceThread,
+        # The endpoint compares the cursor against `thread_model_id`
+        # (a UUID), not the caller-supplied thread `id` (e.g. "thread_124").
+        cursor_field="thread_model_id",
+        max_endpoint_batch_size=max_batch_size,
     )
     return threads
 
