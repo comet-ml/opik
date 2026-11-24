@@ -132,7 +132,8 @@ class CustomModelPriceValidatorTest {
     void validateRejectsAnInvalidRow(String row, String field, String code, String message) {
         var result = CustomModelPriceValidator.validate(rows("[" + row + "]"));
 
-        assertThat(result.errors()).containsExactly(new Problem(0, field, code, message));
+        assertThat(result.errors())
+                .containsExactly(Problem.builder().row(0).field(field).code(code).message(message).build());
     }
 
     @Test
@@ -171,6 +172,19 @@ class CustomModelPriceValidatorTest {
                          {"model": "team-b", "provider": "openai", "kind": "alias",
                           "alias_of": {"model": "gpt-5-mini", "provider": "openai"}}]
                         """, "alias_target_is_alias"),
+                Arguments.of(
+                        """
+                                [{"model": "team-mini", "provider": "openai", "kind": "alias",
+                                  "alias_of": {"model": "gpt-5-mini-2025-08-07"}},
+                                 {"model": "gpt-5-mini", "provider": "openai", "kind": "alias", "alias_of": {"model": "gpt-4o"}}]
+                                """,
+                        "alias_target_is_alias"),
+                Arguments.of(
+                        """
+                                [{"model": "team-mini", "kind": "alias", "alias_of": {"model": "gpt-5-mini"}},
+                                 {"model": "gpt-5-mini", "provider": "openai", "kind": "alias", "alias_of": {"model": "gpt-4o"}}]
+                                """,
+                        "alias_target_is_alias"),
                 Arguments.of("""
                         [{"model": "team-a", "provider": "openai", "kind": "alias", "alias_of": {"model": "team-a"}}]
                         """, "alias_target_is_itself"),
@@ -190,6 +204,16 @@ class CustomModelPriceValidatorTest {
 
         assertThat(result.errors()).extracting(Problem::row, Problem::code)
                 .containsExactly(tuple(0, code));
+    }
+
+    @Test
+    void validateAcceptsAnAliasOfADatedSpellingOfItsOwnName() {
+        var result = CustomModelPriceValidator.validate(rows("""
+                [{"model": "gpt-5-mini", "provider": "openai", "kind": "alias",
+                  "alias_of": {"model": "gpt-5-mini-2025-08-07"}}]
+                """));
+
+        assertThat(result.errors()).isEmpty();
     }
 
     @Test
@@ -285,7 +309,8 @@ class CustomModelPriceValidatorTest {
         var result = CustomModelPriceValidator.validate(rows("[" + row + "]"));
 
         assertThat(result.isValid()).isTrue();
-        assertThat(result.warnings()).containsExactly(new Problem(0, field, code, message));
+        assertThat(result.warnings())
+                .containsExactly(Problem.builder().row(0).field(field).code(code).message(message).build());
     }
 
     @ParameterizedTest
@@ -309,9 +334,13 @@ class CustomModelPriceValidatorTest {
                 [{"model": "gpt-4o-mini", "provider": "openrouter", "kind": "fixed", "input_price": "0.00000015"}]
                 """));
 
-        assertThat(result.warnings()).containsExactly(new Problem(0, "input_price", "price_out_of_range",
-                "0.00000015 per 1M tokens is far from the built-in %s: prices are per 1M tokens, not per token"
-                        .formatted(builtInInput)));
+        assertThat(result.warnings()).containsExactly(Problem.builder()
+                .row(0)
+                .field("input_price")
+                .code("price_out_of_range")
+                .message("0.00000015 per 1M tokens is far from the built-in %s: prices are per 1M tokens, not per token"
+                        .formatted(builtInInput))
+                .build());
     }
 
     @Test

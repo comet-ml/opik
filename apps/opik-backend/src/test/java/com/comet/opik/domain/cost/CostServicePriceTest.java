@@ -114,6 +114,24 @@ class CostServicePriceTest {
     }
 
     @Test
+    void priceOfAModelBilledPerCharacterIgnoresAFixedRowsTokenRates() {
+        var priced = CostService.price("tts-1", "openai", Map.of("input_characters", 1000), null,
+                layers(fixed("tts-1", "openai", "1.00", "1.00")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.015");
+        assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
+    }
+
+    @Test
+    void priceOfAModelBilledPerCharacterKeepsItsMetadataCostOverAFixedRow() {
+        var priced = CostService.price("tts-1", "openai", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
+                layers(fixed("tts-1", "openai", "1.00", "1.00")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.5");
+        assertThat(priced.source()).isEqualTo(CostSource.METADATA);
+    }
+
+    @Test
     void priceKeepsAFreeOrganizationPriceOverTheMetadataCost() {
         var priced = CostService.price("gpt-5-mini", "openai", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
                 layers(fixed("gpt-5-mini", "openai", "0", "0")));

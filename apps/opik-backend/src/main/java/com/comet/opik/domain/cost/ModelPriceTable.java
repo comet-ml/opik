@@ -97,8 +97,7 @@ public class ModelPriceTable {
                 continue;
             }
             index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
-                    .computeIfAbsent(parseModelName(modelName).trim().toLowerCase(Locale.ROOT),
-                            unused -> new ArrayList<>())
+                    .computeIfAbsent(rowModelName(modelName), unused -> new ArrayList<>())
                     .add(modelName);
         }
         index.replaceAll((provider, byName) -> byName.entrySet().stream()
@@ -381,6 +380,11 @@ public class ModelPriceTable {
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
+    // Rows are saved under this name and prefixedModelNames is keyed by it, so the two always agree.
+    static String rowModelName(@NonNull String modelName) {
+        return parseModelName(modelName).trim().toLowerCase(Locale.ROOT);
+    }
+
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
     }
@@ -404,11 +408,11 @@ public class ModelPriceTable {
             BigDecimal audioInputCharacterPrice) {
 
         if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
-            return SpanCostCalculator::videoGenerationCost;
+            return SpanCostCalculator.VIDEO_GENERATION_CALCULATOR;
         }
 
         if (mode.isAudioSpeech() && isPositive(audioInputCharacterPrice)) {
-            return SpanCostCalculator::audioSpeechCost;
+            return SpanCostCalculator.AUDIO_SPEECH_CALCULATOR;
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice) || isPositive(cacheCreationInputTokenPrice)

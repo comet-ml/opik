@@ -82,6 +82,15 @@ class ModelPriceResolver {
         return match;
     }
 
+    Optional<CustomModelPrice> matchingCustomRow(@NonNull String modelName, @NonNull String provider,
+            @NonNull PriceLayers layers) {
+        List<String> lookupOrder = ProviderRegistry.resolve(provider, modelName)
+                .map(ProviderRegistry::priceLookupOrder)
+                .orElse(List.of());
+        return findCustom(layers, lookupOrder, spellings(ModelPriceTable.parseModelName(modelName)), true)
+                .map(CustomMatch::row);
+    }
+
     private Optional<PriceMatch> findPrice(String modelName, Optional<String> resolvedProvider, PriceLayers layers,
             boolean followAliases) {
         List<String> lookupOrder = resolvedProvider.map(ProviderRegistry::priceLookupOrder).orElse(List.of());
@@ -107,7 +116,8 @@ class ModelPriceResolver {
                     .or(() -> findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings));
         }
         Optional<PriceMatch> builtIn = findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings);
-        if (custom.isEmpty()) {
+        // A fixed row only sets token rates, which a model billed per character or per second never reads.
+        if (custom.isEmpty() || builtIn.map(match -> match.price().isPricedPerUnit()).orElse(false)) {
             return builtIn;
         }
         CustomMatch fixed = custom.get();

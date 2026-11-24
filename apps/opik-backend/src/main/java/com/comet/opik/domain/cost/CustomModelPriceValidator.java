@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
@@ -47,14 +48,17 @@ public class CustomModelPriceValidator {
             "last_updated_by");
     private static final Set<String> ALIAS_OF_FIELDS = Set.of("model", "provider");
 
+    @Builder(toBuilder = true)
     public record Problem(@Nullable Integer row, @Nullable String field, @NonNull String code,
             @NonNull String message) {
     }
 
+    @Builder(toBuilder = true)
     public record ValidRow(@NonNull CustomModelPrice price, @Nullable String note) {
     }
 
     /** The normalized rows to save, only when there is no error. */
+    @Builder(toBuilder = true)
     public record Result(@NonNull List<ValidRow> rows, @NonNull List<Problem> errors,
             @NonNull List<Problem> warnings) {
 
@@ -63,18 +67,22 @@ public class CustomModelPriceValidator {
         }
     }
 
-    private record ParsedRow(int index, String sentModel, @Nullable String sentProvider, CustomModelPrice price,
-            @Nullable String note) {
+    @Builder(toBuilder = true)
+    private record ParsedRow(int index, @NonNull String sentModel, @Nullable String sentProvider,
+            @NonNull CustomModelPrice price, @Nullable String note) {
     }
 
-    private record RowKey(String modelName, String provider) {
+    @Builder(toBuilder = true)
+    private record RowKey(@NonNull String modelName, @NonNull String provider) {
     }
 
     public Result validate(@NonNull List<JsonNode> rows) {
         var errors = new ArrayList<Problem>();
         if (rows.size() > MAX_ROWS) {
-            errors.add(new Problem(null, null, "too_many_rows",
-                    "At most %d rows can be saved, got %d".formatted(MAX_ROWS, rows.size())));
+            errors.add(Problem.builder()
+                    .code("too_many_rows")
+                    .message("At most %d rows can be saved, got %d".formatted(MAX_ROWS, rows.size()))
+                    .build());
         }
         var parsedRows = new ArrayList<ParsedRow>();
         Map<RowKey, Integer> firstIndexByKey = new HashMap<>();
@@ -83,11 +91,16 @@ public class CustomModelPriceValidator {
             if (parsed.isEmpty()) {
                 continue;
             }
-            Integer firstIndex = firstIndexByKey.putIfAbsent(keyOf(parsed.get().price()), index);
+            CustomModelPrice price = parsed.get().price();
+            Integer firstIndex = firstIndexByKey.putIfAbsent(keyOf(price), index);
             if (firstIndex != null) {
-                errors.add(new Problem(index, "model", "duplicate_row",
-                        "Row %d already prices '%s' on %s".formatted(firstIndex, parsed.get().price().modelName(),
-                                describeProvider(parsed.get().price().provider()))));
+                errors.add(Problem.builder()
+                        .row(index)
+                        .field("model")
+                        .code("duplicate_row")
+                        .message("Row %d already prices '%s' on %s".formatted(firstIndex, price.modelName(),
+                                describeProvider(price.provider())))
+                        .build());
                 continue;
             }
             parsedRows.add(parsed.get());
@@ -95,30 +108,55 @@ public class CustomModelPriceValidator {
         checkAliasTargets(parsedRows, errors);
         var warnings = warnings(parsedRows);
         List<ValidRow> validRows = errors.isEmpty()
-                ? parsedRows.stream().map(row -> new ValidRow(row.price(), row.note())).toList()
+                ? parsedRows.stream()
+                        .map(row -> ValidRow.builder().price(row.price()).note(row.note()).build())
+                        .toList()
                 : List.of();
-        return new Result(validRows, List.copyOf(errors), warnings);
+        return Result.builder()
+                .rows(validRows)
+                .errors(List.copyOf(errors))
+                .warnings(warnings)
+                .build();
     }
 
     private Optional<ParsedRow> parse(int index, JsonNode node, List<Problem> errors) {
         if (node == null || !node.isObject()) {
-            errors.add(new Problem(index, null, "not_an_object", "Each row must be a JSON object"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .code("not_an_object")
+                    .message("Each row must be a JSON object")
+                    .build());
             return Optional.empty();
         }
         int errorsBefore = errors.size();
         node.fieldNames().forEachRemaining(field -> {
             if (!FIELDS.contains(field) && !READ_ONLY_FIELDS.contains(field)) {
-                errors.add(new Problem(index, field, "unknown_field", "Unknown field '%s'".formatted(field)));
+                errors.add(Problem.builder()
+                        .row(index)
+                        .field(field)
+                        .code("unknown_field")
+                        .message("Unknown field '%s'".formatted(field))
+                        .build());
             }
         });
 
         String sentModel = text(index, node, "model", errors);
         String trimmedModel = name(index, "model", sentModel, errors);
-        String modelName = trimmedModel == null ? null : normalizeModelName(trimmedModel);
+        String modelName = trimmedModel == null ? null : ModelPriceTable.rowModelName(trimmedModel);
         if (!isSet(node, "model") || (sentModel != null && sentModel.isBlank())) {
-            errors.add(new Problem(index, "model", "missing_model", "Every row needs a model"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field("model")
+                    .code("missing_model")
+                    .message("Every row needs a model")
+                    .build());
         } else if (modelName != null && modelName.isEmpty()) {
-            errors.add(new Problem(index, "model", "missing_model", "The model has no name after its provider"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field("model")
+                    .code("missing_model")
+                    .message("The model has no name after its provider")
+                    .build());
         }
         String sentProvider = text(index, node, "provider", errors);
         String trimmedProvider = name(index, "provider", sentProvider, errors);
@@ -134,8 +172,12 @@ public class CustomModelPriceValidator {
         });
         String note = text(index, node, "note", errors);
         if (note != null && note.length() > MAX_NOTE_LENGTH) {
-            errors.add(new Problem(index, "note", "note_too_long",
-                    "The note is %d characters, at most %d".formatted(note.length(), MAX_NOTE_LENGTH)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field("note")
+                    .code("note_too_long")
+                    .message("The note is %d characters, at most %d".formatted(note.length(), MAX_NOTE_LENGTH))
+                    .build());
         }
 
         var priceBuilder = CustomModelPrice.builder()
@@ -151,57 +193,87 @@ public class CustomModelPriceValidator {
         } else if (kind == CustomModelPrice.Kind.ALIAS) {
             checkAlias(index, node, priceBuilder, errors);
         }
-        return errors.size() == errorsBefore
-                ? Optional.of(new ParsedRow(index, sentModel, sentProvider, priceBuilder.build(), note))
-                : Optional.empty();
+        if (errors.size() != errorsBefore) {
+            return Optional.empty();
+        }
+        return Optional.of(ParsedRow.builder()
+                .index(index)
+                .sentModel(sentModel)
+                .sentProvider(sentProvider)
+                .price(priceBuilder.build())
+                .note(note)
+                .build());
     }
 
     private void checkFixed(int index, JsonNode node, List<Problem> errors) {
         if (isSet(node, ALIAS_OF)) {
-            errors.add(new Problem(index, ALIAS_OF, "field_not_for_kind", "A fixed row can't have alias_of"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(ALIAS_OF)
+                    .code("field_not_for_kind")
+                    .message("A fixed row can't have alias_of")
+                    .build());
         }
         if (PRICE_FIELDS.stream().noneMatch(field -> isSet(node, field))) {
-            errors.add(new Problem(index, null, "no_price", "A fixed row needs at least one price"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .code("no_price")
+                    .message("A fixed row needs at least one price")
+                    .build());
         }
     }
 
     private void checkAlias(int index, JsonNode node, CustomModelPrice.CustomModelPriceBuilder priceBuilder,
             List<Problem> errors) {
-        PRICE_FIELDS.stream().filter(field -> isSet(node, field)).forEach(field -> errors.add(new Problem(index,
-                field, "field_not_for_kind", "An alias row prices like its target, so it can't have %s"
-                        .formatted(field))));
+        PRICE_FIELDS.stream().filter(field -> isSet(node, field)).forEach(field -> errors.add(Problem.builder()
+                .row(index)
+                .field(field)
+                .code("field_not_for_kind")
+                .message("An alias row prices like its target, so it can't have %s".formatted(field))
+                .build()));
         JsonNode aliasOf = node.get(ALIAS_OF);
         if (aliasOf == null || !aliasOf.isObject()) {
-            errors.add(new Problem(index, ALIAS_OF, "missing_alias_target",
-                    "An alias row needs alias_of with the model it prices like"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(ALIAS_OF)
+                    .code("missing_alias_target")
+                    .message("An alias row needs alias_of with the model it prices like")
+                    .build());
             return;
         }
         aliasOf.fieldNames().forEachRemaining(field -> {
             if (!ALIAS_OF_FIELDS.contains(field)) {
-                errors.add(new Problem(index, ALIAS_OF + "." + field, "unknown_field",
-                        "Unknown field '%s.%s'".formatted(ALIAS_OF, field)));
+                errors.add(Problem.builder()
+                        .row(index)
+                        .field(ALIAS_OF + "." + field)
+                        .code("unknown_field")
+                        .message("Unknown field '%s.%s'".formatted(ALIAS_OF, field))
+                        .build());
             }
         });
         String targetModel = name(index, ALIAS_OF + ".model", text(index, aliasOf, "model", errors), errors);
-        if (targetModel == null || normalizeModelName(targetModel).isEmpty()) {
-            errors.add(new Problem(index, ALIAS_OF + ".model", "missing_alias_target",
-                    "An alias row needs the model it prices like"));
+        if (targetModel == null || ModelPriceTable.rowModelName(targetModel).isEmpty()) {
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(ALIAS_OF + ".model")
+                    .code("missing_alias_target")
+                    .message("An alias row needs the model it prices like")
+                    .build());
             return;
         }
         String targetProvider = name(index, ALIAS_OF + ".provider", text(index, aliasOf, "provider", errors),
                 errors);
-        priceBuilder.aliasModelName(normalizeModelName(targetModel))
+        priceBuilder.aliasModelName(ModelPriceTable.rowModelName(targetModel))
                 .aliasProvider(ProviderRegistry.resolve(targetProvider, targetModel)
                         .orElse(CustomModelPrice.SPAN_PROVIDER));
     }
 
     private void checkAliasTargets(List<ParsedRow> rows, List<Problem> errors) {
-        Map<RowKey, CustomModelPrice> byKey = new HashMap<>();
-        rows.forEach(row -> byKey.put(keyOf(row.price()), row.price()));
-        List<CustomModelPrice> fixedPrices = rows.stream()
-                .map(ParsedRow::price)
+        List<CustomModelPrice> prices = rows.stream().map(ParsedRow::price).toList();
+        List<CustomModelPrice> fixedPrices = prices.stream()
                 .filter(price -> price.kind() == CustomModelPrice.Kind.FIXED)
                 .toList();
+        var rowsLayer = PriceLayers.of("validation", 0, prices);
         var fixedPriceLayer = PriceLayers.of("validation", 0, fixedPrices);
         // A fixed row can be filed under a provider no built-in price uses, so its spans still price.
         Set<String> spanProviders = new HashSet<>(ModelPriceTable.pricedProviders());
@@ -209,35 +281,54 @@ public class CustomModelPriceValidator {
                 .forEach(spanProviders::add);
         for (ParsedRow row : rows) {
             if (row.price().kind() == CustomModelPrice.Kind.ALIAS) {
-                aliasTargetProblem(row, byKey, fixedPriceLayer, spanProviders).ifPresent(errors::add);
+                aliasTargetProblem(row, rowsLayer, fixedPriceLayer, spanProviders).ifPresent(errors::add);
             }
         }
     }
 
-    private Optional<Problem> aliasTargetProblem(ParsedRow row, Map<RowKey, CustomModelPrice> byKey,
-            PriceLayers fixedPriceLayer, Set<String> spanProviders) {
+    private Optional<Problem> aliasTargetProblem(ParsedRow row, PriceLayers rowsLayer, PriceLayers fixedPriceLayer,
+            Set<String> spanProviders) {
         CustomModelPrice alias = row.price();
         boolean underSpanProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider());
         String targetProvider = underSpanProvider ? alias.provider() : alias.aliasProvider();
-        var targetKey = new RowKey(alias.aliasModelName(), targetProvider);
+        var targetKey = RowKey.builder().modelName(alias.aliasModelName()).provider(targetProvider).build();
         if (targetKey.equals(keyOf(alias))) {
-            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_is_itself",
-                    "An alias row can't price like itself"));
+            return Optional.of(Problem.builder()
+                    .row(row.index())
+                    .field(ALIAS_OF)
+                    .code("alias_target_is_itself")
+                    .message("An alias row can't price like itself")
+                    .build());
         }
-        CustomModelPrice target = byKey.get(targetKey);
-        if (target != null && target.kind() == CustomModelPrice.Kind.ALIAS) {
-            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_is_alias",
-                    "'%s' is an alias too: point this row at a model with a price".formatted(target.modelName())));
+        // An any-provider alias whose target names no provider is looked up under each span's own provider.
+        Set<String> targetProviders = underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())
+                ? spanProviders
+                : Set.of(targetProvider);
+        // The target is priced with alias rows skipped, so if a span named like the target would match another alias,
+        // the two bill differently. Spans match any spelling (a date suffix stripped, ...), not only the exact name.
+        // Matching this row itself is fine: both then end at the target's own price.
+        Optional<CustomModelPrice> targetAlias = targetProviders.stream()
+                .map(provider -> ModelPriceResolver.matchingCustomRow(alias.aliasModelName(), provider, rowsLayer))
+                .flatMap(Optional::stream)
+                .filter(target -> target.kind() == CustomModelPrice.Kind.ALIAS && !target.equals(alias))
+                .findFirst();
+        if (targetAlias.isPresent()) {
+            return Optional.of(Problem.builder()
+                    .row(row.index())
+                    .field(ALIAS_OF)
+                    .code("alias_target_is_alias")
+                    .message("'%s' is an alias too: point this row at a model with a price"
+                            .formatted(targetAlias.get().modelName()))
+                    .build());
         }
-        // An any-provider alias whose target names no provider is looked up under each span's own provider, so it
-        // is only an error when no provider prices the target.
-        boolean priced = underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())
-                ? pricedUnderSomeProvider(alias.aliasModelName(), spanProviders, fixedPriceLayer)
-                : ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedPriceLayer).isPresent();
-        if (!priced) {
-            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_unpriced",
-                    "Neither the built-in prices nor these rows price '%s' on %s".formatted(alias.aliasModelName(),
-                            describeProvider(targetProvider))));
+        if (!pricedUnderSomeProvider(alias.aliasModelName(), targetProviders, fixedPriceLayer)) {
+            return Optional.of(Problem.builder()
+                    .row(row.index())
+                    .field(ALIAS_OF)
+                    .code("alias_target_unpriced")
+                    .message("Neither the built-in prices nor these rows price '%s' on %s".formatted(
+                            alias.aliasModelName(), describeProvider(targetProvider)))
+                    .build());
         }
         return Optional.empty();
     }
@@ -248,14 +339,22 @@ public class CustomModelPriceValidator {
             CustomModelPrice price = row.price();
             if (!price.modelName().equals(row.sentModel()) || !price.provider().equals(
                     Optional.ofNullable(row.sentProvider()).orElse(CustomModelPrice.ANY_PROVIDER))) {
-                warnings.add(new Problem(row.index(), "model", "name_normalized",
-                        "Saved as '%s' on %s, the form spans are looked up in".formatted(price.modelName(),
-                                describeProvider(price.provider()))));
+                warnings.add(Problem.builder()
+                        .row(row.index())
+                        .field("model")
+                        .code("name_normalized")
+                        .message("Saved as '%s' on %s, the form spans are looked up in".formatted(price.modelName(),
+                                describeProvider(price.provider())))
+                        .build());
             }
             if (!price.provider().isEmpty() && !ModelPriceTable.isPricedProvider(price.provider())) {
-                warnings.add(new Problem(row.index(), "provider", "provider_unpriced",
-                        "No built-in price is filed under '%s', so only these rows price its spans"
-                                .formatted(price.provider())));
+                warnings.add(Problem.builder()
+                        .row(row.index())
+                        .field("provider")
+                        .code("provider_unpriced")
+                        .message("No built-in price is filed under '%s', so only these rows price its spans"
+                                .formatted(price.provider()))
+                        .build());
             }
             Optional<ModelPrice> builtIn = price.provider().isEmpty() ? Optional.empty() : builtInBase(row);
             if (price.kind() == CustomModelPrice.Kind.ALIAS) {
@@ -264,15 +363,24 @@ public class CustomModelPriceValidator {
                                 PriceLayers.BUILT_IN_ONLY)
                         : builtIn.isPresent();
                 if (shadows) {
-                    warnings.add(new Problem(row.index(), "model", "shadows_builtin",
-                            "'%s' has a built-in price, which this alias replaces".formatted(price.modelName())));
+                    warnings.add(Problem.builder()
+                            .row(row.index())
+                            .field("model")
+                            .code("shadows_builtin")
+                            .message("'%s' has a built-in price, which this alias replaces"
+                                    .formatted(price.modelName()))
+                            .build());
                 }
             } else if (!price.provider().isEmpty()) {
                 builtIn.ifPresentOrElse(base -> warnings.addAll(fixedRowWarnings(row.index(), price, base)),
-                        () -> warnings.add(new Problem(row.index(), "model", "no_base",
-                                ("No built-in price for '%s' on %s: rates left unset bill nothing, and cached tokens "
-                                        + "bill at the input price").formatted(price.modelName(),
-                                                describeProvider(price.provider())))));
+                        () -> warnings.add(Problem.builder()
+                                .row(row.index())
+                                .field("model")
+                                .code("no_base")
+                                .message(("No built-in price for '%s' on %s: rates left unset bill nothing, and "
+                                        + "cached tokens bill at the input price").formatted(price.modelName(),
+                                                describeProvider(price.provider())))
+                                .build()));
             }
         }
         return List.copyOf(warnings);
@@ -282,7 +390,7 @@ public class CustomModelPriceValidator {
     // price through it, so the row's base is looked up under each spelling such a span could have.
     private Optional<ModelPrice> builtInBase(ParsedRow row) {
         CustomModelPrice price = row.price();
-        return Stream.of(Stream.of(price.modelName()), Stream.ofNullable(row.sentModel()).map(String::trim),
+        return Stream.of(Stream.of(price.modelName(), row.sentModel().trim()),
                 ModelPriceTable.prefixedModelNames(price.modelName(), price.provider()).stream())
                 .flatMap(names -> names)
                 .map(name -> ModelPriceResolver.resolve(name, price.provider()))
@@ -292,12 +400,16 @@ public class CustomModelPriceValidator {
     }
 
     private List<Problem> fixedRowWarnings(int index, CustomModelPrice price, ModelPrice base) {
-        var warnings = new ArrayList<Problem>();
-        if (base.calculator() != SpanCostCalculator.DEFAULT_COST_CALCULATOR && !base.hasTokenPrices()) {
-            warnings.add(new Problem(index, "model", "priced_per_unit",
-                    "'%s' is priced per second or per character, so token prices don't apply"
-                            .formatted(price.modelName())));
+        if (base.isPricedPerUnit()) {
+            return List.of(Problem.builder()
+                    .row(index)
+                    .field("model")
+                    .code("priced_per_unit")
+                    .message("'%s' is priced per second or per character, so token prices don't apply"
+                            .formatted(price.modelName()))
+                    .build());
         }
+        var warnings = new ArrayList<Problem>();
         outOfRange(index, INPUT_PRICE, price.inputPerMillion(), base.inputPrice()).ifPresent(warnings::add);
         outOfRange(index, OUTPUT_PRICE, price.outputPerMillion(), base.outputPrice()).ifPresent(warnings::add);
         outOfRange(index, CACHE_READ_PRICE, price.cacheReadPerMillion(), base.cacheReadInputTokenPrice())
@@ -318,24 +430,37 @@ public class CustomModelPriceValidator {
                 && perMillion.multiply(OUT_OF_RANGE_FACTOR).compareTo(builtInPerMillion) >= 0) {
             return Optional.empty();
         }
-        return Optional.of(new Problem(index, field, "price_out_of_range",
-                "%s per 1M tokens is far from the built-in %s: prices are per 1M tokens, not per token".formatted(
-                        perMillion.stripTrailingZeros().toPlainString(),
-                        builtInPerMillion.stripTrailingZeros().toPlainString())));
+        return Optional.of(Problem.builder()
+                .row(index)
+                .field(field)
+                .code("price_out_of_range")
+                .message("%s per 1M tokens is far from the built-in %s: prices are per 1M tokens, not per token"
+                        .formatted(perMillion.stripTrailingZeros().toPlainString(),
+                                builtInPerMillion.stripTrailingZeros().toPlainString()))
+                .build());
     }
 
     private @Nullable CustomModelPrice.Kind kind(int index, JsonNode node, List<Problem> errors) {
         String kind = text(index, node, "kind", errors);
         if (StringUtils.isBlank(kind)) {
-            errors.add(new Problem(index, "kind", "missing_kind", "Every row needs a kind: fixed or alias"));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field("kind")
+                    .code("missing_kind")
+                    .message("Every row needs a kind: fixed or alias")
+                    .build());
             return null;
         }
         return switch (kind.trim().toLowerCase(Locale.ROOT)) {
             case "fixed" -> CustomModelPrice.Kind.FIXED;
             case "alias" -> CustomModelPrice.Kind.ALIAS;
             default -> {
-                errors.add(new Problem(index, "kind", "unknown_kind",
-                        "The kind is fixed or alias, got '%s'".formatted(kind)));
+                errors.add(Problem.builder()
+                        .row(index)
+                        .field("kind")
+                        .code("unknown_kind")
+                        .message("The kind is fixed or alias, got '%s'".formatted(kind))
+                        .build());
                 yield null;
             }
         };
@@ -356,26 +481,48 @@ public class CustomModelPriceValidator {
                 throw new NumberFormatException();
             }
         } catch (NumberFormatException exception) {
-            errors.add(new Problem(index, field, "not_a_number", "%s must be a number".formatted(field)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("not_a_number")
+                    .message("%s must be a number".formatted(field))
+                    .build());
             return null;
         }
         int errorsBefore = errors.size();
         if (price.stripTrailingZeros().scale() > MAX_DECIMALS) {
-            errors.add(new Problem(index, field, "too_many_decimals",
-                    "%s has more than %d decimals".formatted(field, MAX_DECIMALS)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("too_many_decimals")
+                    .message("%s has more than %d decimals".formatted(field, MAX_DECIMALS))
+                    .build());
         }
         if (price.compareTo(MAX_PRICE_PER_MILLION) > 0) {
-            errors.add(new Problem(index, field, "price_too_high",
-                    "%s is over %s per 1M tokens".formatted(field, MAX_PRICE_PER_MILLION.toPlainString())));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("price_too_high")
+                    .message("%s is over %s per 1M tokens".formatted(field, MAX_PRICE_PER_MILLION.toPlainString()))
+                    .build());
         }
         boolean cachePrice = CACHE_READ_PRICE.equals(field) || CACHE_WRITE_PRICE.equals(field);
         // The calculator bills cached tokens at the input price when the cache price isn't above 0, so 0 can't mean
         // free here: leave the field out to inherit the built-in cache price.
         if (cachePrice && price.signum() <= 0) {
-            errors.add(new Problem(index, field, "cache_price_not_positive",
-                    "%s must be above 0; leave it out to keep the built-in cache price".formatted(field)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("cache_price_not_positive")
+                    .message("%s must be above 0; leave it out to keep the built-in cache price".formatted(field))
+                    .build());
         } else if (price.signum() < 0) {
-            errors.add(new Problem(index, field, "negative_price", "%s can't be negative".formatted(field)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("negative_price")
+                    .message("%s can't be negative".formatted(field))
+                    .build());
         }
         return errors.size() == errorsBefore ? price : null;
     }
@@ -386,32 +533,43 @@ public class CustomModelPriceValidator {
             return null;
         }
         if (!value.isTextual()) {
-            errors.add(new Problem(index, field, "not_a_string", "%s must be a string".formatted(field)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("not_a_string")
+                    .message("%s must be a string".formatted(field))
+                    .build());
             return null;
         }
         return value.asText();
     }
 
+    // Whitespace and control characters at either end, as a pasted value often has, are trimmed and reported by the
+    // name_normalized warning. Inside a name they are an error: no span name could match it.
     private @Nullable String name(int index, String field, @Nullable String sent, List<Problem> errors) {
         if (sent == null) {
             return null;
         }
         String trimmed = sent.trim();
         if (trimmed.length() > MAX_NAME_LENGTH) {
-            errors.add(new Problem(index, field, "name_too_long",
-                    "%s is %d characters, at most %d".formatted(field, trimmed.length(), MAX_NAME_LENGTH)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("name_too_long")
+                    .message("%s is %d characters, at most %d".formatted(field, trimmed.length(), MAX_NAME_LENGTH))
+                    .build());
             return null;
         }
         if (trimmed.chars().anyMatch(Character::isISOControl)) {
-            errors.add(new Problem(index, field, "control_characters",
-                    "%s can't contain control characters".formatted(field)));
+            errors.add(Problem.builder()
+                    .row(index)
+                    .field(field)
+                    .code("control_characters")
+                    .message("%s can't contain control characters".formatted(field))
+                    .build());
             return null;
         }
         return trimmed;
-    }
-
-    private String normalizeModelName(String trimmedModel) {
-        return ModelPriceTable.parseModelName(trimmedModel).trim().toLowerCase(Locale.ROOT);
     }
 
     private boolean isSet(JsonNode node, String field) {
@@ -425,7 +583,7 @@ public class CustomModelPriceValidator {
     }
 
     private RowKey keyOf(CustomModelPrice price) {
-        return new RowKey(price.modelName(), price.provider());
+        return RowKey.builder().modelName(price.modelName()).provider(price.provider()).build();
     }
 
     private String describeProvider(String provider) {
