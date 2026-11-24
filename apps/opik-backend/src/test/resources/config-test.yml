@@ -1120,6 +1120,13 @@ topics:
       priority: 100
       maxBlockSize: 8192
       countSlice: 1d
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
