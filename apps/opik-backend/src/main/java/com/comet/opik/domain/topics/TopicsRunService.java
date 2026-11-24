@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -11,11 +12,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -40,18 +41,11 @@ public class TopicsRunService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
-    private final @NonNull Clock clock;
 
     @Inject
     TopicsRunService(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicWindowReader reader,
             @NonNull TopicsLlm llm, @NonNull TopicRunStore store, @NonNull TopicRunOutcomes outcomes,
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm) {
-        this(config, reader, llm, store, outcomes, idGenerator, metrics, algorithm, Clock.systemUTC());
-    }
-
-    TopicsRunService(@NonNull TopicsConfig config, @NonNull TopicWindowReader reader, @NonNull TopicsLlm llm,
-            @NonNull TopicRunStore store, @NonNull TopicRunOutcomes outcomes, @NonNull IdGenerator idGenerator,
-            @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm, @NonNull Clock clock) {
         this.config = config;
         this.reader = reader;
         this.llm = llm;
@@ -60,7 +54,6 @@ public class TopicsRunService {
         this.idGenerator = idGenerator;
         this.metrics = metrics;
         this.algorithm = algorithm;
-        this.clock = clock;
     }
 
     /**
@@ -81,33 +74,35 @@ public class TopicsRunService {
     private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces, Scheduler compute) {
         int maxTopics = config.getAlgorithm().getMaxTopics();
         var timeout = config.getRun().getProjectTimeout().toJavaDuration();
+        // What the run has read so far: a failed run's outcome and log carry it. Each step adds to a copy.
+        var read = new AtomicReference<>(TopicRunOutcomes.bounds(run));
         return timed(run, "window", reader.read(run, windowTraces, compute))
+                .doOnNext(window -> add(read, window.stats()))
                 .flatMap(window -> compute(run, "cluster", compute,
                         () -> algorithm.cluster(window.topicWindow(), maxTopics))
+                        .doOnNext(clustering -> add(read, clustering.stats()))
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
+                                .doOnNext(answer -> add(read, answer.stats()))
                                 .flatMap(answer -> compute(run, "assign", compute,
-                                        () -> rows(run, window, clustering, answer)))))
+                                        () -> rows(run, window, clustering, answer, read.get())))))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded()))
                 .timeout(timeout, Mono.error(this::timedOut), compute)
                 .flatMap(rows -> saved(run, rows, compute))
-                .onErrorResume(error -> outcomes.failed(run, error));
+                .onErrorResume(error -> outcomes.failed(run, error, read.get()));
     }
 
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
     private TopicRunRows rows(TopicRun run, RunWindow window, Clustering clustering,
-            TopicsLlm.Answer<AuthorAnswer> answer) {
+            TopicsLlm.Answer<AuthorAnswer> answer, ObjectNode read) {
         TopicRunRows rows;
         try {
             rows = TopicRunRows.of(run, window.traces(), clustering.finish(answer.value()), idGenerator::generateId);
         } catch (IllegalArgumentException exception) {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
-        var stats = TopicRunOutcomes.bounds(run);
-        stats.setAll(window.stats());
-        stats.setAll(clustering.stats());
-        stats.setAll(answer.stats());
+        var stats = read.deepCopy();
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
@@ -133,12 +128,20 @@ public class TopicsRunService {
         return timed(run, phase, Mono.fromCallable(step)).subscribeOn(compute);
     }
 
-    /** Records the phase's duration, from its subscription to its end, whatever the end. */
+    /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */
     private <T> Mono<T> timed(TopicRun run, String phase, Mono<T> step) {
         return Mono.defer(() -> {
-            var started = clock.instant();
+            long started = System.nanoTime();
             return step.doFinally(
-                    signal -> metrics.phase(run.workspace(), phase, Duration.between(started, clock.instant())));
+                    signal -> metrics.phase(run.workspace(), phase, Duration.ofNanos(System.nanoTime() - started)));
+        });
+    }
+
+    private static void add(AtomicReference<ObjectNode> read, ObjectNode stats) {
+        read.updateAndGet(previous -> {
+            var next = previous.deepCopy();
+            next.setAll(stats);
+            return next;
         });
     }
 }

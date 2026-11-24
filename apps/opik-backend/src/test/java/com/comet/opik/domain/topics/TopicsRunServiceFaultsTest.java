@@ -278,7 +278,7 @@ class TopicsRunServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout and the window bounds, "
+    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout and what it had read, "
             + "cancels the LLM call in flight and saves nothing")
     void runTimeoutCancelsTheCallInFlight() throws Exception {
         when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
@@ -301,8 +301,8 @@ class TopicsRunServiceFaultsTest {
 
         assertThat(outcome.errorCode()).isEqualTo("timeout");
         assertThat(outcome.stats().has("window_from")).isTrue();
-        assertThat(outcome.stats().has("window_traces")).as("a timed-out run carries the window bounds only")
-                .isFalse();
+        assertThat(outcome.stats().get("window_traces").asLong()).as("the window it read").isEqualTo(TRACES);
+        assertThat(outcome.stats().has("topics")).as("no list: the answer never came").isFalse();
         assertThat(points(metricReader, "topics.run.duration_seconds")).extracting(point -> point.get("phase"))
                 .contains("window", "cluster", "llm");
         assertThat(cancelled).hasValue(1);

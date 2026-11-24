@@ -164,7 +164,7 @@ class TopicRunStore {
     /**
      * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.run.insertRetries}
      * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt
-     * stops after {@code topics.run.readTimeout}; the timeouts and backoffs run on {@code compute}. False when it
+     * stops after {@code topics.run.readTimeout}; the timeouts run on {@code compute}. False when it
      * still failed: the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics,
@@ -174,7 +174,6 @@ class TopicRunStore {
                 .timeout(runConfig.getReadTimeout().toJavaDuration(), compute)
                 .retryWhen(RetryUtils.handleClickHouseErrors(runConfig.getInsertRetries(), backoff,
                         backoff.multipliedBy(1L << runConfig.getInsertRetries()))
-                        .scheduler(compute)
                         .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
                                 signal.totalRetries() + 2, signal.failure())))

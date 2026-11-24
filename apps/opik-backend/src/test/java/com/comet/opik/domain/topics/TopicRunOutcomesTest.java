@@ -30,7 +30,9 @@ class TopicRunOutcomesTest {
         when(store.fail(run.runId(), run.workspace(), run.projectId(), RunError.LLM_BAD_ANSWER))
                 .thenReturn(Mono.just(true));
 
-        var outcome = outcomes.failed(run, new TopicsRunException(RunError.LLM_BAD_ANSWER, "no JSON")).block();
+        var outcome = outcomes
+                .failed(run, new TopicsRunException(RunError.LLM_BAD_ANSWER, "no JSON"), TopicRunOutcomes.bounds(run))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
@@ -44,7 +46,7 @@ class TopicRunOutcomesTest {
         when(store.fail(run.runId(), run.workspace(), run.projectId(), RunError.INTERNAL))
                 .thenReturn(Mono.just(true));
 
-        var outcome = outcomes.failed(run, new IllegalStateException("bug")).block();
+        var outcome = outcomes.failed(run, new IllegalStateException("bug"), TopicRunOutcomes.bounds(run)).block();
 
         assertThat(outcome.errorCode()).isEqualTo("internal");
     }
@@ -56,7 +58,8 @@ class TopicRunOutcomesTest {
                 .thenReturn(Mono.just(false));
         when(store.isSaved(run)).thenReturn(Mono.just(true));
 
-        var outcome = outcomes.failed(run, new TopicsRunException(RunError.TIMEOUT, "late")).block();
+        var outcome = outcomes
+                .failed(run, new TopicsRunException(RunError.TIMEOUT, "late"), TopicRunOutcomes.bounds(run)).block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.SAVED);
         assertThat(outcome.errorCode()).isNull();
@@ -68,7 +71,8 @@ class TopicRunOutcomesTest {
         when(store.fail(run.runId(), run.workspace(), run.projectId(), RunError.SAVE))
                 .thenReturn(Mono.error(new IllegalStateException("MySQL down")));
 
-        var outcome = outcomes.failed(run, new TopicsRunException(RunError.SAVE, "conflict")).block();
+        var outcome = outcomes
+                .failed(run, new TopicsRunException(RunError.SAVE, "conflict"), TopicRunOutcomes.bounds(run)).block();
 
         assertThat(outcome.status()).isEqualTo(RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("save");
