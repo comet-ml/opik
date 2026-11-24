@@ -1057,10 +1057,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
@@ -1091,6 +1094,49 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
+  build:
+    projectTimeout: 15m
+    minVectors: 100
+    windowDays: 30
+    maxVectors: 100000
+    llmDeadline: 120s
+    readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
+    insertRetries: 3
+    insertBackoff: 500ms
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
+  firstBuild:
+    enabled: false
+    planInterval: 5m
+    sweepInterval: 24h
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: [1h, 6h, 1d]
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 1
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1103,6 +1149,8 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    maxTopics: 10
+    provisionalBelow: 1000
     nightlyMinCandidate: 20
     nightlyMinGroups: 2
     nightlyMaxGroups: 20
@@ -1112,6 +1160,9 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:

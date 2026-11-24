@@ -1,0 +1,68 @@
+package com.comet.opik.api.resources.v1.events;
+
+import com.comet.opik.api.events.ProjectsDeleted;
+import com.comet.opik.domain.topics.TopicDAO;
+import com.comet.opik.domain.topics.TopicProject.CancelReason;
+import com.comet.opik.domain.topics.TopicRunStore;
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.google.common.collect.Lists;
+import com.google.common.eventbus.Subscribe;
+import jakarta.inject.Inject;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.util.List;
+
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+
+/**
+ * Cancels the deleted projects' runs in flight and deletes their topics within the event's workspace: names and
+ * definitions come from the projects' traces, and each topic's prototype vectors are on its row. A queued run fails at
+ * once, a running one stops at its next heartbeat; a cancel this misses, the planner's reconcile makes. Their
+ * {@code topic_projects} rows go with {@link TopicVectorBackfillsProjectDeletedListener}, and the trace_topics rows
+ * through the TracesDeleted cascade of each trace delete. Topics a failed delete leaves, the first-build job's daily
+ * sweep deletes.
+ */
+@EagerSingleton
+@Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+public class TopicsProjectDeletedListener {
+
+    private final @NonNull TransactionTemplate template;
+    private final @NonNull @Config("topics") TopicsConfig config;
+    private final @NonNull TopicRunStore runStore;
+
+    @Subscribe
+    public void onProjectsDeleted(@NonNull ProjectsDeleted event) {
+        try {
+            int cancelled = runStore.cancelProjects(event.workspaceId(), event.projectIds(),
+                    CancelReason.PROJECT_DELETED).block();
+            if (cancelled > 0) {
+                log.info("Cancelled the topics runs of deleted projects, workspace '{}', runs '{}'",
+                        event.workspaceId(), cancelled);
+            }
+        } catch (RuntimeException exception) {
+            log.error("Failed to cancel the topics runs of deleted projects, workspace '{}', project count '{}'",
+                    event.workspaceId(), event.projectIds().size(), exception);
+        }
+        try {
+            // One transaction per batch: a bulk project delete names any number of projects.
+            int topics = Lists.partition(List.copyOf(event.projectIds()), config.getStorage().getDeleteBatchSize())
+                    .stream()
+                    .mapToInt(batch -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                            .deleteTopicsByProjects(event.workspaceId(), batch)))
+                    .sum();
+            if (topics > 0) {
+                log.info("Deleted the topics of deleted projects, workspace '{}', project count '{}', topics '{}'",
+                        event.workspaceId(), event.projectIds().size(), topics);
+            }
+        } catch (RuntimeException exception) {
+            log.error("Failed to delete the topics of deleted projects, workspace '{}', project count '{}'",
+                    event.workspaceId(), event.projectIds().size(), exception);
+        }
+    }
+}

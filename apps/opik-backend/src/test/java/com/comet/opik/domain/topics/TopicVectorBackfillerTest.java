@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Slice;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -97,13 +96,13 @@ class TopicVectorBackfillerTest {
 
         verify(dao, times(2)).findBackfillProjects(any(), any(), any(), any(), anyLong());
         verify(dao, times(2)).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
-        verify(backfills).discovered(workspaceId, List.of(Backfill.builder().workspaceId(workspaceId)
+        verify(backfills).discovered(workspaceId, List.of(TopicBackfill.builder().workspaceId(workspaceId)
                 .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).backfillTracesTotal(4)
                 .backfillTracesDone(2).build()), now, now.minus(2, ChronoUnit.DAYS));
     }
 
-    private static Backfill backfill(long remaining, Instant lastDoneAt) {
-        return Backfill.builder()
+    private static TopicBackfill backfill(long remaining, Instant lastDoneAt) {
+        return TopicBackfill.builder()
                 .workspaceId(UUID.randomUUID().toString())
                 .projectId(UUID.randomUUID())
                 .backfillStartedAt(lastDoneAt)

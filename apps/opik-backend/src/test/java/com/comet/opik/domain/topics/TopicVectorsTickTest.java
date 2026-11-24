@@ -440,12 +440,12 @@ class TopicVectorsTickTest {
         assertVectors(tables.vectors(workspaceId, secondTraces), expectedVectors(workspaceId, second, secondTraces, 1));
         var rows = backfillService.findByKeys(workspaceId, List.of(first, second));
         assertThat(rows.get(first)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
-                .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(first)
+                .isEqualTo(TopicBackfill.builder().workspaceId(workspaceId).projectId(first)
                         .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(3)
                         .backfillTracesDone(3).backfillLastDoneAt(written).build());
         assertThat(rows.get(first).backfillLastDoneAt()).isCloseTo(written, within(1, ChronoUnit.SECONDS));
         assertThat(rows.get(second)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
-                .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(second)
+                .isEqualTo(TopicBackfill.builder().workspaceId(workspaceId).projectId(second)
                         .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(2)
                         .backfillTracesDone(2).backfillLastDoneAt(written).build());
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
@@ -839,7 +839,7 @@ class TopicVectorsTickTest {
         var deleted = ID_GENERATOR.generateId();
         var kept = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
-        var row = TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0)
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0)
                 .backfillLastDoneAt(t0);
         backfillService.start(List.of(row.projectId(deleted).build(), row.projectId(kept).build(),
                 row.workspaceId(otherWorkspaceId).projectId(deleted).build()));
@@ -1003,9 +1003,9 @@ class TopicVectorsTickTest {
     private void markDrained(String workspaceId, UUID projectId) {
         tables.project(workspaceId, projectId);
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        backfillService.start(List.of(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId)
+        backfillService.start(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                 .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
-        backfillService.record(List.of(TopicVectorBackfillDAO.Progress.builder().workspaceId(workspaceId)
+        backfillService.record(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                 .projectId(projectId).drainedAt(now).build()));
     }
 
