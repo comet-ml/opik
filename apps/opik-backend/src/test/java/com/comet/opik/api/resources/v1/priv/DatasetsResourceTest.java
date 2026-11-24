@@ -115,7 +115,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -9289,12 +9288,18 @@ class DatasetsResourceTest {
             assertExperimentItems(actualPage.content().getFirst().experimentItems(), expectedExperimentItems);
         }
 
+        private void assertStreamedExperimentItems(List<ExperimentItem> actualExperimentItems,
+                List<DatasetItem> datasetItems, ExperimentItem... expectedExperimentItems) {
+            var dataByItemId = datasetItems.stream().collect(toMap(DatasetItem::id, DatasetItem::data));
+            assertExperimentItems(actualExperimentItems, Arrays.stream(expectedExperimentItems)
+                    .map(item -> item.toBuilder().datasetItemData(dataByItemId.get(item.datasetItemId())).build())
+                    .toArray(ExperimentItem[]::new));
+        }
+
         private void assertExperimentItems(List<ExperimentItem> actualExperimentItems,
                 ExperimentItem... expectedExperimentItems) {
-            // datasetItemData is only on streamed rows; the stream tests assert it against the dataset item
             assertThat(actualExperimentItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                            ArrayUtils.add(IGNORED_FIELDS_LIST, "datasetItemData"))
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
                     .containsExactlyInAnyOrder(expectedExperimentItems);
 
             var expectedById = Arrays.stream(expectedExperimentItems)
@@ -9509,10 +9514,8 @@ class DatasetsResourceTest {
             assertThat(actualExperimentItems)
                     .extracting(ExperimentItem::id)
                     .containsExactlyElementsOf(inStreamOrder(expectedExperimentItems));
-            assertExperimentItems(actualExperimentItems, expectedExperimentItems.toArray(ExperimentItem[]::new));
-            var dataByItemId = datasetItems.stream().collect(toMap(DatasetItem::id, DatasetItem::data));
-            assertThat(actualExperimentItems).allSatisfy(item -> assertThat(item.datasetItemData())
-                    .isEqualTo(dataByItemId.get(item.datasetItemId())));
+            assertStreamedExperimentItems(actualExperimentItems, datasetItems,
+                    expectedExperimentItems.toArray(ExperimentItem[]::new));
         }
 
         @Test
@@ -9660,19 +9663,21 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(idFilter(targetItem.id())))
                     .build();
 
-            assertExperimentItems(
+            var targetItems = List.of(targetItem);
+            assertStreamedExperimentItems(
                     streamAll(request.toBuilder().datasetVersions(Set.of(version1.versionHash())).build()),
-                    expectedOnVersion1);
-            assertExperimentItems(
+                    targetItems, expectedOnVersion1);
+            assertStreamedExperimentItems(
                     streamAll(request.toBuilder()
                             .datasetVersions(Set.of(version1.versionHash(), version2.versionHash())).build()),
-                    expectedOnVersion1, expectedOnVersion2);
-            assertExperimentItems(
+                    targetItems, expectedOnVersion1, expectedOnVersion2);
+            assertStreamedExperimentItems(
                     streamAll(request.toBuilder()
                             .datasetVersions(Set.of(version2.versionHash(), DatasetVersionService.LATEST_TAG))
                             .build()),
-                    expectedOnVersion2, expectedOnVersion3);
-            assertExperimentItems(streamAll(request), expectedOnVersion1, expectedOnVersion2, expectedOnVersion3);
+                    targetItems, expectedOnVersion2, expectedOnVersion3);
+            assertStreamedExperimentItems(streamAll(request), targetItems, expectedOnVersion1, expectedOnVersion2,
+                    expectedOnVersion3);
         }
 
         @ParameterizedTest
@@ -9687,9 +9692,9 @@ class DatasetsResourceTest {
             var expectedExperimentItem = createExperimentItem(regularExperimentId, targetItem);
             createExperimentItems(expectedExperimentItem, createExperimentItem(optimizerExperimentId, targetItem));
 
-            assertExperimentItems(
+            assertStreamedExperimentItems(
                     streamAll(DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).build()),
-                    expectedExperimentItem);
+                    List.of(targetItem), expectedExperimentItem);
         }
 
         @ParameterizedTest
@@ -9726,7 +9731,7 @@ class DatasetsResourceTest {
                     .filter(item -> !item.id().equals(cursorItem.id()))
                     .filter(item -> !withExperimentHint || item.experimentId().equals(olderExperimentId))
                     .toArray(ExperimentItem[]::new);
-            assertExperimentItems(remainingExperimentItems, expectedRemaining);
+            assertStreamedExperimentItems(remainingExperimentItems, datasetItems, expectedRemaining);
         }
 
         @Test
