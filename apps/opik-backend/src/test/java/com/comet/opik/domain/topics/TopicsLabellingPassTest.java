@@ -30,7 +30,6 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -171,7 +170,7 @@ class TopicsLabellingPassTest {
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         var pass = labelService.labelWindow(workspace(workspaceId), projectId,
-                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RUN, Schedulers.boundedElastic()).block();
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RUN).block();
 
         assertThat(pass).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
@@ -195,7 +194,7 @@ class TopicsLabellingPassTest {
 
         var rowsBefore = data.traceTopics(workspaceId, projectId).size();
         var again = labelService.labelWindow(workspace(workspaceId), projectId,
-                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME, Schedulers.boundedElastic()).block();
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME).block();
 
         assertThat(again).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
@@ -290,6 +289,41 @@ class TopicsLabellingPassTest {
     }
 
     @Test
+    @DisplayName("a vector that lands behind the cursor during a pass cuts the pass instead of completing it, and the "
+            + "next pass labels it and completes")
+    void vectorBehindTheCursorCutsThePass() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = id();
+        saveList(workspaceId, projectId, runId, id());
+        // Lower than every trace id, so it is behind the first page's cursor; created with trace 0, in the first slice.
+        var late = new UUID(0, 1);
+        var inserts = spy(traceTopicsDAO);
+        var calls = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (calls.incrementAndGet() == 1) {
+                copyVector(workspaceId, projectId, TRACES.traceIds().getFirst(), late);
+            }
+            return invocation.callRealMethod();
+        }).when(inserts).insert(any());
+
+        assertThat(label(service(windowDAO, inserts), workspaceId, projectId,
+                Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(LabelPassOutcome.CUT);
+
+        assertThat(rowsOfRun(workspaceId, projectId, runId)).containsOnlyKeys(TRACES.traceIds());
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
+
+        assertThat(label(labelService, workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+                .isEqualTo(LabelPassOutcome.COMPLETE);
+
+        assertThat(rowsOfRun(workspaceId, projectId, runId))
+                .containsOnlyKeys(Stream.concat(TRACES.traceIds().stream(), Stream.of(late)).toList())
+                .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+    }
+
+    @Test
     @DisplayName("a pass past its deadline is cut before it reads; one whose deadline comes mid-pass, or whose caller "
             + "cancels it, is cut too: the pages inserted stay, and nothing is marked complete")
     void cutPasses() {
@@ -316,7 +350,7 @@ class TopicsLabellingPassTest {
         assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(PAGE);
 
         var cancelled = service.labelWindow(workspace(workspaceId), projectId,
-                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME, Schedulers.boundedElastic())
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME)
                 .timeout(Duration.ofSeconds(3)).onErrorResume(
                         error -> Mono.empty())
                 .block();
@@ -446,8 +480,7 @@ class TopicsLabellingPassTest {
 
     private LabelPassOutcome label(TopicWindowLabelService service, String workspaceId, UUID projectId,
             Instant deadline) {
-        return service.labelWindow(workspace(workspaceId), projectId, deadline, LabelTrigger.RUN,
-                Schedulers.boundedElastic()).block();
+        return service.labelWindow(workspace(workspaceId), projectId, deadline, LabelTrigger.RUN).block();
     }
 
     private static TopicsMetrics.Workspace workspace(String workspaceId) {

@@ -2850,10 +2850,10 @@ topics:
     #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
     #  Between 1 and 100000
     labelPageTraces: ${TOPICS_RUN_LABEL_PAGE_TRACES:-10000}
-    #  Default: 50000
+    #  Default: 10000
     #  Description: Traces per slice of the window the labelling pass reads in pages; a page's read costs about one
-    #  slice of keys. Between 1 and 1000000
-    labelSliceTraces: ${TOPICS_RUN_LABEL_SLICE_TRACES:-50000}
+    #  slice of keys, so a slice the size of a page reads only its own keys. Between 1 and 1000000
+    labelSliceTraces: ${TOPICS_RUN_LABEL_SLICE_TRACES:-10000}
     #  Default: 3
     #  Description: Retries of the trace_topics insert after the save's commit. At most 10
     insertRetries: ${TOPICS_RUN_INSERT_RETRIES:-3}

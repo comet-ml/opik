@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -33,7 +33,12 @@ import java.util.UUID;
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
  * in pages of at most {@code topics.run.labelPageTraces} traces, each read, assigned and inserted before the next, so
  * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
- * pass ends at the caller's deadline. The prototype assignment, the pass's CPU step, runs on the caller's scheduler.
+ * pass ends at the caller's deadline. Each page is handed off the ClickHouse driver's thread, to {@code boundedElastic},
+ * before its prototype assignment, the pass's CPU step.
+ *
+ * <p>A trace whose vector lands behind the cursor while the pass runs is not on any later page. So before a pass marks
+ * the labels complete, it reads the whole window once more for a trace left: if there is one, the pass ends cut, and
+ * the next pass labels it.
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
@@ -105,16 +110,15 @@ public class TopicWindowLabelService {
 
     /**
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
-     * none is left or {@code deadline}. The prototype assignment runs on {@code compute}, the caller's scheduler. A
-     * pass that ends complete marks the run's labels complete. Never errors: how it ended is the outcome. A project
+     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it ended is the outcome. A project
      * with no saved list is complete. The caller keeps a run of the same project from saving meanwhile: that would make
      * this pass label with a list that is no longer the project's.
      */
     Mono<LabelPassOutcome> labelWindow(@NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
-            @NonNull Instant deadline, @NonNull LabelTrigger trigger, @NonNull Scheduler compute) {
+            @NonNull Instant deadline, @NonNull LabelTrigger trigger) {
         return store.readSaved(workspace.id(), projectId)
                 .map(this::saved)
-                .flatMap(saved -> pass(workspace, projectId, saved, deadline, trigger, compute))
+                .flatMap(saved -> pass(workspace, projectId, saved, deadline, trigger))
                 .defaultIfEmpty(LabelPassOutcome.COMPLETE)
                 .onErrorResume(exception -> {
                     log.warn("Topics labelling pass could not read the saved list, project '{}'", projectId,
@@ -132,7 +136,7 @@ public class TopicWindowLabelService {
     }
 
     private Mono<LabelPassOutcome> pass(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved,
-            Instant deadline, LabelTrigger trigger, Scheduler compute) {
+            Instant deadline, LabelTrigger trigger) {
         long started = System.nanoTime();
         var budget = Duration.between(Instant.now(), deadline);
         if (!budget.isPositive()) {
@@ -141,7 +145,7 @@ public class TopicWindowLabelService {
             ended(workspace, projectId, saved, trigger, LabelPassOutcome.CUT, Totals.ZERO, started);
             return Mono.just(LabelPassOutcome.CUT);
         }
-        return steps(workspace, projectId, saved, compute)
+        return steps(workspace, projectId, saved)
                 .concatWith(Mono.just(Totals.END))
                 .onErrorResume(exception -> {
                     log.warn("Topics labelling pass failed, a later pass labels the rest, run '{}', project '{}'",
@@ -161,7 +165,10 @@ public class TopicWindowLabelService {
                 });
     }
 
-    /** The pass's outcome: a complete one marks the run's labels complete, and fails when that mark fails. */
+    /**
+     * The pass's outcome. One that reached the end checks the window for a trace left, and is cut when it finds one;
+     * otherwise it marks the run's labels complete, and fails when the check or the mark fails.
+     */
     private Mono<LabelPassOutcome> finish(String workspaceId, UUID projectId, Saved saved, Totals totals) {
         var outcome = totals.outcome();
         if (outcome == LabelPassOutcome.CUT) {
@@ -170,19 +177,43 @@ public class TopicWindowLabelService {
         if (outcome != LabelPassOutcome.COMPLETE) {
             return Mono.just(outcome);
         }
-        return store.markLabelsComplete(workspaceId, projectId, saved.runId())
-                .doOnNext(marked -> {
-                    if (!marked) {
-                        log.info("Topics labelling pass complete for a run that is no longer saved, run '{}', "
-                                + "project '{}'", saved.runId(), projectId);
+        return anyLeft(workspaceId, projectId, saved)
+                .flatMap(left -> {
+                    if (left) {
+                        log.info("Topics labelling pass found a trace left behind its pages, a later pass labels it, "
+                                + "run '{}', project '{}'", saved.runId(), projectId);
+                        return Mono.just(LabelPassOutcome.CUT);
                     }
+                    return store.markLabelsComplete(workspaceId, projectId, saved.runId())
+                            .doOnNext(marked -> {
+                                if (!marked) {
+                                    log.info("Topics labelling pass complete for a run that is no longer saved, "
+                                            + "run '{}', project '{}'", saved.runId(), projectId);
+                                }
+                            })
+                            .thenReturn(LabelPassOutcome.COMPLETE);
                 })
-                .thenReturn(LabelPassOutcome.COMPLETE)
                 .onErrorResume(exception -> {
-                    log.warn("Topics labelling pass could not mark its run complete, a later pass marks it, run '{}', "
-                            + "project '{}'", saved.runId(), projectId, exception);
+                    log.warn(
+                            "Topics labelling pass could not check or mark its run complete, a later pass does, run '{}', "
+                                    + "project '{}'",
+                            saved.runId(), projectId, exception);
                     return Mono.just(LabelPassOutcome.FAILED);
                 });
+    }
+
+    /**
+     * Whether the window has a trace with a usable vector and no row of the run. Traces with an unusable vector never
+     * get one, so a full page of them reads on to the next.
+     */
+    private Mono<Boolean> anyLeft(String workspaceId, UUID projectId, Saved saved) {
+        int chunk = config.getRun().getLabelPageTraces();
+        var window = new Slice(saved.from(), saved.to());
+        return page(workspaceId, projectId, saved, window, 1, "", chunk)
+                .expand(page -> page.rows().size() == chunk && page.advanced()
+                        ? page(workspaceId, projectId, saved, window, page.number() + 1, page.last(), chunk)
+                        : Mono.empty())
+                .any(page -> page.rows().stream().anyMatch(row -> TopicEmbedding.usable(row.vector())));
     }
 
     private void ended(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, LabelTrigger trigger,
@@ -197,7 +228,7 @@ public class TopicWindowLabelService {
     }
 
     /** The window's count, then what each page added. */
-    private Flux<Totals> steps(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Scheduler compute) {
+    private Flux<Totals> steps(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved) {
         int chunk = config.getRun().getLabelPageTraces();
         int sliceTraces = config.getRun().getLabelSliceTraces();
         var countTimeout = config.getRun().getCountTimeout().toJavaDuration();
@@ -209,12 +240,12 @@ public class TopicWindowLabelService {
                 .timeout(countTimeout)
                 .flatMapMany(window -> Flux.fromIterable(slices(saved.from(), saved.to(), window.bounds()))
                         // The next page is read only once the step before it has inserted: the heap holds one page.
-                        .concatMap(slice -> step(workspace, projectId, saved, slice, 1, "", chunk, maxPages, compute)
+                        .concatMap(slice -> step(workspace, projectId, saved, slice, 1, "", chunk, maxPages)
                                 .expand(step -> {
                                     var page = step.page();
                                     return page.rows().size() == chunk && page.advanced() && page.number() < maxPages
                                             ? step(workspace, projectId, saved, slice, page.number() + 1, page.last(),
-                                                    chunk, maxPages, compute)
+                                                    chunk, maxPages)
                                             : Mono.empty();
                                 })
                                 .map(Step::totals))
@@ -237,9 +268,9 @@ public class TopicWindowLabelService {
     }
 
     private Mono<Step> step(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Slice slice, int number,
-            String after, int chunk, int maxPages, Scheduler compute) {
+            String after, int chunk, int maxPages) {
         return page(workspace.id(), projectId, saved, slice, number, after, chunk)
-                .flatMap(page -> labelPage(workspace, projectId, saved, page, chunk, maxPages, compute)
+                .flatMap(page -> labelPage(workspace, projectId, saved, page, chunk, maxPages)
                         .map(totals -> new Step(page, totals)));
     }
 
@@ -249,6 +280,8 @@ public class TopicWindowLabelService {
         return windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
                 readTimeout.toSeconds())
                 .collectList()
+                // Off the driver's thread, which the API's reads share: the caller labels the page next.
+                .publishOn(Schedulers.boundedElastic())
                 .timeout(readTimeout)
                 .map(rows -> new Page(slice, number, after, rows));
     }
@@ -258,7 +291,7 @@ public class TopicWindowLabelService {
      * that used all its pages, stops the slice: the pass then ends failed.
      */
     private Mono<Totals> labelPage(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Page page,
-            int chunk, int maxPages, Scheduler compute) {
+            int chunk, int maxPages) {
         if (page.rows().isEmpty()) {
             return Mono.just(Totals.ZERO);
         }
@@ -275,14 +308,10 @@ public class TopicWindowLabelService {
                     page.slice().to(), maxPages);
         }
         var traces = page.rows().stream().map(row -> new WindowTrace(row.traceId(), row.traceCreatedAt())).toList();
-        return Mono.fromCallable(() -> saved.labeller()
-                .label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList()))
-                .subscribeOn(compute)
-                .flatMap(labels -> {
-                    var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
-                    long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-                    var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
-                    return store.insertTraceTopics(workspace, rows).thenReturn(totals);
-                });
+        var labels = saved.labeller().label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList());
+        var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
+        long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+        var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
+        return store.insertTraceTopics(workspace, rows).thenReturn(totals);
     }
 }

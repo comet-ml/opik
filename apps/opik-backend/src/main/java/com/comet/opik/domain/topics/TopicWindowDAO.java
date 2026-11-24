@@ -19,6 +19,7 @@ import java.lang.reflect.Array;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -350,13 +351,21 @@ public class TopicWindowDAO {
      * shorter. The read casts it to Float32, as the driver returns a BFloat16 array's raw bits.
      */
     private static float[] toVector(Row row) {
-        // As TopicVectorsDAO: the driver's Java array type for Array(Float32) isn't part of its contract.
+        // The driver returns Array(Float32) as a float[]; that type isn't part of its contract, so reflection stays as
+        // the fallback, as in TopicVectorsDAO.
         var array = row.get("vector", Object.class);
-        var vector = new float[Array.getLength(array)];
+        float[] vector;
+        if (array instanceof float[] floats) {
+            vector = Arrays.copyOf(floats, floats.length);
+        } else {
+            vector = new float[Array.getLength(array)];
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] = ((Number) Array.get(array, i)).floatValue();
+            }
+        }
         double norm = 0;
-        for (int i = 0; i < vector.length; i++) {
-            vector[i] = ((Number) Array.get(array, i)).floatValue();
-            norm += (double) vector[i] * vector[i];
+        for (float value : vector) {
+            norm += (double) value * value;
         }
         if (norm > 0) {
             float scale = (float) (1 / Math.sqrt(norm));
@@ -373,7 +382,7 @@ public class TopicWindowDAO {
 
     /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
     @Builder(toBuilder = true)
-    public record WindowBounds(long traces, @NonNull List<Instant> bounds) {
+    record WindowBounds(long traces, @NonNull List<Instant> bounds) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */

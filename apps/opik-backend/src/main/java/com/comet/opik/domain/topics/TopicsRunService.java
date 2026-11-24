@@ -8,18 +8,17 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
- * It owns the run's time limit and its cancel; the scheduler its CPU steps run on is the caller's.
+ * It owns the run's time limit and its cancel. Its CPU steps run off the ClickHouse driver's thread: the window read
+ * hands its result to {@code boundedElastic}.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -56,31 +55,30 @@ public class TopicsRunService {
 
     /**
      * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces. The CPU steps, clustering and assignment, run on {@code compute},
-     * the caller's scheduler. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
+     * caller counted as {@code windowTraces} traces. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
      * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
      * one cancelled by its subscriber is failed with {@code timeout} too.
      */
     Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
-            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces, @NonNull Scheduler compute) {
+            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces) {
         var run = TopicRun.of(runId, workspace.id(), workspace.name(), projectId, night,
                 config.getRun().getWindowDays());
-        return Mono.usingWhen(Mono.just(run), started -> run(started, windowTraces, compute),
+        return Mono.usingWhen(Mono.just(run), started -> run(started, windowTraces),
                 started -> Mono.empty(), (started, error) -> Mono.empty(), outcomes::cancelled);
     }
 
-    private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces, Scheduler compute) {
+    private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces) {
         int maxTopics = config.getAlgorithm().getMaxTopics();
         var timeout = config.getRun().getProjectTimeout().toJavaDuration();
         // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> compute(run, "cluster", compute,
-                        () -> algorithm.cluster(window.topicWindow(), maxTopics))
+                .flatMap(window -> timed(run, "cluster",
+                        Mono.fromCallable(() -> algorithm.cluster(window.topicWindow(), maxTopics)))
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .flatMap(answer -> compute(run, "assign", compute,
-                                        () -> rows(run, window, clustering, answer)))
+                                .flatMap(answer -> timed(run, "assign",
+                                        Mono.fromCallable(() -> assign(run, window, clustering, answer))))
                                 .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
@@ -92,7 +90,7 @@ public class TopicsRunService {
     }
 
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
-    private TopicRunRows rows(TopicRun run, RunWindow window, Clustering clustering,
+    private TopicRunRows assign(TopicRun run, RunWindow window, Clustering clustering,
             TopicsLlm.Answer<AuthorAnswer> answer) {
         TopicRunRows rows;
         try {
@@ -126,11 +124,6 @@ public class TopicsRunService {
     private TopicsRunException timedOut() {
         return new TopicsRunException(RunError.TIMEOUT, "the run outlasted topics.run.projectTimeout '%s'"
                 .formatted(config.getRun().getProjectTimeout()));
-    }
-
-    /** A CPU step on {@code compute}, timed from when it starts there. */
-    private <T> Mono<T> compute(TopicRun run, String phase, Scheduler compute, Callable<T> step) {
-        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(compute);
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */

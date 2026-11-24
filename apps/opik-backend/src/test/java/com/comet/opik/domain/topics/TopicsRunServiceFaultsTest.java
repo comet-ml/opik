@@ -16,14 +16,11 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -83,8 +80,6 @@ class TopicsRunServiceFaultsTest {
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunService service;
-    /** The scheduler the entry point would hand in. */
-    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-faults-compute");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -119,11 +114,6 @@ class TopicsRunServiceFaultsTest {
                 metrics, TopicsTestAlgorithm.algorithm());
     }
 
-    @AfterEach
-    void tearDown() {
-        compute.dispose();
-    }
-
     @Test
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
             + "counts it once, with its workspace")
@@ -155,7 +145,7 @@ class TopicsRunServiceFaultsTest {
                 .doOnSubscribe(__ -> calls.incrementAndGet())
                 .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.discover(runId, workspace, projectId, night, TRACES, compute).subscribe();
+        var subscription = service.discover(runId, workspace, projectId, night, TRACES).subscribe();
         Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
 
@@ -175,7 +165,7 @@ class TopicsRunServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -194,7 +184,7 @@ class TopicsRunServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -215,7 +205,7 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -237,7 +227,7 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -259,7 +249,7 @@ class TopicsRunServiceFaultsTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -289,7 +279,7 @@ class TopicsRunServiceFaultsTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
