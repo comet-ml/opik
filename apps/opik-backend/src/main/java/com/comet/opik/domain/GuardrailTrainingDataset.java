@@ -44,9 +44,9 @@ public class GuardrailTrainingDataset {
 
     private static final List<String> LABELS = List.of("yes", "no");
     private static final int MAX_PROBLEMS_LISTED = 20;
-    private static final String BYTE_ORDER_MARK = "﻿";
-    // JSON escapes a character in at most 12 characters (a surrogate pair as two \\uXXXX escapes), and the keys, the
-    // label and the spacing around them take far less than this.
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
+    // JSON escapes a character in at most 12 characters (a surrogate pair as two six-character escapes), and the keys,
+    // the label and the spacing around them take far less than this.
     private static final int MAX_ESCAPED_CHARACTER_LENGTH = 12;
     private static final int MAX_ROW_OVERHEAD = 1_024;
 
