@@ -130,12 +130,10 @@ type Loaded = { row?: ModelPriceRow; values: DrawerValues };
 type ChangedElsewhere = { version: number; removed: boolean };
 
 const typeOf = (
-  entry: CatalogEntry | undefined,
   loadedRow: ModelPriceRow | undefined,
   builtIn: BuiltInPrice | undefined,
 ): CatalogType => {
-  if (!entry) return builtIn ? "override" : "custom";
-  if (!entry.builtIn) return "custom";
+  if (loadedRow?.kind === "alias" || !builtIn) return "custom";
   return loadedRow ? "override" : "default";
 };
 
@@ -172,9 +170,14 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirming, setConfirming] = useState<"discard" | "remove">();
+  // Looked up by model and provider, not taken from the entry: an alias entry has no built-in, but the row can
+  // become a fixed price (an override of that built-in) while the drawer is open.
+  const [identityBuiltIn] = useState(() =>
+    entry ? findBuiltIn(builtIns, entry.model, entry.provider) : undefined,
+  );
   const [loaded, setLoaded] = useState<Loaded>(() => ({
     row: entry?.row,
-    values: drawerValuesOf(entry?.row, entry?.builtIn),
+    values: drawerValuesOf(entry?.row, identityBuiltIn),
   }));
   const [changedElsewhere, setChangedElsewhere] = useState<ChangedElsewhere>();
 
@@ -184,7 +187,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
       (kind === "fixed" ? findBuiltIn(builtIns, model, provider) : undefined),
     [entry, builtIns, model, provider, kind],
   );
-  const type = typeOf(entry, loaded.row, builtIn);
+  const type = entry
+    ? typeOf(loaded.row, identityBuiltIn)
+    : builtIn
+      ? "override"
+      : "custom";
   const keepsBuiltIn = Boolean(builtIn);
   const isCustomPrice = !keepsBuiltIn && kind === "fixed";
   const readOnly = !canEdit;
@@ -212,7 +219,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   // The list refetches in the background (window focus, after a 409), so someone else's save can land while
   // the drawer is open. Rebase in render, not in an effect, so the stale values are never shown or saved.
   if (identity && !isSameSavedRow(latestRow, loaded.row)) {
-    const theirs = drawerValuesOf(latestRow, entry?.builtIn);
+    const theirs = drawerValuesOf(latestRow, identityBuiltIn);
     const merged = rebaseValues(
       loaded.values,
       { kind, aliasModel, aliasProvider, note, prices: values },
@@ -472,9 +479,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               className="comet-body-s rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
               data-testid="model-price-changed-elsewhere"
             >
-              {changedElsewhere.removed
-                ? `Someone else removed this model's organization price (version ${changedElsewhere.version}). Saving adds it back with the values below.`
-                : `Someone else saved version ${changedElsewhere.version} while you were editing. Their prices are loaded below and your changes are kept on top. Review them before saving.`}
+              <p>
+                {changedElsewhere.removed
+                  ? `Someone else removed this model's organization price (version ${changedElsewhere.version}). Saving adds it back with the values below.`
+                  : `Someone else saved version ${changedElsewhere.version} while you were editing. Their prices are loaded below and your changes are kept on top. Review them before saving.`}
+              </p>
             </div>
           )}
           {isNew && (

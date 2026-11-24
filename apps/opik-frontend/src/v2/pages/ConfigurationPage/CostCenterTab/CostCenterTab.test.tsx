@@ -833,6 +833,75 @@ describe("CostCenterTab", () => {
         ).toBeNull();
       });
 
+      it("shows built-in prices and override actions when an alias becomes its own price", () => {
+        listState.current = {
+          version: 3,
+          rows: [
+            ...LIST.rows,
+            {
+              id: "row-4",
+              model: "gpt-4o-mini",
+              provider: "openai",
+              kind: "alias" as const,
+              alias_of: { model: "gpt-4o", provider: "openai" },
+            },
+          ],
+        };
+        const view = renderTab(ADMIN);
+        openRow("gpt-4o-mini");
+        listState.current = {
+          version: 4,
+          rows: [
+            ...LIST.rows,
+            {
+              id: "row-4",
+              model: "gpt-4o-mini",
+              provider: "openai",
+              kind: "fixed" as const,
+              input_price: "0.1",
+            },
+          ],
+        };
+        view.rerender(tabTree(ADMIN));
+
+        expect(priceInput("Input")).toHaveValue("0.1");
+        expect(priceInput("Output")).toHaveValue("0.6");
+        expect(
+          screen.getByRole("button", { name: /Restore all defaults/ }),
+        ).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: /Remove model/ }),
+        ).toBeNull();
+      });
+
+      it("offers to remove, not restore, when an override becomes an alias", () => {
+        const view = renderTab(ADMIN);
+        openRow("gpt-4o");
+        listState.current = {
+          version: 4,
+          rows: LIST.rows.map((row) =>
+            row.model === "gpt-4o"
+              ? {
+                  id: "row-1",
+                  model: "gpt-4o",
+                  provider: "openai",
+                  kind: "alias" as const,
+                  alias_of: { model: "gpt-4.1", provider: "openai" },
+                }
+              : row,
+          ),
+        };
+        view.rerender(tabTree(ADMIN));
+
+        expect(screen.getByLabelText("Priced like")).toHaveValue("gpt-4.1");
+        expect(
+          screen.getByRole("button", { name: /Remove model/ }),
+        ).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: /Restore all defaults/ }),
+        ).toBeNull();
+      });
+
       it("leaves the open model alone when another model changes", () => {
         const view = renderTab(ADMIN);
 
