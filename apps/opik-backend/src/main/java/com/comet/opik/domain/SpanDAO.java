@@ -46,7 +46,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
@@ -3046,7 +3045,7 @@ public class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
         var priced = CostService.price(model, span.provider(), span.usage(), span.metadata(), priceLayers);
-        return new SpanCost(priced.cost(), CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(span.usage())));
+        return new SpanCost(priced.cost(), CostVersion.of(priced, priceLayers, span.usage()));
     }
 
     // An update recomputes the cost only for a span whose cost the client never set, and only when the new cost is
@@ -3064,7 +3063,7 @@ public class SpanDAO {
             return Optional.empty();
         }
         return Optional.of(new SpanCost(priced.cost(),
-                CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(spanUpdate.usage()))));
+                CostVersion.of(priced, priceLayers, spanUpdate.usage())));
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {

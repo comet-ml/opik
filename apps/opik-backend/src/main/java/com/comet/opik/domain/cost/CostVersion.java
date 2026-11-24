@@ -3,6 +3,10 @@ package com.comet.opik.domain.cost;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
+import javax.annotation.Nullable;
+
+import java.util.Map;
+
 /**
  * The {@code total_estimated_cost_version} a span gets for a cost Opik computed. A blank version means the client
  * sent the cost, which is why an Opik-computed cost of 0 stays blank unless the version carries something to find.
@@ -22,15 +26,16 @@ public class CostVersion {
     /**
      * {@code 1.1;o<list version>} when the organization's rows set the cost, {@code 1.1;b<price files>} for built-in
      * prices, {@code 1.1;fb} when the organization's prices couldn't be loaded for a span with usage, even at 0, as
-     * those are the spans to find later. Only a span with usage can be priced by the organization's rows, so a span
-     * without usage keeps its version when the load fails, and a cost from {@code metadata.cost} keeps plain
-     * {@code 1.1}.
+     * those are the spans to find later. Only a span with a positive token count can be priced by the organization's
+     * rows, so a span without one keeps its version when the load fails, and a cost from {@code metadata.cost} keeps
+     * plain {@code 1.1}.
      */
-    public static String of(@NonNull PricedCost priced, @NonNull PriceLayers layers, boolean hasUsage) {
+    public static String of(@NonNull PricedCost priced, @NonNull PriceLayers layers,
+            @Nullable Map<String, Integer> usage) {
         if (priced.source() == CostSource.ORGANIZATION) {
             return ESTIMATED + ORGANIZATION_PREFIX + layers.getListVersion();
         }
-        if (layers.getOrigin() == PriceLayers.Origin.LOAD_FAILED && hasUsage) {
+        if (layers.getOrigin() == PriceLayers.Origin.LOAD_FAILED && CostService.hasUsage(usage)) {
             return ESTIMATED + LOAD_FAILED_SUFFIX;
         }
         if (priced.cost().signum() <= 0) {
