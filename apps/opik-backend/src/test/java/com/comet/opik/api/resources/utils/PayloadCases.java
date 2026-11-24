@@ -34,7 +34,7 @@ public class PayloadCases {
     /**
      * Deep enough to nest raw JSON well inside the row, shallow enough for the recursive comparison in the span and
      * trace assertions, which recurses per level and overflows the test thread's stack near the 1000-level limit.
-     * {@code JsonRowValuesTest} covers that limit itself.
+     * {@code StreamedPayloadsResourceTest} covers that limit itself, compared as text.
      */
     private static final int NESTED_ARRAYS_DEPTH = 100;
 

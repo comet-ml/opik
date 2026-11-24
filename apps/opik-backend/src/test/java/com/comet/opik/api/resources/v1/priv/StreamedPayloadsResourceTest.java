@@ -20,6 +20,7 @@ import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -46,6 +47,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The payload storage cases of {@code TracesResourceTest} and {@code SpansResourceTest}, on an app with
@@ -161,6 +163,51 @@ class StreamedPayloadsResourceTest {
                 .map(span -> spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY))
                 .toList();
         SpanAssertions.assertSpan(actualSpans, List.of(batchSpan, singleSpan), USER);
+    }
+
+    /**
+     * As deep as a batch create accepts: its request nests the payload three levels down ({@code {"traces":[{"input":}),
+     * and requests are parsed with the default nesting limit. Compared as text, because the recursive comparison in the
+     * span and trace assertions overflows the stack this deep.
+     */
+    private static final int DEEPEST_PAYLOAD_DEPTH = StreamReadConstraints.DEFAULT_MAX_DEPTH - 3;
+
+    @Test
+    @DisplayName("traces: the deepest payload a batch create and a single create accept is stored and read back as sent")
+    void tracesStoreTheDeepestPayload() {
+        var payload = PayloadCases.nestedArrays(DEEPEST_PAYLOAD_DEPTH);
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var batchTrace = PayloadCases.trace(factory, projectName, payload);
+        var singleTrace = PayloadCases.trace(factory, projectName, payload);
+
+        traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, WORKSPACE_NAME);
+        traceResourceClient.createTrace(singleTrace, API_KEY, WORKSPACE_NAME);
+
+        var actual = Stream.of(batchTrace, singleTrace)
+                .map(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY))
+                .map(trace -> List.of(trace.input().toString(), trace.output().toString()))
+                .toList();
+        var json = payload.toString();
+        assertThat(actual).isEqualTo(List.of(List.of(json, json), List.of(json, json)));
+    }
+
+    @Test
+    @DisplayName("spans: the deepest payload a batch create and a single create accept is stored and read back as sent")
+    void spansStoreTheDeepestPayload() {
+        var payload = PayloadCases.nestedArrays(DEEPEST_PAYLOAD_DEPTH);
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var batchSpan = PayloadCases.span(factory, projectName, payload);
+        var singleSpan = PayloadCases.span(factory, projectName, payload);
+
+        spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.createSpan(singleSpan, API_KEY, WORKSPACE_NAME);
+
+        var actual = Stream.of(batchSpan, singleSpan)
+                .map(span -> spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY))
+                .map(span -> List.of(span.input().toString(), span.output().toString()))
+                .toList();
+        var json = payload.toString();
+        assertThat(actual).isEqualTo(List.of(List.of(json, json), List.of(json, json)));
     }
 
     @Test
