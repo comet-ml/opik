@@ -125,6 +125,9 @@ public class OpikConfiguration extends JobConfiguration {
     private GuardrailsConfig guardrails = new GuardrailsConfig();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsTrainingDatasetConfig guardrailsTrainingDataset = new GuardrailsTrainingDatasetConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
