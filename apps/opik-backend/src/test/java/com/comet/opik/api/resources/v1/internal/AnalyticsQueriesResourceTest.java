@@ -43,8 +43,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -191,23 +189,17 @@ class AnalyticsQueriesResourceTest {
     }
 
     private static void insertLegacyDatasetItems(Client admin, String workspaceId) {
-        var datasetId = UUID.randomUUID();
-        var rows = IntStream.range(0, LEGACY_ROWS)
-                .mapToObj(i -> "('%s', '%s', '%s')".formatted(UUID.randomUUID(), datasetId, workspaceId))
-                .collect(Collectors.joining(", "));
-        admin.queryAll("INSERT INTO %s.dataset_items (id, dataset_id, workspace_id) VALUES %s"
-                .formatted(DATABASE_NAME, rows));
+        admin.queryAll("""
+                INSERT INTO %s.dataset_items (id, dataset_id, workspace_id)
+                SELECT toString(generateUUIDv4()), '%s', '%s' FROM numbers(%d)
+                """.formatted(DATABASE_NAME, UUID.randomUUID(), workspaceId, LEGACY_ROWS));
     }
 
     private static void insertLegacyFeedbackScores(Client admin, FreeFormSqlTestData.Project project) {
-        var rows = IntStream.range(0, LEGACY_ROWS)
-                .mapToObj(i -> "('%s', 'trace', '%s', '%s', 'score', 1, 'sdk')".formatted(UUID.randomUUID(),
-                        project.id(), project.workspace().id()))
-                .collect(Collectors.joining(", "));
         admin.queryAll("""
                 INSERT INTO %s.feedback_scores (entity_id, entity_type, project_id, workspace_id, name, value, source)
-                VALUES %s
-                """.formatted(DATABASE_NAME, rows));
+                SELECT toString(generateUUIDv4()), 'trace', '%s', '%s', 'score', 1, 'sdk' FROM numbers(%d)
+                """.formatted(DATABASE_NAME, project.id(), project.workspace().id(), LEGACY_ROWS));
     }
 
     @Test
@@ -450,12 +442,7 @@ class AnalyticsQueriesResourceTest {
     void allowedTable__thenReturnsResult(Endpoint endpoint, String table, int expectedCount) {
         String query = "SELECT toJSONString(map('n', toString(count()))) AS result FROM %s".formatted(table);
         var a1 = seeded.a1();
-        try (Response response = switch (endpoint) {
-            case EXECUTE -> analyticsQueriesClient.callExecute(a1.id(), query, a1.workspace().apiKey(),
-                    a1.workspace().name());
-            case EXECUTE_SCOPED -> analyticsQueriesClient.callExecuteScoped(a1.id(), query, a1.workspace().apiKey(),
-                    a1.workspace().name());
-        }) {
+        try (Response response = call(endpoint, a1.id(), query, a1.workspace().apiKey(), a1.workspace().name())) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
             assertThat(response.readEntity(AnalyticsQueryResponse.class).results())
                     .singleElement()
@@ -521,10 +508,13 @@ class AnalyticsQueriesResourceTest {
     }
 
     private Response call(Endpoint endpoint, String query) {
+        return call(endpoint, projectIdA, query, API_KEY_A, WORKSPACE_NAME_A);
+    }
+
+    private Response call(Endpoint endpoint, UUID projectId, String query, String apiKey, String workspaceName) {
         return switch (endpoint) {
-            case EXECUTE -> analyticsQueriesClient.callExecute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A);
-            case EXECUTE_SCOPED -> analyticsQueriesClient.callExecuteScoped(projectIdA, query, API_KEY_A,
-                    WORKSPACE_NAME_A);
+            case EXECUTE -> analyticsQueriesClient.callExecute(projectId, query, apiKey, workspaceName);
+            case EXECUTE_SCOPED -> analyticsQueriesClient.callExecuteScoped(projectId, query, apiKey, workspaceName);
         };
     }
 

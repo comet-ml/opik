@@ -260,7 +260,7 @@ public class FreeFormSqlQueryService {
                         if (containsForbiddenResolvedTable(account, queryTree)) {
                             throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
                         }
-                        if (containsForbiddenResolvedMetadataFunction(queryTree)) {
+                        if (containsForbiddenOrUnreadableFunction(queryTree)) {
                             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
                         }
                     } catch (WebApplicationException e) {
@@ -499,7 +499,7 @@ public class FreeFormSqlQueryService {
     }
 
     /** A FUNCTION node whose name cannot be read counts as forbidden, so a tree format change fails closed. */
-    private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {
+    private static boolean containsForbiddenOrUnreadableFunction(List<String> queryTree) {
         return queryTree.stream()
                 .filter(FreeFormSqlSubqueries::isFunctionNode)
                 .anyMatch(line -> FreeFormSqlSubqueries.resolvedFunctionName(line)
