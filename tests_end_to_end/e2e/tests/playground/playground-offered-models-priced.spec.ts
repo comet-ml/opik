@@ -103,6 +103,25 @@ test.describe('Playground — the offered OpenRouter catalog is priced', {
     'every OpenRouter model the picker offers has a row in the shipped price file',
     { tag: ['@cap:playground.offered-model-price-coverage'] },
     async () => {
+      // QA: failing for the 2.3.0 review pass, and this is the relation the
+      // spec exists to catch rather than an environment mismatch. 1 of the 372
+      // labelled OpenRouter ids has no price row:
+      // `dots-studio/dots-3-note-preview:free`. Both halves come from the SAME
+      // commit here — `llm-models-default.yaml` (served statically by
+      // `LlmModelRegistryService`; `GET /v1/private/llm/models` does no live
+      // OpenRouter fetch) lists it labelled at line 860, and neither
+      // `apps/opik-backend/src/main/resources/model_prices_openrouter.json` nor
+      // the frontend's copy carries `openrouter/dots-studio/dots-3-note-preview:free`
+      // in their 476 rows. So the escape the failure message offers — a
+      // deployment NEWER than this checkout — does not apply, and a span logged
+      // on that model is billed nothing. Product: the catalog yaml was
+      // regenerated without regenerating the price file beside it. Not fixed
+      // here: it is product data outside `tests_end_to_end/`, and the
+      // assertion below is the correct one — the set must be empty, never an
+      // allowlist. Remove test.fail() once the row lands; Playwright reports it
+      // as an unexpected pass when it does.
+      test.fail();
+
       const rows = await test.step('Read the deployment’s own model registry', async () => {
         const registry = await fetchRegistryModels();
         const served = registry[PROVIDER];

@@ -66,6 +66,23 @@ import { randomBytes } from 'node:crypto';
  * `overriddenTraceIds` is not in its diff), and reported it for a human call on
  * whether orphaning is intended. Pinning either answer here would be guessing
  * at a design decision nobody has made.
+ *
+ * ## Tagging
+ *
+ * The SECOND test carries `@cap:traces.otel-project-routing`, which is exactly
+ * what it asserts: which project an export's spans may land in.
+ *
+ * The FIRST test deliberately carries NO `@cap:`, and that is an under-claim
+ * rather than an oversight. What it asserts is batch JOINING — several exports
+ * sharing one OTLP trace id, each with a parentless span, resolving to one Opik
+ * trace instead of the 409/500 that discarded them — and no capability in
+ * `traces` names that. `otel-project-routing` is about the destination project
+ * and would still pass with the resume entirely reverted, so tagging it here
+ * would make a routing capability answer for an ingestion claim: a false green
+ * of exactly the kind TESTING-TAGS.md warns about. The gap is reported to QA
+ * for a human call (add an OTel batch-ingestion capability, or leave this
+ * behaviour honestly uncovered); until one exists the assertion still fails the
+ * build when it regresses, it just does not count towards coverage.
  */
 
 /** A random OTLP trace id as lowercase hex — 16 bytes, as the protocol requires. */
