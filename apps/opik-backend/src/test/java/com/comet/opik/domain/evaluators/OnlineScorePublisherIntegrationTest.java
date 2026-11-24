@@ -10,6 +10,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -27,6 +29,7 @@ import org.redisson.config.Config;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -48,6 +51,8 @@ class OnlineScorePublisherIntegrationTest {
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
     private final ServiceTogglesConfig serviceTogglesConfig = new ServiceTogglesConfig();
+
+    private OrganizationResolver organizationResolver = FixedOrganizationResolver.none();
 
     /**
      * Required by the publisher's constructor but never exercised: these tests use the overload that takes an
@@ -176,6 +181,22 @@ class OnlineScorePublisherIntegrationTest {
         assertThat(written).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    @Test
+    @DisplayName("The organization a judge message carries survives the stream codec")
+    void enqueueThreadMessageKeepsTheOrganizationThroughTheCodec() {
+        var organizationId = UUID.randomUUID().toString();
+        organizationResolver = FixedOrganizationResolver.of(organizationId);
+        var publisher = newPublisher();
+        var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix());
+
+        publisher.enqueueThreadMessage(threadIds, llmRule(), idGenerator.generateId(), UUID.randomUUID().toString(),
+                RandomStringUtils.secure().nextAlphanumeric(10)).block();
+        organizationResolver = FixedOrganizationResolver.none();
+
+        assertThat(readStream()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                .containsExactly(organizationId, organizationId);
+    }
+
     private AutomationRuleEvaluatorTraceThreadLlmAsJudge llmRule() {
         return AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
                 .id(idGenerator.generateId())
@@ -196,7 +217,7 @@ class OnlineScorePublisherIntegrationTest {
         redissonClient.getStream(streamName, RedisStreamCodec.JAVA.getCodec()).delete().block();
         redissonClient.getStream(pythonStreamName, RedisStreamCodec.JAVA.getCodec()).delete().block();
         return new OnlineScorePublisherImpl(config, serviceTogglesConfig, redissonClient,
-                automationRuleEvaluatorService);
+                automationRuleEvaluatorService, organizationResolver);
     }
 
     private List<TraceThreadToScoreLlmAsJudge> readStream() {

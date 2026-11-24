@@ -1,6 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CustomModelPrice;
+import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.data.message.AiMessage;
@@ -10,11 +13,13 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class BudgetGuardTest {
@@ -41,7 +46,7 @@ class BudgetGuardTest {
     void noBudgetSetReturnsSharedUnlimitedGuardThatNeverTrips() {
         // A bare factory (no stubbing): create() short-circuits to UNLIMITED before resolving the model,
         // so model resolution never participates in this path.
-        var guard = BudgetGuard.create(null, "gpt-4o", mock(LlmProviderFactory.class));
+        var guard = BudgetGuard.create(null, "gpt-4o", mock(LlmProviderFactory.class), PriceLayers.BUILT_IN_ONLY);
 
         assertThat(guard).isSameAs(BudgetGuard.UNLIMITED);
 
@@ -59,9 +64,10 @@ class BudgetGuardTest {
         // before the model is resolved.
         var factory = mock(LlmProviderFactory.class);
 
-        assertThat(BudgetGuard.create(BigDecimal.ZERO, "gpt-4o", factory)).isSameAs(BudgetGuard.UNLIMITED);
+        assertThat(BudgetGuard.create(BigDecimal.ZERO, "gpt-4o", factory, PriceLayers.BUILT_IN_ONLY))
+                .isSameAs(BudgetGuard.UNLIMITED);
 
-        var negative = BudgetGuard.create(new BigDecimal("-1"), "gpt-4o", factory);
+        var negative = BudgetGuard.create(new BigDecimal("-1"), "gpt-4o", factory, PriceLayers.BUILT_IN_ONLY);
         assertThat(negative).isSameAs(BudgetGuard.UNLIMITED);
         negative.track(Mono.just(responseWith(1_000_000, 1_000_000))).block();
         assertThat(negative.shouldWrapUp()).isFalse();
@@ -77,7 +83,7 @@ class BudgetGuardTest {
         assertThat(perCallCost).isGreaterThan(BigDecimal.ZERO); // guard against an unpriced-model false pass
         var limit = perCallCost.add(perCallCost); // trips exactly on the second identical call
 
-        var guard = BudgetGuard.create(limit, "gpt-4o", factoryFor("gpt-4o", "openai"));
+        var guard = BudgetGuard.create(limit, "gpt-4o", factoryFor("gpt-4o", "openai"), PriceLayers.BUILT_IN_ONLY);
 
         assertThat(guard.shouldWrapUp()).isFalse();
 
@@ -91,7 +97,8 @@ class BudgetGuardTest {
 
     @Test
     void doesNotChargeWhenResponseCarriesNoUsage() {
-        var guard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factoryFor("gpt-4o", "openai"));
+        var guard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factoryFor("gpt-4o", "openai"),
+                PriceLayers.BUILT_IN_ONLY);
 
         var response = ChatResponse.builder().aiMessage(AiMessage.from("ok")).build();
         guard.track(Mono.just(response)).block();
@@ -105,7 +112,7 @@ class BudgetGuardTest {
         var factory = mock(LlmProviderFactory.class);
         when(factory.getResolvedModelInfo("mystery")).thenThrow(new RuntimeException("unknown model"));
 
-        var guard = BudgetGuard.create(new BigDecimal("0.01"), "mystery", factory);
+        var guard = BudgetGuard.create(new BigDecimal("0.01"), "mystery", factory, PriceLayers.BUILT_IN_ONLY);
 
         assertThat(guard).isSameAs(BudgetGuard.UNLIMITED);
         assertThat(guard.shouldWrapUp()).isFalse();
@@ -115,7 +122,7 @@ class BudgetGuardTest {
     void unknownModelPriceNeverTripsTheBudget() {
         // Model resolves but has no entry in the price table -> cost is zero, so the budget can't trip.
         var guard = BudgetGuard.create(new BigDecimal("0.01"), "no-such-model",
-                factoryFor("no-such-model", "no-such-provider"));
+                factoryFor("no-such-model", "no-such-provider"), PriceLayers.BUILT_IN_ONLY);
 
         guard.track(Mono.just(responseWith(1_000_000, 1_000_000))).block();
 
@@ -129,7 +136,7 @@ class BudgetGuardTest {
         // price-table provider ("google_ai"). CostService maps it, so the guard actually charges and can
         // enforce the budget for Gemini/Vertex judges instead of silently pricing every call at zero.
         var guard = BudgetGuard.create(new BigDecimal("999"), "gemini-2.5-flash",
-                factoryFor("gemini-2.5-flash", "gemini"));
+                factoryFor("gemini-2.5-flash", "gemini"), PriceLayers.BUILT_IN_ONLY);
 
         guard.track(Mono.just(responseWith(1_000_000, 0))).block();
 
@@ -141,11 +148,12 @@ class BudgetGuardTest {
         // The class contract is "everything is fail-open". A pricing exception inside charge() must be
         // swallowed: the tracked response passes through unchanged, nothing is charged, and the budget
         // never trips — a regression that let it propagate would break the scoring call.
-        var guard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factoryFor("gpt-4o", "openai"));
+        var guard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factoryFor("gpt-4o", "openai"),
+                PriceLayers.BUILT_IN_ONLY);
         var response = responseWith(100_000, 0);
 
         try (var costService = mockStatic(CostService.class)) {
-            costService.when(() -> CostService.calculateCost(any(), any(), any(), any()))
+            costService.when(() -> CostService.price(any(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("pricing failure"));
 
             assertThat(guard.track(Mono.just(response)).block()).isSameAs(response);
@@ -153,5 +161,47 @@ class BudgetGuardTest {
 
         assertThat(guard.spentUsd()).isEqualByComparingTo("0");
         assertThat(guard.shouldWrapUp()).isFalse();
+    }
+
+    private static PriceLayers organizationPricingGpt4oAt1And10() {
+        return PriceLayers.of("org-1", 1, List.of(CustomModelPrice.builder()
+                .modelName("gpt-4o")
+                .provider("openai")
+                .kind(CustomModelPrice.Kind.FIXED)
+                .inputPerMillion(new BigDecimal("1"))
+                .outputPerMillion(new BigDecimal("10"))
+                .build()));
+    }
+
+    @Test
+    void chargesTheOrganizationsPrice() {
+        var guard = BudgetGuard.create(new BigDecimal("999"), "gpt-4o", factoryFor("gpt-4o", "openai"),
+                organizationPricingGpt4oAt1And10());
+
+        guard.track(Mono.just(responseWith(1_000_000, 100_000))).block();
+
+        assertThat(guard.spentUsd()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void loadWithoutALimitLooksUpNoPrices() {
+        var modelPriceService = mock(ModelPriceService.class);
+
+        var guard = BudgetGuard.load(null, "gpt-4o", factoryFor("gpt-4o", "openai"), modelPriceService).block();
+
+        assertThat(guard).isSameAs(BudgetGuard.UNLIMITED);
+        verifyNoInteractions(modelPriceService);
+    }
+
+    @Test
+    void loadChargesWithTheLoadedPrices() {
+        var modelPriceService = mock(ModelPriceService.class);
+        when(modelPriceService.layersFor()).thenReturn(Mono.just(organizationPricingGpt4oAt1And10()));
+
+        var guard = BudgetGuard.load(new BigDecimal("999"), "gpt-4o", factoryFor("gpt-4o", "openai"),
+                modelPriceService).block();
+        guard.track(Mono.just(responseWith(1_000_000, 100_000))).block();
+
+        assertThat(guard.spentUsd()).isEqualByComparingTo("2");
     }
 }

@@ -11,12 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -36,6 +41,7 @@ public class ModelPriceTable {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
     private static final Set<String> pricedProviders;
+    private static final String pricesFingerprint;
     private static final Map<String, Map<String, List<String>>> prefixedModelNames;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
@@ -65,6 +71,7 @@ public class ModelPriceTable {
         pricedProviders = modelProviderPrices.keySet().stream()
                 .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
                 .collect(Collectors.toUnmodifiableSet());
+        pricesFingerprint = fingerprint(MODEL_PRICES_FILE, MODEL_PRICES_OPENROUTER_FILE, MODEL_PRICES_OVERRIDES_FILE);
         prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
     }
 
@@ -78,6 +85,30 @@ public class ModelPriceTable {
 
     static Set<String> pricedProviders() {
         return pricedProviders;
+    }
+
+    // The bundled files hold no date, so their content names the built-in prices a span was priced with.
+    static String pricesFingerprint() {
+        return pricesFingerprint;
+    }
+
+    private static String fingerprint(String... files) {
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            for (String file : files) {
+                try (InputStream inputStream = ModelPriceTable.class.getClassLoader().getResourceAsStream(file)) {
+                    if (inputStream != null) {
+                        digest.update(file.getBytes(StandardCharsets.UTF_8));
+                        digest.update(inputStream.readAllBytes());
+                    }
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest(), 0, 4);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Failed to read the model prices files", exception);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     /**
