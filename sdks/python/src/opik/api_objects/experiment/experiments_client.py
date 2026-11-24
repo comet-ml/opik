@@ -80,9 +80,11 @@ class ExperimentsClient:
         Note:
             Without ``experiment_ids``, ``page_size`` and ``num_threads`` do not
             control paging (the read pages through a server-side cursor), but
-            they are still validated. Each
-            result's ``dataset_item_data`` is then the item's input as the
-            experiment saw it.
+            they are still validated. Results are read experiment by experiment,
+            so a read cut short by ``max_results`` can miss later experiments
+            entirely; a warning is logged when that happens. Either way, each
+            result's ``dataset_item_data`` is the dataset item's content, taken
+            from the newest version among the experiments read.
 
         Note:
             To look at these results without writing code, AI coding assistants

@@ -4,6 +4,7 @@ import functools
 import json
 import types
 from typing import Any, Dict, List, Optional
+from unittest import mock
 from unittest.mock import Mock
 
 import pytest
@@ -25,9 +26,10 @@ def _row(experiment_id: str, row_id: str, dataset_item_id: str) -> Dict[str, Any
         "experiment_id": experiment_id,
         "dataset_item_id": dataset_item_id,
         "trace_id": f"trace-{experiment_id}-{row_id}",
-        "input": {"question": dataset_item_id},
+        "input": {"question": dataset_item_id, "run": row_id},
         "output": {"answer": f"{experiment_id}/{row_id}"},
         "feedback_scores": [{"name": "accuracy", "value": 1.0}],
+        "dataset_item_data": {"question": dataset_item_id, "expected": "yes"},
     }
 
 
@@ -99,7 +101,13 @@ def test_find_experiment_items_for_dataset__no_experiment_ids__reads_every_row_f
         ("item-2", "exp-a"),
     ]
     assert [call["last_retrieved_id"] for call in stream.calls] == [None, "r4", "r1"]
-    assert all("last_retrieved_experiment_id" not in call for call in stream.calls)
+    # Each later page names the cursor row's experiment, so a deleted cursor row
+    # resumes from that experiment instead of restarting the stream.
+    assert [call.get("last_retrieved_experiment_id") for call in stream.calls] == [
+        None,
+        "exp-b",
+        "exp-a",
+    ]
     assert all(call["dataset_id"] == DATASET_ID for call in stream.calls)
 
 
@@ -111,7 +119,11 @@ def test_find_experiment_items_for_dataset__no_experiment_ids__row_fields_mapped
     assert item.id == "r1"
     assert item.experiment_id == "exp-a"
     assert item.trace_id == "trace-exp-a-r1"
-    assert item.dataset_item_data == {"question": "item-1"}
+    assert item.dataset_item_data == {
+        "question": "item-1",
+        "expected": "yes",
+        "id": "item-1",
+    }
     assert item.evaluation_task_output == {"answer": "exp-a/r1"}
     assert item.feedback_scores == [
         {"category_name": None, "name": "accuracy", "reason": None, "value": 1.0}
@@ -254,3 +266,71 @@ def test_find_experiment_items_for_dataset__error_line_alone_on_a_page__raises_a
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.body == error_line
+
+
+def test_find_experiment_items_for_dataset__row_without_dataset_item_data__falls_back_to_input():
+    row = _row("exp-a", "r1", "item-1")
+    del row["dataset_item_data"]
+
+    (item,) = _find(_client(_StreamEndpoint([row])))
+
+    assert item.dataset_item_data == {"question": "item-1", "run": "r1"}
+
+
+def test_find_experiment_items_for_dataset__error_line_ending_a_full_page__raises_without_reading_on(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        rest_operations.rest_stream_parser,
+        "read_and_parse_full_stream",
+        functools.partial(
+            rest_stream_parser.read_and_parse_full_stream, max_endpoint_batch_size=2
+        ),
+    )
+    error_line = {"code": 500, "message": "Streaming operation timed out"}
+    calls = []
+
+    def stream(**kwargs: Any) -> List[bytes]:
+        calls.append(kwargs)
+        return [
+            json.dumps(_row("exp-a", f"r{len(calls)}", "item-1")).encode("utf-8")
+            + b"\n",
+            json.dumps(error_line).encode("utf-8") + b"\n",
+        ]
+
+    with pytest.raises(ApiError) as exc_info:
+        _find(_client(stream))
+
+    assert exc_info.value.body == error_line
+    assert len(calls) == 1
+
+
+def test_find_experiment_items_for_dataset__read_stops_at_max_results__warns_that_experiments_may_be_missing():
+    stream = _StreamEndpoint(
+        [_row(f"exp-{index}", f"r{index}", "item-1") for index in range(3)]
+    )
+
+    with mock.patch.object(rest_operations.LOGGER, "warning") as warning:
+        items = _find(_client(stream), max_results=2)
+
+    assert len(items) == 2
+    warning.assert_called_once()
+    assert "max_results=2" in warning.call_args.args[0] % warning.call_args.args[1:]
+
+
+def test_find_experiment_items_for_dataset__read_below_max_results__no_warning():
+    stream = _StreamEndpoint([_row("exp-a", "r1", "item-1")])
+
+    with mock.patch.object(rest_operations.LOGGER, "warning") as warning:
+        _find(_client(stream), max_results=2)
+
+    warning.assert_not_called()
+
+
+def test_find_experiment_items_for_dataset__null_dataset_item_id__sorts_without_error():
+    rows = [_row("exp-a", "r1", "item-1"), _row("exp-b", "r2", "item-2")]
+    rows[1]["dataset_item_id"] = None
+
+    items = _find(_client(_StreamEndpoint([rows[0]] + [rows[1]])))
+
+    assert [item.dataset_item_id for item in items] == [None, "item-1"]
