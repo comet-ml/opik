@@ -869,19 +869,19 @@ rateLimit:
       userFacingBucketName: ollie_state_upload
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
-    freeFormSql:
-      # Default: 150
+    dashboardWidgetQueries:
+      # Default: 300
       # Description: how many free-form SQL queries are allowed per workspace in the specified time bucket, shared by
-      #   the public analytics-queries endpoint and the saved widget queries (dashboards and insights views). Every
+      #   the saved widget queries (dashboards and insights views) and the public analytics-queries endpoint. Every
       #   viewer runs every Ollie chart on each load and date-range change.
-      limit: ${RATE_LIMIT_FREE_FORM_SQL_PER_WORKSPACE_LIMIT:-150}
+      limit: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_PER_WORKSPACE_LIMIT:-300}
       # Default: 60
       # Description: Time bucket size in seconds
-      durationInSeconds: ${RATE_LIMIT_FREE_FORM_SQL_DURATION_IN_SEC:-60}
+      durationInSeconds: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_DURATION_IN_SEC:-60}
       # Description: Header name to use for rate limiting
-      headerName: Free-Form-Sql
+      headerName: Dashboard-Widget-Queries
       # Description: User facing bucket name
-      userFacingBucketName: free_form_sql
+      userFacingBucketName: dashboard_widget_queries
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for free-form SQL queries in this workspace. Please try again later."
     getSpans:

@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-class AnalyticsQueriesResourcePublicEndpointsOffTest {
+class AnalyticsQueriesPublicResourceOffTest {
 
     private final FreeFormSqlQueryService freeFormSqlQueryService = mock(FreeFormSqlQueryService.class);
     @SuppressWarnings("unchecked")
@@ -27,7 +27,7 @@ class AnalyticsQueriesResourcePublicEndpointsOffTest {
         serviceToggles.setOllieEnabled(true);
         var customCharts = new CustomChartsConfig();
         customCharts.setEnabled(true);
-        var resource = new AnalyticsQueriesResource(freeFormSqlQueryService, requestContext, serviceToggles,
+        var resource = new AnalyticsQueriesPublicResource(freeFormSqlQueryService, requestContext, serviceToggles,
                 customCharts);
 
         try (Response response = resource.runQuery(

@@ -47,7 +47,7 @@ import java.util.concurrent.CompletionException;
 @Timed
 @Slf4j
 @Tag(name = "Analytics queries", description = "Free-form analytics SQL for Custom Charts")
-public class AnalyticsQueriesResource {
+public class AnalyticsQueriesPublicResource {
 
     private final FreeFormSqlQueryService freeFormSqlQueryService;
     private final Provider<RequestContext> requestContext;
@@ -57,7 +57,7 @@ public class AnalyticsQueriesResource {
     // Hand-written rather than Lombok's: image builds do not read lombok.config, so a generated constructor loses the
     // @Config qualifiers and customCharts is injected as an empty default instance (OPIK-8548).
     @Inject
-    public AnalyticsQueriesResource(
+    public AnalyticsQueriesPublicResource(
             @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
@@ -76,7 +76,7 @@ public class AnalyticsQueriesResource {
             @ApiResponse(responseCode = "429", description = "Too many queries; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Custom Charts or its public endpoints are not enabled")})
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
-    @RateLimited(value = "freeFormSql:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RateLimited(value = "dashboardWidgetQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response runQuery(
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 

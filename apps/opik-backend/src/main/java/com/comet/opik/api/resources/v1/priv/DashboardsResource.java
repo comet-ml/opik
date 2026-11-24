@@ -179,7 +179,7 @@ public class DashboardsResource {
     })
     // The rows are project data, so this is gated like the endpoints behind the built-in charts.
     @RequiredPermissions({WorkspaceUserPermission.DASHBOARD_VIEW, WorkspaceUserPermission.PROJECT_DATA_VIEW})
-    @RateLimited(value = "freeFormSql:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RateLimited(value = "dashboardWidgetQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response runWidgetQuery(
             @PathParam("dashboardId") UUID id,
             @PathParam("widgetId") String widgetId,

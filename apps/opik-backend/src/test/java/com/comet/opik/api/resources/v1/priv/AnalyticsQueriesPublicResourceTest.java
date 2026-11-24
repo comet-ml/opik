@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Public Analytics Queries Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AnalyticsQueriesResourceTest {
+class AnalyticsQueriesPublicResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
