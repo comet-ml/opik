@@ -107,7 +107,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
             />
             <span className="comet-body-s truncate">{e.name}</span>
           </div>
-          <div className="comet-body-xs truncate pl-[26px] text-light-slate">
+          <div className="comet-body-xs break-words pl-[26px] text-light-slate">
             {formatExperimentSubtext(e)}
           </div>
         </label>
