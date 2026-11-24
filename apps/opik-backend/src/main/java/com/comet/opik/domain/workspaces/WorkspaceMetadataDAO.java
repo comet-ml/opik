@@ -14,6 +14,8 @@ import reactor.core.publisher.Mono;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
 interface WorkspaceMetadataDAO {
     Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
@@ -64,7 +66,8 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             SELECT
                 round((query_result.query_size * total_spans.total_count) / 1e9, 2) AS size_gb_,
                 if(isNaN(size_gb_), 0, size_gb_) AS size_gb
-            FROM query_result, total_spans;
+            FROM query_result, total_spans
+            SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String CALCULATE_EXPERIMENT_METADATA = """
@@ -83,7 +86,8 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
     @Override
     public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
-        var template = TemplateUtils.newST(CALCULATE_METADATA);
+        var template = getSTWithLogComment(CALCULATE_METADATA, "get_project_metadata", workspaceId, "",
+                "project_id=%s".formatted(projectId));
         if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
             template.add("project_span_weeks_bound", true);
         }

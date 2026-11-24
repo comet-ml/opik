@@ -37,7 +37,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         analytics.track_event("integration", "dspy")
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
-        # Store (lm_instance, expected_messages) for extracting usage and verifying correct history entry
+        # Store (lm_instance, expected_call_input) for extracting usage and verifying correct history entry
         self._map_call_id_to_lm_info: Dict[str, Tuple[Any, Optional[Any]]] = {}
 
         self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
@@ -315,10 +315,12 @@ class OpikCallback(dspy_callback.BaseCallback):
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
-        # Store LM instance and expected messages for extracting usage
+        # Store LM instance and call input for extracting usage. dspy>=3.5
+        # adapters call the LM with `prompt` (an lm15 Request) instead of `messages`.
+        messages = inputs.get("messages")
         self._map_call_id_to_lm_info[call_id] = (
             instance,
-            inputs.get("messages"),
+            messages if messages is not None else inputs.get("prompt"),
         )
 
         self._set_current_context_data(span_data)
@@ -391,8 +393,8 @@ class OpikCallback(dspy_callback.BaseCallback):
         Extract token usage, cache status, actual provider, and cost from the LM's history.
 
         DSPy stores usage information in the LM's history after each call.
-        We verify the history entry matches our expected messages to handle
-        potential race conditions with concurrent LM calls.
+        We verify the history entry matches the call's input (messages or prompt)
+        to handle potential race conditions with concurrent LM calls.
 
         For routers like OpenRouter, the response contains the actual provider
         that served the request (e.g., "Novita", "Together"), which differs from
@@ -414,8 +416,8 @@ class OpikCallback(dspy_callback.BaseCallback):
                 total_cost=None,
             )
 
-        lm_instance, expected_messages = lm_info
-        return extract_lm_info_from_history(lm_instance, expected_messages)
+        lm_instance, expected_call_input = lm_info
+        return extract_lm_info_from_history(lm_instance, expected_call_input)
 
     def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
         if not self.log_graph:

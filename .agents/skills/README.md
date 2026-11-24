@@ -9,6 +9,7 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | debugging-e2e-tests | `debugging-e2e-tests/` | Investigate a failed Opik E2E test and propose a fix (read-only). Use when a test goes red in CI, a TestOps launch, or locally — gathers the trace + history, classifies regression vs. flake, proposes a fix. |
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
+| genui | `genui/` | Generative UI engine patterns for Opik. Use when working in `sdks/genui`, on the iframe host, the HTML contract, the tokens, the authoring guidance or the engine version. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |
 | metrics-instrumentation | `metrics-instrumentation/` | Instrument an opik-backend workflow with operational OpenTelemetry metrics and a flow-ordered Grafana dashboard. Use when a pipeline is a black box and you need per-stage throughput/latency/error visibility plus a per-customer drill. Distinct from analytics-instrumentation (PostHog product events). |
 | opik-backend | `opik-backend/` | Java backend patterns for Opik. Use when working in `apps/opik-backend`, designing APIs, database operations, or services. |

@@ -43,7 +43,7 @@ and `--platform-build` are documented in `./scripts/dev-runner.sh --help`.
 
 - **Frontend**: localhost:5174 (standard) / localhost:5173 (BE-only)
 - **Backend API**: localhost:8080
-- **Health**: http://localhost:8080/health-check?name=all
+- **Health**: <http://localhost:8080/health-check?name=all>
 
 ## Build Commands
 
@@ -51,7 +51,7 @@ and `--platform-build` are documented in `./scripts/dev-runner.sh --help`.
 ./scripts/dev-runner.sh --build-be   # Backend only
 ./scripts/dev-runner.sh --build-fe   # Frontend only
 ./scripts/dev-runner.sh --lint-be    # Spotless
-./scripts/dev-runner.sh --lint-fe    # ESLint
+./scripts/dev-runner.sh --lint-fe    # oxlint + oxfmt
 ./scripts/dev-runner.sh --migrate    # DB migrations
 ```
 
@@ -73,6 +73,7 @@ export OPIK_WORKSPACE='default'
 ## Troubleshooting
 
 **Won't start:**
+
 ```bash
 ./scripts/dev-runner.sh --verify
 lsof -i :8080                        # Port conflict?
@@ -80,12 +81,14 @@ lsof -i :8080                        # Port conflict?
 ```
 
 **Build fails:**
+
 ```bash
 cd apps/opik-backend && mvn clean install -DskipTests
 cd apps/opik-frontend && rm -rf node_modules && npm install
 ```
 
 **Database issues:**
+
 ```bash
 ./scripts/dev-runner.sh --stop
 ./opik.sh --clean                    # WARNING: deletes data

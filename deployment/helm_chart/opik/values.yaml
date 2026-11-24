@@ -177,7 +177,6 @@ component:
       ANALYTICS_DB_USERNAME: "opik"
       ANALYTICS_DB_DATABASE_NAME: "opik"
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"
-      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/ # betterleaks:allow — bundled Redis default
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
@@ -255,6 +254,9 @@ component:
     serviceAccount:
       create: true
       name: opik-python-backend
+    # false keeps the Kubernetes API token out of the pod that runs user metric code; python-backend
+    # does not call the Kubernetes API. Workload identity tokens (e.g. IRSA) use a separate volume.
+    automountServiceAccountToken: true
     metrics:
       enabled: false
     image:
@@ -369,8 +371,8 @@ component:
       # minimal template (started with an allowlisted environment) so it does not start from the backend's
       # memory or environment. Needs Linux and Python 3.14 (as in the image), python-backend running as
       # root (CAP_SETUID/CAP_SETGID, default for root), no privileged mode; works under a RuntimeDefault
-      # seccomp profile. If it can't be applied no worker starts. Off by default.
-      PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "false"
+      # seccomp profile. If it can't be applied no worker starts; set "false" where python-backend can't run as root.
+      PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "true"
       # Seconds a new process-strategy worker may take to report ready before it is stopped and left out
       # of the pool. A positive number; any other value fails startup.
       PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS: "10"
@@ -379,6 +381,14 @@ component:
       PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES: "67108864"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
+      # Docker strategy only. "true" starts executor containers with no capabilities, a read-only root
+      # filesystem with a small /tmp and a process limit, and, while PYTHON_CODE_EXECUTOR_ALLOW_NETWORK is
+      # "false", runs the in-container Docker daemon without a bridge network or iptables rules. Metrics
+      # that write outside /tmp or start many processes fail; set "false" for them.
+      PYTHON_CODE_EXECUTOR_DOCKER_HARDENING: "true"
+      # Process limit and /tmp size per executor container when hardening is on.
+      PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT: "64"
+      PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE: "16m"
       # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.
       PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS: "60"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
@@ -389,8 +399,6 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
       # Opik SDK URL for optimizer to reach Java backend
       OPIK_URL_OVERRIDE: "http://opik-backend:8080"
-      # Redis URL for Optimization Studio log streaming
-      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/ # betterleaks:allow — bundled Redis default
 
       # ============================================================
       # Optimization Studio Configuration (optional)
@@ -859,6 +867,12 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+  # Also publish opik.clickhouse.tiered_table.* gauges (cold-tier reads, read latency, failed reads, failed
+  # moves) from system.query_log and system.part_log. Reads every replica with clusterAllReplicas, so it
+  # needs the `cluster` macro and the backend user's REMOTE grant.
+  tieredStorageEnabled: false
+  # How far behind now the tiered-storage window ends, so rows still buffered for the system logs aren't skipped.
+  tieredStorageLogFlushLag: 15s
 
 # Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
 # default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
@@ -1112,7 +1126,9 @@ clickhouse:
   # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
-  # start, before macros bind.
+  # start, before macros bind. With `backupServer` on, set
+  # `backupServer.env.S3_OBJECT_DISK_PATH` (outside `S3_PATH`) before any part
+  # reaches cold, or every backup after that fails.
   tieredStorage:
     enabled: false
     hot:
@@ -1304,6 +1320,27 @@ clickhouse:
     password: opikmon
     useSecret:
       enabled: false
+    # -- (list) Networks the monitoring user may log in from
+    networks:
+      - '0.0.0.0/0'
+    # -- (object) Profile settings; readonly 2 because Grafana sends per-query settings (log_comment)
+    settings:
+      readonly: 2
+      read_overflow_mode: throw
+      constraints/read_overflow_mode/const: 1
+    # -- (object) Read caps; a query may lower them but not raise them or set 0 (unlimited)
+    limits:
+      max_execution_time: 60
+      max_memory_usage: 10000000000
+      max_bytes_to_read: 250000000000
+      max_rows_to_read: 1500000000
+      max_concurrent_queries_for_user: 20
+    # -- (list) GRANT statements for the monitoring user; REMOTE is for cluster()
+    grants:
+      - GRANT SELECT ON system.*
+      - GRANT REMOTE ON *.*
+    # -- (list) Extra GRANT statements, e.g. column-level SELECT on tables a dashboard reads
+    additionalGrants: []
     # resources:
     #   requests:
     #     cpu: 300m
@@ -1342,7 +1379,7 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.6"
+    tag: "3.9.7"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:

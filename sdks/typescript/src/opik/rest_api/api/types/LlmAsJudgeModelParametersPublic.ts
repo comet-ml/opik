@@ -7,4 +7,5 @@ export interface LlmAsJudgeModelParametersPublic {
     temperature?: number;
     seed?: number;
     customParameters?: OpikApi.JsonNodePublic;
+    api?: OpikApi.LlmAsJudgeModelParametersPublicApi;
 }

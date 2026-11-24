@@ -20,6 +20,7 @@
     "apps/opik-python-backend/**",
     "apps/opik-sandbox-executor-python/**",
     "deployment/helm_chart/opik/**",
+    "sdks/genui/**",
     "sdks/python/setup.py",
     "tests_end_to_end/e2e/**"
   ],
@@ -94,12 +95,6 @@
       "separateMajorMinor": false,
       "schedule": ["* * * * 1-5"],
       "commitMessagePrefix": "chore(deps):"
-    },
-    {
-      "description": "Runtimes set in a setup action's with: (node-version, python-version, pnpm version) are the toolchain a job builds or tests with, often deliberately the oldest supported; they move by hand",
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["uses-with"],
-      "enabled": false
     }
   ]
 }

@@ -1,3 +1,4 @@
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
@@ -5,6 +6,9 @@ import isNumber from "lodash/isNumber";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Tag } from "@/ui/tag";
+import { formatAsPercentage } from "@/lib/optimization-formatters";
+import CustomSquare from "@/icons/custom-square.svg?react";
+import StatusDotPill from "@/shared/StatusDotPill/StatusDotPill";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 
 export const formatPassRate = (
@@ -13,6 +17,16 @@ export const formatPassRate = (
   totalCount: number,
 ): string => {
   return `${(passRate * 100).toFixed(1)}% (${passedCount}/${totalCount})`;
+};
+
+// The backend sends exactly 1 only when every item passed; anything below
+// rounds no higher than 99% so the label never reads "100%" in red.
+export const formatPassRatePercent = (passRate: number) =>
+  formatAsPercentage(passRate < 1 ? Math.min(passRate, 0.99) : passRate);
+
+const PASS_RATE_DOT_COLOR = {
+  passed: "var(--color-green-bright)",
+  failed: "var(--color-red)",
 };
 
 const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -27,7 +41,6 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
   const tooltip = hasData
     ? formatPassRate(passRate, passedCount, totalCount)
     : undefined;
-  const badgeLabel = hasData ? `${Math.round(passRate * 100)}%` : undefined;
 
   return (
     <CellWrapper
@@ -35,9 +48,16 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
       tableMetadata={context.table.options.meta}
     >
       {hasData ? (
+        // Same filled status tag as the Alerts and Online evaluation status
+        // columns.
         <TooltipWrapper content={tooltip}>
           <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
-            {badgeLabel}
+            <div className="flex items-center gap-1">
+              <CustomSquare className="size-3 shrink-0" />
+              <span className="truncate">
+                {formatPassRatePercent(passRate)}
+              </span>
+            </div>
           </Tag>
         </TooltipWrapper>
       ) : (
@@ -59,37 +79,48 @@ const PassRateAggregationCell = <TData,>(
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
-  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const data = aggregationMap?.[rowId] ?? {};
   const passRate = get(data, aggregationKey ?? "", undefined) as
     | number
     | undefined;
-  const passedCount = get(data, "passed_count", undefined) as
+  const passedCount = get(data, "passed_count_sum", undefined) as
     | number
     | undefined;
-  const totalCount = get(data, "total_count", undefined) as number | undefined;
+  const totalCount = get(data, "total_count_sum", undefined) as
+    | number
+    | undefined;
 
-  const hasData =
-    isNumber(passRate) && isNumber(passedCount) && isNumber(totalCount);
-  const tooltip = hasData
-    ? formatPassRate(passRate, passedCount, totalCount)
-    : undefined;
-  const badgeLabel = hasData ? `${Math.round(passRate * 100)}%` : undefined;
+  // The backend's group pass rate is the mean of the experiments' pass rates,
+  // not passed / total, so the tooltip must not present the counts as its source.
+  const tooltip = (
+    <div>
+      <div>Average of the experiments&apos; pass rates</div>
+      {isNumber(passedCount) && isNumber(totalCount) && (
+        <div>{`${passedCount} / ${totalCount} items passed in total`}</div>
+      )}
+    </div>
+  );
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {hasData ? (
+      {isNumber(passRate) && (
+        // Group rows use the lighter status-dot pill, so the filled tags on the
+        // experiment rows inside the group stay the primary signal.
         <TooltipWrapper content={tooltip}>
-          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
-            {badgeLabel}
-          </Tag>
+          <StatusDotPill
+            dotColor={
+              passRate === 1
+                ? PASS_RATE_DOT_COLOR.passed
+                : PASS_RATE_DOT_COLOR.failed
+            }
+          >
+            {formatPassRatePercent(passRate)}
+          </StatusDotPill>
         </TooltipWrapper>
-      ) : (
-        <span className="truncate text-light-slate">-</span>
       )}
     </CellWrapper>
   );

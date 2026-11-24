@@ -44,6 +44,33 @@ describe("ResourceLink", () => {
     });
   });
 
+  it("renders an underlined table link by default", () => {
+    render(
+      <ResourceLink
+        resource={RESOURCE_TYPE.experiment}
+        id="dataset-1"
+        name="exp"
+      />,
+    );
+
+    expect(screen.getByText("exp")).toHaveClass("underline");
+  });
+
+  it("renders plain text inside the link for the text variant", () => {
+    render(
+      <ResourceLink
+        resource={RESOURCE_TYPE.experiment}
+        id="dataset-1"
+        name="exp"
+        variant="text"
+      />,
+    );
+
+    const name = screen.getByText("exp");
+    expect(name).not.toHaveClass("underline");
+    expect(screen.getByTestId("link")).toContainElement(name);
+  });
+
   it("keeps an explicit projectId over the active project", () => {
     render(
       <ResourceLink

@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.WorkspaceFeaturesModule;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
@@ -31,6 +32,9 @@ import com.comet.opik.infrastructure.llm.ollama.OllamaModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
+import com.comet.opik.infrastructure.otel.OtelProtobufDropwizardErrorMessageBodyWriter;
+import com.comet.opik.infrastructure.otel.OtelProtobufErrorMessageBodyWriter;
+import com.comet.opik.infrastructure.otel.OtelProtobufValidationErrorMessageBodyWriter;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redaction.RedactionModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
@@ -83,9 +87,17 @@ public class OpikApplication extends Application<OpikConfiguration> {
         return "Opik";
     }
 
+    /**
+     * Fills {@code ${VAR:-default}} in the config from the environment. Substitution in variables lets a default be
+     * another variable, {@code ${NEW_NAME:-${OLD_NAME:-}}}, so a renamed variable can fall back to its old name.
+     */
+    public static EnvironmentVariableSubstitutor newSubstitutor() {
+        return new EnvironmentVariableSubstitutor(false, true);
+    }
+
     @Override
     public void initialize(Bootstrap<OpikConfiguration> bootstrap) {
-        var substitutor = new EnvironmentVariableSubstitutor(false);
+        var substitutor = newSubstitutor();
         var provider = new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(), substitutor);
         bootstrap.setConfigurationSourceProvider(provider);
         bootstrap.addBundle(new MultiPartBundle());
@@ -114,7 +126,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new OllamaModule(), new FreeModelModule(), new ToolsModule())
+                        new OllamaModule(), new FreeModelModule(), new ToolsModule(), new WorkspaceFeaturesModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
@@ -165,6 +177,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.register(InstantParamConverter.class);
         jersey.register(LocalDateParamConverter.class);
         jersey.register(JsonUploadFormatMessageBodyReader.class);
+        jersey.register(OtelProtobufErrorMessageBodyWriter.class);
+        jersey.register(OtelProtobufDropwizardErrorMessageBodyWriter.class);
+        jersey.register(OtelProtobufValidationErrorMessageBodyWriter.class);
     }
 
     /**

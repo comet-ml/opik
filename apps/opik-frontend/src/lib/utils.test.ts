@@ -7,6 +7,7 @@ import {
   getJSONPaths,
   buildJSONPath,
   JSON_PATH_FORMAT,
+  formatCount,
 } from "./utils";
 
 describe("isStringMarkdown", () => {
@@ -337,6 +338,19 @@ describe("isLooseEqual", () => {
     expect(isLooseEqual({}, {})).toBe(true);
   });
 
+  it("compares keys named like Object methods as plain values", () => {
+    const a = { rows: [{ toString: 1, valueOf: "x" }] };
+    expect(isLooseEqual(a, { rows: [{ toString: 1, valueOf: "x" }] })).toBe(
+      true,
+    );
+    expect(isLooseEqual(a, { rows: [{ toString: 2, valueOf: "x" }] })).toBe(
+      false,
+    );
+    expect(isLooseEqual(a, { rows: [{ toString: 1, valueOf: "y" }] })).toBe(
+      false,
+    );
+  });
+
   it("should return true for objects with all undefined vs empty object", () => {
     const a = { x: undefined, y: undefined };
     const b = {};
@@ -521,5 +535,16 @@ describe("buildJSONPath", () => {
     expect(
       buildJSONPath([{ key: 'say "hi".x' }], JSON_PATH_FORMAT.bracket),
     ).toBe('["say \\"hi\\".x"]');
+  });
+});
+
+describe("formatCount", () => {
+  it.each([
+    [3, undefined, "3"],
+    [1, "exp", "1 exp"],
+    [3, "exp", "3 exps"],
+    [0, "exp", "0 exps"],
+  ])("formats %i with unit %s as %s", (count, unit, expected) => {
+    expect(formatCount(count, unit)).toBe(expected);
   });
 });

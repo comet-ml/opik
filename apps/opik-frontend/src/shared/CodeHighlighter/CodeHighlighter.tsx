@@ -1,6 +1,6 @@
 import React from "react";
 
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";

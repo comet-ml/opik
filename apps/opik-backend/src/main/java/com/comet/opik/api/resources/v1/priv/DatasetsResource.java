@@ -7,6 +7,7 @@ import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
@@ -296,6 +297,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetByIdentifier", summary = "Get dataset by name", description = "Get dataset by name", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response getDatasetByIdentifier(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
@@ -322,6 +324,7 @@ public class DatasetsResource {
     @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
             @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response expandDataset(
             @PathParam("id") UUID datasetId,
@@ -341,6 +344,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItemById", summary = "Get dataset item by id", description = "Get dataset item by id", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetItem.View.Public.class)
     public Response getDatasetItemById(@PathParam("itemId") @NotNull UUID itemId) {
 
@@ -361,6 +365,7 @@ public class DatasetsResource {
     @Operation(operationId = "batchUpdateDatasetItems", summary = "Batch update dataset items", description = "Update multiple dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response batchUpdate(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatchUpdate.class))) @Valid @NotNull DatasetItemBatchUpdate batchUpdate) {
@@ -393,6 +398,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Dataset item not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response patchDatasetItem(
             @PathParam("itemId") @NotNull UUID itemId,
@@ -415,6 +421,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItems", summary = "Get dataset items", description = "Get dataset items", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset items resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetItem.View.Public.class)
     public Response getDatasetItems(
             @PathParam("id") UUID id,
@@ -459,6 +466,7 @@ public class DatasetsResource {
                     ErrorMessage.class
             }), maxItems = 2000)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public ChunkedOutput<JsonNode> streamDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
             @Context HttpServletResponse httpResponse) {
@@ -502,6 +510,52 @@ public class DatasetsResource {
         }
     }
 
+    @POST
+    @Path("/items/experiments/items/stream")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "streamDatasetExperimentItems", summary = "Stream a dataset's experiment items", description = """
+            Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+            Optimizer trial, mini-batch and mutation experiments are excluded.
+
+            Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+            received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+            send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+            resume from the start of its experiment instead of from the start of the stream.""", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    ExperimentItem.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "404", description = "Dataset or dataset version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
+    public ChunkedOutput<JsonNode> streamDatasetExperimentItems(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExperimentItemStreamRequest.class))) @NotNull @Valid DatasetExperimentItemStreamRequest request) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        var ctxSnapshot = requestContext.get();
+        var workspaceId = ctxSnapshot.getWorkspaceId();
+
+        @SuppressWarnings("unchecked")
+        List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
+
+        // Resolved before the stream starts, so an unknown dataset or version is a 404 rather than an error line
+        var datasetId = request.datasetId() != null
+                ? service.findById(request.datasetId(), workspaceId, ctxSnapshot.getVisibility()).id()
+                : service.resolveDatasetByName(DatasetIdentifier.builder()
+                        .datasetName(request.datasetName())
+                        .projectName(request.projectName())
+                        .build()).id();
+
+        log.info("Streaming experiment items for dataset '{}', versions '{}', limit '{}' on workspaceId '{}'",
+                datasetId, request.datasetVersions(), request.limit(), workspaceId);
+
+        var items = itemService.streamExperimentItems(datasetId, request, queryFilters, workspaceId)
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
+
+        return streamer.getOutputStream(items);
+    }
+
     /**
      * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
      * specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
@@ -519,6 +573,7 @@ public class DatasetsResource {
             the fields are null, carry-forward rows are read from the destination's prior version.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
@@ -558,6 +613,7 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromTraces", summary = "Create dataset items from traces", description = "Create dataset items from traces with enriched metadata", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_EDIT, WorkspaceUserPermission.PROJECT_DATA_VIEW})
     @RateLimited
     public Response createDatasetItemsFromTraces(
             @PathParam("dataset_id") UUID datasetId,
@@ -585,6 +641,7 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromSpans", summary = "Create dataset items from spans", description = "Create dataset items from spans with enriched metadata", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_EDIT, WorkspaceUserPermission.PROJECT_DATA_VIEW})
     @RateLimited
     public Response createDatasetItemsFromSpans(
             @PathParam("dataset_id") UUID datasetId,
@@ -614,6 +671,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItemsFromCsv(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
@@ -646,6 +704,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Accepted - JSON processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItemsFromJson(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
@@ -694,6 +753,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     @JsonView(DatasetVersion.View.Public.class)
     public Response applyDatasetItemChanges(
@@ -777,6 +837,7 @@ public class DatasetsResource {
     @Operation(operationId = "findDatasetItemsWithExperimentItems", summary = "Find dataset items with experiment items", description = "Find dataset items with experiment items", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     @JsonView(ExperimentItem.View.Compare.class)
     public Response findDatasetItemsWithExperimentItems(
             @PathParam("id") UUID datasetId,
@@ -785,7 +846,7 @@ public class DatasetsResource {
                     + ALL_EXPERIMENTS_MAX_PAGE_SIZE
                     + " when experiment_ids is omitted, since each item then carries a result per experiment") int size,
             @QueryParam("experiment_ids") @Schema(description = "JSON array of experiment IDs. Omit to include every regular experiment on the dataset (optimizer trial, mini-batch and mutation experiments are excluded); item filters are then evaluated against the newest version of each item that those experiments reference") String experimentIdsQueryParam,
-            @QueryParam("dataset_version") @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Requires experiment_ids to be omitted. Returns 404 if the version does not exist") String datasetVersion,
+            @QueryParam("dataset_versions") @Schema(description = "JSON array of dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Requires experiment_ids to be omitted. Returns 404 if any version does not exist") String datasetVersionsQueryParam,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("search") String search,
@@ -795,17 +856,22 @@ public class DatasetsResource {
         Set<UUID> experimentIds = allDatasetExperiments || StringUtils.isBlank(experimentIdsQueryParam)
                 ? Set.of()
                 : ParamsValidator.getIds(experimentIdsQueryParam);
+        Set<String> datasetVersions = datasetVersionsQueryParam == null
+                ? null
+                : ParamsValidator.get(datasetVersionsQueryParam, String.class, "dataset_versions");
 
         String validationError = null;
         if (!allDatasetExperiments && experimentIds.isEmpty()) {
             validationError = "experiment_ids cannot be empty";
-        } else if (!allDatasetExperiments && StringUtils.isNotBlank(datasetVersion)) {
-            validationError = "dataset_version can only be used when experiment_ids is omitted";
+        } else if (!allDatasetExperiments && datasetVersions != null) {
+            validationError = "dataset_versions can only be used when experiment_ids is omitted";
         } else if (allDatasetExperiments && !featureFlags.isDatasetVersioningEnabled()) {
             validationError = "experiment_ids is required when dataset versioning is disabled";
         } else if (allDatasetExperiments && size > ALL_EXPERIMENTS_MAX_PAGE_SIZE) {
             validationError = "size must be at most %d when experiment_ids is omitted"
                     .formatted(ALL_EXPERIMENTS_MAX_PAGE_SIZE);
+        } else if (datasetVersions != null) {
+            validationError = validateDatasetVersions(datasetVersions);
         }
 
         if (validationError != null) {
@@ -828,7 +894,7 @@ public class DatasetsResource {
                 .truncate(truncate)
                 .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
                 .allDatasetExperiments(allDatasetExperiments)
-                .experimentsVersionHashOrTag(datasetVersion)
+                .experimentsDatasetVersions(datasetVersions)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -846,12 +912,28 @@ public class DatasetsResource {
         return Response.ok(datasetItemPage).build();
     }
 
+    // Same rules as DatasetExperimentItemStreamRequest.datasetVersions, which bean validation enforces there
+    private static String validateDatasetVersions(Set<String> datasetVersions) {
+        if (datasetVersions.isEmpty()) {
+            return "dataset_versions cannot be empty";
+        }
+        if (datasetVersions.stream().anyMatch(StringUtils::isBlank)) {
+            return "dataset_versions must not contain blank values";
+        }
+        if (datasetVersions.size() > DatasetExperimentItemStreamRequest.MAX_DATASET_VERSIONS) {
+            return "dataset_versions must have at most %d values"
+                    .formatted(DatasetExperimentItemStreamRequest.MAX_DATASET_VERSIONS);
+        }
+        return null;
+    }
+
     @Timed
     @GET
     @Path("/{id}/items/experiments/items/stats")
     @Operation(operationId = "getDatasetExperimentItemsStats", summary = "Get experiment items stats for dataset", description = "Get experiment items stats for dataset", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
     @SuppressWarnings("unchecked")
     public Response getDatasetExperimentItemsStats(
@@ -887,6 +969,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItemsOutputColumns", summary = "Get dataset items output columns", description = "Get dataset items output columns", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item output columns", content = @Content(schema = @Schema(implementation = PageColumns.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     public Response getDatasetItemsOutputColumns(
             @PathParam("id") @NotNull UUID datasetId,
             @QueryParam("experiment_ids") String experimentIdsQueryParam) {
@@ -931,6 +1014,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     @RateLimited
     public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
@@ -963,6 +1047,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
 
@@ -985,6 +1070,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -1005,6 +1091,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
             @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     public Response getDatasetExportJobs() {
 
@@ -1029,6 +1116,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "400", description = "Export job is not ready for download"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public Response downloadDatasetExport(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

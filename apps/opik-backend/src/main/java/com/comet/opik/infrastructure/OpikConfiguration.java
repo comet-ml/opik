@@ -122,6 +122,9 @@ public class OpikConfiguration extends JobConfiguration {
     private S3Config s3Config = new S3Config();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsConfig guardrails = new GuardrailsConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
@@ -222,6 +225,29 @@ public class OpikConfiguration extends JobConfiguration {
     private AiLabelsConfig aiLabels = new AiLabelsConfig();
 
     @Valid @NotNull @JsonProperty
+    private InferenceConfig inference = new InferenceConfig();
+
+    @Valid @NotNull @JsonProperty
+    private TopicsConfig topics = new TopicsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private WorkspaceFeaturesConfig workspaceFeatures = new WorkspaceFeaturesConfig();
+
+    @JsonIgnore
+    @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: the backend runs guardrail checks on opik-inference")
+    public boolean isGuardrailsInferenceConfigured() {
+        return !serviceToggles.isGuardrailsValidationsEnabled()
+                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
+    public boolean isAiLabelsInferenceConfigured() {
+        return !aiLabels.isEnabled()
+                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+    }
+
+    @Valid @NotNull @JsonProperty
     private AdminServerConfig adminServer;
 
     @JsonIgnore
@@ -235,5 +261,43 @@ public class OpikConfiguration extends JobConfiguration {
     @AssertTrue(message = "aiLabels.enabled (AI_LABELS_ENABLED) requires databaseAnalyticsDataModel.traceColumnsNonNullable (ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE): ai-labels reads only the cut-over traces table")
     public boolean isAiLabelsDataModelSupported() {
         return !aiLabels.isEnabled() || databaseAnalyticsDataModel.traceColumnsNonNullable();
+    }
+
+    // Topics embeds ai-labels' summaries through ai-labels' opik-inference deployment: without labels there is nothing.
+    @JsonIgnore
+    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED) and inference.url (OPIK_INFERENCE_URL)")
+    public boolean isTopicsAiLabelsEnabled() {
+        return !topics.isEnabled() || (aiLabels.isEnabled() && StringUtils.isNotBlank(inference.getUrl()));
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY, when ai-labels is on) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY, when Topics is on) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
+    public boolean isInferenceCallsWithinConnectionPool() {
+        if (!serviceToggles.isGuardrailsValidationsEnabled() || inference == null || jerseyClient == null) {
+            return true;
+        }
+        // Only the features that are on call opik-inference. Summed as long so a value near Integer.MAX_VALUE can't
+        // overflow past the check.
+        long loadConcurrency = aiLabels.isEnabled() ? aiLabels.getLoadConcurrency() : 0;
+        long embedConcurrency = topics.isEnabled() && topics.getVectors() != null
+                ? topics.getVectors().getEmbedConcurrency()
+                : 0;
+        return inference.getMaxConcurrentDecides() + loadConcurrency + embedConcurrency < jerseyClient
+                .getMaxConnectionsPerRoute();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.vectors.embedBatchSize must not be above inference.limits.maxEmbedInputs") public boolean isTopicsEmbedBatchWithinLimits() {
+        return topics.getVectors() == null || inference.getLimits() == null
+                || topics.getVectors().getEmbedBatchSize() <= inference.getLimits().getMaxEmbedInputs();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.vectors.embedTimeout must not be above inference.limits.maxEmbedDeadline") public boolean isTopicsEmbedTimeoutWithinLimits() {
+        var vectors = topics.getVectors();
+        var limits = inference.getLimits();
+        return vectors == null || vectors.getEmbedTimeout() == null || limits == null
+                || limits.getMaxEmbedDeadline() == null
+                || vectors.getEmbedTimeout().toMilliseconds() <= limits.getMaxEmbedDeadline().toMilliseconds();
     }
 }

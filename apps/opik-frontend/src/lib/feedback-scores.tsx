@@ -39,9 +39,9 @@ export function getIsMultiValueFeedbackScore(
 ): value_by_author is FeedbackScoreValueByAuthorMap {
   return Boolean(
     value_by_author &&
-      typeof value_by_author === "object" &&
-      !Array.isArray(value_by_author) &&
-      Object.keys(value_by_author).length > 1,
+    typeof value_by_author === "object" &&
+    !Array.isArray(value_by_author) &&
+    Object.keys(value_by_author).length > 1,
   );
 }
 
@@ -54,6 +54,17 @@ export function hasValuesByAuthor(
     score && typeof score === "object" && "value_by_author" in score,
   );
 }
+
+export const getAuthorName = (
+  key: string,
+  entry?: FeedbackScoreValueByAuthorMap[string],
+): string => {
+  if (entry?.author) {
+    return entry.author;
+  }
+  const lastUnderscore = key.lastIndexOf("_");
+  return lastUnderscore !== -1 ? key.substring(0, lastUnderscore) : key;
+};
 
 /**
  * Finds a value in value_by_author by userName, handling both regular keys (userName)

@@ -16,7 +16,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Spec 08: the shipped v1 task builds a byte-exact, contract-valid item. */
+/** Spec 08: the shipped task builds a byte-exact, contract-valid item. */
 class TraceSummaryTaskTest {
 
     private static final UUID TRACE_ID = UUID.fromString("0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d");

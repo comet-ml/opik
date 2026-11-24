@@ -20,7 +20,7 @@ type FiltersButtonProps<TColumnData> = {
   config?: FilterButtonConfig;
   filters: Filters;
   onChange: (filters: Filters) => void;
-  layout?: "standard" | "icon";
+  layout?: "standard" | "icon" | "add";
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   align?: "start" | "end";
@@ -46,12 +46,15 @@ const FiltersButton = <TColumnData,>({
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
-  const isIconLayout = layout === "icon";
-  const buttonSize = size ?? (isIconLayout ? "icon-sm" : "sm");
 
   const validFilters = useDeepMemo(() => {
     return filters.filter(isFilterValid);
   }, [filters]);
+
+  const showAddChip = layout === "add" && validFilters.length === 0;
+  // Once a filter is applied, the "add" layout falls back to the icon-with-count state.
+  const isIconLayout = layout === "icon" || layout === "add";
+  const buttonSize = size ?? (isIconLayout ? "icon-sm" : "sm");
 
   const onClearAll = useCallback(() => {
     setFilters([]);
@@ -89,28 +92,44 @@ const FiltersButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <TooltipWrapper content={isIconLayout ? tooltip ?? "Filters" : undefined}>
+      <TooltipWrapper
+        content={
+          isIconLayout && !showAddChip ? (tooltip ?? "Filters") : undefined
+        }
+      >
         <PopoverTrigger asChild>
-          <Button
-            variant={variant}
-            size={buttonSize}
-            className={cn(
-              isIconLayout && validFilters.length && "w-auto px-3",
-              className,
-            )}
-            disabled={disabled}
-          >
-            <FilterIcon
-              className={cn("shrink-0", !isIconLayout && "size-3.5")}
-            />
-            {isIconLayout ? (
-              validFilters.length ? (
-                <span className="ml-1.5">{validFilters.length}</span>
-              ) : null
-            ) : (
-              <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
-            )}
-          </Button>
+          {showAddChip ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn("rounded-full text-muted-slate", className)}
+              disabled={disabled}
+            >
+              <Plus className="size-3.5 shrink-0" />
+              <span className="ml-1.5">Add filter</span>
+            </Button>
+          ) : (
+            <Button
+              variant={variant}
+              size={buttonSize}
+              className={cn(
+                isIconLayout && validFilters.length && "w-auto px-3",
+                className,
+              )}
+              disabled={disabled}
+            >
+              <FilterIcon
+                className={cn("shrink-0", !isIconLayout && "size-3.5")}
+              />
+              {isIconLayout ? (
+                validFilters.length ? (
+                  <span className="ml-1.5">{validFilters.length}</span>
+                ) : null
+              ) : (
+                <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
+              )}
+            </Button>
+          )}
         </PopoverTrigger>
       </TooltipWrapper>
       <PopoverContent

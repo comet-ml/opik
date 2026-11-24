@@ -2,11 +2,11 @@
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM python:3.12.16-slim@sha256:e695ab189fa2d082b1c61c69a6b888a5adeca61ceeccad107b1ed2a125721a9e AS builder
+FROM python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS builder
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
-COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d /uv /usr/local/bin/uv
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM python:3.12.16-slim@sha256:e695ab189fa2d082b1c61c69a6b888a5adeca61ceeccad107b1ed2a125721a9e AS runtime
+FROM python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 

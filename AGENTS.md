@@ -1,19 +1,24 @@
 # Repository Guidelines
 
 ## Scope & Inheritance
+
 - This is the canonical monorepo guide for shared contribution policy.
 - Module-level `AGENTS.md` files should keep only module-specific guidance and reference this file for shared rules.
 
 ## Project Structure & Module Organization
+
 This repository is a multi-module Opik codebase. Main areas:
+
 - `apps/opik-backend`: Java backend (source in `src/main/java`, tests in `src/test/java`).
 - `apps/opik-frontend`: React/TypeScript frontend (`src` and related assets/config).
 - `apps/opik-documentation`: documentation website and generated API docs.
 - `sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`: SDK packages and examples.
+- `sdks/genui`: the generative UI engine: the iframe host and HTML contract for generated views, the tokens and the authoring guidance.
 - `deployment`, `scripts`, `extensions`: infra, tooling, and integration extension points.
 - `tests_end_to_end`, `tests_load`: cross-stack and performance test suites.
 
 ## Build, Test, and Development Commands
+
 - `./opik.sh` — run default local stack via Docker.
 - `./opik.sh --build` — rebuild images and run the full stack.
 - `./opik.sh --verify` — run stack health checks.
@@ -23,20 +28,23 @@ This repository is a multi-module Opik codebase. Main areas:
 - `scripts/dev-runner.sh --build-be` / `--build-fe` — build one side only.
 - `scripts/dev-runner.sh --lint-be` — Java lint/format checks.
 - `scripts/dev-runner.sh --lint-fe` — frontend lint/type checks via `npm`.
-- `cd apps/opik-frontend && npm run lint && npm run test` — run ESLint + Vitest.
+- `cd apps/opik-frontend && npm run lint && npm run test` — run oxlint, oxfmt check, stylelint + Vitest.
 - `cd apps/opik-frontend && npm run build` — production frontend build.
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 - `cd sdks/python && pip install -r tests/test_requirements.txt && pip install -r tests/unit/test_requirements.txt && pytest tests/unit tests/e2e` — Python SDK test suites.
 - `make precommit` — run pre-commit hooks on changed files (vs origin/main) from the root `.pre-commit-config.yaml` across all modules (do not duplicate per-module command lines in multiple places).
 - `cd sdks/typescript && npm run lint && npm run test && npm run build` — TS SDK checks.
+- `cd sdks/genui && npm ci && npm run ci` — engine checks, as CI runs them: lint, typecheck, build, smoke, Python tests (`npm run lint:fix` applies oxlint fixes and oxfmt); `npm run build && npm run check` for the browser checks.
 - `cd tests_end_to_end/e2e && npx playwright test` — cross-stack Playwright E2E suite.
 
 ## Coding Style & Naming Conventions
+
 - Use existing module formatters/conventions and keep edits scoped; avoid blanket reformatting.
 - For detailed coding rules, defer to module-level `AGENTS.md` files and skill docs (for example `.agents/skills/python-sdk/good-code.md`) instead of duplicating style guidance here.
 
 ## Testing Guidelines
+
 - Frameworks: Vitest (frontend + TS SDK), Playwright (frontend E2E), Maven/JUnit (backend), pytest (Python SDK).
 - Naming conventions:
   - Java: `*Test.java` in `apps/opik-backend/src/test/java`.
@@ -49,6 +57,7 @@ This repository is a multi-module Opik codebase. Main areas:
   - `tests_end_to_end/e2e/README.md` for suite-specific command and setup
 
 ## Agent Contribution Workflow
+
 - This repository is a monorepo; submodule `AGENTS.md` files inherit this workflow by default.
 - Read `CONTRIBUTING.md` and `.github/pull_request_template.md` before editing or opening a PR.
 - Link tracked work in PRs with `Fixes #<id>` or `Resolves #<id>`.
@@ -57,6 +66,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - Run relevant unit tests and formatters for the touched area before requesting review.
 
 ## Commit & Pull Request Guidelines
+
 - PR title and first commit should use semantic style with ticket prefix: `[OPIK-1234] [COMPONENT] feat|fix|refactor|docs: short summary`.
 - Follow existing component prefixes (`[FE]`, `[SDK]`, `[DOCS]`, `[NA]`, `[INFRA]`, etc.).
 - PR descriptions should include: change summary, test coverage run, and linked issue references (`Resolves #...`).
@@ -64,15 +74,18 @@ This repository is a multi-module Opik codebase. Main areas:
 - Include screenshots or short recordings for user-visible UI changes when possible.
 
 ## Ignored Surfaces
+
 - `.github/instructions/` contains GitHub Copilot-specific instruction files. Other agents should ignore this directory and use `.agents/` as the canonical source.
 - `.github/copilot-instructions.md` is GitHub Copilot code review guidance only.
 
 ## Security & Configuration Tips
+
 - Keep secrets and API keys out of source control; use local `.env` or shell variables.
 - For local self-hosted testing, ensure dependencies are configured (MySQL, ClickHouse, Redis) before running backend tests.
 - Prefer `opik configure --use_local` when running SDK examples against your local deployment.
 
 ## Generated Files
+
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` and `apps/opik-frontend/src/data/model_prices_and_context_window.json` are generated artifacts.
 - `apps/opik-backend/src/main/resources/model_prices_openrouter.json` and `apps/opik-frontend/src/data/model_prices_openrouter.json` are generated from OpenRouter's model list by `scripts/update_openrouter_model_prices.py`.
 - Do not edit these files directly; updates should come from the repository updater automation.

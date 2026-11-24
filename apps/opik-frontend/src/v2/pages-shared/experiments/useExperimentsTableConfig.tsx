@@ -6,6 +6,7 @@ import {
   ColumnDefTemplate,
   CellContext,
   OnChangeFn,
+  Row,
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
@@ -52,6 +53,7 @@ import {
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import {
   createItemSourceGroupCell,
+  EXPERIMENT_COUNT_UNIT,
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
@@ -59,6 +61,9 @@ import {
   Experiment,
   ExperimentsAggregations,
 } from "@/types/datasets";
+
+const getExperimentRowClassName = <T,>(row: Row<T>) =>
+  row.getIsGrouped() ? "comet-table-row-group" : "";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -75,6 +80,9 @@ export type UseExperimentsTableConfigProps<T> = {
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
   datasetTypeMap?: Record<string, DATASET_TYPE>;
+  // Set when the table lists a single item source type; names it in the UI and
+  // drops the per-row type prefix.
+  itemSourceLabel?: string;
 };
 
 export const useExperimentsTableConfig = <
@@ -95,6 +103,7 @@ export const useExperimentsTableConfig = <
   sortedColumns,
   setSortedColumns,
   datasetTypeMap,
+  itemSourceLabel,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns-v2`,
@@ -161,32 +170,30 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType, type: scoreType }) => {
-          const actualType = scoreType || SCORE_TYPE_FEEDBACK;
-          const scoreName = parseScoreColumnId(id)?.scoreName;
+    return dynamicScoresColumns.map(
+      ({ label, id, columnType, type: scoreType }) => {
+        const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+        const scoreName = parseScoreColumnId(id)?.scoreName;
 
-          const columnData: ColumnData<T> = {
-            id,
-            label,
-            type: columnType,
-            scoreType: actualType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                getExperimentScore(id, aggregation)?.value,
-              scoreName,
-            },
-          };
+        const columnData: ColumnData<T> = {
+          id,
+          label,
+          type: columnType,
+          scoreType: actualType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          aggregatedCell: FeedbackScoreCell.Aggregation as never,
+          accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
+          customMeta: {
+            accessorFn: (aggregation: ExperimentsAggregations) =>
+              getExperimentScore(id, aggregation)?.value,
+            scoreName,
+          },
+        };
 
-          return columnData;
-        },
-      ),
-    ];
+        return columnData;
+      },
+    );
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
@@ -223,7 +230,7 @@ export const useExperimentsTableConfig = <
     const groupColumns = groups.map((group) => {
       const label =
         group.field === COLUMN_DATASET_ID
-          ? ITEM_SOURCE_LABEL
+          ? (itemSourceLabel ?? ITEM_SOURCE_LABEL)
           : calculateGroupLabel(group);
       const id = buildGroupFieldName(group);
       const metaKey = buildGroupFieldNameForMeta(group);
@@ -237,6 +244,7 @@ export const useExperimentsTableConfig = <
           valueKey: `${metaKey}.value`,
           labelKey: `${metaKey}.label`,
           countAggregationKey: "experiment_count",
+          countUnit: EXPERIMENT_COUNT_UNIT,
           explainer: {
             id: "group-experiments",
             description: `Some of the experiments didn’t match any group`,
@@ -256,9 +264,14 @@ export const useExperimentsTableConfig = <
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
+              hidePrefix: Boolean(itemSourceLabel),
               explainer: {
                 id: "group-experiments",
-                description: `Some experiments reference an item source that has been deleted`,
+                description: `Some experiments reference ${
+                  itemSourceLabel
+                    ? `a ${itemSourceLabel.toLowerCase()}`
+                    : "an item source"
+                } that has been deleted`,
               },
             },
           } as ColumnData<T>;
@@ -275,6 +288,7 @@ export const useExperimentsTableConfig = <
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
+              countUnit: EXPERIMENT_COUNT_UNIT,
               explainer: {
                 id: "group-experiments",
                 description: `Some experiments reference a project that has been deleted`,
@@ -322,6 +336,7 @@ export const useExperimentsTableConfig = <
                   getSearch: (data: Experiment) => ({
                     experiments: [data.id],
                   }),
+                  variant: "text",
                 },
                 headerCheckbox: true,
               },
@@ -345,12 +360,14 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    const baseColumns = [
-      ...firstColumns,
-      ...groupColumns,
-      ...regularColumns,
-      ...scoresColumns,
-    ];
+    // Columns without a group stat need an explicit empty cell, otherwise
+    // TanStack falls back to rendering the summed column value.
+    const statColumns = [...regularColumns, ...scoresColumns].map((column) => ({
+      ...column,
+      aggregatedCell: column.aggregatedCell ?? (() => null),
+    }));
+
+    const baseColumns = [...firstColumns, ...groupColumns, ...statColumns];
 
     if (actionsCell) {
       baseColumns.push(
@@ -372,6 +389,7 @@ export const useExperimentsTableConfig = <
     scoresColumnsOrder,
     actionsCell,
     datasetTypeMap,
+    itemSourceLabel,
   ]);
 
   const sortConfig = useMemo(
@@ -440,6 +458,7 @@ export const useExperimentsTableConfig = <
 
     // Utility methods
     getExperimentRowId,
+    getExperimentRowClassName,
 
     // Configs
     sortConfig,

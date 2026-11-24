@@ -3,19 +3,11 @@ import {
   TraceFeedbackScore,
 } from "@/types/traces";
 import { ExpandingFeedbackScoreRow } from "./types";
-import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
+import {
+  getAuthorName,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
 import { PARENT_ROW_ID_PREFIX } from "./constants";
-
-export const getAuthorName = (
-  key: string,
-  entry?: FeedbackScoreValueByAuthorMap[string],
-): string => {
-  if (entry?.author) {
-    return entry.author;
-  }
-  const lastUnderscore = key.lastIndexOf("_");
-  return lastUnderscore !== -1 ? key.substring(0, lastUnderscore) : key;
-};
 
 /**
  * Creates a child row from a parent feedback score and individual score entry.

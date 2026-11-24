@@ -1,6 +1,6 @@
 import React from "react";
 import { useFormContext } from "react-hook-form";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";

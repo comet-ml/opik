@@ -1,5 +1,5 @@
 # Build stage
-FROM node:26.13.0-alpine3.23@sha256:e6c03d42b46af3b1e98207e59f06a43cfe5efd3ec4b4d3d9802bddf04f833374 AS builder
+FROM node:26.13.1-alpine3.23@sha256:39d8c143e60e99ae98f014bebea1e72fc96d3c9bdf9504bc3a27af5c05bfa39f AS builder
 
 WORKDIR /opt/frontend
 
@@ -27,7 +27,7 @@ RUN npm run build -- --mode $BUILD_MODE \
 # Slim plus only the OpenTelemetry module: the -otel image is built on the full alpine variant, whose other
 # modules we don't use and which bring in brotli and expat CVEs. The module comes from nginx.org, signed with the
 # key slim already trusts, pinned the way nginx's own -otel Dockerfile pins it. curl is for the compose healthcheck.
-FROM nginx:1.30.6-alpine-slim@sha256:dede8895648b461178c3bc604f7eed4423efe5220b2c4d839f5eb3d34ac3f8f7 AS nginx
+FROM nginx:1.30.7-alpine-slim@sha256:8c950211a641ec5b23f265450517001f6bcca533666120ebe36cb4cff3d00a55 AS nginx
 ARG OTEL_VERSION=0.1.2
 # curl stays unpinned: Alpine keeps only the latest build in a release's repo, so a pin breaks the next rebuild.
 # hadolint ignore=DL3018

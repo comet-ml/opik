@@ -17,6 +17,7 @@ import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
+import { GuardrailPoliciesClient } from "./api/resources/guardrailPolicies/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
 import { InsightsViewsClient } from "./api/resources/insightsViews/client/Client.js";
 import { LlmModelsClient } from "./api/resources/llmModels/client/Client.js";
@@ -40,6 +41,7 @@ import { SpansClient } from "./api/resources/spans/client/Client.js";
 import { SystemAnalyticsQueriesClient } from "./api/resources/systemAnalyticsQueries/client/Client.js";
 import { SystemUsageClient } from "./api/resources/systemUsage/client/Client.js";
 import { TracesClient } from "./api/resources/traces/client/Client.js";
+import { ViewsClient } from "./api/resources/views/client/Client.js";
 import { WelcomeWizardClient } from "./api/resources/welcomeWizard/client/Client.js";
 import { WorkspacePermissionsClient } from "./api/resources/workspacePermissions/client/Client.js";
 import { WorkspacesClient } from "./api/resources/workspaces/client/Client.js";
@@ -79,6 +81,7 @@ export class OpikApiClient {
     protected _environments: EnvironmentsClient | undefined;
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
+    protected _guardrailPolicies: GuardrailPoliciesClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
     protected _insightsViews: InsightsViewsClient | undefined;
     protected _llmModels: LlmModelsClient | undefined;
@@ -98,6 +101,7 @@ export class OpikApiClient {
     protected _serviceToggles: ServiceTogglesClient | undefined;
     protected _spans: SpansClient | undefined;
     protected _traces: TracesClient | undefined;
+    protected _views: ViewsClient | undefined;
     protected _welcomeWizard: WelcomeWizardClient | undefined;
     protected _workspacePermissions: WorkspacePermissionsClient | undefined;
     protected _workspaces: WorkspacesClient | undefined;
@@ -187,6 +191,10 @@ export class OpikApiClient {
         return (this._feedbackDefinitions ??= new FeedbackDefinitionsClient(this._options));
     }
 
+    public get guardrailPolicies(): GuardrailPoliciesClient {
+        return (this._guardrailPolicies ??= new GuardrailPoliciesClient(this._options));
+    }
+
     public get guardrails(): GuardrailsClient {
         return (this._guardrails ??= new GuardrailsClient(this._options));
     }
@@ -261,6 +269,10 @@ export class OpikApiClient {
 
     public get traces(): TracesClient {
         return (this._traces ??= new TracesClient(this._options));
+    }
+
+    public get views(): ViewsClient {
+        return (this._views ??= new ViewsClient(this._options));
     }
 
     public get welcomeWizard(): WelcomeWizardClient {

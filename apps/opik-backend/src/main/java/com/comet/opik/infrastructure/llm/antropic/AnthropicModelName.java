@@ -17,6 +17,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_SONNET_3_7("claude-3-7-sonnet-20250219"),
     CLAUDE_FABLE_5("claude-fable-5"),
     CLAUDE_FABLE_5_1("claude-fable-5-1"),
+    CLAUDE_FABLE_5_2("claude-fable-5-2"),
     CLAUDE_HAIKU_4_5("claude-haiku-4-5-20251001"),
     CLAUDE_HAIKU_5_5("claude-haiku-5-5"),
     CLAUDE_MYTHOS_5("claude-mythos-5"),

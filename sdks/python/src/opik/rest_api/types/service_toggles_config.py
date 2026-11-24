@@ -18,11 +18,15 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="spanUserDefinedMetricPythonEnabled")
     ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
+    guardrails_validations_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="guardrailsValidationsEnabled")
+    ]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
     cost_intelligence_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="costIntelligenceEnabled")]
+    model_prices_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="modelPricesEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
     dataset_export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetExportEnabled")]
     demo_data_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="demoDataEnabled")]
@@ -40,9 +44,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="agentInsightsGuidanceEnabled")
     ]
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
-    online_scoring_tracing_enabled: typing_extensions.Annotated[
-        bool, FieldMetadata(alias="onlineScoringTracingEnabled")
-    ]
     annotation_queue_automation_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="annotationQueueAutomationEnabled")
     ]

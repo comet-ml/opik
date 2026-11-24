@@ -168,7 +168,11 @@ Object.assign(
           ),
         );
       };
-      visible ? show() : hide();
+      if (visible) {
+        show();
+      } else {
+        hide();
+      }
       return wrap;
     };
 

@@ -203,7 +203,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
      * <ol>
      * <li>the explicit request {@code project_name}, when provided;</li>
      * <li>otherwise the existing experiment's project, when it already exists and has one;</li>
-     * <li>otherwise the existing dataset's project, when it already exists and has one;</li>
+     * <li>otherwise the existing dataset's project, when it already exists and has one other than the default
+     * project;</li>
      * <li>otherwise the default project (deprecated fallback).</li>
      * </ol>
      * Derivation only reads existing entities; it never creates an experiment or dataset to obtain a project.
@@ -231,6 +232,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         ? Mono.<String>empty()
                         : projectService.getOrFail(dataset.projectId())
                                 .map(Project::name)
+                                .filter(name -> !ProjectService.DEFAULT_PROJECT.equals(name))
                                 .onErrorResume(NotFoundException.class, ex -> Mono.empty()))
                 .onErrorResume(NotFoundException.class, ex -> Mono.empty());
     }
@@ -275,12 +277,23 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 });
     }
 
+    /**
+     * A dataset in the default project does not tie the experiment to a project: datasets created without a project
+     * are stored there, and before that they had no project, which never conflicted with a request project.
+     */
     private Mono<Optional<UUID>> resolveDatasetProjectId(String datasetName, String projectName) {
         // Resolve the dataset scoped to the request project so the lookup is project-aware.
         return datasetService
                 .resolveDatasetByNameAsync(
                         DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build())
-                .map(dataset -> Optional.ofNullable(dataset.projectId()))
+                .flatMap(dataset -> dataset.projectId() == null
+                        ? Mono.just(Optional.<UUID>empty())
+                        : projectService.getOrFail(dataset.projectId())
+                                .map(project -> ProjectService.DEFAULT_PROJECT.equals(project.name())
+                                        ? Optional.<UUID>empty()
+                                        : Optional.of(project.id()))
+                                .onErrorResume(NotFoundException.class,
+                                        ex -> Mono.just(Optional.of(dataset.projectId()))))
                 .defaultIfEmpty(Optional.empty())
                 .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
     }
