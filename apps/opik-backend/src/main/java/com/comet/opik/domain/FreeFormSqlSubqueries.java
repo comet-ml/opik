@@ -42,13 +42,17 @@ class FreeFormSqlSubqueries {
     private static final Pattern TABLE_NODE = Pattern.compile("^TABLE id: \\d+(?:, |$)");
     private static final Pattern TABLE_FUNCTION_NODE = Pattern.compile("^TABLE_FUNCTION id: \\d+(?:, |$)");
     private static final Pattern TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
-    private static final Pattern FUNCTION_NAME = Pattern
-            .compile("^FUNCTION id: \\d+(?=, ).*?, function_name: ([^,]+)");
+    private static final Pattern FUNCTION_NODE = Pattern.compile("^FUNCTION id: \\d+(?:, |$)");
+    private static final Pattern FUNCTION_NAME = Pattern.compile("^FUNCTION id: \\d+, function_name: ([^,]+)");
     private static final Pattern SUBQUERY = Pattern.compile("(?:^|, )is_subquery: 1(?:,|$)");
 
     static Optional<String> resolvedFunctionName(String line) {
         var matcher = FUNCTION_NAME.matcher(line.stripLeading());
         return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    static boolean isFunctionNode(String line) {
+        return FUNCTION_NODE.matcher(line.stripLeading()).find();
     }
 
     /** A table read, not a section label such as the {@code TABLE EXPRESSION} an ARRAY JOIN prints. */

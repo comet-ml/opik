@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.internal;
 
+import com.clickhouse.client.api.Client;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -17,6 +18,7 @@ import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.db.FreeFormSqlTestData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -41,10 +43,13 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.db.FreeFormSqlTestData.PER_PROJECT;
 import static com.comet.opik.domain.FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE;
 import static com.comet.opik.domain.FreeFormSqlQueryService.EXECUTION_FAILED_MESSAGE;
 import static com.comet.opik.domain.FreeFormSqlQueryService.INVALID_JSON_RESULT_MESSAGE;
@@ -80,6 +85,10 @@ class AnalyticsQueriesResourceTest {
     private static final String API_KEY_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
+
+    // Rows seeded directly into the legacy tables, per workspace (dataset_items) or project (feedback_scores).
+    // Distinct from PER_PROJECT, so a count taken from the wrong table cannot pass by coincidence.
+    private static final int LEGACY_ROWS = 3;
 
     private static final String RESULT_QUERY = "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM traces ORDER BY id";
 
@@ -132,9 +141,11 @@ class AnalyticsQueriesResourceTest {
     private UUID traceIdB;
     private UUID experimentIdA;
     private UUID experimentIdB;
+    // Every table the accounts read, seeded with known counts in two fresh workspaces.
+    private FreeFormSqlTestData seeded;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client) throws Exception {
         var baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -165,6 +176,38 @@ class AnalyticsQueriesResourceTest {
                 experimentResourceClient.createPartialExperiment().projectId(projectIdA2).build(),
                 API_KEY_A, WORKSPACE_NAME_A);
         experimentIdB = experimentResourceClient.create(API_KEY_B, WORKSPACE_NAME_B);
+
+        try (var admin = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME)
+                .buildClient()) {
+            seeded = FreeFormSqlTestData.seed(client, wireMock, admin);
+            mockWorkspace(seeded.a().apiKey(), seeded.a().name(), seeded.a().id());
+            // The API no longer writes these legacy tables (scores go to authored_feedback_scores, and dataset
+            // versioning writes dataset_item_versions), so they are seeded directly.
+            insertLegacyDatasetItems(admin, seeded.a().id());
+            insertLegacyDatasetItems(admin, seeded.b().id());
+            Stream.of(seeded.a1(), seeded.a2(), seeded.b1())
+                    .forEach(project -> insertLegacyFeedbackScores(admin, project));
+        }
+    }
+
+    private static void insertLegacyDatasetItems(Client admin, String workspaceId) {
+        var datasetId = UUID.randomUUID();
+        var rows = IntStream.range(0, LEGACY_ROWS)
+                .mapToObj(i -> "('%s', '%s', '%s')".formatted(UUID.randomUUID(), datasetId, workspaceId))
+                .collect(Collectors.joining(", "));
+        admin.queryAll("INSERT INTO %s.dataset_items (id, dataset_id, workspace_id) VALUES %s"
+                .formatted(DATABASE_NAME, rows));
+    }
+
+    private static void insertLegacyFeedbackScores(Client admin, FreeFormSqlTestData.Project project) {
+        var rows = IntStream.range(0, LEGACY_ROWS)
+                .mapToObj(i -> "('%s', 'trace', '%s', '%s', 'score', 1, 'sdk')".formatted(UUID.randomUUID(),
+                        project.id(), project.workspace().id()))
+                .collect(Collectors.joining(", "));
+        admin.queryAll("""
+                INSERT INTO %s.feedback_scores (entity_id, entity_type, project_id, workspace_id, name, value, source)
+                VALUES %s
+                """.formatted(DATABASE_NAME, rows));
     }
 
     @Test
@@ -235,14 +278,16 @@ class AnalyticsQueriesResourceTest {
     private Stream<Arguments> forbiddenQueries() {
         var catalogTables = Stream.of("system.tables", "system.columns", "system.databases", "system.settings",
                 "system.one", "information_schema.tables")
-                .map(table -> arguments("catalog table " + table,
-                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + table));
+                .map(table -> arguments("catalog table %s".formatted(table),
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM %s".formatted(table)));
         var metadataExpressions = Stream.of("currentUser()", "database()", "schema()", "current_database()",
                 "current_user()", "current_user", "getMacro('replica')", "getServerPort('tcp_port')",
                 "displayName()", "DISPLAYNAME()", "enabledRoles()", "defaultRoles()", "getOSKernelVersion()",
                 "tcpPort()", "TCPPORT()", "authenticatedUser()", "enabledProfiles()", "defaultProfiles()",
-                "current_database", "database", "schema", "user", "currentDatabase", "currentUser")
-                .map(expression -> arguments("metadata expression " + expression,
+                "current_database", "database", "schema", "user", "currentDatabase", "currentUser",
+                // ClickHouse aliases of listed functions whose own names are not listed: caught by canonical name.
+                "authUser()", "current_schemas(true)", "fullHostName()")
+                .map(expression -> arguments("metadata expression %s".formatted(expression),
                         "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression)));
         var nested = Stream.of(
                 arguments("catalog table in CTE", """
@@ -299,7 +344,8 @@ class AnalyticsQueriesResourceTest {
                 arguments("remote catalog", "remote('localhost', 'system', 'tables')"),
                 arguments("cluster catalog", "cluster('default', 'system', 'tables')"))
                 .flatMap(testCase -> Stream.of(Endpoint.values()).map(endpoint -> arguments(testCase.get()[0], endpoint,
-                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + testCase.get()[1])));
+                        "SELECT toJSONString(map('n', toString(count()))) AS result FROM %s"
+                                .formatted(testCase.get()[1]))));
     }
 
     @ParameterizedTest(name = "{0} via {1}")
@@ -363,24 +409,42 @@ class AnalyticsQueriesResourceTest {
         }
     }
 
+    /**
+     * Counts fixed by the seeding, not read back. Project-bound tables see project A1 only; experiments, their items
+     * and dataset items belong to the workspace, so they count both of A's projects. Workspace B and project A2 hold
+     * the same data, so any count above these means a read escaped the caller's scope.
+     */
     private Stream<Arguments> allowedTablesByEndpoint() {
         var standard = Stream.of("spans", "traces", "authored_feedback_scores")
-                .map(table -> arguments(Endpoint.EXECUTE, table));
-        var extended = Stream.of("spans", "traces", "authored_feedback_scores", "feedback_scores", "trace_threads",
-                "experiments", "experiment_items", "dataset_items", "dataset_item_versions")
-                .map(table -> arguments(Endpoint.EXECUTE_SCOPED, table));
-        return Stream.concat(standard, extended);
+                .map(table -> arguments(Endpoint.EXECUTE, table, PER_PROJECT));
+        var extendedProjectBound = Stream.concat(
+                Stream.of("spans", "traces", "authored_feedback_scores", "trace_threads")
+                        .map(table -> arguments(Endpoint.EXECUTE_SCOPED, table, PER_PROJECT)),
+                Stream.of(arguments(Endpoint.EXECUTE_SCOPED, "feedback_scores", LEGACY_ROWS)));
+        var extendedWorkspaceBound = Stream.of(
+                arguments(Endpoint.EXECUTE_SCOPED, "experiments", 2),
+                arguments(Endpoint.EXECUTE_SCOPED, "experiment_items", 2 * PER_PROJECT),
+                arguments(Endpoint.EXECUTE_SCOPED, "dataset_item_versions", 2 * PER_PROJECT),
+                arguments(Endpoint.EXECUTE_SCOPED, "dataset_items", LEGACY_ROWS));
+        return Stream.of(standard, extendedProjectBound, extendedWorkspaceBound).flatMap(s -> s);
     }
 
     @ParameterizedTest(name = "{0} reads {1}")
     @MethodSource("allowedTablesByEndpoint")
     @DisplayName("each account can query only its listed logical tables")
-    void allowedTable__thenReturnsResult(Endpoint endpoint, String table) {
-        String query = "SELECT toJSONString(map('n', toString(count()))) AS result FROM " + table;
-        try (Response response = call(endpoint, query)) {
+    void allowedTable__thenReturnsResult(Endpoint endpoint, String table, int expectedCount) {
+        String query = "SELECT toJSONString(map('n', toString(count()))) AS result FROM %s".formatted(table);
+        var a1 = seeded.a1();
+        try (Response response = switch (endpoint) {
+            case EXECUTE -> analyticsQueriesClient.callExecute(a1.id(), query, a1.workspace().apiKey(),
+                    a1.workspace().name());
+            case EXECUTE_SCOPED -> analyticsQueriesClient.callExecuteScoped(a1.id(), query, a1.workspace().apiKey(),
+                    a1.workspace().name());
+        }) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
             assertThat(response.readEntity(AnalyticsQueryResponse.class).results())
-                    .singleElement().satisfies(node -> assertThat(node.get("n").asText()).isNotBlank());
+                    .singleElement()
+                    .satisfies(node -> assertThat(node.get("n").asText()).isEqualTo(String.valueOf(expectedCount)));
         }
     }
 

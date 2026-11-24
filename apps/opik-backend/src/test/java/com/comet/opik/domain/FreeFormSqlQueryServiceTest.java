@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.ServerException;
-import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
@@ -9,8 +8,10 @@ import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -221,28 +222,33 @@ class FreeFormSqlQueryServiceTest {
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("tree unavailable")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
-                .cause().satisfies(error -> {
-                    assertThat(error).isInstanceOf(WebApplicationException.class);
-                    assertThat(((WebApplicationException) error).getResponse().getStatus()).isEqualTo(503);
-                });
+                .cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("a query returning more than the single result column is a clean 400")
-    void nonSingleResultColumnIsRejected() {
+    @DisplayName("a FUNCTION node whose name cannot be read is rejected, so a tree format change fails closed")
+    void unreadableFunctionNodeIsRejected() {
         givenClickHouseReturnsOneRow();
-        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(CompletableFuture.failedFuture(
-                        new NoSuchColumnException("Free-form SQL must return exactly one result column")));
+        when(dao.explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, QUERY))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, alias: u, function_name: currentUser, result_type: String")));
 
-        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).cause().satisfies(error -> {
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
                     assertThat(error).isExactlyInstanceOf(BadRequestException.class);
                     assertThat(((WebApplicationException) error).getResponse().getEntity())
-                            .isEqualTo(
-                                    new ErrorMessage(List.of(FreeFormSqlQueryService.RESULT_SHAPE_MESSAGE)));
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
                 });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static void assertExecutionFailed(Throwable error) {
+        assertThat(error).isExactlyInstanceOf(ServiceUnavailableException.class);
+        var response = ((WebApplicationException) error).getResponse();
+        assertThat(response.getStatus()).isEqualTo(Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+        assertThat(response.getEntity())
+                .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.EXECUTION_FAILED_MESSAGE)));
     }
 
     @Test
@@ -438,7 +444,7 @@ class FreeFormSqlQueryServiceTest {
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).cause().isInstanceOf(WebApplicationException.class);
+                .join()).cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
     }
@@ -453,7 +459,7 @@ class FreeFormSqlQueryServiceTest {
                 .thenReturn(CompletableFuture.completedFuture(Stream.of("QUERY id: 0", (String) null).toList()));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).cause().isInstanceOf(WebApplicationException.class);
+                .join()).cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());

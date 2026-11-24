@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -514,12 +513,13 @@ public class FreeFormSqlQueryService {
                 .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
+    /** A FUNCTION node whose name cannot be read counts as forbidden, so a tree format change fails closed. */
     private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {
         return queryTree.stream()
-                .map(FreeFormSqlSubqueries::resolvedFunctionName)
-                .flatMap(Optional::stream)
-                .map(name -> name.toLowerCase(Locale.ROOT))
-                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
+                .filter(FreeFormSqlSubqueries::isFunctionNode)
+                .anyMatch(line -> FreeFormSqlSubqueries.resolvedFunctionName(line)
+                        .map(name -> FORBIDDEN_FUNCTIONS.contains(name.toLowerCase(Locale.ROOT)))
+                        .orElse(true));
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
