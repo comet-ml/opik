@@ -2,9 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
-import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -32,7 +32,6 @@ public class ExperimentItemPublisher {
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final ExperimentCancellationService cancellationService;
     private final ExperimentItemLedger itemLedger;
-    private final OrganizationResolver organizationResolver;
 
     @Inject
     public ExperimentItemPublisher(
@@ -40,14 +39,12 @@ public class ExperimentItemPublisher {
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
             @NonNull ExperimentCancellationService cancellationService,
-            @NonNull ExperimentItemLedger itemLedger,
-            @NonNull OrganizationResolver organizationResolver) {
+            @NonNull ExperimentItemLedger itemLedger) {
         this.redisClient = redisClient;
         this.config = config;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.cancellationService = cancellationService;
         this.itemLedger = itemLedger;
-        this.organizationResolver = organizationResolver;
     }
 
     /**
@@ -66,18 +63,18 @@ public class ExperimentItemPublisher {
     }
 
     /** Publishes all messages to the Redis stream. Counters are already set by {@link #startTrackingRun}. */
-    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages,
+            @Nullable String organizationId) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
 
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        var organizationIdStamper = new OrganizationIdStamper(organizationResolver.organizationId());
         return Flux.fromIterable(messages)
-                .flatMap(message -> organizationIdStamper.stamp(message)
-                        .flatMap(stamped -> stream.add(RedisStreamUtils.buildAddArgs(
-                                ExperimentExecutionConfig.PAYLOAD_FIELD, stamped, config)))
+                .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
+                        ExperimentExecutionConfig.PAYLOAD_FIELD, OrganizationIdStamper.stamp(message, organizationId),
+                        config))
                         .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
                         .map(id -> Map.entry(message.experimentId(), id)))
                 .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)
