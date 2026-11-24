@@ -323,7 +323,7 @@ public class FreeFormSqlQueryService {
         if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
             throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
-        if (containsForbiddenFunctionName(nodeLabels)) {
+        if (containsForbiddenName(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
@@ -473,7 +473,7 @@ public class FreeFormSqlQueryService {
      * A forbidden function called by any spelling, or a name ClickHouse calls when written bare, wherever it appears:
      * an identifier, a table or CTE reference, or an alias.
      */
-    private static boolean containsForbiddenFunctionName(List<String> nodeLabels) {
+    private static boolean containsForbiddenName(List<String> nodeLabels) {
         return nodeLabels.stream().anyMatch(label -> isForbidden(functionName(label), FreeFormSqlForbiddenFunctions.ALL)
                 || isForbidden(referencedName(label), FreeFormSqlForbiddenFunctions.BARE_NAMES)
                 || isForbidden(alias(label), FreeFormSqlForbiddenFunctions.BARE_NAMES));
