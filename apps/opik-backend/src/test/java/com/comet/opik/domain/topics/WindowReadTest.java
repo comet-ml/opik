@@ -102,7 +102,9 @@ class WindowReadTest {
 
     private List<Candidate> candidates(int count) {
         return IntStream.range(0, count)
-                .mapToObj(i -> new Candidate(workspaceId, UUID.randomUUID(), UUID.randomUUID(), now, 1, now, "summary"))
+                .mapToObj(i -> Candidate.builder().workspaceId(workspaceId).projectId(UUID.randomUUID())
+                        .traceId(UUID.randomUUID()).traceCreatedAt(now).taskVersion(1).statusUpdatedAt(now)
+                        .summary("summary").build())
                 .toList();
     }
 }
