@@ -137,7 +137,7 @@ class TopicsReadResourceTest {
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
                         new CustomConfig("topics.nightly.enabled", "false"),
-                        new CustomConfig("topics.firstBuild.enabled", "false")))
+                        new CustomConfig("topics.discovery.enabled", "false")))
                 .build());
     }
 
@@ -184,18 +184,18 @@ class TopicsReadResourceTest {
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
-        var firstBuild = today.minusDays(20);
-        var first = topic(caller.workspaceId(), projectId, firstBuild);
+        var discovery = today.minusDays(20);
+        var first = topic(caller.workspaceId(), projectId, discovery);
         var newborn = topic(caller.workspaceId(), projectId, today.minusDays(3));
-        var largest = topic(caller.workspaceId(), projectId, firstBuild);
+        var largest = topic(caller.workspaceId(), projectId, discovery);
         // Retired since: no topics row, its trace_topics rows remain.
-        var retired = topic(caller.workspaceId(), projectId, firstBuild);
+        var retired = topic(caller.workspaceId(), projectId, discovery);
         var lastRun = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var saved = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
             var firstRun = ID_GENERATOR.generateId();
             saveRun(handle, caller.workspaceId(), projectId, firstRun,
-                    firstBuild.atTime(2, 0).toInstant(ZoneOffset.UTC));
+                    discovery.atTime(2, 0).toInstant(ZoneOffset.UTC));
             handle.attach(TopicProjectDAO.class).saveList(caller.workspaceId(), projectId, firstRun, saved, lastRun,
                     today.atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
             handle.attach(TopicDAO.class).insertTopics(List.of(first, newborn, largest));
@@ -241,7 +241,7 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, queued: no live topic and no run; the window's vectors and the first build's minimum, "
+    @DisplayName("collecting, queued: no live topic and no run; the window's vectors and the discovery run's minimum, "
             + "without the ready fields, attempt or last_run_at")
     void collecting() {
         var caller = topics.caller();
@@ -261,7 +261,7 @@ class TopicsReadResourceTest {
             assertThat(json.get("status").asText()).isEqualTo("collecting");
             assertThat(json.get("vectors_in_window").asLong()).isEqualTo(2);
             assertThat(json.get("min_vectors").asLong())
-                    .isEqualTo(opikConfig.getTopics().getBuild().getMinVectors());
+                    .isEqualTo(opikConfig.getTopics().getRun().getMinVectors());
             assertThat(json.get("topics")).isEmpty();
             assertThat(json.has("total_traces")).isFalse();
             assertThat(json.has("other")).isFalse();
@@ -587,7 +587,7 @@ class TopicsReadResourceTest {
         var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicProjectDAO.class);
-            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, startedAt);
+            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, startedAt);
             if (status == TopicProject.RunStatus.FAILED) {
                 runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
                         TopicProject.RunError.ABANDONED);

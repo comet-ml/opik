@@ -26,13 +26,13 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
- * The topics read API: a project's topics over the window, the last {@code topics.build.windowDays} UTC days, today
+ * The topics read API: a project's topics over the window, the last {@code topics.run.windowDays} UTC days, today
  * included, in one of four states.
  * <ul>
  * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
  * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
  * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has
- * ({@link #vectorCounts}, cached) and how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
+ * ({@link #vectorCounts}, cached) and how many the discovery run needs, and, as {@code attempt}, whether the project's current or last attempt is running or
  * failed.</li>
  * <li>{@code ready}: eligible with a saved list; {@link TopicsCounts} folds the counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}, cached by {@link #dayCounts}.</li>
@@ -132,7 +132,7 @@ public class TopicReadService {
     private ProjectTopics read(String workspaceId, UUID projectId) {
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        int windowDays = config.getBuild().getWindowDays();
+        int windowDays = config.getRun().getWindowDays();
         var scope = readScope(workspaceId, projectId);
         if (scope.isEmpty()) {
             return TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.DISABLED).build();
@@ -148,7 +148,7 @@ public class TopicReadService {
                             .lastRunAt(TopicsCounts.lastRunAt(project))
                             .attempt(TopicsCounts.attempt(project))
                             .vectorsInWindow(vectors)
-                            .minVectors((long) config.getBuild().getMinVectors())
+                            .minVectors((long) config.getRun().getMinVectors())
                             .build())
                     .orElseGet(() -> tooLarge(today, windowDays));
         }

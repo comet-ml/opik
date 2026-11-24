@@ -33,6 +33,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean guardrailsValidationsEnabled;
     @JsonProperty
+    @NotNull boolean guardrailsTrainingEnabled;
+    @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
     @NotNull boolean alertsEnabled;

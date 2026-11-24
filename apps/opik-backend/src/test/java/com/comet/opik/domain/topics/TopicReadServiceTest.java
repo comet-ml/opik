@@ -105,7 +105,7 @@ class TopicReadServiceTest {
         var body = service(now).get(WORKSPACE_ID, projectId);
 
         assertThat(body.today()).isEqualTo(today);
-        assertThat(body.windowFrom()).isEqualTo(today.minusDays(config.getBuild().getWindowDays() - 1L));
+        assertThat(body.windowFrom()).isEqualTo(today.minusDays(config.getRun().getWindowDays() - 1L));
     }
 
     @Test

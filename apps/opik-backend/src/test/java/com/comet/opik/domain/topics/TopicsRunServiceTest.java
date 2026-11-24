@@ -11,7 +11,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -36,6 +35,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -68,14 +69,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * The rebuild service end to end: the window read from ClickHouse, the save to MySQL, the {@code trace_topics} insert
+ * The run service end to end: the window read from ClickHouse, the save to MySQL, the {@code trace_topics} insert
  * and opik-inference stubbed in WireMock. Each test has its own workspace and project, and some bind an algorithm of
- * their own. Failures that need a store to fail on cue are in {@link TopicsRebuildServiceFaultsTest}.
+ * their own. Failures that need a store to fail on cue are in {@link TopicsRunServiceFaultsTest}.
  */
-@DisplayName("topics rebuild service")
+@DisplayName("topics run service")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class TopicsRebuildServiceTest {
+class TopicsRunServiceTest {
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final TopicsTestData.Traces TRACES = new TopicsTestData.Traces(FIXTURE.traceIds,
@@ -121,14 +122,15 @@ class TopicsRebuildServiceTest {
     private TopicsConfig config;
     private TraceTopicsDAO traceTopicsDAO;
     private ProjectService projectService;
-    private WorkspaceNameService workspaceNames;
     private TopicWindowDAO windowDAO;
     private InferenceClient client;
     private TransactionTemplateAsync clickHouseTemplate;
     private TopicVectorsDAO vectorsDAO;
     private TopicsMetrics metrics;
     private TopicRunStore store;
-    private TopicsRebuildService service;
+    private TopicsRunService service;
+    /** The scheduler the entry point would hand in. */
+    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-test-compute");
     private InMemoryMetricReader metricReader;
 
     private String workspaceId;
@@ -137,7 +139,7 @@ class TopicsRebuildServiceTest {
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, IdGenerator idGenerator, ProjectService projectService,
-            WorkspaceNameService workspaceNames, @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit InferenceClient client) {
         this.template = template;
         this.idGenerator = idGenerator;
@@ -147,13 +149,13 @@ class TopicsRebuildServiceTest {
         this.config = opikConfig.getTopics();
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
-        this.workspaceNames = workspaceNames;
         this.windowDAO = windowDAO;
         this.client = client;
     }
 
     @AfterAll
     void afterAll() {
+        compute.dispose();
         wireMock.server().stop();
         clickHouse.stop();
         zookeeper.stop();
@@ -178,16 +180,16 @@ class TopicsRebuildServiceTest {
     @DisplayName("a saved run writes the named topics, the project's saved row and one trace_topics row per trace, "
             + "and counts the run, its rows and its Other share")
     void savedRun() {
-        stubAnswer(FIXTURE.firstBuildAnswer);
+        stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, 250_000).block();
+        var outcome = service.discover(runId, workspace(), projectId, NIGHT, 250_000, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(250_000);
         assertThat(outcome.stats().get("sample_traces").asLong()).isEqualTo(FIXTURE.size());
         var topics = data.topics(projectId);
-        var want = FIXTURE.expected.get("first_build");
+        var want = FIXTURE.expected.get("discovery");
         assertThat(topics).extracting(Topic::name, Topic::definition)
                 .containsExactlyInAnyOrderElementsOf(expectedTopics(want));
         assertThat(data.topicProject(projectId)).satisfies(project -> {
@@ -215,7 +217,7 @@ class TopicsRebuildServiceTest {
         stubAnswer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_BAD_ANSWER);
@@ -235,7 +237,7 @@ class TopicsRebuildServiceTest {
                 .withBody("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"over quota\",\"retryable\":true}}")));
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
@@ -246,13 +248,13 @@ class TopicsRebuildServiceTest {
     @DisplayName("a window read that trips the ClickHouse row guard fails the run with window_read, before the LLM "
             + "call and the save")
     void windowReadGuardHit() {
-        var read = config.getBuild().getRead();
+        var read = config.getRun().getRead();
         long maxRows = read.getMaxRowsToRead();
         read.setMaxRowsToRead(1);
         try {
             var runId = start();
 
-            var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+            var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
             assertThat(outcome.errorCode()).isEqualTo("window_read");
             assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
@@ -269,10 +271,10 @@ class TopicsRebuildServiceTest {
     void secondSaveIsConflict() {
         data.savedList(workspaceId, projectId, FIXTURE.night, 5);
         var before = data.topics(projectId);
-        stubAnswer(FIXTURE.firstBuildAnswer);
+        stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(data.topics(projectId)).usingRecursiveFieldByFieldElementComparator()
@@ -288,12 +290,12 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a run whose project was deleted before its commit keeps no topics and inserts no trace_topics")
     void projectDeletedDuringTheRun() {
-        stubAnswer(FIXTURE.firstBuildAnswer);
+        stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM projects WHERE id = ?",
                 projectId.toString()));
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
@@ -306,7 +308,7 @@ class TopicsRebuildServiceTest {
     void startRecordsAnAbandonedAttempt() {
         var first = start();
 
-        var second = store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD,
+        var second = store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY,
                 Instant.now().plusSeconds(1)).block();
 
         assertThat(second).isNotEqualTo(first);
@@ -339,7 +341,7 @@ class TopicsRebuildServiceTest {
      * (gated), {@code delta} is an Other group far from it (kept).
      */
     @Test
-    @DisplayName("the gated Other prototypes are not saved, and the saved rows assign as the build did")
+    @DisplayName("the gated Other prototypes are not saved, and the saved rows assign as the run did")
     void gatedOtherIsNotSaved() {
         int d = TopicEmbedding.DIMENSIONS;
         var alpha = unit(d, 0, 1, 0, 0);
@@ -377,7 +379,7 @@ class TopicsRebuildServiceTest {
         var runId = start();
 
         var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
-                .firstBuild(runId, workspaceId, projectId, NIGHT, count).block();
+                .discover(runId, workspace(), projectId, NIGHT, count, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -394,7 +396,7 @@ class TopicsRebuildServiceTest {
             }
         }
 
-        // The saved rows, with or without the gated twins, give the labels the build saved.
+        // The saved rows, with or without the gated twins, give the labels the run saved.
         var topicIdByTrace = data.traceTopics(workspaceId, projectId).stream()
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
         var savedLabels = traceIds.stream()
@@ -437,12 +439,12 @@ class TopicsRebuildServiceTest {
                     }
 
                     @Override
-                    public FirstBuild finish(AuthorAnswer answer) {
+                    public DiscoveredTopics finish(AuthorAnswer answer) {
                         var labels = new int[window.size()];
                         for (int i = 0; i < labels.length; i++) {
                             labels[i] = i % 3 == 2 ? OTHER : i % 3;
                         }
-                        return FirstBuild.builder()
+                        return DiscoveredTopics.builder()
                                 .topics(List.of(
                                         NewTopic.builder().name("First").definition("one")
                                                 .prototypes(List.of(first)).build(),
@@ -461,10 +463,11 @@ class TopicsRebuildServiceTest {
                 return Optional.empty();
             }
         };
-        stubAnswer(FIXTURE.firstBuildAnswer);
+        stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = serviceWith(stub).firstBuild(runId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = serviceWith(stub).discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute)
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         var saved = data.topics(projectId);
@@ -493,9 +496,10 @@ class TopicsRebuildServiceTest {
                         / FIXTURE.size());
     }
 
-    private TopicsRebuildService serviceWith(TopicAlgorithm algorithm) {
-        return new TopicsRebuildService(config, new TopicWindowReader(config, windowDAO),
-                new TopicsLlm(config, client, metrics), store, idGenerator, metrics, workspaceNames, algorithm);
+    private TopicsRunService serviceWith(TopicAlgorithm algorithm) {
+        return new TopicsRunService(config, new TopicWindowReader(config, windowDAO),
+                new TopicsLlm(config, client, metrics), store, new TopicRunOutcomes(store), idGenerator, metrics,
+                algorithm);
     }
 
     /** A topic born on the run's night, with the traces whose index is {@code label} mod 3, and one prototype. */
@@ -529,10 +533,10 @@ class TopicsRebuildServiceTest {
     }
 
     private UUID start() {
-        return store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD, Instant.EPOCH).block();
+        return store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY, Instant.EPOCH).block();
     }
 
-    /** The workspace as the run records it: no name service runs in the test app, so the name is the id. */
+    /** The workspace as the entry point hands it in; the test names it by its id. */
     private TopicsMetrics.Workspace workspace() {
         return new TopicsMetrics.Workspace(workspaceId, workspaceId);
     }
@@ -552,7 +556,7 @@ class TopicsRebuildServiceTest {
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
     }
 
-    /** The fixture's first build topics, as name and definition. */
+    /** The fixture's discovery run topics, as name and definition. */
     private static List<Tuple> expectedTopics(JsonNode want) {
         var topics = want.get("topics");
         return IntStream.range(0, topics.size())
@@ -560,7 +564,7 @@ class TopicsRebuildServiceTest {
                 .toList();
     }
 
-    /** A run row per trace, with the topic of the fixture's first build label, or Other. */
+    /** A run row per trace, with the topic of the fixture's discovery run label, or Other. */
     private List<TraceTopic> expectedTraceTopics(UUID runId, JsonNode want, Map<String, UUID> idByName) {
         var labels = want.get("labels");
         var topics = want.get("topics");

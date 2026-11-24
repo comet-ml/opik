@@ -17,7 +17,7 @@ import java.time.Duration;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
+ * The topic runs' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
  * carries {@code workspace_id} and {@code workspace_name}: the caller resolves the name once, at its boundary, so
  * recording never blocks. {@code topics.api.duration_seconds} has neither, where every caller's workspace would add
  * series.
