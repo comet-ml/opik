@@ -1074,6 +1074,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
