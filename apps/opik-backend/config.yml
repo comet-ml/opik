@@ -2942,6 +2942,12 @@ topics:
     #  Default: 2m
     #  Description: The planner stops counting first-build candidates after this and queues what it found. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+  #  The topics state's MySQL writes
+  storage:
+    #  Default: 100
+    #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
+    #  bounded however many projects went at once. From 1 to 10000
+    deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
