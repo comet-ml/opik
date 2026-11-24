@@ -1388,12 +1388,12 @@ export class DatasetsClient {
         request: OpikApi.FindDatasetItemsWithExperimentItemsRequest = {},
         requestOptions?: DatasetsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPageCompare>> {
-        const { page, size, experimentIds, datasetVersion, filters, sorting, search, truncate } = request;
+        const { page, size, experimentIds, datasetVersions, filters, sorting, search, truncate } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             experiment_ids: experimentIds,
-            dataset_version: datasetVersion,
+            dataset_versions: datasetVersions,
             filters,
             sorting,
             search,
@@ -2244,6 +2244,83 @@ export class DatasetsClient {
             _response.rawResponse,
             "POST",
             "/v1/private/datasets/{id}/export",
+        );
+    }
+
+    /**
+     * Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+     * Optimizer trial, mini-batch and mutation experiments are excluded.
+     *
+     * Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+     * received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+     * send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+     * resume from the start of its experiment instead of from the start of the stream.
+     * @throws {@link OpikApi.NotFoundError}
+     */
+    public streamDatasetExperimentItems(
+        request: OpikApi.DatasetExperimentItemStreamRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<ReadableStream<Uint8Array>> {
+        return core.HttpResponsePromise.fromPromise(this.__streamDatasetExperimentItems(request, requestOptions));
+    }
+
+    private async __streamDatasetExperimentItems(
+        request: OpikApi.DatasetExperimentItemStreamRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<ReadableStream<Uint8Array>>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher<ReadableStream<Uint8Array>>({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/datasets/items/experiments/items/stream",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.DatasetExperimentItemStreamRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            responseType: "streaming",
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: _response.body, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/datasets/items/experiments/items/stream",
         );
     }
 
