@@ -1609,3 +1609,10 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
+guardrailsTrainingDataset:
+  maxFileSizeMb: 50
+  minRows: 20
+  maxRows: 50000
+  minRowsPerLabel: 5
+  maxTextLength: 12000

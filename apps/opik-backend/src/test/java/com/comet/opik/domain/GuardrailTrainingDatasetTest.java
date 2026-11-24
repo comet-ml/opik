@@ -21,9 +21,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("Guardrail Training Dataset")
 class GuardrailTrainingDatasetTest {
 
-    private static final GuardrailTrainingDataset DATASET = new GuardrailTrainingDataset(
-            new GuardrailsTrainingDatasetConfig());
-    private static final long MAX_BYTES = 50L * 1024 * 1024;
+    private static final GuardrailsTrainingDatasetConfig CONFIG = config(50, 20, 50_000, 5, 12_000);
+    private static final GuardrailTrainingDataset DATASET = new GuardrailTrainingDataset(CONFIG);
+    private static final long MAX_BYTES = CONFIG.getMaxFileSizeMb() * 1024L * 1024L;
+
+    private static GuardrailsTrainingDatasetConfig config(int maxFileSizeMb, int minRows, int maxRows,
+            int minRowsPerLabel, int maxTextLength) {
+        var config = new GuardrailsTrainingDatasetConfig();
+        config.setMaxFileSizeMb(maxFileSizeMb);
+        config.setMinRows(minRows);
+        config.setMaxRows(maxRows);
+        config.setMinRowsPerLabel(minRowsPerLabel);
+        config.setMaxTextLength(maxTextLength);
+        return config;
+    }
 
     private static InputStream lines(String... lines) {
         return new ByteArrayInputStream(String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
@@ -78,12 +89,7 @@ class GuardrailTrainingDatasetTest {
     @Test
     @DisplayName("The configured limits are the ones checked, and the problems name them")
     void validateUsesTheConfiguredLimits() {
-        var config = new GuardrailsTrainingDatasetConfig();
-        config.setMinRows(2);
-        config.setMaxRows(3);
-        config.setMinRowsPerLabel(2);
-        config.setMaxTextLength(4);
-        var dataset = new GuardrailTrainingDataset(config);
+        var dataset = new GuardrailTrainingDataset(config(1, 2, 3, 2, 4));
 
         assertThatThrownBy(() -> dataset.validate(lines(
                 "{\"text\": \"abc\", \"label\": \"yes\"}",
