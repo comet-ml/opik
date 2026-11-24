@@ -96,8 +96,8 @@ import lombok.Builder;
  * {@code spanColumnsNonNullable} is also on: the legacy {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime}
  * that wraps far-future ids, so a week bound there would drop rows. {@code span_weeks_mv} registers each span's week in
  * the spans insert itself, so a new span is indexed by the time its insert returns; older spans are indexed by the
- * backfill, so turn this on once the backfill logs that it is complete, as unindexed spans would be skipped. Partition
- * imports bypass the view and need a backfill of the moved range.</p>
+ * backfill, so turn this on once the backfill has no pending chunk in {@code span_weeks_backfill_chunks}, as unindexed
+ * spans would be skipped. Partition imports bypass the view and need the backfill re-planned.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
