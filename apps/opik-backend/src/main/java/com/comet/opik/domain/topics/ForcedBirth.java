@@ -1,0 +1,299 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.domain.topics.NightState.RetiredReason;
+import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Builder;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
+
+/**
+ * Step c of the nightly update; every share is a share of the whole window. Every
+ * candidate, largest first, goes to one grouped naming call for the night; a loose one (tightness below
+ * {@value #MIN_TIGHTNESS}) is known Other without a call.
+ * <p>
+ * The naming call shows the live topics and may assign a group to one, put same-kind groups into one new topic, or
+ * leave a group in Other. An assign passes one batched verify; a rejected group goes to a second call that offers new
+ * and other only. A new topic's groups are de-duplicated; a blank name or a name that is a catch-all as a whole
+ * ({@link AuthorApplier#isCatchAllName}, the first build's rule) is skipped; a name equal to a live topic's (by
+ * {@link AuthorApplier#nameKey}) joins that topic in the first call and is known Other in the second (the verify may
+ * just have rejected that topic for it), and equal new names are one topic. New topics are created largest first; one
+ * whose groups' share of the window is below {@value #MIN_NEW_SHARE} is not born, its groups are known Other
+ * ({@link Result#OTHER_SMALL}). On a full list, the topic not born tonight with the lowest share of the window is
+ * retired when that share is below the new topic's, else its groups are known Other; a topic's share here counts the
+ * groups given to it tonight. A group the answers leave out is known Other.
+ */
+@Slf4j
+@UtilityClass
+public class ForcedBirth {
+
+    static final double MIN_TIGHTNESS = 0.80;
+    static final double MIN_NEW_SHARE = NightlyUpdate.BIG_SHARE;
+    static final String NAMING_TAG = "naming";
+    static final String NAMING_NEW_TAG = "naming_new";
+    static final String VERIFY_TAG = "verify_naming";
+    static final int NAMING_TOKENS = 2500;
+
+    /**
+     * The naming of the night's candidates, as steps: the naming call, the verify of its assigns, the second naming of
+     * the rejected groups. The result is the outcomes, in the order they were decided.
+     *
+     * @param ordered     the candidates largest first (ties by group id)
+     * @param map         the group map, filled in place: candidate group to topic index or {@link NightlyUpdate#OTHER}
+     * @param shownTopics the live topics as a prompt shows them now, read again for each naming call
+     */
+    public static NightStep<List<Outcome>> apply(@NonNull NightState state, @NonNull List<NightGroup> ordered,
+            @NonNull Map<Integer, Integer> map, @NonNull Supplier<List<TopicPrompts.PromptTopic>> shownTopics,
+            int maxTopics, int recentDays) {
+        var outcomes = new ArrayList<Outcome>();
+        var groupShares = new HashMap<Integer, Double>();
+        ordered.forEach(group -> groupShares.put(group.group(), group.share()));
+        var forced = new ArrayList<NightGroup>();
+        for (var candidate : ordered) {
+            if (candidate.tightness() < MIN_TIGHTNESS) {
+                map.put(candidate.group(), NightlyUpdate.OTHER);
+                outcomes.add(Outcome.builder().group(candidate.group()).result(Result.OTHER_LOOSE).build());
+                continue;
+            }
+            forced.add(candidate);
+        }
+        if (forced.isEmpty()) {
+            return NightStep.done(outcomes);
+        }
+        return new Naming(state, map, shownTopics, maxTopics, recentDays, groupShares, outcomes).name(forced, true);
+    }
+
+    /** One night's naming: what its calls share. Each step reads and changes it in the order the calls answer. */
+    @RequiredArgsConstructor
+    private static final class Naming {
+
+        private final NightState state;
+        private final Map<Integer, Integer> map;
+        private final Supplier<List<TopicPrompts.PromptTopic>> shownTopics;
+        private final int maxTopics;
+        private final int recentDays;
+        private final Map<Integer, Double> groupShares;
+        private final List<Outcome> outcomes;
+
+        /** One naming call over {@code forced}; {@code allowAssign} is the first call's, the second offers new and other only. */
+        NightStep<List<Outcome>> name(List<NightGroup> forced, boolean allowAssign) {
+            var shown = shownTopics.get();
+            var byPromptId = new HashMap<Integer, Integer>();
+            var byTopic = new HashMap<Integer, TopicPrompts.PromptTopic>();
+            shown.forEach(topic -> {
+                byPromptId.put(topic.id(), topic.topic());
+                byTopic.put(topic.topic(), topic);
+            });
+            var byGroup = new LinkedHashMap<Integer, NightGroup>();
+            forced.forEach(group -> byGroup.put(group.group(), group));
+            var request = LlmRequest.builder()
+                    .call(LlmCall.NAMING)
+                    .tag(allowAssign ? NAMING_TAG : NAMING_NEW_TAG)
+                    .prompt(TopicPrompts.namingGroup(shown, forced, allowAssign, recentDays))
+                    .schema(allowAssign ? TopicPrompts.NAMING_GROUP_SCHEMA : TopicPrompts.NAMING_GROUP_NEW_SCHEMA)
+                    .maxTokens(NAMING_TOKENS)
+                    .build();
+            return NightStep.ask(request, answer -> {
+                var done = new HashSet<Integer>();
+                var rejected = new ArrayList<NightGroup>();
+                var assigned = allowAssign
+                        ? assign(answer, byPromptId, byTopic, byGroup, done, rejected)
+                        : NightStep.done(outcomes);
+                return assigned.then(__ -> named(answer, allowAssign, byTopic, byGroup, done, rejected));
+            });
+        }
+
+        /** The naming answer's new topics, then the second call over the rejected groups, then the groups left out. */
+        private NightStep<List<Outcome>> named(JsonNode answer, boolean allowAssign,
+                Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, NightGroup> byGroup, Set<Integer> done,
+                List<NightGroup> rejected) {
+            var live = new HashMap<String, Integer>();
+            Arrays.stream(state.live()).forEach(t -> live.put(AuthorApplier.nameKey(state.topic(t).getName()), t));
+            var groups = new LinkedHashMap<String, NewGroup>();
+            for (var entry : NightJson.objects(answer == null ? null : answer.get("new"))) {
+                var name = TopicText.name(text(entry.get("name")));
+                var ids = new LinkedHashSet<Integer>();
+                for (var id : NightJson.integers(entry.get("clusters"))) {
+                    if (id != null && byGroup.containsKey(id) && !done.contains(id)) {
+                        ids.add(id);
+                    }
+                }
+                if (ids.isEmpty() || name.isEmpty() || AuthorApplier.isCatchAllName(name)) {
+                    continue;
+                }
+                done.addAll(ids);
+                var key = AuthorApplier.nameKey(name);
+                if (live.containsKey(key)) {
+                    for (int id : ids) {
+                        if (allowAssign) {
+                            map.put(id, live.get(key));
+                            outcomes.add(
+                                    Outcome.builder().group(id).result(Result.SAME_NAME).topic(live.get(key)).build());
+                        } else {
+                            map.put(id, NightlyUpdate.OTHER);
+                            outcomes.add(Outcome.builder().group(id).result(Result.OTHER_NAME).build());
+                        }
+                    }
+                    continue;
+                }
+                var group = groups.get(key);
+                if (group == null) {
+                    groups.put(key, new NewGroup(name, text(entry.get("definition")), new ArrayList<>(ids)));
+                } else {
+                    group.groups().addAll(ids);
+                }
+            }
+            var largestFirst = new ArrayList<>(groups.values());
+            largestFirst.sort(Comparator.comparingLong(
+                    group -> -group.groups().stream().mapToLong(id -> byGroup.get(id).size()).sum()));
+            for (var group : largestFirst) {
+                born(group, byTopic, byGroup);
+            }
+            var again = rejected.isEmpty() ? NightStep.done(outcomes) : name(rejected, false);
+            return again.map(__ -> {
+                for (int id : byGroup.keySet()) {
+                    if (!map.containsKey(id)) {
+                        map.put(id, NightlyUpdate.OTHER);
+                        outcomes.add(Outcome.builder().group(id).result(Result.OTHER_NAME).build());
+                    }
+                }
+                return outcomes;
+            });
+        }
+
+        /** A new topic from the answer: born, replacing the weakest on a full list, or its groups known Other. */
+        private void born(NewGroup group, Map<Integer, TopicPrompts.PromptTopic> byTopic,
+                Map<Integer, NightGroup> byGroup) {
+            // A plain loop in list order, as Python's sum: DoubleStream.sum compensates and can differ in the last bit.
+            double share = 0;
+            for (int id : group.groups()) {
+                share += byGroup.get(id).share();
+            }
+            if (share < MIN_NEW_SHARE) {
+                for (int id : group.groups()) {
+                    map.put(id, NightlyUpdate.OTHER);
+                    outcomes.add(Outcome.builder().group(id).result(Result.OTHER_SMALL).build());
+                }
+                return;
+            }
+            if (state.liveCount() >= maxTopics) {
+                Integer lowest = null;
+                for (int t : state.live()) {
+                    if (state.topic(t).getBorn().equals(state.getNight())) {
+                        continue;
+                    }
+                    if (lowest == null || share(byTopic, t, groupShares, outcomes) < share(byTopic, lowest,
+                            groupShares, outcomes)) {
+                        lowest = t;
+                    }
+                }
+                if (lowest == null || share(byTopic, lowest, groupShares, outcomes) >= share) {
+                    for (int id : group.groups()) {
+                        map.put(id, NightlyUpdate.OTHER);
+                        outcomes.add(Outcome.builder().group(id).result(Result.OTHER_FULL).build());
+                    }
+                    return;
+                }
+                state.retire(lowest, RetiredReason.REPLACED);
+            }
+            int born = state.born(TopicText.name(group.name()), group.definition());
+            for (int id : group.groups()) {
+                map.put(id, born);
+                outcomes.add(Outcome.builder().group(id).result(Result.BORN).topic(born).build());
+            }
+        }
+
+        /**
+         * The answer's assigns to a live topic, one per group, through one batched verify; a group not verified is
+         * rejected. No assign, no verify call.
+         */
+        private NightStep<List<Outcome>> assign(JsonNode answer, Map<Integer, Integer> byPromptId,
+                Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, NightGroup> byGroup, Set<Integer> done,
+                List<NightGroup> rejected) {
+            var pairs = new ArrayList<int[]>();
+            var prompts = new ArrayList<TopicPrompts.VerifyPair>();
+            for (var entry : NightJson.objects(answer == null ? null : answer.get("assign"))) {
+                var group = NightJson.integer(entry.get("cluster"));
+                var promptId = NightJson.integer(entry.get("topic"));
+                var topic = promptId == null ? null : byPromptId.get(promptId);
+                if (group != null && byGroup.containsKey(group) && !done.contains(group) && topic != null
+                        && state.topic(topic).isLive()) {
+                    pairs.add(new int[]{group, topic});
+                    prompts.add(TopicPrompts.VerifyPair.builder().topic(byTopic.get(topic)).group(byGroup.get(group))
+                            .build());
+                    done.add(group);
+                }
+            }
+            if (pairs.isEmpty()) {
+                return NightStep.done(outcomes);
+            }
+            return Verifier.ask(VERIFY_TAG, prompts).map(answers -> {
+                for (int n = 0; n < pairs.size(); n++) {
+                    int group = pairs.get(n)[0];
+                    int topic = pairs.get(n)[1];
+                    if (answers.getOrDefault(n, false)) {
+                        map.put(group, topic);
+                        outcomes.add(Outcome.builder().group(group).result(Result.ASSIGNED).topic(topic).build());
+                    } else {
+                        rejected.add(byGroup.get(group));
+                    }
+                }
+                return outcomes;
+            });
+        }
+    }
+
+    /** A string field, Python-stripped; empty when it is missing or not a string. */
+    private static String text(JsonNode node) {
+        return node != null && node.isTextual() ? TopicText.pythonStrip(node.asText()) : "";
+    }
+
+    /**
+     * A live topic's share of the window for a replacement: its share as the prompt showed it, plus the shares of the
+     * groups given to it tonight.
+     */
+    private static double share(Map<Integer, TopicPrompts.PromptTopic> topics, int topic,
+            Map<Integer, Double> groupShares, List<Outcome> outcomes) {
+        var shown = topics.get(topic);
+        double share = shown == null ? 0 : shown.share();
+        for (var outcome : outcomes) {
+            if ((outcome.result() == Result.ASSIGNED || outcome.result() == Result.SAME_NAME)
+                    && outcome.topic() == topic) {
+                share += groupShares.get(outcome.group());
+            }
+        }
+        return share;
+    }
+
+    private record NewGroup(String name, String definition, List<Integer> groups) {
+    }
+
+    public enum Result {
+        BORN,
+        ASSIGNED,
+        SAME_NAME,
+        OTHER_LOOSE,
+        OTHER_FULL,
+        /** Named new, but under {@link #MIN_NEW_SHARE}. */
+        OTHER_SMALL,
+        OTHER_NAME
+    }
+
+    /** What happened to one candidate; {@code topic} is the index of the topic it got. */
+    @Builder(toBuilder = true)
+    public record Outcome(int group, @NonNull Result result, Integer topic) {
+    }
+}

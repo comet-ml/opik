@@ -108,7 +108,9 @@ class TopicsRunsIntegrationTest {
                         new CustomConfig("topics.runs.poolingInterval", "200ms"),
                         new CustomConfig("topics.runs.longPollingDuration", "200ms"),
                         new CustomConfig("topics.runs.heartbeatInterval", "1s"),
-                        new CustomConfig("topics.runs.abandonGrace", "5s")))
+                        new CustomConfig("topics.runs.abandonGrace", "5s"),
+                        // The night pass has its own test (TopicsNightlyIntegrationTest), with its own night.
+                        new CustomConfig("topics.nightly.enabled", "false")))
                 .build());
     }
 

@@ -15,8 +15,9 @@ import java.time.Duration;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics, on the global meter. Every metric carries {@code workspace_id} and {@code workspace_name}:
- * the caller resolves the name once, at its boundary, so recording never blocks.
+ * The topic builds' metrics, on the global meter. Every metric of one workspace's work carries {@code workspace_id}
+ * and {@code workspace_name}: the caller resolves the name once, at its boundary, so recording never blocks. Only
+ * {@code topics.nightly.budget_used_seconds} and {@code topics.nightly.nights}, a whole night's, have neither.
  */
 @Singleton
 public class TopicsMetrics {
@@ -35,6 +36,12 @@ public class TopicsMetrics {
     private static final AttributeKey<String> CALL = stringKey("call");
     private static final AttributeKey<String> TABLE = stringKey("table");
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
+    private static final AttributeKey<String> REASON = stringKey("reason");
+    private static final AttributeKey<String> DECISION = stringKey("decision");
+
+    static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
+    static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
+    static final String NIGHTLY_BUDGET_USED = "topics.nightly.budget_used_seconds";
 
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
@@ -43,6 +50,14 @@ public class TopicsMetrics {
     private final LongCounter traceTopicsInserts;
     private final LongCounter labelPasses;
     private final DoubleHistogram otherShare;
+    private final DoubleHistogram liveTopics;
+    private final LongCounter retired;
+    private final LongCounter born;
+    private final DoubleHistogram churn;
+    private final DoubleHistogram churnAny;
+    private final DoubleHistogram budgetUsed;
+    private final LongCounter nightlyDecisions;
+    private final LongCounter nights;
 
     public TopicsMetrics() {
         this(GlobalOpenTelemetry.get().getMeter("opik.topics"));
@@ -54,7 +69,8 @@ public class TopicsMetrics {
                         + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save, label")
+                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save (first build); "
+                        + "window, state, update, llm, save (nightly update); label (both)")
                 .build();
         this.llmCalls = meter.counterBuilder("topics.llm.calls")
                 .setDescription("LLM calls, by call (author) and outcome: ok, timeout, error, bad_answer")
@@ -70,6 +86,37 @@ public class TopicsMetrics {
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
                         + "resume: the first-build job going on with a pass that did not finish) and outcome "
                         + "(complete; cut by its deadline or its caller; failed)")
+                .build();
+        this.liveTopics = meter.histogramBuilder("topics.topics.live")
+                .setDescription("Live topics of a project after each saved nightly update")
+                .build();
+        this.retired = meter.counterBuilder("topics.retired")
+                .setDescription("Topics retired (deleted) by saved nightly updates, by reason: low_share, replaced")
+                .build();
+        this.born = meter.counterBuilder("topics.topics.born")
+                .setDescription("Topics born by saved nightly updates")
+                .build();
+        this.churn = meter.histogramBuilder("topics.run.churn")
+                .setDescription("Of the window traces in a topic on both the last and this saved night, the share "
+                        + "whose topic changed")
+                .build();
+        this.churnAny = meter.histogramBuilder("topics.run.churn_any")
+                .setDescription("Of the window traces labelled on both the last and this saved night, the share "
+                        + "whose label changed, Other included")
+                .build();
+        this.budgetUsed = meter.histogramBuilder(NIGHTLY_BUDGET_USED).setUnit("s")
+                .setDescription("Of a night's budget, the time from the night's start to its last queued run; the "
+                        + "whole budget when the night did not reach every project")
+                .build();
+        this.nightlyDecisions = meter.counterBuilder(NIGHTLY_DECISIONS)
+                .setDescription("Projects the night decided on, by decision (nightly_update: queued, skip, "
+                        + "not_reached, count_failed) and, for a skip, reason (small, deleted, paused, already_saved, "
+                        + "no_list). A queued run whose claim finds its night saved or no list is counted again, as a "
+                        + "skip")
+                .build();
+        this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
+                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, or failed for "
+                        + "each plan whose read of the night's projects failed")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -94,6 +141,24 @@ public class TopicsMetrics {
         llmCalls.add(1, attributes(workspace).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 
+    /** A saved nightly update's live topics and the topics it gave birth to. */
+    void topics(@NonNull Workspace workspace, int live, int bornTonight) {
+        liveTopics.record(live, attributes(workspace).build());
+        if (bornTonight > 0) {
+            born.add(bornTonight, attributes(workspace).build());
+        }
+    }
+
+    void retired(@NonNull Workspace workspace, @NonNull NightState.RetiredReason reason) {
+        retired.add(1, attributes(workspace).put(REASON, reason.getValue()).build());
+    }
+
+    void churn(@NonNull Workspace workspace, @NonNull TopicChurn.Churn value) {
+        var attributes = attributes(workspace).build();
+        churn.record(value.churn(), attributes);
+        churnAny.record(value.churnAny(), attributes);
+    }
+
     void saved(@NonNull Workspace workspace, @NonNull String table, long rows) {
         saveRows.add(rows, attributes(workspace).put(TABLE, table).build());
     }
@@ -110,6 +175,23 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull Workspace workspace, double share) {
         otherShare.record(share, attributes(workspace).build());
+    }
+
+    void budgetUsed(@NonNull Duration duration) {
+        budgetUsed.record(duration.toNanos() / 1e9);
+    }
+
+    /** {@code reason} is null for a decision other than skip. */
+    void nightlyDecision(@NonNull Workspace workspace, @NonNull String decision, String reason, long projects) {
+        var attributes = attributes(workspace).put(DECISION, decision);
+        if (reason != null) {
+            attributes.put(REASON, reason);
+        }
+        nightlyDecisions.add(projects, attributes.build());
+    }
+
+    void night(@NonNull String outcome, long nights) {
+        this.nights.add(nights, Attributes.of(OUTCOME, outcome));
     }
 
     private static AttributesBuilder attributes(Workspace workspace) {

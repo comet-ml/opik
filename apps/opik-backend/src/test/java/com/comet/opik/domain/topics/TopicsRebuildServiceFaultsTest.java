@@ -6,6 +6,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.InferenceClient;
+import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
@@ -20,6 +21,9 @@ import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.scheduler.VirtualTimeScheduler;
@@ -28,6 +32,7 @@ import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.net.SocketException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -42,13 +47,16 @@ import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -369,6 +377,256 @@ class TopicsRebuildServiceFaultsTest {
 
         build.setProjectTimeout(Duration.minutes(1));
         assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(Duration.minutes(1).toJavaDuration());
+    }
+
+    @Test
+    @DisplayName("a saved nightly update records the Other share it logged in its stats, and its live topics and churn, "
+            + "with its workspace")
+    void nightlyUpdateIsCounted() {
+        firstBuildThenEmptyNaming();
+        double firstBuildShare = sum(metricReader, "topics.run.other_share");
+
+        var outcome = service.nightlyUpdate(IDS.generate(), workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var stats = outcome.stats();
+        assertThat(stats.path("mode").asText()).isEqualTo("nightly_update");
+        assertThat(stats.get("window_traces").asLong()).isEqualTo(TRACES);
+        assertThat(stats.get("sample_traces").asLong()).isEqualTo(TRACES);
+        // The first build's share, then the nightly update's: the value it logged, not computed again.
+        assertThat(sum(metricReader, "topics.run.other_share"))
+                .isCloseTo(firstBuildShare + stats.get("other_share").asDouble(), within(1e-9));
+        assertThat(points(metricReader, "topics.topics.live")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(stats.get("topics").asDouble());
+            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
+            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+        });
+        for (var name : List.of("topics.run.churn", "topics.run.churn_any")) {
+            assertThat(points(metricReader, name)).as(name).singleElement().satisfies(point -> {
+                assertThat(point.value()).isEqualTo(stats.get(name.substring("topics.run.".length())).asDouble());
+                assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
+                assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+            });
+        }
+        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a nightly update saves the list by compare-and-set on the run it read, updates the kept topics and "
+            + "writes its labels as a run's after its commit")
+    @SuppressWarnings("unchecked")
+    void nightlyUpdateSaves() {
+        var built = firstBuildThenEmptyNaming();
+        var updateRunId = IDS.generate();
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        verify(projectDAO).saveList(eq(workspaceId), eq(projectId), eq(runId), eq(updateRunId), any(),
+                eq(night.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()), any(), eq(TopicEmbedding.MODEL));
+        ArgumentCaptor<List<Topic>> updated = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).updateTopics(updated.capture());
+        assertThat(updated.getValue()).extracting(Topic::id)
+                .containsExactlyElementsOf(built.stream().map(Topic::id).toList());
+        verify(topicDAO, never()).deleteTopics(any(), any(), any());
+        verify(projectDAO, never()).resetList(any(), any(), any(), any());
+        ArgumentCaptor<List<TraceTopic>> rows = ArgumentCaptor.forClass(List.class);
+        verify(traceTopicsDAO, times(2)).insert(rows.capture());
+        assertThat(rows.getValue()).hasSize(TRACES)
+                .allSatisfy(row -> {
+                    assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
+                    assertThat(row.runId()).isEqualTo(updateRunId);
+                });
+        var order = inOrder(projectDAO, traceTopicsDAO);
+        order.verify(projectDAO).saveList(eq(workspaceId), eq(projectId), eq(runId), eq(updateRunId), any(), any(),
+                any(), any());
+        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        order.verify(traceTopicsDAO).insert(any());
+    }
+
+    @Test
+    @DisplayName("a nightly update that leaves no live topic deletes every topic, clears the list by compare-and-set, "
+            + "counts each retired topic, and writes no labels")
+    void allRetiredClearsTheList() {
+        var built = firstBuildThenEmptyNaming();
+        // Each topic's only vector is far from every trace: no trace tonight, so it retires; naming births nothing.
+        var far = new ArrayList<Topic>();
+        for (int t = 0; t < built.size(); t++) {
+            far.add(built.get(t).toBuilder().vectors(new PrototypeVectors(List.of(
+                    TopicsTestData.unit(TopicEmbedding.DIMENSIONS - 1 - t)))).build());
+        }
+        when(topicDAO.findByProject(workspaceId, projectId)).thenReturn(far);
+        when(projectDAO.resetList(eq(workspaceId), eq(projectId), eq(runId), any())).thenReturn(1);
+        var updateRunId = IDS.generate();
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var order = inOrder(topicDAO, projectDAO);
+        order.verify(projectDAO).resetList(eq(workspaceId), eq(projectId), eq(runId), any());
+        order.verify(topicDAO).deleteTopics(workspaceId, projectId, far.stream().map(Topic::id).toList());
+        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        verify(projectDAO, never()).saveList(any(), any(), eq(runId), any(), any(), any(), any(), any());
+        verify(topicDAO, never()).updateTopics(any());
+        assertThat(sum(metricReader, "topics.retired", "reason", "low_share", "workspace_id", workspaceId))
+                .isEqualTo(far.size());
+        // The first build's insert only.
+        verify(traceTopicsDAO, times(1)).insert(any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"another run saved the project meanwhile", "MySQL is down"})
+    @DisplayName("a nightly update whose MySQL save fails, as a conflict or with MySQL down, fails with save and "
+            + "writes no trace_topics row: the traces keep last night's")
+    void failedUpdateSaveWritesNoLabels(String failure) {
+        firstBuildThenEmptyNaming();
+        var save = when(projectDAO.saveList(any(), any(), eq(runId), any(), any(), any(), any(), any()));
+        if (failure.equals("MySQL is down")) {
+            save.thenThrow(new IllegalStateException("MySQL down"));
+        } else {
+            save.thenReturn(0);
+        }
+        var updateRunId = IDS.generate();
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(updateRunId), any(), any())).thenReturn(1);
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.errorCode()).isEqualTo("save");
+        verify(topicDAO, never()).updateTopics(any());
+        verify(projectDAO, never()).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        // The first build's insert only.
+        verify(traceTopicsDAO, times(1)).insert(any());
+        assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a nightly update's trace_topics insert comes after its MySQL commit, and a failed insert is retried")
+    void updateInsertAfterCommitIsRetried() {
+        firstBuildThenEmptyNaming();
+        var attempts = new AtomicInteger();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
+                ? Mono.error(new SocketException("Connection reset"))
+                : Mono.just((long) TRACES)));
+        var updateRunId = IDS.generate();
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(attempts).hasValue(3);
+        var order = inOrder(projectDAO, traceTopicsDAO);
+        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        order.verify(traceTopicsDAO).insert(any());
+        assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(2 * TRACES);
+    }
+
+    @Test
+    @DisplayName("a nightly update whose trace_topics insert fails every attempt stays saved")
+    void updateInsertExhausted() {
+        firstBuildThenEmptyNaming();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.error(new SocketException("Connection reset")));
+        var updateRunId = IDS.generate();
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night.plusDays(1), TRACES).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        // The first build's rows only.
+        assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
+        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "error")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a nightly update with no saved list fails with internal and writes nothing")
+    void nightlyUpdateWithoutList() {
+        var updateRunId = IDS.generate();
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(updateRunId), any(), any())).thenReturn(1);
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, night, TRACES).block();
+
+        assertThat(outcome.errorCode()).isEqualTo("internal");
+        verify(client, never()).generate(any(), any());
+        verify(traceTopicsDAO, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
+    void lifecycleMetricsHaveTheWorkspace() {
+        var reader = InMemoryMetricReader.create();
+        var metrics = TopicsMetricsReader.metrics(reader);
+
+        metrics.topics(workspace, 7, 2);
+        metrics.topics(workspace, 7, 0);
+        metrics.retired(workspace, NightState.RetiredReason.LOW_SHARE);
+        metrics.churn(workspace, new TopicChurn.Churn(0.04, 0.1));
+
+        assertThat(points(reader, "topics.topics.born")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(2);
+            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
+            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+        });
+        assertThat(points(reader, "topics.topics.live")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(14);
+            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+        });
+        assertThat(points(reader, "topics.retired")).singleElement().satisfies(point -> {
+            assertThat(point.get("reason")).isEqualTo("low_share");
+            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
+            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+        });
+        assertThat(points(reader, "topics.run.churn")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(0.04);
+            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
+        });
+        assertThat(points(reader, "topics.run.churn_any")).singleElement()
+                .satisfies(point -> assertThat(point.value()).isEqualTo(0.1));
+    }
+
+    /**
+     * The topics and the project row the first build saved, as the nightly update reads them back. Returns the
+     * topics.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Topic> readBackFirstBuild() {
+        ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        var otherVectors = ArgumentCaptor.forClass(PrototypeVectors.class);
+        var windowUntil = ArgumentCaptor.forClass(Instant.class);
+        verify(projectDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(),
+                windowUntil.capture(), otherVectors.capture(), eq(TopicEmbedding.MODEL));
+        verify(traceTopicsDAO).insert(any());
+        var project = TopicProject.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .savedRuns(1)
+                .listRunId(runId)
+                .windowUntil(windowUntil.getValue())
+                .otherVectors(otherVectors.getValue())
+                .embedModel(TopicEmbedding.MODEL)
+                .build();
+        when(projectDAO.findProjects(eq(workspaceId), any())).thenReturn(List.of(project));
+        when(topicDAO.findByProject(workspaceId, projectId)).thenReturn(topics.getValue());
+        return topics.getValue();
+    }
+
+    /**
+     * The first build, read back as the nightly update reads it, then a naming answer that changes nothing: most nights
+     * make no LLM call, and any that comes changes nothing. Returns the first build's topics.
+     */
+    private List<Topic> firstBuildThenEmptyNaming() {
+        answer(FIXTURE.answer);
+        service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
+        var topics = readBackFirstBuild();
+        answer(emptyNaming());
+        return topics;
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     private void answer(JsonNode output) {

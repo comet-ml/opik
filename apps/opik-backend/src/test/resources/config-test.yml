@@ -1100,6 +1100,8 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     readTimeout: 120s
     countTimeout: 60s
     # Small, so a test's pass takes many pages and slices.
@@ -1160,6 +1162,10 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  nightly:
+    enabled: true
+    schedule: "0 0 2 * * ?"
+    budget: 2h
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2

@@ -88,7 +88,10 @@ public class TopicWindowLabelService {
         private final String value;
     }
 
-    /** The saved list a pass labels with: the traces created in {@code [from, to)}, the run's window. */
+    /**
+     * The saved list a pass labels with: the traces created in {@code [from, to)}. {@code from} is the run's window
+     * start; {@code to} is its window end or its save, whichever is later.
+     */
     private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller) {
     }
 
@@ -356,8 +359,11 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * The project's saved list, its window and the labeller of its prototypes. The project row and its topics are read
-     * in one transaction, so they are of the same save; the rest is built after it.
+     * The project's saved list, the traces it labels and the labeller of its prototypes. The project row and its topics
+     * are read in one transaction, so they are of the same save; the rest is built after it. The traces run from the
+     * list's window start to its window end or its save, whichever is later. A nightly update saves after its window's
+     * end: its pass also labels the traces vectored since, which arrival labelled by the list before the save. A first
+     * build's window ends at tomorrow's start, after its save.
      */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         var rows = template.inTransaction(READ_ONLY, handle -> {
@@ -370,8 +376,10 @@ public class TopicWindowLabelService {
             return Optional.of(new SavedRows(project.get(), topicDAO.findByProject(workspaceId, projectId)));
         });
         return rows.map(saved -> {
-            var to = saved.project().windowUntil();
-            var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
+            var windowUntil = saved.project().windowUntil();
+            var lastSuccessAt = saved.project().lastSuccessAt();
+            var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
+            var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             return new Saved(saved.project().listRunId(), from, to,
                     algorithm.labeller(saved.topics(), saved.project().otherVectors()));
         });

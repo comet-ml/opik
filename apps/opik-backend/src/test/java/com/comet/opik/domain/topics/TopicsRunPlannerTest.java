@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -73,6 +74,35 @@ class TopicsRunPlannerTest {
         when(store.dropUnclaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(dropped));
         when(store.isClaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(claimed));
         return new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), workspaces, store,
-                mock(TopicsRunReconciler.class), candidates, publisher, new TopicsBackfillGate(CONFIG));
+                mock(TopicsRunReconciler.class), candidates, publisher, new TopicsBackfillGate(CONFIG),
+                mock(TopicsNightPass.class));
+    }
+
+    @Test
+    @DisplayName("a nightly update by hand that cannot be published is dropped, and the caller gets an error")
+    void nightByHandDropsAnUnpublishedRun() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        var night = LocalDate.now(ZoneOffset.UTC);
+
+        var store = mock(TopicRunStore.class);
+        var publisher = mock(TopicsRunPublisher.class);
+        var nightPass = mock(TopicsNightPass.class);
+        when(nightPass.byHand(eq(workspaceId), eq(projectId), eq(night), any()))
+                .thenAnswer(invocation -> invocation.<Function<TopicsRunPlanner.Planned, Mono<UUID>>>getArgument(3)
+                        .apply(TopicsRunPlanner.Planned.builder().workspaceId(workspaceId).projectId(projectId)
+                                .mode(TopicProject.RunMode.NIGHTLY_UPDATE).night(night).windowTraces(100).build()));
+        when(store.queue(workspaceId, projectId, TopicProject.RunMode.NIGHTLY_UPDATE))
+                .thenReturn(Mono.just(Optional.of(runId)));
+        when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
+        when(store.dropUnclaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(true));
+        var planner = new TopicsRunPlanner(CONFIG, mock(TransactionTemplate.class), mock(TopicWorkspaceService.class),
+                store, mock(TopicsRunReconciler.class), mock(TopicsFirstBuildCandidates.class), publisher,
+                new TopicsBackfillGate(CONFIG), nightPass);
+
+        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, night).block())
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(store).dropUnclaimed(workspaceId, projectId, runId);
     }
 }

@@ -290,6 +290,45 @@ class TopicsRebuildServiceTest {
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("a nightly update after the first build saves the list under its own run, keeps the topics' ids and "
+            + "writes one trace_topics row per trace as its run's")
+    void nightlyUpdateSaves() {
+        stubAnswer(FIXTURE.firstBuildAnswer);
+        var firstRunId = start();
+        assertThat(service.firstBuild(firstRunId, workspaceId, projectId, NIGHT, FIXTURE.size()).block().status())
+                .isEqualTo(TopicProject.RunStatus.SAVED);
+        var before = data.topics(projectId);
+        stubAnswer(emptyNaming());
+        var updateRunId = start(TopicProject.RunMode.NIGHTLY_UPDATE);
+
+        var outcome = service.nightlyUpdate(updateRunId, workspaceId, projectId, NIGHT, FIXTURE.size()).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(outcome.stats().path("mode").asText()).isEqualTo("nightly_update");
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(updateRunId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(project.listRunId()).isEqualTo(updateRunId);
+            assertThat(project.savedRuns()).isEqualTo(2);
+        });
+        var live = outcome.stats().get("topics").asInt();
+        assertThat(data.topics(projectId)).hasSize(live)
+                .extracting(Topic::id).isSubsetOf(before.stream().map(Topic::id).toList());
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
+        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
+    }
+
     /**
      * Four texts, three traces each, so each text is its own group and its vector is the group's centre. The answer
      * names the topic for the group of {@code alpha}: {@code beta} and {@code gamma} are Other groups within 0.95 of it
@@ -304,7 +343,7 @@ class TopicsRebuildServiceTest {
                 unit(d, 0, 0.96, 2, Math.sqrt(1 - 0.96 * 0.96)));
         var delta = unit(d, 3, 1, 0, 0);
         var groupTexts = List.of("alpha request", "beta request", "gamma request", "delta request");
-        var groupVectors = List.of(alpha, gated.get(0), gated.get(1), delta);
+        var groupVectors = List.of(alpha, gated.getFirst(), gated.get(1), delta);
         int count = 12;
         var traceIds = new ArrayList<UUID>(count);
         var createdAt = new ArrayList<Instant>(count);
@@ -414,6 +453,11 @@ class TopicsRebuildServiceTest {
             }
 
             @Override
+            public NightStep<TopicUpdate> update(NightState state, NightWindow window, int maxTopics) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
                 return vectors -> new UUID[vectors.size()];
             }
@@ -487,9 +531,13 @@ class TopicsRebuildServiceTest {
 
     /** Queues and claims a first build, as the planner and a pod's subscriber do. */
     private UUID start() {
-        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD).block().orElseThrow();
+        return start(TopicProject.RunMode.FIRST_BUILD);
+    }
+
+    private UUID start(TopicProject.RunMode mode) {
+        var runId = store.queue(workspaceId, projectId, mode).block().orElseThrow();
         var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicProject.RunMode.FIRST_BUILD).night(NIGHT).windowTraces(FIXTURE.size()).build();
+                .mode(mode).night(NIGHT).windowTraces(FIXTURE.size()).build();
         assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
         return runId;
     }

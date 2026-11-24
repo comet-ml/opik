@@ -363,6 +363,22 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
+        @DisplayName("two names that share their first 255 code points are one stored name, so they merge")
+        void sameNameAfterTheCut() {
+            var prefix = "a".repeat(TopicText.MAX_NAME_LENGTH);
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(prefix + " one", "d", List.of(1)),
+                    new AuthorTopic(prefix + " two", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).singleElement().satisfies(topic -> {
+                assertThat(topic.name()).isEqualTo(prefix);
+                assertThat(topic.groups()).containsExactly(1, 2);
+            });
+        }
+
+        @Test
         @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
         void sameNameKey() {
             var answer = new AuthorAnswer(List.of(
@@ -399,6 +415,19 @@ class TopicsAlgorithmRulesTest {
             var assigner = assigner(List.of(a, a.clone()), List.of(0, 1), List.of());
             assertThat(assigner.assign(new float[]{1, 0, 0.7f, 0.71414284f})).containsExactly(0,
                     TopicAlgorithm.OTHER);
+        }
+
+        @Test
+        @DisplayName("the winner: ties to the earlier prototype, a gated known-Other one never wins, below 0.75 none")
+        void winners() {
+            var a = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(close, far), 2, 0.75,
+                    OTHER_GATE);
+
+            assertThat(assigner.winners(new float[]{1, 0, 0.96f, 0.28f, 0, 1, 0.6f, -0.8f}))
+                    .containsExactly(0, 0, 2, PrototypeAssigner.NO_WINNER);
         }
 
         @Test

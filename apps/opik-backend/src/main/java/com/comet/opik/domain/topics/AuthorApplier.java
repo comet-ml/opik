@@ -67,13 +67,13 @@ public class AuthorApplier {
     }
 
     /**
-     * Topics whose names are equal after {@link #nameKey} become one, at the place of the first of them in the answer.
-     * It keeps the name and definition of its largest member (by {@link #validSize}, ties in answer order) and lists
-     * the members' group ids, largest member first, each id once.
+     * Topics whose stored names ({@link TopicText#name}) are equal after {@link #nameKey} become one, at the place of
+     * the first of them in the answer. It keeps the name and definition of its largest member (by {@link #validSize},
+     * ties in answer order) and lists the members' group ids, largest member first, each id once.
      */
     private static List<AuthorTopic> mergeSameNames(List<AuthorTopic> topics, List<GroupSummary> groups) {
         return topics.stream()
-                .collect(Collectors.groupingBy(topic -> nameKey(topic.name()), LinkedHashMap::new,
+                .collect(Collectors.groupingBy(topic -> nameKey(TopicText.name(topic.name())), LinkedHashMap::new,
                         Collectors.toList()))
                 .values().stream()
                 .map(members -> members.size() == 1 ? members.getFirst() : merge(members, groups))
@@ -91,7 +91,7 @@ public class AuthorApplier {
     }
 
     /** Python's {@code " ".join(name.split()).lower()}: no outer whitespace, inner runs as one space, lower case. */
-    private static String nameKey(String name) {
+    static String nameKey(String name) {
         var out = new StringBuilder(name.length());
         boolean space = false;
         for (int i = 0; i < name.length();) {
@@ -111,7 +111,7 @@ public class AuthorApplier {
     }
 
     /** {@link #CATCH_ALL_NAME} on the name normalised by {@link #nameKey}. */
-    private static boolean isCatchAllName(String name) {
+    static boolean isCatchAllName(String name) {
         return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }
 

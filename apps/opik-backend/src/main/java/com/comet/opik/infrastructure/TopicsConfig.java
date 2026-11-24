@@ -12,11 +12,13 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
+import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
@@ -46,6 +48,7 @@ public class TopicsConfig {
     private RunsConfig runs;
 
     @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
     private StorageConfig storage;
 
     /**
@@ -192,6 +195,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration llmDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call ({@code verify_naming}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /**
          * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
          * of its {@code trace_topics} insert.
@@ -229,6 +244,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
@@ -419,6 +446,30 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.runs.abandonGrace must be above topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
             return abandonGrace == null || heartbeatInterval == null
                     || abandonGrace.toMilliseconds() > heartbeatInterval.toMilliseconds();
+        }
+    }
+
+    /** The nightly job: updates the topic list of each project that has one. */
+    @Data
+    public static class NightlyConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. */
+        @JsonProperty
+        private boolean enabled;
+
+        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project is queued after this much of the night, from its start; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
+            return schedule == null || CronExpression.isValidExpression(schedule);
         }
     }
 

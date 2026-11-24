@@ -2586,7 +2586,7 @@ inference:
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
     #  Default: 300s
     #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
-    #  topics.build.llmDeadline must not be above it
+    #  topics.build.llmDeadline, namingDeadline and verifyDeadline must not be above it
     maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
@@ -2817,6 +2817,13 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
     llmDeadline: ${TOPICS_BUILD_LLM_DEADLINE:-120s}
+    #  Default: 30s
+    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
+    #  projectTimeout
+    namingDeadline: ${TOPICS_BUILD_NAMING_DEADLINE:-30s}
+    #  Default: 60s
+    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
+    verifyDeadline: ${TOPICS_BUILD_VERIFY_DEADLINE:-60s}
     #  Default: 120s
     #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
     #  attempt of its trace_topics insert. At most 30m
@@ -2942,6 +2949,19 @@ topics:
     #  Default: 2m
     #  Description: The planner stops counting first-build candidates after this and queues what it found. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+  nightly:
+    #  Default: true
+    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
+    #  topics.enabled
+    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date it fires on and starts at its first fire that day;
+    #  from then each plan of topics.runs queues the night's nightly updates
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project is queued after this much of the night, from its start; the rest run the next night,
+    #  first. Nightly updates share topics.runs.maxInFlight with first builds. At most 20h
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
   #  The topics state's MySQL writes
   storage:
     #  Default: 100

@@ -14,6 +14,8 @@ import lombok.Setter;
 import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.stream.Stream;
+
 @Getter
 @Setter
 public class OpikConfiguration extends JobConfiguration {
@@ -295,14 +297,6 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.build.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
-        var build = topics.getBuild();
-        var limits = inference.getLimits();
-        return build == null || limits == null
-                || notAbove(build.getLlmDeadline(), limits.getMaxGenerateBatchDeadline());
-    }
-
-    @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedTimeout must not be above inference.limits.maxEmbedDeadline") public boolean isTopicsEmbedTimeoutWithinLimits() {
         var vectors = topics.getVectors();
         var limits = inference.getLimits();
@@ -312,5 +306,14 @@ public class OpikConfiguration extends JobConfiguration {
     /** A bound left unset is checked by its own field's validation, not here. */
     private static boolean notAbove(Duration value, Duration limit) {
         return value == null || limit == null || value.toMilliseconds() <= limit.toMilliseconds();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.build.llmDeadline, namingDeadline and verifyDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlinesWithinLimits() {
+        var build = topics.getBuild();
+        var limits = inference.getLimits();
+        return build == null || limits == null
+                || Stream.of(build.getLlmDeadline(), build.getNamingDeadline(), build.getVerifyDeadline())
+                        .allMatch(deadline -> notAbove(deadline, limits.getMaxGenerateBatchDeadline()));
     }
 }

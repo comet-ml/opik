@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -279,6 +280,48 @@ public interface TopicProjectDAO {
             @Bind("failedAfter") Instant failedAfter);
 
     /**
+     * Of {@code projectIds}, those whose last {@code failures} attempts or more failed in a row, the latest started at
+     * or after {@code since}: the night pauses them. A run whose pod died counts once the planner records it
+     * {@code abandoned}, from its heartbeat.
+     */
+    @SqlQuery("""
+            SELECT project_id FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND run_started_at >= :since
+            AND failed_runs >= :failures
+            """)
+    Set<UUID> findPausedProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds, @Bind("failures") int failures,
+            @Bind("since") Instant since);
+
+    /**
+     * {@code queued -> running} for a nightly update, only while the project still has a list that does not cover the
+     * night: its {@code window_until} is before {@code windowTo}, the night's start. 0 otherwise, as {@link #claim}.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET run_status = 'running', run_started_at = :now, deadline_at = :deadline, heartbeat_at = :now
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'queued' AND list_run_id IS NOT NULL
+            AND (window_until IS NULL OR window_until < :windowTo)
+            """)
+    int claimNightly(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("now") Instant now, @Bind("deadline") Instant deadline,
+            @Bind("windowTo") Instant windowTo);
+
+    /**
+     * {@code queued -> failed} with {@code cancelled} for a nightly update whose project has no list any more, or whose
+     * list already covers the night (saved since it was queued). Not counted in {@code failed_runs}: it ran nothing.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET run_finished_at = :now, run_error_code = 'cancelled', run_status = 'failed'
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'queued' AND (list_run_id IS NULL OR window_until >= :windowTo)
+            """)
+    int skipNightly(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("now") Instant now, @Bind("windowTo") Instant windowTo);
+
+    /**
      * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
      * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
      * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
@@ -294,6 +337,19 @@ public interface TopicProjectDAO {
             @Nullable @Bind("expectedListRunId") UUID expectedListRunId, @Bind("runId") UUID runId,
             @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
+
+    /**
+     * A nightly save that left no live topic: the project has no list again, so the first-build job builds it. A
+     * compare-and-set on {@code list_run_id} as {@link #saveList}; the save still counts in {@code saved_runs}.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET saved_runs = saved_runs + 1, last_success_at = :savedAt, list_run_id = NULL, window_until = NULL,
+                labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
+            """)
+    int resetList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("expectedListRunId") UUID expectedListRunId, @Bind("savedAt") Instant savedAt);
 
     /**
      * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that

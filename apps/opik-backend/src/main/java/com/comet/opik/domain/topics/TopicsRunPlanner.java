@@ -29,8 +29,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * Plans the Topics runs. One plan, on the leader only: settle the runs in flight ({@link TopicsRunReconciler}), then
- * fill the free slots of {@code topics.runs.maxInFlight}, across the cluster, with labelling passes that did not
- * finish and first builds ({@link TopicsFirstBuildCandidates}), one of each in turn. Each run is written
+ * fill the free slots of {@code topics.runs.maxInFlight}, across the cluster: first with the night's nightly updates
+ * while the night's budget lasts ({@link TopicsNightPass}), then with labelling passes that did not finish and first
+ * builds ({@link TopicsFirstBuildCandidates}), one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -46,6 +47,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsFirstBuildCandidates candidates;
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
+    private final @NonNull TopicsNightPass nightPass;
 
     /** A run to queue: its message once queued, which gives it its id. */
     @Builder(toBuilder = true)
@@ -66,12 +68,22 @@ public class TopicsRunPlanner {
                         .flatMap(runs -> reconciler.reconcile(runs, workspaceIds, night, start))
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
-                            if (free <= 0 || workspaceIds.isEmpty()) {
+                            if (workspaceIds.isEmpty()) {
                                 return Mono.just(0);
                             }
-                            return labelsDue(workspaceIds, start)
-                                    .zipWith(candidates.find(workspaceIds, night, start))
-                                    .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night), free));
+                            // The night pass runs with no free slot too: its skips and its end need none.
+                            return nightPass.plan(workspaceIds, start, free, this::queueOne)
+                                    .flatMap(nightly -> {
+                                        int left = free - nightly;
+                                        if (left <= 0) {
+                                            return Mono.just(nightly);
+                                        }
+                                        return labelsDue(workspaceIds, start)
+                                                .zipWith(candidates.find(workspaceIds, night, start))
+                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
+                                                        left))
+                                                .map(queued -> nightly + queued);
+                                    });
                         }))
                 .doOnNext(queued -> log.info("Topics plan done, window until '{}', runs queued '{}'", night, queued));
     }
@@ -121,6 +133,20 @@ public class TopicsRunPlanner {
                 })
                 .doOnNext(runId -> log.info("Topics run '{}' queued by hand, workspace '{}', project '{}', window "
                         + "until '{}'", runId, workspaceId, projectId, night));
+    }
+
+    /**
+     * Queues the project's nightly update for {@code night} now, by hand, and returns its run id
+     * ({@link TopicsNightPass#byHand}).
+     *
+     * @throws ConflictException           when the nightly job is off, the workspace is not opted in, the project is
+     *                                     gone or has no list, its list already covers the night, its window has too
+     *                                     few vectors, or it has a run in flight
+     * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
+     *                                     again
+     */
+    public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
+        return nightPass.byHand(workspaceId, projectId, night, this::queueByHand);
     }
 
     /**
