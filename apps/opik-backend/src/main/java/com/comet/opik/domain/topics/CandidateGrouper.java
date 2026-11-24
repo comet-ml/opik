@@ -12,7 +12,7 @@ import java.util.Objects;
 /**
  * Step b of the nightly update: the traces no prototype took are grouped when they number at least
  * {@code nightlyMinCandidate}: k = unique texts / {@code nightlyTextsPerGroup} within {@code nightlyMinGroups} and
- * {@code nightlyMaxGroups} (the first build's rule), seeded with the night's {@code rebuilds}. Per group a
+ * {@code nightlyMaxGroups} (the discovery run's rule), seeded with the night's {@code rebuilds}. Per group a
  * {@link NightGroup}: size, tightness and examples, with the share of the whole window and the share of the window's
  * last {@code recentDays} days. A candidate is a group of at least {@code nightlyMinCandidate} traces.
  */

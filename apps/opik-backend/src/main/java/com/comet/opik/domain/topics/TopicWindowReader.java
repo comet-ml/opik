@@ -13,9 +13,9 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 
 /**
- * Reads a run's window: all of it, or an even sample of {@code topics.build.maxVectors} traces when it is larger. Rows
+ * Reads a run's window: all of it, or an even sample of {@code topics.run.maxVectors} traces when it is larger. Rows
  * with no text after stripping, or a vector of the wrong size, are skipped. Any failure is {@code window_read}. The
- * caller counts the window: the first-build job counts it to pick the project.
+ * caller counts the window: the discovery job counts it to pick the project.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -24,10 +24,10 @@ class TopicWindowReader {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicWindowDAO windowDAO;
 
-    /** {@code topics.build.readTimeout}, or the project timeout when shorter. */
-    static Duration readTimeout(@NonNull TopicsConfig.BuildConfig build) {
-        var read = build.getReadTimeout().toJavaDuration();
-        var project = build.getProjectTimeout().toJavaDuration();
+    /** {@code topics.run.readTimeout}, or the project timeout when shorter. */
+    static Duration readTimeout(@NonNull TopicsConfig.RunConfig runConfig) {
+        var read = runConfig.getReadTimeout().toJavaDuration();
+        var project = runConfig.getProjectTimeout().toJavaDuration();
         return read.compareTo(project) < 0 ? read : project;
     }
 
@@ -36,8 +36,8 @@ class TopicWindowReader {
      * sizes the arrays the rows are copied into as they arrive, so the window is held once.
      */
     Mono<RunWindow> read(@NonNull TopicRun run, long windowTraces, @NonNull Scheduler compute) {
-        int limit = config.getBuild().getMaxVectors();
-        var readTimeout = readTimeout(config.getBuild());
+        int limit = config.getRun().getMaxVectors();
+        var readTimeout = readTimeout(config.getRun());
         int capacity = (int) Math.max(1, Math.min(windowTraces, limit));
         return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
                 readTimeout.toSeconds())

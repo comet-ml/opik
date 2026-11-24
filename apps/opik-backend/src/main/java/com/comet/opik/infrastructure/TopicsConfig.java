@@ -33,7 +33,7 @@ public class TopicsConfig {
     private AlgorithmConfig algorithm;
 
     @Valid @NotNull @JsonProperty
-    private BuildConfig build;
+    private RunConfig run;
 
     @Valid @NotNull @JsonProperty
     private ReadConfig read;
@@ -85,7 +85,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100) private int maxTopics;
 
-        /** A first build over fewer traces is marked provisional in its stats. */
+        /** A discovery run over fewer traces is marked provisional in its stats. */
         @JsonProperty
         @Min(0) @Max(100_000) private int provisionalBelow;
 
@@ -151,12 +151,12 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
-    public static class BuildConfig {
+    public static class RunConfig {
 
         @Valid @NotNull @JsonProperty
-        private BuildReadConfig read;
+        private RunReadConfig read;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
@@ -164,7 +164,7 @@ public class TopicsConfig {
         @MaxDuration(value = 2, unit = TimeUnit.HOURS)
         private Duration projectTimeout;
 
-        /** A project is built when its window holds at least this many traces with a vector. */
+        /** A project gets a discovery run when its window holds at least this many traces with a vector. */
         @JsonProperty
         @Min(2) @Max(100_000) private int minVectors;
 
@@ -205,24 +205,24 @@ public class TopicsConfig {
         private Duration insertBackoff;
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
+        @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
-        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */
         @JsonIgnore
-        @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
+        @AssertTrue(message = "topics.run.maxVectors must be at least topics.run.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
     }
 
     /**
-     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
-     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     * The ClickHouse guards of the run's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the run reads a whole window, the window read about three times.
      */
     @Data
-    public static class BuildReadConfig implements ReadGuards {
+    public static class RunReadConfig implements ReadGuards {
 
         @JsonProperty
         @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
@@ -248,7 +248,7 @@ public class TopicsConfig {
         private Duration countSlice;
     }
 
-    /** The ClickHouse guards a topics read binds: the build's and the read API's are two sets of them. */
+    /** The ClickHouse guards a topics read binds: the run's and the read API's are two sets of them. */
     public interface ReadGuards {
 
         long getMaxRowsToRead();
@@ -263,7 +263,7 @@ public class TopicsConfig {
     }
 
     /**
-     * The read API's ClickHouse guards, apart from the build's: a page request, not a background job. Its reads (the
+     * The read API's ClickHouse guards, apart from the run's: a page request, not a background job. Its reads (the
      * per topic and day counts, the collecting count) share one time budget.
      */
     @Data

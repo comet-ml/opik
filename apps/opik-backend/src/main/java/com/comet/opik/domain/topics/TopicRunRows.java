@@ -26,7 +26,7 @@ record TopicRunRows(@NonNull List<Topic> topics, PrototypeVectors otherVectors, 
      * The rows of {@code built} over the window's {@code traces}, in the run's order. Fails with an
      * {@link IllegalArgumentException} when the list does not match the window or a prototype is not a unit vector.
      */
-    static TopicRunRows of(@NonNull TopicRun run, @NonNull List<WindowTrace> traces, @NonNull FirstBuild built,
+    static TopicRunRows of(@NonNull TopicRun run, @NonNull List<WindowTrace> traces, @NonNull DiscoveredTopics built,
             @NonNull Supplier<UUID> ids) {
         var labels = built.labels();
         if (labels.length != traces.size()) {

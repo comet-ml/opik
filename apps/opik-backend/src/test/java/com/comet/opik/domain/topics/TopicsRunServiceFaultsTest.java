@@ -53,13 +53,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The rebuild service when a store fails or stalls on cue, which the containers of {@link TopicsRebuildServiceTest}
+ * The run service when a store fails or stalls on cue, which the containers of {@link TopicsRunServiceTest}
  * can't do: a failing window read, save or mark, the retried trace_topics insert, and the run and insert timeouts on
- * virtual time. The stores are mocked; the run builds the fixture's window, so its steps are the real ones. Also the
+ * virtual time. The stores are mocked; the run reads the fixture's window, so its steps are the real ones. Also the
  * prototype check and the time bounds of the window read and the insert.
  */
-@DisplayName("topics rebuild service faults")
-class TopicsRebuildServiceFaultsTest {
+@DisplayName("topics run service faults")
+class TopicsRunServiceFaultsTest {
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final int TRACES = 120;
@@ -82,7 +82,7 @@ class TopicsRebuildServiceFaultsTest {
     private InferenceClient client;
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
-    private TopicsRebuildService service;
+    private TopicsRunService service;
     /** The scheduler the entry point would hand in. */
     private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-faults-compute");
 
@@ -115,7 +115,7 @@ class TopicsRebuildServiceFaultsTest {
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
-        service = new TopicsRebuildService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
+        service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
                 metrics, TopicsTestAlgorithm.algorithm());
     }
 
@@ -155,7 +155,7 @@ class TopicsRebuildServiceFaultsTest {
                 .doOnSubscribe(__ -> calls.incrementAndGet())
                 .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.firstBuild(runId, workspace, projectId, night, TRACES, compute).subscribe();
+        var subscription = service.discover(runId, workspace, projectId, night, TRACES, compute).subscribe();
         Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
 
@@ -175,7 +175,7 @@ class TopicsRebuildServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -194,7 +194,7 @@ class TopicsRebuildServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -215,7 +215,7 @@ class TopicsRebuildServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -237,7 +237,7 @@ class TopicsRebuildServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -259,7 +259,7 @@ class TopicsRebuildServiceFaultsTest {
         var scheduler = VirtualTimeScheduler.create();
         TopicRunOutcome outcome;
         try {
-            var run = service.firstBuild(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -285,11 +285,11 @@ class TopicsRebuildServiceFaultsTest {
         var cancelled = new AtomicInteger();
         when(client.generate(any(), any()))
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
-        var timeout = TestConfigUtils.loadConfigTest().getTopics().getBuild().getProjectTimeout().toJavaDuration();
+        var timeout = TestConfigUtils.loadConfigTest().getTopics().getRun().getProjectTimeout().toJavaDuration();
         var scheduler = VirtualTimeScheduler.create();
         TopicRunOutcome outcome;
         try {
-            var run = service.firstBuild(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();

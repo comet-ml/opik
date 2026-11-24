@@ -153,7 +153,7 @@ class InferenceConfigTest {
     @DisplayName("the Topics LLM deadline stays within the generate batch lane's limit")
     void topicsLlmDeadlineStaysWithinTheBatchLimit(String description, Duration llmDeadline, boolean valid) {
         var config = TestConfigUtils.loadConfigTest();
-        config.getTopics().getBuild().setLlmDeadline(llmDeadline);
+        config.getTopics().getRun().setLlmDeadline(llmDeadline);
 
         assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlineWithinLimits")).hasSize(valid ? 0 : 1);
     }

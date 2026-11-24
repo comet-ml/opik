@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 
 /**
- * One project's first build, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
+ * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
  * It owns the run's time limit and its cancel; the scheduler its CPU steps and timers run on is the caller's.
  *
@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
  */
 @Slf4j
 @Singleton
-public class TopicsRebuildService {
+public class TopicsRunService {
 
     private final @NonNull TopicsConfig config;
     private final @NonNull TopicWindowReader reader;
@@ -43,13 +43,13 @@ public class TopicsRebuildService {
     private final @NonNull Clock clock;
 
     @Inject
-    TopicsRebuildService(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicWindowReader reader,
+    TopicsRunService(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicWindowReader reader,
             @NonNull TopicsLlm llm, @NonNull TopicRunStore store, @NonNull TopicRunOutcomes outcomes,
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm) {
         this(config, reader, llm, store, outcomes, idGenerator, metrics, algorithm, Clock.systemUTC());
     }
 
-    TopicsRebuildService(@NonNull TopicsConfig config, @NonNull TopicWindowReader reader, @NonNull TopicsLlm llm,
+    TopicsRunService(@NonNull TopicsConfig config, @NonNull TopicWindowReader reader, @NonNull TopicsLlm llm,
             @NonNull TopicRunStore store, @NonNull TopicRunOutcomes outcomes, @NonNull IdGenerator idGenerator,
             @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm, @NonNull Clock clock) {
         this.config = config;
@@ -67,20 +67,20 @@ public class TopicsRebuildService {
      * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
      * caller counted as {@code windowTraces} traces. The CPU steps and the timeouts run on {@code compute}, the
      * caller's scheduler. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
-     * returned. A run that outlasts {@code topics.build.projectTimeout} before its commit fails with {@code timeout};
+     * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
      * one cancelled by its subscriber is failed with {@code timeout} too.
      */
-    Mono<TopicRunOutcome> firstBuild(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
+    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
             @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces, @NonNull Scheduler compute) {
         var run = TopicRun.of(runId, workspace.id(), workspace.name(), projectId, night,
-                config.getBuild().getWindowDays());
+                config.getRun().getWindowDays());
         return Mono.usingWhen(Mono.just(run), started -> run(started, windowTraces, compute),
                 started -> Mono.empty(), (started, error) -> Mono.empty(), outcomes::cancelled);
     }
 
     private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces, Scheduler compute) {
         int maxTopics = config.getAlgorithm().getMaxTopics();
-        var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
+        var timeout = config.getRun().getProjectTimeout().toJavaDuration();
         return timed(run, "window", reader.read(run, windowTraces, compute))
                 .flatMap(window -> compute(run, "cluster", compute,
                         () -> algorithm.cluster(window.topicWindow(), maxTopics))
@@ -124,8 +124,8 @@ public class TopicsRebuildService {
     }
 
     private TopicsRunException timedOut() {
-        return new TopicsRunException(RunError.TIMEOUT, "the run outlasted topics.build.projectTimeout '%s'"
-                .formatted(config.getBuild().getProjectTimeout()));
+        return new TopicsRunException(RunError.TIMEOUT, "the run outlasted topics.run.projectTimeout '%s'"
+                .formatted(config.getRun().getProjectTimeout()));
     }
 
     /** A CPU step on {@code compute}, timed from when it starts there. */

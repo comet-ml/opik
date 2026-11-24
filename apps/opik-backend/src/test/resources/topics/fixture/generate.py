@@ -8,9 +8,9 @@ Inputs, in this folder:
 
 Outputs:
   centres.f32      scikit-learn's unit centres for the window (seed 0)
-  expected.json    each step of the first build: merge, scikit-learn k-means, group summaries, the answer and its
-                   application, prototypes, final labels; `first_build` the same steps on the backend's grouping
-  first_build_centres.f32  the unit centres of the backend's grouping
+  expected.json    each step of the discovery run: merge, scikit-learn k-means, group summaries, the answer and its
+                   application, prototypes, final labels; `discovery` the same steps on the backend's grouping
+  discovery_centres.f32  the unit centres of the backend's grouping
 
 The rules follow the backend: IntentMerger, GroupSummaries, AuthorAnswer, AuthorApplier, PrototypeAssigner. The
 backend's k-means is its own, so this script reads its grouping and checks it only by the quality bar in
@@ -36,7 +36,7 @@ from sklearn.metrics import adjusted_rand_score
 
 HERE = Path(__file__).resolve().parent
 DIMENSIONS = 384
-K = 15  # the fixture's grouping; the backend's first build uses finer groups on real windows
+K = 15  # the fixture's grouping; the backend's discovery run uses finer groups on real windows
 SEEDS = 10
 RECENT_DAYS = 7
 MAX_TOPICS = 10
@@ -248,7 +248,7 @@ def main():
         java_answer, x, inverse, counts, intents, recent, java_groups, java_centres, K)
 
     centres.astype("<f4").tofile(HERE / "centres.f32")
-    java_centres.astype("<f4").tofile(HERE / "first_build_centres.f32")
+    java_centres.astype("<f4").tofile(HERE / "discovery_centres.f32")
     expected = {
         "unique_texts": unique, "unique_counts": counts.astype(int).tolist(), "unique_first": first.astype(int).tolist(),
         "k": K,
@@ -259,7 +259,7 @@ def main():
         "answer": answer, "summaries": summ, "topics": topics, "other": other,
         "prototypes": {key: prototypes[key] for key in ("topic_prototypes", "other_prototypes", "gated_other")},
         "final_labels": labels,
-        "first_build": {"groups": java_groups.astype(int).tolist(), "answer": java_answer, "topics": java_topics,
+        "discovery": {"groups": java_groups.astype(int).tolist(), "answer": java_answer, "topics": java_topics,
                         "other": java_other, "prototypes": java_prototypes, "labels": java_labels},
     }
     (HERE / "expected.json").write_text(compact(expected) + "\n")

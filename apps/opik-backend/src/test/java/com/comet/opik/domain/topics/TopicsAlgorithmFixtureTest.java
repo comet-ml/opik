@@ -23,10 +23,10 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * The Java first build against the fixture's expected outputs. The deterministic parts are equal byte for byte given
+ * The Java discovery run against the fixture's expected outputs. The deterministic parts are equal byte for byte given
  * the fixture's cluster labels; the k-means passes the quality bar.
  */
-@DisplayName("topics first build: the algorithm against the fixture")
+@DisplayName("topics discovery run: the algorithm against the fixture")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TopicsAlgorithmFixtureTest {
 
@@ -34,8 +34,8 @@ class TopicsAlgorithmFixtureTest {
     private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
     private static final String WORKSPACE_ID = RandomStringUtils.secure().nextAlphanumeric(10);
     private static final UUID PROJECT_ID = TopicsTestAlgorithm.ID_GENERATOR.generateId();
-    /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
-    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm
+    /** The discovery run at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
+    private static final KMeansTopicAlgorithm DISCOVERY = TopicsTestAlgorithm
             .algorithm(TopicsTestAlgorithm.fixedGroups(15));
 
     private TopicsFixture fixture;
@@ -61,7 +61,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(Arrays.copyOfRange(merged.vectors(), u * D, (u + 1) * D))
                     .containsExactly(Arrays.copyOfRange(fixture.vectors, first * D, (first + 1) * D));
         }
-        // The fixture groups this window into 15; the first build that runs this algorithm makes finer groups.
+        // The fixture groups this window into 15; the discovery run that runs this algorithm makes finer groups.
         assertThat(fixture.k()).isEqualTo(15);
     }
 
@@ -193,56 +193,57 @@ class TopicsAlgorithmFixtureTest {
     }
 
     /**
-     * The whole first build, with the recorded answer moved onto the backend's grouping. The reference cannot run the
+     * The whole discovery run, with the recorded answer moved onto the backend's grouping. The reference cannot run the
      * backend's k-means, so it builds on the grouping in {@code java_kmeans.json}; the first check pins that grouping.
      */
     @Test
-    @DisplayName("firstBuild: the topics, prototypes, owners and labels equal the reference on the backend's grouping")
-    void firstBuild() {
+    @DisplayName("discovery: the topics, prototypes, owners and labels equal the reference on the backend's grouping")
+    void discovery() {
         var groups = fit(KMeansTopicAlgorithm.SEED).labels();
         assertThat(groups)
                 .as("k-means changed: put %s in java_kmeans.json and run generate.py", Arrays.toString(groups))
                 .containsExactly(fixture.javaGroups);
-        var clustering = FIRST_BUILD.cluster(window(), 10);
+        var clustering = DISCOVERY.cluster(window(), 10);
 
-        var build = clustering.finish(AuthorAnswer.parse(fixture.firstBuildAnswer));
+        var discovered = clustering.finish(AuthorAnswer.parse(fixture.discoveryAnswer));
 
-        var want = fixture.expected.get("first_build");
+        var want = fixture.expected.get("discovery");
         var prototypes = want.get("prototypes");
         assertThat(clustering.stats().get("k").asInt()).isEqualTo(fixture.k());
         var names = new ArrayList<Tuple>();
         want.get("topics").forEach(topic -> names.add(tuple(topic.get("name").asText(),
                 topic.get("definition").asText())));
-        assertThat(build.topics()).extracting(NewTopic::name, NewTopic::definition).containsExactlyElementsOf(names);
+        assertThat(discovered.topics()).extracting(NewTopic::name, NewTopic::definition)
+                .containsExactlyElementsOf(names);
         // The reference lists the prototypes flat, each with the index of its topic.
         var owners = new ArrayList<Integer>();
-        for (int t = 0; t < build.topics().size(); t++) {
-            owners.addAll(Collections.nCopies(build.topics().get(t).prototypes().size(), t));
+        for (int t = 0; t < discovered.topics().size(); t++) {
+            owners.addAll(Collections.nCopies(discovered.topics().get(t).prototypes().size(), t));
         }
         assertThat(owners).containsExactly(boxed(TopicsFixture.ints(prototypes.get("owners"))));
-        assertCentres(build.topics().stream().flatMap(topic -> topic.prototypes().stream()).toList(),
+        assertCentres(discovered.topics().stream().flatMap(topic -> topic.prototypes().stream()).toList(),
                 TopicsFixture.ints(prototypes.get("topic_prototypes")));
-        assertCentres(build.otherPrototypes(), TopicsFixture.ints(prototypes.get("other_prototypes")));
-        assertThat(build.labels()).containsExactly(TopicsFixture.ints(want.get("labels")));
+        assertCentres(discovered.otherPrototypes(), TopicsFixture.ints(prototypes.get("other_prototypes")));
+        assertThat(discovered.labels()).containsExactly(TopicsFixture.ints(want.get("labels")));
     }
 
     @Test
-    @DisplayName("the labeller over a saved first build labels the window as the build did")
-    void labellerMatchesFirstBuild() {
-        var build = FIRST_BUILD.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.firstBuildAnswer));
-        var topics = IntStream.range(0, build.topics().size())
+    @DisplayName("the labeller over a saved discovery run labels the window as the run did")
+    void labellerMatchesDiscovery() {
+        var discovered = DISCOVERY.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.discoveryAnswer));
+        var topics = IntStream.range(0, discovered.topics().size())
                 .mapToObj(t -> TopicsTestAlgorithm.topic(WORKSPACE_ID, PROJECT_ID)
-                        .name(build.topics().get(t).name())
-                        .definition(build.topics().get(t).definition())
-                        .vectors(new PrototypeVectors(build.topics().get(t).prototypes()))
+                        .name(discovered.topics().get(t).name())
+                        .definition(discovered.topics().get(t).definition())
+                        .vectors(new PrototypeVectors(discovered.topics().get(t).prototypes()))
                         .build())
                 .toList();
-        assertThat(build.otherPrototypes()).isNotEmpty();
+        assertThat(discovered.otherPrototypes()).isNotEmpty();
 
-        var labels = FIRST_BUILD.labeller(topics, new PrototypeVectors(build.otherPrototypes())).orElseThrow()
+        var labels = DISCOVERY.labeller(topics, new PrototypeVectors(discovered.otherPrototypes())).orElseThrow()
                 .label(fixture.vectors);
 
-        assertThat(labels).containsExactly(Arrays.stream(build.labels())
+        assertThat(labels).containsExactly(Arrays.stream(discovered.labels())
                 .mapToObj(label -> label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(label).id())
                 .toArray(UUID[]::new));
     }
@@ -256,7 +257,7 @@ class TopicsAlgorithmFixtureTest {
         assertThat(actual).hasSize(groups.length);
         for (int i = 0; i < groups.length; i++) {
             assertThat(actual.get(i)).as("prototype %s, group %s", i, groups[i]).containsExactly(
-                    Arrays.copyOfRange(fixture.firstBuildCentres, groups[i] * D, (groups[i] + 1) * D),
+                    Arrays.copyOfRange(fixture.discoveryCentres, groups[i] * D, (groups[i] + 1) * D),
                     within(1e-6f));
         }
     }

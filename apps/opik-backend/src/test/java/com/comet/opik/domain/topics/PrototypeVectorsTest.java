@@ -52,7 +52,7 @@ class PrototypeVectorsTest {
         assertThatThrownBy(() -> NewTopic.builder().name("n").definition("d").prototypes(List.of()).build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("owns no prototype");
-        assertThatThrownBy(() -> FirstBuild.builder().topics(List.of()).labels(new int[0])
+        assertThatThrownBy(() -> DiscoveredTopics.builder().topics(List.of()).labels(new int[0])
                 .otherPrototypes(List.of(new float[]{1f})).stats(JsonUtils.createObjectNode()).build())
                 .isInstanceOf(IllegalArgumentException.class);
     }

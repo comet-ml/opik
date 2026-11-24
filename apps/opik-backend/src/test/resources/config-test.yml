@@ -1093,7 +1093,7 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
-  build:
+  run:
     projectTimeout: 15m
     minVectors: 100
     windowDays: 30

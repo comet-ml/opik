@@ -75,10 +75,10 @@ class TopicRunRowsTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    private static FirstBuild built(int[] labels, List<float[]> otherPrototypes) {
+    private static DiscoveredTopics built(int[] labels, List<float[]> otherPrototypes) {
         var stats = JsonUtils.createObjectNode();
         stats.put("algorithm_stat", 7);
-        return FirstBuild.builder()
+        return DiscoveredTopics.builder()
                 .topics(List.of(
                         NewTopic.builder().name("First").definition("one").prototypes(List.of(unit(0))).build(),
                         NewTopic.builder().name("Second").definition("two").prototypes(List.of(unit(1))).build()))
