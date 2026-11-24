@@ -80,7 +80,10 @@ export const getBackendRuleType = (
 
 export const getRuleUIType = (rule: EvaluatorsRule) =>
   isLLMJudgeRule(rule) &&
-  isDecisionModel((rule.code as LLMJudgeObject).model?.name)
+  isDecisionModel(
+    (rule.code as LLMJudgeObject).model?.name,
+    (rule.code as LLMJudgeObject).model?.api,
+  )
     ? UI_EVALUATORS_RULE_TYPE.decision_model
     : getUIRuleType(rule.type);
 
