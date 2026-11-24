@@ -307,7 +307,8 @@ class TopicVectorBackfiller {
      * @param window the backfill window's bounds and the workspace
      * @param arrival the tick's arrival steps
      */
-    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<TopicBackfill> projects,
+    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull Collection<TopicBackfill> projects,
             @NonNull TopicVectorsFind window, @NonNull TickBudget budget,
             @NonNull TopicsArrivalService.Tick arrival) {
         if (projects.isEmpty()) {
@@ -320,7 +321,8 @@ class TopicVectorBackfiller {
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(workspace, project, window, budget, run.settled, arrival).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, run.settled, arrival)
+                    .doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {

@@ -55,6 +55,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 /**
  * Topics runs across pods as a black box: the planner ({@link TopicsRunPlanner}) queues runs on {@code topic_projects}
@@ -276,7 +277,7 @@ class TopicsRunsIntegrationTest {
             }
         };
         var planner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates,
-                publisher, new TopicsBackfillGate(config));
+                publisher, new TopicsBackfillGate(config), mock(TopicsNightPass.class));
 
         var runId = planner.runByHand(workspaceId, projectId, tomorrow(), true).block();
 

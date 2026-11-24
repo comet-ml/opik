@@ -205,26 +205,27 @@ public class TopicVectorsTickService {
         return backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start()).flatMap(served -> {
             var readTime = since(readStarted);
             long embedStarted = System.nanoTime();
-            return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, arrival).flatMap(written -> {
-                var complete = read.complete() && !written.leftForLater(served.candidates());
-                var visit = new Visit(workspace, longWindow, true, complete, written.result(), served.started(),
-                        readTime, since(embedStarted));
-                if (longWindow) {
-                    return complete
-                            ? saveProgress(workspaceId, () -> workspaces.setVectorsLongWindowRead(workspaceId,
-                                    budget.start())).thenReturn(visit)
-                            : Mono.just(visit);
-                }
-                // The traces of the projects it started are the backfill's from now on.
-                var settled = new HashSet<>(written.settled());
-                var servedKeys = served.candidates().stream().map(VectorKey::of).collect(Collectors.toSet());
-                read.candidates().stream().map(VectorKey::of)
-                        .filter(key -> !servedKeys.contains(key))
-                        .forEach(settled::add);
-                var watermark = watermark(read.candidates(), settled, find.limit(), find.upperBound());
-                return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark))
-                        .thenReturn(visit);
-            });
+            return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, arrival)
+                    .flatMap(written -> {
+                        var complete = read.complete() && !written.leftForLater(served.candidates());
+                        var visit = new Visit(workspace, longWindow, true, complete, written.result(), served.started(),
+                                readTime, since(embedStarted));
+                        if (longWindow) {
+                            return complete
+                                    ? saveProgress(workspaceId, () -> workspaces.setVectorsLongWindowRead(workspaceId,
+                                            budget.start())).thenReturn(visit)
+                                    : Mono.just(visit);
+                        }
+                        // The traces of the projects it started are the backfill's from now on.
+                        var settled = new HashSet<>(written.settled());
+                        var servedKeys = served.candidates().stream().map(VectorKey::of).collect(Collectors.toSet());
+                        read.candidates().stream().map(VectorKey::of)
+                                .filter(key -> !servedKeys.contains(key))
+                                .forEach(settled::add);
+                        var watermark = watermark(read.candidates(), settled, find.limit(), find.upperBound());
+                        return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark))
+                                .thenReturn(visit);
+                    });
         });
     }
 
@@ -291,7 +292,8 @@ public class TopicVectorsTickService {
      * to the backfill; {@code started} the projects its read saw for the first time.
      */
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean reached,
-            boolean complete, @NonNull TickResult result, @NonNull List<TopicBackfill> started, @NonNull Duration readTime,
+            boolean complete, @NonNull TickResult result, @NonNull List<TopicBackfill> started,
+            @NonNull Duration readTime,
             @NonNull Duration embedTime) {
 
         static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean complete) {

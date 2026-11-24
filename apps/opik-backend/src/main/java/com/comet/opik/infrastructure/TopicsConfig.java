@@ -20,15 +20,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
-import java.util.Arrays;
-import java.util.List;
-import lombok.Setter;
-import lombok.ToString;
-
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
