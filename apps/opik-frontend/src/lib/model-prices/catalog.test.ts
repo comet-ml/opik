@@ -1,5 +1,6 @@
 import {
   buildCatalog,
+  builtInLookup,
   extraFields,
   filterCatalog,
   providersOf,
@@ -372,5 +373,20 @@ describe("saving one model", () => {
       "mine",
       "list",
     ]);
+  });
+});
+
+describe("builtInLookup", () => {
+  it("finds a row's built-in price by model and provider, ignoring case and spaces", () => {
+    const first = { model: "gpt-4o", provider: "openai", input_price: "2.5" };
+    const later = { model: "GPT-4o", provider: "openai", input_price: "9" };
+    const builtInOf = builtInLookup([first, later]);
+
+    expect(
+      builtInOf({ model: " GPT-4O ", provider: "OpenAI", kind: "fixed" }),
+    ).toBe(first);
+    expect(
+      builtInOf({ model: "gpt-4o", provider: "azure", kind: "fixed" }),
+    ).toBeUndefined();
   });
 });
