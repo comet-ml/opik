@@ -167,21 +167,26 @@ class CustomModelPriceValidatorTest {
     }
 
     @Test
-    void validateKeepsARowWhosePrefixIsAVendorForAnyProvider() {
+    void validateFilesARowWithoutAProviderUnderItsPrefixAsASpanWithThatNameIsLookedUp() {
         String model = customName();
         BigDecimal input = randomPrice();
 
         var result = validate(row("model", "meta-llama/" + model, "kind", "fixed", "input_price", input));
 
-        assertResult(result, accepted(List.of(valid(fixed(model, ANY_PROVIDER, input, null))),
+        assertResult(result, accepted(List.of(valid(fixed(model, "meta-llama", input, null))),
                 problem(0, "model", Code.NAME_NORMALIZED, "Saved as '%s', the form spans are looked up in"
                         .formatted(model)),
-                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(model, "any provider"))));
-        var priced = CostService.price("meta-llama/" + model, "openai", Map.of("prompt_tokens", 1_000_000), null,
-                PriceLayers.of("org-1", 1, List.of(result.rows().getFirst().price())));
-        assertThat(priced).usingRecursiveComparison()
+                problem(0, "provider", Code.NAME_NORMALIZED, "Saved as 'meta-llama', the form spans are looked up in"),
+                problem(0, "provider", Code.PROVIDER_UNPRICED,
+                        "No built-in price is filed under 'meta-llama', so only these rows price its spans"),
+                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(model, "'meta-llama'"))));
+        var layers = PriceLayers.of("org-1", 1, List.of(result.rows().getFirst().price()));
+        assertThat(CostService.price("meta-llama/" + model, null, Map.of("prompt_tokens", 1_000_000), null, layers))
+                .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                 .isEqualTo(new PricedCost(input, CostSource.ORGANIZATION));
+        assertThat(CostService.price("meta-llama/" + model, "openai", Map.of("prompt_tokens", 1_000_000), null,
+                layers).source()).isEqualTo(CostSource.NONE);
     }
 
     @Test
