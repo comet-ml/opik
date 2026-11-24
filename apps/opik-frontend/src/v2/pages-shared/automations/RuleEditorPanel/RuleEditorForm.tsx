@@ -144,17 +144,16 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
   const hasPrompt = form.watch("llmJudgeDetails.messages").length > 0;
-  const historyScope =
-    isLLMJudge || isDecisionModelRule
-      ? { [RULE_HISTORY_SCOPE_ATTRIBUTE]: "" }
-      : {};
   const isCodeBlocked =
     ruleType === UI_EVALUATORS_RULE_TYPE.python_code &&
     !isPythonEvaluatorEnabled;
 
   return (
     <Form {...form}>
-      <div className="flex size-full flex-col">
+      <div
+        className="flex size-full flex-col"
+        {...{ [RULE_HISTORY_SCOPE_ATTRIBUTE]: "" }}
+      >
         <div className="min-h-0 flex-1 px-5">
           <ResizablePanelGroup
             direction="horizontal"
@@ -162,10 +161,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
           >
             <ResizablePanel id="rule-editor-main" defaultSize={55} minSize={30}>
               <div className="h-full overflow-y-auto">
-                <div
-                  className="flex min-h-full flex-col gap-4 pb-3 pt-5"
-                  {...historyScope}
-                >
+                <div className="flex min-h-full flex-col gap-4 pb-3 pt-5">
                   <RuleNameField form={form} />
                   {isLLMJudge && (
                     <JudgePromptField
@@ -205,18 +201,12 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                     traceScopeOnly={traceScopeOnly}
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
-                  {isLLMJudge && (
-                    <div {...historyScope}>
-                      <ScoreConfigurationCard form={form} />
-                    </div>
-                  )}
+                  {isLLMJudge && <ScoreConfigurationCard form={form} />}
                   {isDecisionModelRule && hasPrompt && (
-                    <div className="flex flex-col" {...historyScope}>
-                      <DecisionModelPromptField
-                        form={form}
-                        datasetColumnNames={datasetColumnNames}
-                      />
-                    </div>
+                    <DecisionModelPromptField
+                      form={form}
+                      datasetColumnNames={datasetColumnNames}
+                    />
                   )}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>

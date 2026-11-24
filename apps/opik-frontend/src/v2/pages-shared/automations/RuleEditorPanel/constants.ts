@@ -169,6 +169,18 @@ export const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
     ? DEFAULT_DECISION_MODEL_DATA
     : DEFAULT_LLM_AS_JUDGE_DATA;
 
+export const DERIVED_FIELDS = [
+  "llmJudgeDetails.variables",
+  "llmJudgeDetails.parsingVariablesError",
+  "pythonCodeDetails.arguments",
+  "pythonCodeDetails.parsingArgumentsError",
+];
+
+export const isDerivedField = (name: string) =>
+  DERIVED_FIELDS.some(
+    (field) => name === field || name.startsWith(`${field}.`),
+  );
+
 export const DEFAULT_PYTHON_CODE_DATA: Record<
   EVALUATORS_RULE_SCOPE,
   PythonCodeObject

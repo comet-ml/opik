@@ -58,23 +58,12 @@ import {
   createInitialRulePrompt,
   FILTER_COLUMNS_BY_SCOPE,
   getDefaultJudgeData,
+  isDerivedField,
   DEFAULT_PYTHON_CODE_DATA,
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 import useRuleEditorHistory from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
-
-const DERIVED_FIELDS = [
-  "llmJudgeDetails.variables",
-  "llmJudgeDetails.parsingVariablesError",
-  "pythonCodeDetails.arguments",
-  "pythonCodeDetails.parsingArgumentsError",
-];
-
-const isDerivedField = (name: string) =>
-  DERIVED_FIELDS.some(
-    (field) => name === field || name.startsWith(`${field}.`),
-  );
 
 const ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|$)/;
 
@@ -292,7 +281,6 @@ const useRuleEditorForm = ({
     isPickingTemplate,
     setIsPickingTemplate,
     recordAction,
-    resetHistory,
     clearHistory,
     withoutHistory,
   } = useRuleEditorHistory(form, autoNameRef);
@@ -312,7 +300,7 @@ const useRuleEditorForm = ({
 
   const changeScope = useCallback(
     (scope: EVALUATORS_RULE_SCOPE) => {
-      resetHistory(() => {
+      recordAction(() => {
         const uiType = form.getValues("uiType");
         const llmJudgeDetails = form.getValues("llmJudgeDetails");
         scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
@@ -346,7 +334,7 @@ const useRuleEditorForm = ({
         );
       });
     },
-    [form, isDefaultName, setAutoName, resetHistory],
+    [form, isDefaultName, setAutoName, recordAction],
   );
 
   const openTemplates = useCallback(

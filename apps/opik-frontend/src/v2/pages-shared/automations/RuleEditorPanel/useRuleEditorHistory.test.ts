@@ -20,8 +20,11 @@ const renderHistory = ({ syncMainScoreName = false } = {}) => {
     const form = useForm<EvaluationRuleFormType>({
       defaultValues: {
         ruleName: "",
+        samplingRate: 1,
         uiType: UI_EVALUATORS_RULE_TYPE.llm_judge,
         llmJudgeDetails: {
+          model: "",
+          config: { temperature: 0 },
           messages: [],
           schema: [
             { name: "", type: LLM_SCHEMA_TYPE.BOOLEAN, description: "" },
@@ -42,10 +45,11 @@ const renderHistory = ({ syncMainScoreName = false } = {}) => {
     const history = useRuleEditorHistory(form, autoNameRef);
     return { form, history };
   });
-  const type = (...values: string[]) =>
-    values.forEach((value) =>
-      act(() => result.current.form.setValue("ruleName", value)),
-    );
+  const type = async (...values: string[]) => {
+    for (const value of values) {
+      await act(async () => result.current.form.setValue("ruleName", value));
+    }
+  };
   return {
     result,
     type,
@@ -54,10 +58,10 @@ const renderHistory = ({ syncMainScoreName = false } = {}) => {
 };
 
 describe("useRuleEditorHistory", () => {
-  it("undoes typing one word at a time", () => {
+  it("undoes typing one word at a time", async () => {
     const { type, ruleName } = renderHistory();
 
-    type("M", "My", "My ", "My r", "My ru", "My rul", "My ru");
+    await type("M", "My", "My ", "My r", "My ru", "My rul", "My ru");
 
     press("z");
     expect(ruleName()).toBe("My rul");
@@ -67,10 +71,10 @@ describe("useRuleEditorHistory", () => {
     expect(ruleName()).toBe("");
   });
 
-  it("ignores the nested update that copies the name into the main score", () => {
+  it("ignores the nested update that copies the name into the main score", async () => {
     const { type, ruleName } = renderHistory({ syncMainScoreName: true });
 
-    type("a", "ab", "a", "");
+    await type("a", "ab", "a", "");
 
     press("z");
     expect(ruleName()).toBe("ab");
@@ -78,10 +82,10 @@ describe("useRuleEditorHistory", () => {
     expect(ruleName()).toBe("");
   });
 
-  it("keeps an action as one step when a silent update runs inside it", () => {
+  it("keeps an action as one step when a silent update runs inside it", async () => {
     const { result, type, ruleName } = renderHistory();
 
-    type("My rule ");
+    await type("My rule ");
     act(() =>
       result.current.history.recordAction(() => {
         result.current.history.withoutHistory(() =>
@@ -97,10 +101,10 @@ describe("useRuleEditorHistory", () => {
     expect(ruleName()).toBe("");
   });
 
-  it("undoes typing and actions in order, and redoes them", () => {
+  it("undoes typing and actions in order, and redoes them", async () => {
     const { result, type, ruleName } = renderHistory();
 
-    type("My rule");
+    await type("My rule");
     act(() =>
       result.current.history.recordAction(() => {
         result.current.form.setValue("ruleName", "Hallucination");
@@ -128,5 +132,27 @@ describe("useRuleEditorHistory", () => {
     press("z", true);
     expect(ruleName()).toBe("Hallucination");
     expect(result.current.history.isPickingTemplate).toBe(true);
+  });
+
+  it("undoes a slider drag as one step and a multi-field change as one step", async () => {
+    const { result } = renderHistory();
+    const { form } = result.current;
+
+    for (const rate of [0.9, 0.85, 0.8]) {
+      await act(async () => form.setValue("samplingRate", rate));
+    }
+    await act(async () => {
+      form.setValue("llmJudgeDetails.model", "gpt-5" as never);
+      form.setValue("llmJudgeDetails.config", { temperature: 1 } as never);
+    });
+
+    press("z");
+    expect(form.getValues("llmJudgeDetails.model")).toBe("");
+    expect(form.getValues("llmJudgeDetails.config")).toEqual({
+      temperature: 0,
+    });
+    expect(form.getValues("samplingRate")).toBe(0.8);
+    press("z");
+    expect(form.getValues("samplingRate")).toBe(1);
   });
 });

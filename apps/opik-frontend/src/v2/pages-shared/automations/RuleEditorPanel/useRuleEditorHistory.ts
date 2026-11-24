@@ -1,41 +1,49 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FieldPathValue, UseFormReturn } from "react-hook-form";
+import { FieldPath, UseFormReturn } from "react-hook-form";
 import cloneDeep from "lodash/cloneDeep";
 import isEqual from "lodash/isEqual";
+import isObjectLike from "lodash/isObjectLike";
+import omit from "lodash/omit";
 
 import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
+import {
+  DERIVED_FIELDS,
+  isDerivedField,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 export const RULE_HISTORY_SCOPE_ATTRIBUTE = "data-rule-history";
 export const RULE_HISTORY_IGNORE_ATTRIBUTE = "data-rule-history-ignore";
 
-const TRACKED_FIELDS = [
-  "ruleName",
-  "llmJudgeDetails.messages",
-  "llmJudgeDetails.schema",
-];
 const TYPING_PAUSE_MS = 500;
 const WORD_END_REGEX = /[\s.,;:!?]$/;
 
+type FormField = FieldPath<EvaluationRuleFormType>;
+
 type EditorSnapshot = {
-  llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
-  ruleName: string;
+  values: EvaluationRuleFormType;
   autoName: string;
   isPickingTemplate: boolean;
 };
 
-type TypingGroup = { at: number; isDeleting: boolean; endedWord: boolean };
+type TypingGroup = {
+  field: string;
+  isText: boolean;
+  at: number;
+  isDeleting: boolean;
+  endedWord: boolean;
+};
 
-const getContentText = ({ ruleName, llmJudgeDetails }: EditorSnapshot) =>
-  [
-    ruleName,
-    ...llmJudgeDetails.messages.map(({ content }) =>
-      typeof content === "string" ? content : JSON.stringify(content),
-    ),
-    ...llmJudgeDetails.schema.map(
-      ({ name, description }) => `${name}\n${description}`,
-    ),
-  ].join("\n");
+const getTrackedValues = ({ values }: EditorSnapshot) =>
+  omit(values, DERIVED_FIELDS);
+
+const collectText = (value: unknown): string[] =>
+  isObjectLike(value)
+    ? Object.values(value as object).flatMap(collectText)
+    : [String(value ?? "")];
+
+const getContentText = (snapshot: EditorSnapshot) =>
+  collectText(getTrackedValues(snapshot)).join("\n");
 
 const getInsertedText = (previous: string, next: string) => {
   let start = 0;
@@ -50,15 +58,8 @@ const getInsertedText = (previous: string, next: string) => {
   return next.slice(start, next.length - end);
 };
 
-const isTrackedField = (name: string) =>
-  TRACKED_FIELDS.some(
-    (field) => name === field || name.startsWith(`${field}.`),
-  );
-
 const isSameContent = (a: EditorSnapshot, b: EditorSnapshot) =>
-  a.ruleName === b.ruleName &&
-  isEqual(a.llmJudgeDetails.messages, b.llmJudgeDetails.messages) &&
-  isEqual(a.llmJudgeDetails.schema, b.llmJudgeDetails.schema);
+  isEqual(getTrackedValues(a), getTrackedValues(b));
 
 const getHistoryCommand = (event: KeyboardEvent) => {
   if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
@@ -91,6 +92,7 @@ const useRuleEditorHistory = (
   const currentRef = useRef<EditorSnapshot | null>(null);
   const isSilentRef = useRef(false);
   const typingGroupRef = useRef<TypingGroup | null>(null);
+  const isSameTaskRef = useRef(false);
 
   const setIsPickingTemplate = useCallback((isPicking: boolean) => {
     isPickingTemplateRef.current = isPicking;
@@ -100,8 +102,7 @@ const useRuleEditorHistory = (
   const takeSnapshot = useCallback(
     (): EditorSnapshot =>
       cloneDeep({
-        llmJudgeDetails: form.getValues("llmJudgeDetails"),
-        ruleName: form.getValues("ruleName"),
+        values: form.getValues(),
         autoName: autoNameRef.current,
         isPickingTemplate: isPickingTemplateRef.current,
       }),
@@ -138,38 +139,32 @@ const useRuleEditorHistory = (
     [takeSnapshot, runSilently],
   );
 
-  const resetHistory = useCallback(
-    (change: () => void) => {
-      runSilently(change);
-      pastRef.current = [];
-      futureRef.current = [];
-      currentRef.current = takeSnapshot();
-      typingGroupRef.current = null;
-    },
-    [takeSnapshot, runSilently],
-  );
-
-  const clearHistory = useCallback(
-    () => resetHistory(() => {}),
-    [resetHistory],
-  );
+  const clearHistory = useCallback(() => {
+    pastRef.current = [];
+    futureRef.current = [];
+    currentRef.current = takeSnapshot();
+    typingGroupRef.current = null;
+  }, [takeSnapshot]);
 
   const restore = useCallback(
     (snapshot: EditorSnapshot) => {
-      const current = currentRef.current ?? takeSnapshot();
-      if (!isSameContent(snapshot, current)) {
-        const { model, config, maxCostUsd } = form.getValues("llmJudgeDetails");
-        runSilently(() => {
-          autoNameRef.current = snapshot.autoName;
-          form.setValue("ruleName", snapshot.ruleName, { shouldDirty: true });
+      const current = form.getValues();
+      const changedFields = (
+        Object.keys(snapshot.values) as (keyof EvaluationRuleFormType)[]
+      ).filter((key) => !isEqual(current[key], snapshot.values[key]));
+      runSilently(() => {
+        autoNameRef.current = snapshot.autoName;
+        changedFields.forEach((key) =>
           form.setValue(
-            "llmJudgeDetails",
-            { ...snapshot.llmJudgeDetails, model, config, maxCostUsd },
+            key as FormField,
+            cloneDeep(snapshot.values[key]) as never,
             { shouldDirty: true },
-          );
-          form.clearErrors("llmJudgeDetails");
-        });
-      }
+          ),
+        );
+        if (changedFields.length > 0) {
+          form.clearErrors(changedFields as FormField[]);
+        }
+      });
       setIsPickingTemplate(snapshot.isPickingTemplate);
       currentRef.current = takeSnapshot();
       typingGroupRef.current = null;
@@ -190,28 +185,43 @@ const useRuleEditorHistory = (
   useEffect(() => {
     currentRef.current = takeSnapshot();
     const subscription = form.watch((_, { name }) => {
-      if (isSilentRef.current || !name || !isTrackedField(name)) return;
+      if (isSilentRef.current || !name || isDerivedField(name)) return;
       const previous = currentRef.current;
       const next = takeSnapshot();
       if (previous && isSameContent(previous, next)) return;
+
+      const isSameTask = isSameTaskRef.current;
+      isSameTaskRef.current = true;
+      queueMicrotask(() => {
+        isSameTaskRef.current = false;
+      });
+
+      const value = form.getValues(name);
+      const isText = typeof value !== "number" && typeof value !== "boolean";
       const previousText = previous ? getContentText(previous) : "";
       const nextText = getContentText(next);
       const isDeleting = nextText.length < previousText.length;
       const now = Date.now();
       const group = typingGroupRef.current;
       const startsStep =
-        !group ||
-        now - group.at > TYPING_PAUSE_MS ||
-        group.isDeleting !== isDeleting ||
-        group.endedWord;
+        !isSameTask &&
+        (!group ||
+          (group.field !== name && !(isText && group.isText)) ||
+          typeof value === "boolean" ||
+          now - group.at > TYPING_PAUSE_MS ||
+          (isText && (group.isDeleting !== isDeleting || group.endedWord)));
       if (previous && startsStep) {
         pastRef.current.push(previous);
         futureRef.current = [];
       }
       typingGroupRef.current = {
+        ...(isSameTask && group
+          ? { field: group.field, isText: group.isText }
+          : { field: name, isText }),
         at: now,
         isDeleting,
         endedWord:
+          isText &&
           !isDeleting &&
           WORD_END_REGEX.test(getInsertedText(previousText, nextText)),
       };
@@ -243,7 +253,6 @@ const useRuleEditorHistory = (
     isPickingTemplate,
     setIsPickingTemplate,
     recordAction,
-    resetHistory,
     clearHistory,
     withoutHistory,
   };
