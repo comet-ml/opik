@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A project's topics over the window: the last {@code topics.build.windowDays} UTC days (default 30), today included.
+ * A project's topics over the window: the last {@code topics.run.windowDays} UTC days (default 30), today included.
  * Fields that exist only in some states are omitted in the others.
  */
 @Builder(toBuilder = true)
@@ -28,13 +28,13 @@ public record ProjectTopics(
                 + "to count; a retry answers the same") Status status,
         @Schema(description = "The UTC date of the request, the window's last day") LocalDate today,
         @Schema(description = "The window's first UTC day, inclusive") LocalDate windowFrom,
-        @Nullable @Schema(description = "When the project's last saved run (a first build or a nightly update) "
+        @Nullable @Schema(description = "When the project's last saved run (a discovery run or a nightly update) "
                 + "finished; omitted before the first one") Instant lastRunAt,
         @Nullable @Schema(description = "collecting only: the project's newest run when it is running or failed; "
                 + "omitted when it saved or there is none. The runbook's 'Reading topics' section tells the "
                 + "collecting cases apart") Attempt attempt,
         @Nullable @Schema(description = "collecting only: traces with a vector in the window") Long vectorsInWindow,
-        @Nullable @Schema(description = "collecting only: traces with a vector the first build needs") Long minVectors,
+        @Nullable @Schema(description = "collecting only: traces with a vector the discovery run needs") Long minVectors,
         @Nullable @Schema(description = "ready only: traces with a topic in the window, Other "
                 + "included") Long totalTraces,
         @Nullable @Schema(description = "ready only: the first day in the window with a labelled trace; earlier "
@@ -81,9 +81,9 @@ public record ProjectTopics(
             @Schema(description = "The topic id, the value the traces filter uses") UUID id,
             @Schema(description = "The topic's name") String name,
             @Schema(description = "What the topic's traces are about") String definition,
-            @Schema(description = "The UTC date the topic was made: for a first build's topics, the day the run "
+            @Schema(description = "The UTC date the topic was made: for a discovery run's topics, the day the run "
                     + "started") LocalDate born,
-            @Schema(description = "Born after the project's first build, in the last 7 days") boolean isNew,
+            @Schema(description = "Born after the project's discovery run, in the last 7 days") boolean isNew,
             @Schema(description = "Traces of the topic in the window") long count,
             @Schema(description = "count / total_traces, from 0 to 1, not rounded") double share,
             @Schema(description = "1-based: topics by count, most first, then the earlier born, then the id") int rank,

@@ -12,6 +12,7 @@ from .experiment_item_status import ExperimentItemStatus
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
+from .json_node import JsonNode
 
 
 class ExperimentItem(UniversalBaseModel):
@@ -38,6 +39,7 @@ class ExperimentItem(UniversalBaseModel):
     execution_policy: typing.Optional[ExecutionPolicy] = None
     assertion_results: typing.Optional[typing.List[AssertionResult]] = None
     status: typing.Optional[ExperimentItemStatus] = None
+    dataset_item_data: typing.Optional[JsonNode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

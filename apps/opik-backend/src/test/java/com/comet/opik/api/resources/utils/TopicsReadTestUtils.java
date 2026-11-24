@@ -137,7 +137,7 @@ public class TopicsReadTestUtils {
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         var runDAO = handle.attach(TopicProjectDAO.class);
-        runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+        runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                 savedAt.minus(Duration.ofMinutes(5)));
         runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);

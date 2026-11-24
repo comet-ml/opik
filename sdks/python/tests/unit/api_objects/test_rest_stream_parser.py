@@ -451,3 +451,62 @@ def test_read_and_parse_full_stream__dropped_records_are_reported(caplog):
         r"finished with (\d+) record\(s\) dropped", "\n".join(warnings)
     )
     assert reported == ["2"], warnings
+
+
+def test_read_and_parse_full_stream__page_without_a_cursor_after_an_unparsable_one__stops_instead_of_looping():
+    # Page 1 ends on a record that decodes but fails validation, so the cursor is
+    # that record. Page 2 has no decodable line at all. Falling back to the last
+    # record that *parsed* (row r06) would move the cursor backwards, re-serve
+    # page 1's tail and page 2, and repeat forever.
+    rows = _RowSource(_rows(("r06",), ("r05", "bad"), ("r04", "raw"), ("r03", "raw")))
+
+    def source(current_batch_size, last_retrieved_id):
+        if len(rows.requested) >= 5:
+            raise AssertionError("the read kept requesting pages")
+        return rows(current_batch_size, last_retrieved_id)
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == ["r06"]
+    assert [cursor for _, cursor in rows.requested] == [None, "r05"]
+
+
+def test_read_and_parse_full_stream__dict_items__page_without_an_id__ends_without_error():
+    # A backend error line (no id) can be a page's only line. Reading it as a
+    # dict must not assume attribute access for the cursor fallback.
+    error_line = {"code": 500, "message": "Streaming operation timed out"}
+
+    def source(current_batch_size, last_retrieved_id):
+        return [json.dumps(error_line).encode("utf-8") + b"\n"]
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=dict,
+        max_results=None,
+        max_endpoint_batch_size=2,
+    )
+
+    assert items == [error_line]
+
+
+def test_read_and_parse_full_stream__full_page_without_ids__stops_instead_of_restarting():
+    # Rows without an id give no cursor. Resetting the cursor to None would
+    # restart the stream and serve the same rows again until max_results.
+    requested = []
+
+    def source(current_batch_size, last_retrieved_id):
+        requested.append(last_retrieved_id)
+        return [
+            json.dumps({"value": index}).encode("utf-8") + b"\n"
+            for index in range(current_batch_size)
+        ]
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=dict,
+        max_results=10,
+        max_endpoint_batch_size=2,
+    )
+
+    assert items == [{"value": 0}, {"value": 1}]
+    assert requested == [None]

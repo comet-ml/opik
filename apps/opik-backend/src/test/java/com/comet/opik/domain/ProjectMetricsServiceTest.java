@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.api.ServerException;
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.Project;
@@ -92,7 +92,7 @@ class ProjectMetricsServiceTest {
     @EnumSource(value = MetricType.class, names = {"THREAD_COST", "SPAN_COUNT"})
     void threadAndSpanMetricsIgnoreATopicInTraceFilters(MetricType metricType) {
         var projectId = UUID.randomUUID();
-        var limit = new RuntimeException(new ServerException(159, "time limit", 500, "query-id"));
+        var limit = new RuntimeException(new ClickHouseException(159, "time limit", null));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
         // Strict stubs: the call fails the test if the service passes the trace filters on
         when(topicReadService.filterScope(isNull(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));

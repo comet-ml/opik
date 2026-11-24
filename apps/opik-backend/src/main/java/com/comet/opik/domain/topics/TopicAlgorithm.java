@@ -8,8 +8,8 @@ import java.util.Optional;
 
 /**
  * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
- * saved list. A first build is two pure steps around one LLM call: {@link #cluster}, then {@link Clustering#finish}.
- * {@link TopicsRebuildService} does everything around them: it reads the window, makes the call, checks the
+ * saved list. A discovery run is two pure steps around one LLM call: {@link #cluster}, then {@link Clustering#finish}.
+ * {@link TopicsRunService} does everything around them: it reads the window, makes the call, checks the
  * prototypes, saves and counts. {@link TopicWindowLabelService} labels the window's
  * other traces with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
  * {@link KMeansTopicAlgorithm}.
@@ -19,8 +19,8 @@ import java.util.Optional;
  * prototypes. A trace is labelled by the nearest saved prototype. An algorithm that cannot express its result as
  * prototypes does not fit this seam.
  *
- * <p>The labels a build returns should be the ones its {@link #labeller} gives with the prototypes it returns:
- * otherwise a trace the build read and a trace the labelling pass labels get their topic by two different rules.
+ * <p>The labels a run returns should be the ones its {@link #labeller} gives with the prototypes it returns:
+ * otherwise a trace the run read and a trace the labelling pass labels get their topic by two different rules.
  *
  * <p>Values every algorithm shares live here; the vector size is {@link TopicEmbedding#DIMENSIONS}. Values one
  * algorithm needs stay with it.

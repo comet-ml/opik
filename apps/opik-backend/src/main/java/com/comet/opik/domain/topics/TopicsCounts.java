@@ -24,37 +24,37 @@ import java.util.stream.IntStream;
 /**
  * The topics read API's {@code ready} body from a project's live topics, its {@code topic_projects} row and the per topic and day counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}. The window is the {@code windowDays} UTC days that end with today
- * ({@code topics.build.windowDays}), the window of the next build.
+ * ({@code topics.run.windowDays}), the window of the next run.
  * <ul>
  * <li>A row of an id that is neither a live topic nor Other (a topic retired since the trace was labelled) counts as
  * Other.</li>
  * <li>{@code share} is over all the window's traces, Other included.</li>
- * <li>New: born after the first build's date and at most {@value #NEW_DAYS} days ago, so a first build's topics are
+ * <li>New: born after the discovery run's date and at most {@value #NEW_DAYS} days ago, so a discovery run's topics are
  * never New.</li>
  * </ul>
  */
 @UtilityClass
-public class TopicsCounts {
+class TopicsCounts {
 
     static final int NEW_DAYS = 7;
 
-    public static LocalDate windowFrom(@NonNull LocalDate today, int windowDays) {
+    static LocalDate windowFrom(@NonNull LocalDate today, int windowDays) {
         return today.minusDays(windowDays - 1L);
     }
 
-    public static ProjectTopics.ProjectTopicsBuilder window(@NonNull LocalDate today, int windowDays) {
+    static ProjectTopics.ProjectTopicsBuilder window(@NonNull LocalDate today, int windowDays) {
         return ProjectTopics.builder()
                 .today(today)
                 .windowFrom(windowFrom(today, windowDays))
                 .topics(List.of());
     }
 
-    public static Instant lastRunAt(@Nullable TopicProject project) {
+    static Instant lastRunAt(@Nullable TopicProject project) {
         return project == null ? null : project.lastSuccessAt();
     }
 
     /** The project's current or last attempt, when it is running or failed. */
-    public static ProjectTopics.Attempt attempt(@Nullable TopicProject project) {
+    static ProjectTopics.Attempt attempt(@Nullable TopicProject project) {
         if (project == null || project.runStatus() == null) {
             return null;
         }
@@ -67,7 +67,7 @@ public class TopicsCounts {
     }
 
     /** {@code rows} come from a read of the window, so every row's day is in it. */
-    public static ProjectTopics ready(@NonNull LocalDate today, int windowDays, @NonNull List<Topic> live,
+    static ProjectTopics ready(@NonNull LocalDate today, int windowDays, @NonNull List<Topic> live,
             @NonNull TopicProject project, @NonNull List<TopicDayCount> rows) {
         var from = windowFrom(today, windowDays);
         var days = new HashMap<UUID, long[]>();
@@ -84,7 +84,7 @@ public class TopicsCounts {
         }
 
         long total = sum(other) + days.values().stream().mapToLong(TopicsCounts::sum).sum();
-        var firstBuild = project.firstBuiltAt() == null
+        var discovered = project.firstBuiltAt() == null
                 ? null
                 : LocalDate.ofInstant(project.firstBuiltAt(), ZoneOffset.UTC);
         var ranked = new ArrayList<>(live);
@@ -98,7 +98,7 @@ public class TopicsCounts {
                             .name(topic.name())
                             .definition(topic.definition())
                             .born(topic.born())
-                            .isNew(firstBuild != null && topic.born().isAfter(firstBuild)
+                            .isNew(discovered != null && topic.born().isAfter(discovered)
                                     && !topic.born().isBefore(today.minusDays(NEW_DAYS - 1)))
                             .count(sum(topicDays))
                             .share(share(sum(topicDays), total))

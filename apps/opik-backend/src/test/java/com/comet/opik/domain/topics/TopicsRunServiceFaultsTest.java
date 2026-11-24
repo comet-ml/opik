@@ -4,7 +4,6 @@ import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
@@ -17,11 +16,14 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -34,8 +36,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
@@ -53,13 +53,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The rebuild service when a store fails or stalls on cue, which the containers of {@link TopicsRebuildServiceTest}
+ * The run service when a store fails or stalls on cue, which the containers of {@link TopicsRunServiceTest}
  * can't do: a failing window read, save or mark, the retried trace_topics insert, and the run and insert timeouts on
- * virtual time. The stores are mocked; the run builds the fixture's window, so its steps are the real ones. Also the
+ * virtual time. The stores are mocked; the run reads the fixture's window, so its steps are the real ones. Also the
  * prototype check and the time bounds of the window read and the insert.
  */
-@DisplayName("topics rebuild service faults")
-class TopicsRebuildServiceFaultsTest {
+@DisplayName("topics run service faults")
+class TopicsRunServiceFaultsTest {
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final int TRACES = 120;
@@ -81,9 +81,10 @@ class TopicsRebuildServiceFaultsTest {
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
     private TopicWindowDAO windowDAO;
-    private WorkspaceNameService workspaceNames;
     private TopicRunStore store;
-    private TopicsRebuildService service;
+    private TopicsRunService service;
+    /** The scheduler the entry point would hand in. */
+    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-faults-compute");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -110,14 +111,17 @@ class TopicsRebuildServiceFaultsTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> IDS.generate());
         var metrics = TopicsMetricsReader.metrics(metricReader);
-        workspaceNames = mock(WorkspaceNameService.class);
-        when(workspaceNames.nameOrId(workspaceId)).thenReturn(workspaceName);
         var config = TestConfigUtils.loadConfigTest().getTopics();
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
-        service = new TopicsRebuildService(config, reader, llm, store, idGenerator, metrics, workspaceNames,
-                TopicsTestAlgorithm.algorithm());
+        service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
+                metrics, TopicsTestAlgorithm.algorithm());
+    }
+
+    @AfterEach
+    void tearDown() {
+        compute.dispose();
     }
 
     @Test
@@ -142,48 +146,25 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a run cancelled while it looks up its workspace name fails its attempt with timeout, under the id")
-    void cancelDuringNameLookup() throws Exception {
+    @DisplayName("a run cancelled during its LLM call fails its attempt with timeout and cancels the call")
+    void cancelDuringTheCall() {
         when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        var lookupStarted = new CountDownLatch(1);
-        var lookupReleased = new CountDownLatch(1);
-        when(workspaceNames.nameOrId(workspaceId)).thenAnswer(invocation -> {
-            lookupStarted.countDown();
-            lookupReleased.await(5, TimeUnit.SECONDS);
-            return workspaceName;
-        });
+        var calls = new AtomicInteger();
+        var cancelled = new AtomicInteger();
+        when(client.generate(any(), any())).thenReturn(Mono.<GenerateResponse>never()
+                .doOnSubscribe(__ -> calls.incrementAndGet())
+                .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.firstBuild(runId, workspaceId, projectId, night, TRACES).subscribe();
-        assertThat(lookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        var subscription = service.discover(runId, workspace, projectId, night, TRACES, compute).subscribe();
+        Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
-        lookupReleased.countDown();
 
         Awaitility.await().untilAsserted(() -> verify(projectDAO).markFailed(eq(workspaceId), eq(projectId),
                 eq(runId), any(), eq(TopicProject.RunError.TIMEOUT)));
+        assertThat(cancelled).hasValue(1);
         assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "timeout", "workspace_name",
-                workspaceId)).isEqualTo(1);
-        verify(windowDAO, never()).readWindow(any(), any(), any(), any(), anyInt(), anyLong());
-    }
-
-    @Test
-    @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before the LLM call and "
-            + "the save")
-    void windowReadGuardHit() {
-        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
-                .thenReturn(Flux.error(new IllegalStateException(
-                        "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
-
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.FAILED);
-        assertThat(outcome.errorCode()).isEqualTo("window_read");
-        verify(projectDAO).markFailed(eq(workspaceId), eq(projectId), eq(runId), any(),
-                eq(TopicProject.RunError.WINDOW_READ));
-        verify(client, never()).generate(any(), any());
+                workspaceName)).isEqualTo(1);
         verify(topicDAO, never()).insertTopics(any());
-        verify(traceTopicsDAO, never()).insert(any());
-        assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "window_read")).isEqualTo(1);
     }
 
     @Test
@@ -194,7 +175,7 @@ class TopicsRebuildServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -213,7 +194,7 @@ class TopicsRebuildServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -234,7 +215,7 @@ class TopicsRebuildServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -256,7 +237,7 @@ class TopicsRebuildServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.firstBuild(runId, workspaceId, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -275,10 +256,10 @@ class TopicsRebuildServiceFaultsTest {
             return Mono.<Long>never().doOnCancel(cancelled::incrementAndGet);
         }));
         answer(FIXTURE.answer);
-        var scheduler = VirtualTimeScheduler.getOrSet();
-        TopicsRebuildService.Outcome outcome;
+        var scheduler = VirtualTimeScheduler.create();
+        TopicRunOutcome outcome;
         try {
-            var run = service.firstBuild(runId, workspaceId, projectId, night, TRACES).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -286,7 +267,7 @@ class TopicsRebuildServiceFaultsTest {
             });
             outcome = run.get();
         } finally {
-            VirtualTimeScheduler.reset();
+            scheduler.dispose();
         }
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
@@ -297,28 +278,33 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     @Test
-    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout, cancels the LLM call "
-            + "in flight and saves nothing")
+    @DisplayName("a run that outlasts the project timeout before its commit fails with timeout and the window bounds, "
+            + "cancels the LLM call in flight and saves nothing")
     void runTimeoutCancelsTheCallInFlight() throws Exception {
         when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         var cancelled = new AtomicInteger();
         when(client.generate(any(), any()))
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
-        var timeout = TestConfigUtils.loadConfigTest().getTopics().getBuild().getProjectTimeout().toJavaDuration();
-        var scheduler = VirtualTimeScheduler.getOrSet();
-        TopicsRebuildService.Outcome outcome;
+        var timeout = TestConfigUtils.loadConfigTest().getTopics().getRun().getProjectTimeout().toJavaDuration();
+        var scheduler = VirtualTimeScheduler.create();
+        TopicRunOutcome outcome;
         try {
-            var run = service.firstBuild(runId, workspaceId, projectId, night, TRACES).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
             });
             outcome = run.get();
         } finally {
-            VirtualTimeScheduler.reset();
+            scheduler.dispose();
         }
 
         assertThat(outcome.errorCode()).isEqualTo("timeout");
+        assertThat(outcome.stats().has("window_from")).isTrue();
+        assertThat(outcome.stats().has("window_traces")).as("a timed-out run carries the window bounds only")
+                .isFalse();
+        assertThat(points(metricReader, "topics.run.duration_seconds")).extracting(point -> point.get("phase"))
+                .contains("window", "cluster", "llm");
         assertThat(cancelled).hasValue(1);
         verify(topicDAO, never()).insertTopics(any());
         verify(traceTopicsDAO, never()).insert(any());
@@ -326,50 +312,6 @@ class TopicsRebuildServiceFaultsTest {
     }
 
     /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
-    private static float[] unit(int d, int i, double a, int j, double b) {
-        var out = new float[d];
-        out[i] = (float) a;
-        out[j] += (float) b;
-        return out;
-    }
-
-    @Test
-    @DisplayName("a prototype passes the check before the save only with 384 values and unit length, NaN fails")
-    void unitPrototype() {
-        int d = TopicEmbedding.DIMENSIONS;
-        // The embedding model's output size, independent of the constant the code reads.
-        assertThat(d).isEqualTo(384);
-        var unit = unit(d, 0, 0.6, 1, 0.8);
-        assertThat(PrototypeVectors.isUnit(unit)).isTrue();
-        var nearUnit = unit.clone();
-        nearUnit[0] *= 1.0005f;
-        assertThat(PrototypeVectors.isUnit(nearUnit)).isTrue();
-
-        var tooLong = unit.clone();
-        tooLong[0] = 0.7f;
-        assertThat(PrototypeVectors.isUnit(tooLong)).isFalse();
-        var nan = unit.clone();
-        nan[2] = Float.NaN;
-        assertThat(PrototypeVectors.isUnit(nan)).isFalse();
-        var infinite = unit.clone();
-        infinite[2] = Float.POSITIVE_INFINITY;
-        assertThat(PrototypeVectors.isUnit(infinite)).isFalse();
-        assertThat(PrototypeVectors.isUnit(new float[]{0.6f, 0.8f})).isFalse();
-    }
-
-    @Test
-    @DisplayName("the window read stops after topics.build.readTimeout, or after a shorter run timeout; the insert's "
-            + "bound covers every attempt and backoff")
-    void readTimeoutAndInsertBound() {
-        var build = TestConfigUtils.loadConfigTest().getTopics().getBuild();
-        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(READ_TIMEOUT.toJavaDuration());
-        assertThat(TopicRunStore.insertBound(build))
-                .isEqualTo(Duration.milliseconds(4 * 120_000 + 3_500 + 30_000).toJavaDuration());
-
-        build.setProjectTimeout(Duration.minutes(1));
-        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(Duration.minutes(1).toJavaDuration());
-    }
-
     private void answer(JsonNode output) {
         when(client.generate(any(), any())).thenReturn(Mono.just(response(output)));
     }

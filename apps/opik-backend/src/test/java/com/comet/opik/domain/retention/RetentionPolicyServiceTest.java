@@ -22,6 +22,9 @@ import com.comet.opik.domain.ailabels.AiLabel;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.domain.topics.TopicEmbedding;
+import com.comet.opik.domain.topics.TopicVector;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -126,12 +129,13 @@ class RetentionPolicyServiceTest {
     private IdGenerator idGenerator;
     private AiLabelsDAO aiLabelsDAO;
     private AiLabelStatusDAO aiLabelStatusDAO;
+    private TopicVectorsDAO topicVectorsDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit AiLabelsDAO aiLabelsDAO,
-            @Jit AiLabelStatusDAO aiLabelStatusDAO) {
+            @Jit AiLabelStatusDAO aiLabelStatusDAO, @Jit TopicVectorsDAO topicVectorsDAO) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -142,6 +146,7 @@ class RetentionPolicyServiceTest {
         this.idGenerator = idGenerator;
         this.aiLabelsDAO = aiLabelsDAO;
         this.aiLabelStatusDAO = aiLabelStatusDAO;
+        this.topicVectorsDAO = topicVectorsDAO;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -884,10 +889,35 @@ class RetentionPolicyServiceTest {
                 .legend(Map.of())
                 .output("{}")
                 .build())).block();
+        topicVectorsDAO.insert(List.of(TopicVector.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .task(TopicEmbedding.SUMMARY_TASK)
+                .traceId(traceId)
+                .traceCreatedAt(Instant.now())
+                .taskVersion(1)
+                .embedModel("bge-small-en-v1.5")
+                .embedDimensions(2)
+                .text("summary")
+                .vector(new float[]{0.6f, 0.8f})
+                .build())).block();
+        // TopicVectorStatus is package-private to the topics domain, so the row goes in as SQL.
+        templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vector_status (workspace_id, project_id, task, trace_id, trace_created_at,
+                    task_version, reason)
+                VALUES (:workspace_id, :project_id, :task, :trace_id, now64(6), 1, 'invalid_vector')
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("task", TopicEmbedding.SUMMARY_TASK)
+                .bind("trace_id", traceId.toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
     }
 
     private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
-        for (var table : List.of("ai_labels", "ai_label_status")) {
+        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "topic_vector_status")) {
             var actual = templateAsync.nonTransaction(connection -> Mono
                     .from(connection.createStatement(
                             "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"

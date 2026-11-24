@@ -124,17 +124,6 @@ def setup_mcp_server(
         )
         return NOTHING_INSTALLED
 
-    ambiguity = _workspace_ambiguity(
-        api_key=api_key,
-        workspace=workspace,
-        base_url=base_url,
-        use_local=use_local,
-        check_tls_certificate=check_tls_certificate,
-    )
-    if ambiguity is not None:
-        display.problem(ambiguity)
-        return NOTHING_INSTALLED
-
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
     # fall back to the local `uvx opik-mcp` server. The probe — not the
     # deployment type — drives the choice, so a deployment that gains the hosted
@@ -181,6 +170,19 @@ def setup_mcp_server(
             "key."
         )
         return NOTHING_INSTALLED
+
+    if isinstance(server_spec, mcp_spec.StdioServerSpec):
+        # Only a local server is told a workspace; the hosted one asks at sign-in.
+        ambiguity = _workspace_ambiguity(
+            api_key=api_key,
+            workspace=workspace,
+            base_url=base_url,
+            use_local=use_local,
+            check_tls_certificate=check_tls_certificate,
+        )
+        if ambiguity is not None:
+            display.problem(ambiguity)
+            return NOTHING_INSTALLED
 
     candidates = _candidate_targets(host_keys)
     if len(candidates) == 0:

@@ -15,7 +15,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -33,21 +32,18 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 class TopicRunStore {
 
-    private static final Duration INSERT_BOUND_SLACK = Duration.ofSeconds(30);
-
-    private final TopicsConfig.BuildConfig build;
+    private final TopicsConfig.RunConfig runConfig;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final ProjectService projectService;
     private final IdGenerator idGenerator;
     private final TopicsMetrics metrics;
-    private final Scheduler jdbi = Schedulers.boundedElastic();
 
     @Inject
     TopicRunStore(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
             @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull ProjectService projectService,
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics) {
-        this.build = config.getBuild();
+        this.runConfig = config.getRun();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
@@ -109,13 +105,13 @@ class TopicRunStore {
 
     /**
      * Saves the list in one transaction: the list on the project's row, the new topics with their prototype vectors,
-     * and the run as {@code saved}. The list is a compare-and-set on an empty {@code list_run_id}, as a first build
+     * and the run as {@code saved}. The list is a compare-and-set on an empty {@code list_run_id}, as a discovery run
      * saves a project that has no list: if another run saved the project anyway (a Redis failover, or a timed-out run
      * that outlives its lock), the save is a conflict. A run failed meanwhile, by its timeout, rolls the save back.
      *
      * <p>The project's row is not locked. After the commit the save reads it: when the project is gone, the run's topics
      * are deleted and the result is false, so the caller skips the {@code trace_topics} insert. A delete that commits
-     * after that read leaves the topics to the first-build job's sweep of deleted projects.
+     * after that read leaves the topics to the discovery job's sweep of deleted projects.
      */
     Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
         return jdbi(() -> {
@@ -165,25 +161,20 @@ class TopicRunStore {
         });
     }
 
-    /** The longest the insert after the commit takes: every attempt to its stop, the backoffs, and some slack. */
-    static Duration insertBound(@NonNull TopicsConfig.BuildConfig build) {
-        int retries = build.getInsertRetries();
-        var backoffs = build.getInsertBackoff().toJavaDuration().multipliedBy((1L << retries) - 1);
-        return build.getReadTimeout().toJavaDuration().multipliedBy(retries + 1L).plus(backoffs)
-                .plus(INSERT_BOUND_SLACK);
-    }
-
     /**
-     * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.build.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
-     * the labelling pass gives the window's traces their topics.
+     * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.run.insertRetries}
+     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt
+     * stops after {@code topics.run.readTimeout}; the timeouts and backoffs run on {@code compute}. False when it
+     * still failed: the labelling pass gives the window's traces their topics.
      */
-    Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
-        var backoff = build.getInsertBackoff().toJavaDuration();
+    Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics,
+            @NonNull Scheduler compute) {
+        var backoff = runConfig.getInsertBackoff().toJavaDuration();
         return traceTopicsDAO.insert(traceTopics)
-                .timeout(build.getReadTimeout().toJavaDuration())
-                .retryWhen(RetryUtils.handleClickHouseErrors(build.getInsertRetries(), backoff,
-                        backoff.multipliedBy(1L << build.getInsertRetries()))
+                .timeout(runConfig.getReadTimeout().toJavaDuration(), compute)
+                .retryWhen(RetryUtils.handleClickHouseErrors(runConfig.getInsertRetries(), backoff,
+                        backoff.multipliedBy(1L << runConfig.getInsertRetries()))
+                        .scheduler(compute)
                         .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
                                 signal.totalRetries() + 2, signal.failure())))
@@ -201,6 +192,6 @@ class TopicRunStore {
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {
-        return Mono.fromCallable(call).subscribeOn(jdbi);
+        return Mono.fromCallable(call).subscribeOn(Schedulers.boundedElastic());
     }
 }
