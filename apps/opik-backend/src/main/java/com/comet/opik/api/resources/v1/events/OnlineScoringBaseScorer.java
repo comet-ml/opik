@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.OrganizationScopedMessage;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
@@ -15,6 +16,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -160,10 +162,11 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         return doScore(message)
                 // Sourced from the message (resolved from RequestContext.WORKSPACE_NAME at trace-event
                 // publish time).
-                .contextWrite(ctx -> ctx
+                .contextWrite(ctx -> AsyncUtils.setOrganizationId(ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                        .put(RequestContext.USER_NAME, message.userName()));
+                        .put(RequestContext.USER_NAME, message.userName()),
+                        message instanceof OrganizationScopedMessage scoped ? scoped.organizationId() : null));
     }
 
     /**

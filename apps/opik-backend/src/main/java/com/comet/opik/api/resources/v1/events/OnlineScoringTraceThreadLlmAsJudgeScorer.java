@@ -15,6 +15,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.cost.ModelPriceService;
 import com.comet.opik.domain.evaluation.EvaluatedThread;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
@@ -72,6 +73,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
+    private final ModelPriceService modelPriceService;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -87,9 +89,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull AgenticScoringService agenticScoringService,
             @NonNull SpanService spanService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
-            @NonNull AttachmentService attachmentService) {
+            @NonNull AttachmentService attachmentService,
+            @NonNull ModelPriceService modelPriceService) {
         super(config, redisson, feedbackScoreService, traceService, spanService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
+        this.modelPriceService = modelPriceService;
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
         this.traceThreadService = traceThreadService;
@@ -345,13 +349,21 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             List<Trace> traces, List<Span> spans, int estimatedTokens, boolean hasAttachments,
             UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc,
             EvaluationRecorder recorder) {
+        // One guard per thread evaluation; UNLIMITED when the rule sets no maxCostUsd. Charges every
+        // LLM call (initial + tool rounds + wrap-up) and tells the tool loop when to start wrapping up.
+        return BudgetGuard.load(message.code().maxCostUsd(), message.code().model().name(), llmProviderFactory,
+                modelPriceService)
+                .flatMap(costGuard -> evaluate(message, traces, spans, estimatedTokens, hasAttachments,
+                        threadModelId, threadId, rule, mdc, recorder, costGuard));
+    }
+
+    private Mono<List<FeedbackScoreBatchItemThread>> evaluate(TraceThreadToScoreLlmAsJudge message,
+            List<Trace> traces, List<Span> spans, int estimatedTokens, boolean hasAttachments,
+            UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc,
+            EvaluationRecorder recorder, BudgetGuard costGuard) {
         // `spans` is empty on the tools path (nothing was fetched — the model drills per-trace via
         // ReadTool) and the bounded inline span list otherwise. `estimatedTokens` was computed up front
         // from the cheap size aggregate, so no spans are needed to size the routing decision.
-        // One guard per thread evaluation; UNLIMITED when the rule sets no maxCostUsd. Charges every
-        // LLM call (initial + tool rounds + wrap-up) and tells the tool loop when to start wrapping up.
-        var costGuard = BudgetGuard.create(message.code().maxCostUsd(), message.code().model().name(),
-                llmProviderFactory);
         return Mono.fromCallable(
                 () -> prepareEvaluation(message, traces, spans, estimatedTokens, hasAttachments, threadId, rule,
                         mdc))

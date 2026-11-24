@@ -21,6 +21,7 @@ import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
@@ -28,6 +29,7 @@ import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -72,6 +74,7 @@ public class ExperimentExecutionService {
     private final PromptService promptService;
     private final FeatureFlags featureFlags;
     private final LockService lockService;
+    private final OrganizationResolver organizationResolver;
 
     @Inject
     public ExperimentExecutionService(
@@ -86,7 +89,8 @@ public class ExperimentExecutionService {
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
             @NonNull PromptService promptService,
             @NonNull FeatureFlags featureFlags,
-            @NonNull LockService lockService) {
+            @NonNull LockService lockService,
+            @NonNull OrganizationResolver organizationResolver) {
         this.experimentService = experimentService;
         this.cancellationService = cancellationService;
         this.datasetService = datasetService;
@@ -99,6 +103,7 @@ public class ExperimentExecutionService {
         this.promptService = promptService;
         this.featureFlags = featureFlags;
         this.lockService = lockService;
+        this.organizationResolver = organizationResolver;
     }
 
     /**
@@ -154,7 +159,14 @@ public class ExperimentExecutionService {
                                             // One past the cap is already too many
                                             .take(experimentExecutionConfig.getStreamAdmissionLen() + 1L)
                                             .collectList()
-                                            .flatMap(messages -> {
+                                            // Looked up here, not when publishing: the publish holds the
+                                            // cluster-wide lock, so a slow Comet call there would turn other
+                                            // workspaces' launches away
+                                            .zipWith(organizationResolver.organizationId().singleOptional())
+                                            .flatMap(messagesAndOrganization -> {
+                                                var messages = messagesAndOrganization.getT1();
+                                                String organizationId = messagesAndOrganization.getT2()
+                                                        .orElse(null);
                                                 // Refused before anything is written, so a run
                                                 // we will not accept leaves nothing behind
                                                 if (messages.size() > experimentExecutionConfig
@@ -176,8 +188,8 @@ public class ExperimentExecutionService {
                                                                     experimentIds).then(Mono.error(error)));
                                                 }
 
-                                                return admitAndPublish(messages, testSuite, batchId,
-                                                        plannedExperiments, workspaceId, experimentIds)
+                                                return admitAndPublish(messages, organizationId, testSuite,
+                                                        batchId, plannedExperiments, workspaceId, experimentIds)
                                                         .then(purgeIfCancelledWhilePublishing(
                                                                 workspaceId, experimentIds)
                                                                 .then(Mono.fromCallable(() -> {
@@ -554,8 +566,9 @@ public class ExperimentExecutionService {
      * would all be admitted, leaving the trim to take whatever no consumer has claimed. The writes
      * are inside the lock so a refused run still leaves nothing behind.
      */
-    private Mono<Void> admitAndPublish(List<ExperimentItemToProcess> messages, boolean testSuite, UUID batchId,
-            List<Experiment> plannedExperiments, String workspaceId, List<UUID> experimentIds) {
+    private Mono<Void> admitAndPublish(List<ExperimentItemToProcess> messages, @Nullable String organizationId,
+            boolean testSuite, UUID batchId, List<Experiment> plannedExperiments, String workspaceId,
+            List<UUID> experimentIds) {
         return lockService.bestEffortLock(
                 new LockService.Lock(PUBLISH_LOCK),
                 refuseIfQueueIsFull(messages.size())
@@ -563,7 +576,7 @@ public class ExperimentExecutionService {
                         // would mark experiments failed that were never created.
                         .then(itemPublisher.startTrackingRun(messages, testSuite)
                                 .then(persistExperiments(plannedExperiments))
-                                .then(itemPublisher.publish(batchId, messages))
+                                .then(itemPublisher.publish(batchId, messages, organizationId))
                                 .then(Mono.just(true))
                                 .onErrorResume(error -> abortRun(workspaceId, experimentIds)
                                         .then(Mono.error(error))))
