@@ -1131,6 +1131,13 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
 
 # Python evaluator configuration
 pythonEvaluator:
