@@ -19,19 +19,19 @@ You require to install Fern to run this script.
 
 See:
 
-- https://buildwithfern.com/
+- <https://buildwithfern.com/>
 
 ### `start_openapi_server.sh`
 
 Use this script to start a local server with an updated OpenAPI specification file, to be able to test the specification
 quickly.
 
-Open the server in your browser at http://localhost:3003/
+Open the server in your browser at <http://localhost:3003/>
 
 See:
 
-- https://github.com/Redocly/redoc
-- https://docs.oracle.com/en/java/javase/23/docs/specs/man/jwebserver.html
+- <https://github.com/Redocly/redoc>
+- <https://docs.oracle.com/en/java/javase/23/docs/specs/man/jwebserver.html>
 
 ### `sync-codex.sh`
 
@@ -217,6 +217,7 @@ export OPIK_WORKSPACE='default'
 ```
 
 Or edit `~/.opik.config`:
+
 ```ini
 [opik]
 url_override = http://localhost:8122

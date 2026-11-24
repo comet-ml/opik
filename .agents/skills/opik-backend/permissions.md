@@ -39,4 +39,4 @@ Not all resources have permissions defined yet. The remaining endpoints rely on 
 
 ### Reference
 
-Full permissions spec: https://www.notion.so/cometml/Workspace-permissions-and-user-roles-management-2b77124010a380f8b526e7ecb235c419
+Full permissions spec: <https://www.notion.so/cometml/Workspace-permissions-and-user-roles-management-2b77124010a380f8b526e7ecb235c419>

@@ -19,7 +19,8 @@ public record DatasetItemSearchCriteria(
         String search,
         boolean truncate,
         String versionHashOrTag,
-        // Resolve experimentIds to every experiment on the dataset, optionally only those run against this version
+        // Resolve experimentIds to every experiment on the dataset, optionally only those run against one of these
+        // versions (hash or tag)
         boolean allDatasetExperiments,
-        String experimentsVersionHashOrTag) {
+        Set<String> experimentsDatasetVersions) {
 }
