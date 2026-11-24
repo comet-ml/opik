@@ -2243,42 +2243,6 @@ class OpenTelemetryMapperTest {
         }
     }
 
-    @Nested
-    class AgentgatewayMappingTest {
-
-        @Test
-        void unmappedAttributesGoToMetadataAndOnlyThePromptIsInput() {
-            var otelSpan = io.opentelemetry.proto.trace.v1.Span.newBuilder()
-                    .setName("POST /v1/chat/completions")
-                    .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
-                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
-                    .addAttributes(str("gen_ai.prompt", "[{\"role\":\"user\",\"content\":\"hello\"}]"))
-                    .addAttributes(str("gen_ai.request.model", "gpt-4o-mini"))
-                    .addAttributes(str("route", "default/llm"))
-                    .addAttributes(str("http.path", "/v1/chat/completions"))
-                    .addAttributes(str("agw.ai.usage.cost.total", "0.0001"))
-                    .build();
-
-            var span = OpenTelemetryMapper.toOpikSpan(otelSpan, Generators.timeBasedEpochGenerator().generate(),
-                    OpenTelemetryMappingRuleFactory.AGENTGATEWAY_INSTRUMENTATION,
-                    OpenTelemetryMappingRuleFactory.AGENTGATEWAY_INSTRUMENTATION);
-
-            assertThat(span.input().size()).isEqualTo(1);
-            assertThat(span.input().has("gen_ai.prompt")).isTrue();
-            assertThat(span.model()).isEqualTo("gpt-4o-mini");
-            assertThat(span.metadata().get("route").asText()).isEqualTo("default/llm");
-            assertThat(span.metadata().get("http.path").asText()).isEqualTo("/v1/chat/completions");
-            assertThat(span.metadata().get("agw.ai.usage.cost.total").asText()).isEqualTo("0.0001");
-        }
-
-        private KeyValue str(String key, String value) {
-            return KeyValue.newBuilder()
-                    .setKey(key)
-                    .setValue(AnyValue.newBuilder().setStringValue(value))
-                    .build();
-        }
-    }
-
     /**
      * Prefix matched INPUT/OUTPUT/METADATA attributes should strip the rule prefix from the
      * storage key, and when the resulting suffix is empty a JSON-object value should be

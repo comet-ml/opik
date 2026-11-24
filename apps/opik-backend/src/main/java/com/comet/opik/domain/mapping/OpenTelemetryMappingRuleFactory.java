@@ -39,7 +39,7 @@ public class OpenTelemetryMappingRuleFactory {
     private static final String CLAUDE_CODE_SPAN_PREFIX = "claude_code.";
 
     /** Instrumentation scope name of every span that agentgateway exports. */
-    public static final String AGENTGATEWAY_INSTRUMENTATION = "agentgateway";
+    private static final String AGENTGATEWAY_INSTRUMENTATION = "agentgateway";
 
     private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),

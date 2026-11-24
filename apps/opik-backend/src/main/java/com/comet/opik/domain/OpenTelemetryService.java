@@ -33,6 +33,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
@@ -112,10 +113,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .findFirst()
                 .orElse(null);
 
-        Map<SpanKey, Span> spansById = traceRequest.getResourceSpansList().stream()
-                .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                .collect(Collectors.toMap(SpanKey::of, Function.identity(), (first, _) -> first));
+        var ancestorProjects = AncestorProjects.of(traceRequest);
 
         Map<String, List<ScopedSpan>> spansByProjectName = new HashMap<>();
         Set<String> skippedProjectNames = new LinkedHashSet<>();
@@ -136,8 +134,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         skippedProjectNames.addAll(tooLong);
                     }
                     var projectName = spanProjectName.filter(OpenTelemetryMapper::isValidProjectName)
-                            .or(() -> ancestorProjectName(span, spansById))
                             .or(() -> resourceProjectName.filter(OpenTelemetryMapper::isValidProjectName))
+                            .or(() -> ancestorProjects.nearestProjectName(span))
                             .orElse(fallbackProjectName);
                     spansByProjectName.computeIfAbsent(WorkspaceUtils.getProjectName(projectName),
                             name -> new ArrayList<>()).add(new ScopedSpan(span, scopeName));
@@ -162,7 +160,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             OpenTelemetryServiceImpl::mergeSpans))
                     .flatMapMany(spansByProjectId -> {
                         log.info(
-                                "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' go to project '{}'",
+                                "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' on the span, its resource or an ancestor in the batch go to project '{}'",
                                 workspaceId, describeProjects(spansByProjectId.values()),
                                 GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, fallbackProjectName);
                         return Flux.fromIterable(spansByProjectId.values());
@@ -170,25 +168,6 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     .flatMap(entry -> storeProjectSpans(entry.getValue(), entry.getKey(), integrationName))
                     .reduce(0L, Long::sum);
         }).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * The nearest ancestor in the batch with a valid {@code opik.project_name} span attribute names the project, so a
-     * subtree stays with its root when only the root carries the attribute (agentgateway adds it to the request span
-     * only, not to its upstream-call child span).
-     */
-    private static Optional<String> ancestorProjectName(Span span, Map<SpanKey, Span> spansById) {
-        var visited = new HashSet<SpanKey>();
-        var ancestor = SpanKey.parentOf(span).map(spansById::get);
-        while (ancestor.isPresent() && visited.add(SpanKey.of(ancestor.get()))) {
-            var projectName = OpenTelemetryMapper.extractOpikProjectName(ancestor.get().getAttributesList())
-                    .filter(OpenTelemetryMapper::isValidProjectName);
-            if (projectName.isPresent()) {
-                return projectName;
-            }
-            ancestor = SpanKey.parentOf(ancestor.get()).map(spansById::get);
-        }
-        return Optional.empty();
     }
 
     private static Map.Entry<Project, List<ScopedSpan>> mergeSpans(Map.Entry<Project, List<ScopedSpan>> left,
@@ -269,7 +248,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         .projectName(projectName)
                         .build())
                 .toList();
-        var opikSpans = joinParentTraces(otelSpans, convertedSpans);
+        var opikSpans = overriddenTraceIds.isEmpty() ? convertedSpans : joinParentTraces(otelSpans, convertedSpans);
 
         // Some integrations (e.g. PydanticAI/Logfire) put cumulative usage tokens on parent/agent spans
         // that already represent the sum of all child LLM call spans. Including both the parent and children
@@ -351,9 +330,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     }
 
     /**
-     * A span without its own {@code opik.trace_id} joins the Opik trace of its parent in the batch. Without this, the
-     * child of a span attached to an existing trace with {@code opik.trace_id} (agentgateway sets it on the request
-     * span only) would land in a trace of its own that is never created.
+     * A span without its own {@code opik.trace_id} goes into the Opik trace of its parent in the batch, under that
+     * parent. agentgateway sets {@code opik.trace_id} on the request span only, not on its upstream-call child span.
+     * Parents are resolved before their children by walking up each chain first, so an ancestor's trace reaches
+     * every descendant.
      */
     private static List<com.comet.opik.api.Span> joinParentTraces(List<ScopedSpan> otelSpans,
             List<com.comet.opik.api.Span> opikSpans) {
@@ -361,34 +341,77 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         for (int i = 0; i < otelSpans.size(); i++) {
             indexBySpanKey.putIfAbsent(SpanKey.of(otelSpans.get(i).span()), i);
         }
+        var parentIndexes = new Integer[otelSpans.size()];
+        for (int i = 0; i < otelSpans.size(); i++) {
+            var otelSpan = otelSpans.get(i).span();
+            if (OpenTelemetryMapper.extractOpikTraceId(otelSpan).isEmpty()) {
+                parentIndexes[i] = SpanKey.parentOf(otelSpan).map(indexBySpanKey::get).orElse(null);
+            }
+        }
+
         var joined = new ArrayList<>(opikSpans);
-        var visited = new boolean[joined.size()];
+        var resolved = new boolean[joined.size()];
+        var chain = new ArrayDeque<Integer>();
         for (int i = 0; i < joined.size(); i++) {
-            joinParentTrace(i, otelSpans, indexBySpanKey, joined, visited);
+            for (Integer index = i; index != null && !resolved[index]; index = parentIndexes[index]) {
+                resolved[index] = true;
+                chain.push(index);
+            }
+            while (!chain.isEmpty()) {
+                int index = chain.pop();
+                var parentIndex = parentIndexes[index];
+                if (parentIndex == null) {
+                    continue;
+                }
+                var parent = joined.get(parentIndex);
+                var span = joined.get(index);
+                if (!parent.traceId().equals(span.traceId())) {
+                    joined.set(index, span.toBuilder().traceId(parent.traceId()).parentSpanId(parent.id()).build());
+                }
+            }
         }
         return joined;
     }
 
-    private static com.comet.opik.api.Span joinParentTrace(int index, List<ScopedSpan> otelSpans,
-            Map<SpanKey, Integer> indexBySpanKey, List<com.comet.opik.api.Span> joined, boolean[] visited) {
-        if (visited[index]) {
-            return joined.get(index);
-        }
-        visited[index] = true;
-        var otelSpan = otelSpans.get(index).span();
-        var parentIndex = SpanKey.parentOf(otelSpan).map(indexBySpanKey::get);
-        if (parentIndex.isEmpty() || OpenTelemetryMapper.extractOpikTraceId(otelSpan).isPresent()) {
-            return joined.get(index);
-        }
-        var parent = joinParentTrace(parentIndex.get(), otelSpans, indexBySpanKey, joined, visited);
-        var span = joined.get(index);
-        if (!parent.traceId().equals(span.traceId())) {
-            joined.set(index, span.toBuilder().traceId(parent.traceId()).parentSpanId(parent.id()).build());
-        }
-        return joined.get(index);
+    private record ScopedSpan(Span span, String scopeName) {
     }
 
-    private record ScopedSpan(Span span, String scopeName) {
+    /**
+     * Valid {@code opik.project_name} span attributes of the batch, so a span with no project of its own or of its
+     * resource goes to the project of its nearest ancestor in the batch. agentgateway sets the attribute on the request
+     * span only, not on its upstream-call child span.
+     */
+    private record AncestorProjects(Map<SpanKey, Span> spansById, Map<SpanKey, String> projectNames) {
+
+        static AncestorProjects of(ExportTraceServiceRequest traceRequest) {
+            Map<SpanKey, Span> spansById = new HashMap<>();
+            Map<SpanKey, String> projectNames = new HashMap<>();
+            traceRequest.getResourceSpansList().stream()
+                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                    .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
+                    .forEach(span -> {
+                        var key = SpanKey.of(span);
+                        spansById.putIfAbsent(key, span);
+                        OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList())
+                                .filter(OpenTelemetryMapper::isValidProjectName)
+                                .ifPresent(projectName -> projectNames.putIfAbsent(key, projectName));
+                    });
+            return projectNames.isEmpty()
+                    ? new AncestorProjects(Map.of(), Map.of())
+                    : new AncestorProjects(spansById, projectNames);
+        }
+
+        Optional<String> nearestProjectName(Span span) {
+            var ancestorKey = SpanKey.parentOf(span);
+            for (int hops = 0; ancestorKey.isPresent() && hops < spansById.size(); hops++) {
+                var projectName = projectNames.get(ancestorKey.get());
+                if (projectName != null) {
+                    return Optional.of(projectName);
+                }
+                ancestorKey = Optional.ofNullable(spansById.get(ancestorKey.get())).flatMap(SpanKey::parentOf);
+            }
+            return Optional.empty();
+        }
     }
 
     private record SpanKey(ByteString traceId, ByteString spanId) {
