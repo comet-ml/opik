@@ -16037,6 +16037,8 @@ components:
           enum:
           - passed
           - failed
+        dataset_item_data:
+          $ref: "#/components/schemas/JsonNode"
     ExperimentRunSummary:
       type: object
       properties:
@@ -16793,6 +16795,8 @@ components:
           enum:
           - passed
           - failed
+        dataset_item_data:
+          $ref: "#/components/schemas/JsonNode"
       readOnly: true
     ExperimentRunSummary_Compare:
       type: object

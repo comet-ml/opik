@@ -26,4 +26,5 @@ export interface ExperimentItem {
     executionPolicy?: OpikApi.ExecutionPolicy;
     assertionResults?: OpikApi.AssertionResult[];
     status?: OpikApi.ExperimentItemStatus;
+    datasetItemData?: OpikApi.JsonNode;
 }
