@@ -287,6 +287,7 @@ cache runs no query. No alert reads these metrics.
 
 The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
 stay.
+
 ## Topics discovery runs
 
 A discovery run makes the topic list of a project that has none yet, from the project's topic vectors. A project
