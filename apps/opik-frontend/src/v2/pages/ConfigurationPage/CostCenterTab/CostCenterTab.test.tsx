@@ -256,14 +256,6 @@ describe("CostCenterTab", () => {
     });
   });
 
-  it("shows the version and who saved it last", () => {
-    renderTab(ADMIN);
-
-    expect(
-      screen.getByText(/Organization prices: version 3 · saved by maria/),
-    ).toBeVisible();
-  });
-
   it("opens and closes the history from the History button", () => {
     renderTab(ADMIN);
 

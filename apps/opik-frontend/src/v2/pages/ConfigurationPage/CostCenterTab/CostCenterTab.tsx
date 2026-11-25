@@ -248,11 +248,9 @@ const CostCenterTab: React.FC = () => {
   return (
     <div data-testid="cost-center-tabpanel" className="pb-12">
       <CostCenterHeader
-        version={list.version}
         organizationName={access.organizationName}
         canEdit={canEdit}
         isAccessPending={access.isPending}
-        latest={history[0]}
         actions={
           canEdit && (
             <div className="flex items-center gap-2">
