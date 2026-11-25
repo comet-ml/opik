@@ -425,9 +425,14 @@ models:
         accepted: true
         levels: [low, medium, high]
         default: high
+  # Google still honors temperature on 3.1 Flash-Lite: Vertex AI lists 0.0-2.0 for it, and in a live test ten calls at
+  # 0 gave 2 distinct answers, at 2 they gave 10. The models from 3.5 Flash-Lite on ignore it. Top-P and the penalties
+  # stay refused. The default of 1 is what Google uses when the field is left out, and what it asks Gemini 3 to keep.
+  # Same for the Vertex AI row below.
   - id: gemini-3.1-flash-lite
     profile: gemini-no-sampling
     params:
+      temperature: {accepted: true, default: 1}
       effort:
         accepted: true
         levels: [none, minimal, low, medium, high]
@@ -533,6 +538,7 @@ models:
   - id: gemini-3.1-flash-lite
     profile: gemini-no-sampling
     params:
+      temperature: {accepted: true, default: 1}
       effort:
         accepted: true
         levels: [none, minimal, low, medium, high]
