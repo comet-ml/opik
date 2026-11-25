@@ -1319,7 +1319,9 @@ class Opik:
             dataset_item_id: The dataset item's id. Must be a UUID.
             dataset_versions: Dataset version hashes or tags. Only experiments run
                 against one of these versions are included. Defaults to every version.
-            project_name: The name of the project the dataset belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            project_name: The name of the project the dataset belongs to. If not
+                provided, falls back to the active project context (from @track or
+                opik.project_context), then to the client's default.
             max_results: The maximum number of results to return.
 
         Returns:
@@ -1864,7 +1866,9 @@ class Opik:
             item_id: The test suite item's id. Must be a UUID.
             dataset_versions: Test suite version hashes or tags. Only experiments run
                 against one of these versions are included. Defaults to every version.
-            project_name: The name of the project the suite belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            project_name: The name of the project the suite belongs to. If not
+                provided, falls back to the active project context (from @track or
+                opik.project_context), then to the client's default.
             max_results: The maximum number of results to return.
 
         Returns:
