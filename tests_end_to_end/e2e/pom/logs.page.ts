@@ -678,6 +678,42 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Follow a URL the BACKEND chose — the `Location` of a
+   * `/v1/session/redirect/*` answer — and return the trace panel it should have
+   * opened.
+   *
+   * Distinct from {@link openTraceById}, and it has to be: that method BUILDS
+   * the URL from `env.baseUrl`, the workspace and `/logs?trace=`, so a spec
+   * about whether the backend's own URL lands would be asserting against a URL
+   * this suite wrote. Here the string is an argument and nothing reconstructs
+   * it — which is the only way "the link the SDK printed works" is expressible.
+   *
+   * `projectId` is adopted from the landed URL rather than taken as an
+   * argument, for the same reason: the project in the link is part of what is
+   * under test, so a caller that passed it in could not notice the link naming
+   * the wrong one. It is read back out of the path so later POM calls on this
+   * instance (`traceRow`, `openTraceById`) work as they would after a `goto`.
+   */
+  async landOnTraceLink(location: string, traceId: string): Promise<TracePanelPage> {
+    return test.step(`Follow the backend's trace link to ${traceId}`, async () => {
+      await this.page.goto(location);
+      const landedProjectId = new URL(this.page.url()).pathname.match(
+        /\/projects\/([^/]+)\//,
+      )?.[1];
+      // Asserted rather than left undefined: `projectId` being null is what
+      // every other method on this POM throws on, and a landing that produced
+      // no project segment at all is a finding in its own right — not a reason
+      // for a later call to report "call goto(projectId) first".
+      expect(
+        landedProjectId,
+        'the landed URL names a project in its path',
+      ).toBeDefined();
+      this.projectId = landedProjectId!;
+      return new TracePanelPage(this.page, traceId);
+    });
+  }
+
   async openFirstTrace(): Promise<TracePanelPage> {
     return test.step('Open first trace in table', async () => {
       const row = this.traceRows.first();
