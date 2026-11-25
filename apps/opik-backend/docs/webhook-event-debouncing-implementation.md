@@ -78,6 +78,7 @@ if (eventMatchesAlertConfig(event, alert)) {
 **Bucket Key Format:** `alert_bucket:{alertId}:{eventType}`
 
 **Bucket Data Structure:**
+
 ```json
 {
   "eventIds": "[\"event-1\", \"event-2\", \"event-3\"]",
@@ -88,6 +89,7 @@ if (eventMatchesAlertConfig(event, alert)) {
 ```
 
 **Note:** The bucket stores:
+
 - `windowSize`: The debouncing window (in milliseconds) active when the bucket was created
 - `workspaceId`: The workspace ID for retrieving alert configuration without RequestContext
 These fields ensure that configuration changes do not affect existing buckets and allow background jobs to access alert data.
@@ -216,6 +218,7 @@ t60+: Bucket deleted by AlertJob after processing
 ```
 
 **TTL Behavior:**
+
 - TTL is set ONLY when the first event is added to a new bucket
 - Subsequent events to the same bucket do NOT refresh the TTL
 - This prevents buckets from living indefinitely if events keep arriving
@@ -227,12 +230,14 @@ t60+: Bucket deleted by AlertJob after processing
 When the debouncing `windowSize` configuration is changed, the system handles existing and new buckets correctly:
 
 **Scenario:**
+
 1. Alert has debouncing window = 60 seconds
 2. Bucket A is created at t0 with events
 3. Configuration is changed to debouncing window = 120 seconds
 4. New events for same alert arrive
 
 **Behavior:**
+
 - **Bucket A** (created with 60s window):
   - Continues to use its stored windowSize = 60000ms
   - Will be processed when (now - firstSeen) >= 60s
@@ -244,6 +249,7 @@ When the debouncing `windowSize` configuration is changed, the system handles ex
   - Uses the new configuration
 
 **Key Implementation Details:**
+
 1. `addEventToBucket()` stores `windowSize` only for the first event in a bucket
 2. Subsequent events to the same bucket preserve the original `windowSize`
 3. `getBucketsReadyToProcess()` reads the `windowSize` from each bucket (not from current config)
@@ -251,6 +257,7 @@ When the debouncing `windowSize` configuration is changed, the system handles ex
 
 **Test Coverage:**
 See `AlertBucketServiceTest.java` for comprehensive tests covering:
+
 - Window size storage with first event
 - Window size preservation with subsequent events
 - Multiple buckets with different window sizes being processed independently
@@ -386,6 +393,7 @@ void shouldHandleDisabledAlert() {
 ## Key Files
 
 ### Core Implementation
+
 - `AlertBucketService.java` - Redis bucket management
 - `AlertJob.java` - Scheduled job for processing buckets
 - `WebhookPublisher.java` - Webhook event publisher
@@ -393,18 +401,21 @@ void shouldHandleDisabledAlert() {
 - `AlertService.java` - Alert configuration service (includes `getByIdAndWorkspace`)
 
 ### Data Models
+
 - `Alert.java` - Alert configuration
 - `AlertTrigger.java` - Alert trigger configuration
 - `WebhookEvent.java` - Webhook event structure
 - `WebhookEventTypes.java` - Event type enum (includes `ALERT_FIRED`)
 
 ### Services
+
 - `AlertService.java` - Alert CRUD operations
 - `AlertDAO.java` - Alert database access
 
 ## Version History
 
 ### Version 1.2 (Current)
+
 - **Workspace Context**: Added `workspaceId` storage in buckets for background job access
   - AlertJob can now retrieve alert configuration without RequestContext
   - Added `getByIdAndWorkspace()` method to AlertService
@@ -414,6 +425,7 @@ void shouldHandleDisabledAlert() {
 - **Documentation**: Updated to use `WebhookPublisher` instead of `WebhookSubscriber`
 
 ### Version 1.1
+
 - **Configuration Change Handling**: Buckets now store their creation-time `windowSize`
   - Existing buckets continue to use their original debouncing window
   - New buckets created after configuration changes use the updated window
@@ -422,6 +434,7 @@ void shouldHandleDisabledAlert() {
 - Modified `getBucketsReadyToProcess()` to use stored window size instead of current config
 
 ### Version 1.0 (2024-01-01)
+
 - Initial implementation
 - Timestamp-based debouncing
 - 5-second AlertJob schedule

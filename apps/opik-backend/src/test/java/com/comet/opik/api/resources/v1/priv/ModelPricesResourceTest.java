@@ -231,9 +231,9 @@ class ModelPricesResourceTest {
                     .extracting(CustomModelPriceValidator.Problem::row, CustomModelPriceValidator.Problem::field,
                             CustomModelPriceValidator.Problem::code)
                     .contains(
-                            tuple(0, "input_prise", "unknown_field"),
-                            tuple(1, "cache_read_price", "cache_price_not_positive"),
-                            tuple(2, "organization_id", "unknown_field"));
+                            tuple(0, "input_prise", CustomModelPriceValidator.Code.UNKNOWN_FIELD),
+                            tuple(1, "cache_read_price", CustomModelPriceValidator.Code.CACHE_PRICE_NOT_POSITIVE),
+                            tuple(2, "organization_id", CustomModelPriceValidator.Code.UNKNOWN_FIELD));
         }
         assertThat(find()).isEqualTo(before);
     }

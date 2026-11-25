@@ -190,15 +190,19 @@ SDK-only seeding, fixture-owned teardown, and the taxonomy update. Don't restate
   `covered: true` with the tier).
 - `tag_lint.py` reports `0 problem(s)` — this is the CI `tag-lint` job, so a miss here is a red
   build:
+
   ```bash
   python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
   ```
+
 - It runs green locally, and so does the rest of its feature directory — a shared POM or fixture is
   used by sibling specs:
+
   ```bash
   cd tests_end_to_end/e2e && npx playwright test tests/<area>/ --reporter=list
   npx tsc --noEmit
   ```
+
 - Report the committed spec path back to the dev, plus anything you deliberately left uncovered
   (the other N surfaces, edge cases) so they know the boundary.
 

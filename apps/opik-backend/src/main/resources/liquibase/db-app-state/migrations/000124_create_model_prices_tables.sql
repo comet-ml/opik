@@ -26,11 +26,13 @@ CREATE TABLE IF NOT EXISTS model_prices
 (
     id                CHAR(36)                NOT NULL,
     organization_id   VARCHAR(150)            NOT NULL,
-    -- Stored normalized, the form span names are looked up in (lower case, provider prefix removed).
-    model_name        VARCHAR(255)            NOT NULL,
+    -- Stored normalized, the form span names are looked up in (lower case, provider prefix removed). Binary, so the
+    -- unique key below compares names exactly as the validator does: utf8mb4_unicode_ci would also treat 'modèle'
+    -- and 'modele' as one name and fail the insert after validation passed.
+    model_name        VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
     -- '' means any provider. NOT NULL so the unique key below holds: MySQL treats every NULL as distinct, which
     -- would let two any-provider rows for one model both save.
-    provider          VARCHAR(255)            NOT NULL DEFAULT '',
+    provider          VARCHAR(255) COLLATE utf8mb4_bin NOT NULL DEFAULT '',
     kind              ENUM ('fixed', 'alias') NOT NULL,
     -- USD per 1M tokens, exactly as typed. NULL inherits the built-in rate and 0 makes it free. Ten decimals keep
     -- a mistyped per-token value instead of rounding it to 0, so the out-of-range warning can catch it.

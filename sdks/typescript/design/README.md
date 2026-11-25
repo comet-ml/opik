@@ -29,7 +29,6 @@ Comprehensive architecture documentation for contributors and team members. Thes
 | Debugging | [API and Data Flow](API_AND_DATA_FLOW.md) | Batch Queue System |
 | Writing tests | [Testing](TESTING.md) | Testing Patterns, MSW mocking |
 
-
 ### Module Architecture
 
 ```
@@ -54,6 +53,7 @@ opik/
 #### Configure CLI (`configure/`)
 
 A separate CLI tool (`npx opik-ts configure`) that helps set up Opik in Node.js projects:
+
 - Interactive setup wizard for API key and workspace
 - Environment variable configuration
 - Editor rules integration (Cursor/VS Code)
@@ -62,12 +62,14 @@ A separate CLI tool (`npx opik-ts configure`) that helps set up Opik in Node.js 
 ## 🔄 Maintenance
 
 **Update documentation when**:
+
 - Major architectural changes
 - New patterns introduced
 - New integrations added
 - Performance optimizations
 
 **Quality standards**:
+
 - Accurate (reflects codebase)
 - Clear (easy for newcomers)
 - Practical (real examples)

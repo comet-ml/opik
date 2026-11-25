@@ -28,6 +28,7 @@ src/
 ```
 
 ### Import rules
+
 - `ui → shared` (one-way only)
 - `ui → shared → v2/pages-shared → v2/pages` (one-way only)
 - Validate with: `npm run deps:validate`
