@@ -14,6 +14,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopic;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.AiLabelsConfig;
@@ -218,6 +220,7 @@ class AiLabelsTickTest {
     private AiLabelStatusDAO statusDAO;
     private AiLabelsDAO labelsDAO;
     private TopicVectorsDAO topicVectorsDAO;
+    private TraceTopicsDAO traceTopicsDAO;
     private Connection clickHouseConnection;
 
     private Instant lastTick = Instant.EPOCH;
@@ -239,8 +242,8 @@ class AiLabelsTickTest {
             GuiceJobManager jobManager, @Jit AiLabelsTickService tickService, @Jit InferenceClient client,
             @Jit AiLabelSweepService sweepService, @Jit AiLabelTaskRegistry registry, @Jit AiLabelRenderer renderer,
             @Jit AiLabelItemBuilder itemBuilder, @Jit AiLabelResultMapper resultMapper,
-            @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO, @Jit TopicVectorsDAO topicVectorsDAO)
-            throws SQLException {
+            @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO, @Jit TopicVectorsDAO topicVectorsDAO,
+            @Jit TraceTopicsDAO traceTopicsDAO) throws SQLException {
         this.opikConfig = opikConfig;
         this.template = template;
         this.lockService = lockService;
@@ -255,6 +258,7 @@ class AiLabelsTickTest {
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
         this.topicVectorsDAO = topicVectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.clickHouseConnection = clickHouse.createConnection("");
         this.defaultBudget = config().getBudgetBytes();
         this.defaultChunkTraces = config().getChunkTraces();
@@ -591,7 +595,7 @@ class AiLabelsTickTest {
         when(clock.instant()).thenAnswer(invocation -> now.get());
         var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
                 sweepService, registry,
-                renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, clock);
+                renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO, clock);
 
         tick(service);
         var throttledAt = now.get();
@@ -867,7 +871,7 @@ class AiLabelsTickTest {
             }).when(slowRenderer).render(anyString(), anyList(), anyCollection());
             var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
                     sweepService, registry,
-                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO);
+                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
 
             tick(service);
             var took = Duration.between(lastTick, Instant.now());
@@ -1041,6 +1045,17 @@ class AiLabelsTickTest {
                             trace_created_at, task_version, reason)
                         VALUES ('%s', '%s', '%s', '%s', now64(6), 1, 'invalid_vector')
                         """.formatted(DATABASE_NAME, workspaceId, deletedProject, GENERATE_TASK, traceId));
+                // A topic is then assigned to that vector; the other project's copy of the id has one too.
+                traceTopicsDAO.insert(Stream.of(deletedProject, keptProject)
+                        .map(projectId -> TraceTopic.builder()
+                                .workspaceId(workspaceId)
+                                .projectId(projectId)
+                                .traceId(traceId)
+                                .traceCreatedAt(Instant.now())
+                                .topicId(ID_GENERATOR.generateId())
+                                .source(TraceTopic.Source.ARRIVAL)
+                                .build())
+                        .toList()).block();
                 return invocation.callRealMethod();
             }).when(deleting).insert(anyList());
             tick(tickService(template, statusDAO, deleting));
@@ -1060,6 +1075,12 @@ class AiLabelsTickTest {
                 assertThat(count("SELECT count() FROM %s.%s WHERE workspace_id = '%s' AND trace_id = '%s'"
                         .formatted(DATABASE_NAME, table, workspaceId, traceId))).as(table).isZero();
             }
+            var traceTopics = "SELECT count() FROM %s.trace_topics WHERE workspace_id = '%s' AND project_id = '%s' "
+                    + "AND trace_id = '%s'";
+            assertThat(count(traceTopics.formatted(DATABASE_NAME, workspaceId, deletedProject, traceId)))
+                    .as("trace_topics").isZero();
+            assertThat(count(traceTopics.formatted(DATABASE_NAME, workspaceId, keptProject, traceId)))
+                    .as("trace_topics of the other project").isOne();
         }
 
         @Test
@@ -1274,14 +1295,14 @@ class AiLabelsTickTest {
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
             AiLabelsDAO labelsDAO) {
         return new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService, sweepService,
-                registry, renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO);
+                registry, renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
     }
 
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
             AiLabelTaskRegistry registry, AiLabelSweepService sweepService) {
         return new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService, sweepService,
                 registry, renderer,
-                itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO);
+                itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
     }
 
     private static AiLabelSweepDAO countingSweeps(AiLabelSweepDAO sweepDAO, AtomicInteger sweeps) {

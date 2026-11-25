@@ -4,6 +4,7 @@ import com.comet.opik.domain.ailabels.AiLabelItemPlan.JobKey;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.Candidate;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.InferenceConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -115,6 +116,7 @@ public class AiLabelsTickService {
     private final AiLabelStatusDAO statusDAO;
     private final AiLabelsDAO labelsDAO;
     private final TopicVectorsDAO topicVectorsDAO;
+    private final TraceTopicsDAO traceTopicsDAO;
 
     // Only the throttle reads the clock: the tick's deadlines are measured from its own start.
     private final Clock clock;
@@ -185,9 +187,9 @@ public class AiLabelsTickService {
             @NonNull AiLabelTaskRegistry registry, @NonNull AiLabelRenderer renderer,
             @NonNull AiLabelItemBuilder itemBuilder, @NonNull AiLabelResultMapper resultMapper,
             @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO,
-            @NonNull TopicVectorsDAO topicVectorsDAO) {
+            @NonNull TopicVectorsDAO topicVectorsDAO, @NonNull TraceTopicsDAO traceTopicsDAO) {
         this(config, inference, template, client, lockService, sweepService, registry, renderer, itemBuilder,
-                resultMapper, statusDAO, labelsDAO, topicVectorsDAO, Clock.systemUTC());
+                resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO, Clock.systemUTC());
     }
 
     AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull InferenceConfig inference,
@@ -196,7 +198,8 @@ public class AiLabelsTickService {
             @NonNull AiLabelSweepService sweepService, @NonNull AiLabelTaskRegistry registry,
             @NonNull AiLabelRenderer renderer, @NonNull AiLabelItemBuilder itemBuilder,
             @NonNull AiLabelResultMapper resultMapper, @NonNull AiLabelStatusDAO statusDAO,
-            @NonNull AiLabelsDAO labelsDAO, @NonNull TopicVectorsDAO topicVectorsDAO, @NonNull Clock clock) {
+            @NonNull AiLabelsDAO labelsDAO, @NonNull TopicVectorsDAO topicVectorsDAO,
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull Clock clock) {
         this.config = config;
         this.inference = inference;
         this.template = template;
@@ -210,6 +213,7 @@ public class AiLabelsTickService {
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
         this.topicVectorsDAO = topicVectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.clock = clock;
 
         var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
@@ -454,11 +458,11 @@ public class AiLabelsTickService {
     /**
      * Deletes the rows just written for traces deleted while their jobs were in flight, which the trace-delete cascade
      * ran too early to find. A trace's row goes before its cascade starts, so a cascade that missed these rows shows
-     * here as a trace with no row. The trace's topic vectors go too, in the cascade's order: the vectors tick may have
-     * embedded the done status in between, and its own check trusts that status. Returns the jobs whose rows were all
-     * checked. That is fewer than {@code loaded} when the check or a delete fails, or when {@code tickEnd} passes
-     * before the last check query starts, so the queries stay within the leader lease: the other jobs stay submitted,
-     * and the next tick writes and checks them again.
+     * here as a trace with no row. The trace's topic vectors and topics go too, in the cascade's order: the vectors
+     * tick may have embedded the done status in between, its own check trusts that status, and a topic may have been
+     * assigned to that vector. Returns the jobs whose rows were all checked. That is fewer than {@code loaded} when the
+     * check or a delete fails, or when {@code tickEnd} passes before the last check query starts, so the queries stay
+     * within the leader lease: the other jobs stay submitted, and the next tick writes and checks them again.
      */
     private List<LoadedJob> dropDeleted(List<LoadedJob> loaded, Instant tickEnd) {
         var traceIdsByProject = loaded.stream().flatMap(AiLabelsTickService::written)
@@ -505,6 +509,7 @@ public class AiLabelsTickService {
             labelsDAO.deleteByTraceIds(gone, project.projectId())
                     .then(statusDAO.deleteByTraceIds(gone, project.projectId()))
                     .then(topicVectorsDAO.deleteByTraceIds(gone, project.projectId()))
+                    .then(traceTopicsDAO.deleteByTraceIds(gone, project.projectId()))
                     .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, project.workspaceId())
                             .put(RequestContext.USER_NAME, DELETE_USER))
                     .block();

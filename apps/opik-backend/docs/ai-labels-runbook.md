@@ -76,27 +76,30 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 ## Removing rows of deleted traces
 
 Before the tick checked for deleted traces, a trace deleted while its jobs were in flight could keep its
-`ai_labels` and `ai_label_status` rows, and the Topics vectors tick could then write `topic_vectors` and
-`topic_vector_status` rows for it. The steps below delete those rows once, one weekly partition at a time: every
-statement reads one partition of the table it cleans, and only the `traces` rows of the trace ids in it. Do not run
-them while a `traces` cutover or backfill is in progress, when `traces` can miss rows that are live.
+`ai_labels` and `ai_label_status` rows. The Topics vectors tick could then write `topic_vectors` and
+`topic_vector_status` rows for it, and a topic could be assigned to its vector in `trace_topics`. The steps below
+delete those rows once, one weekly partition at a time: every statement reads one partition of the table it cleans,
+and only the `traces` rows of the trace ids in it. Do not run them while a `traces` cutover or backfill is in
+progress, when `traces` can miss rows that are live.
 
-1. List the workspaces and the weeks (partitions) that have rows in any of the four tables:
+1. List the workspaces and the weeks (partitions) that have rows in any of the five tables:
 
    ```sql
    SELECT DISTINCT workspace_id FROM (
      SELECT workspace_id FROM ai_labels UNION ALL SELECT workspace_id FROM ai_label_status
-     UNION ALL SELECT workspace_id FROM topic_vectors UNION ALL SELECT workspace_id FROM topic_vector_status)
+     UNION ALL SELECT workspace_id FROM topic_vectors UNION ALL SELECT workspace_id FROM topic_vector_status
+     UNION ALL SELECT workspace_id FROM trace_topics)
    ORDER BY workspace_id;
    SELECT DISTINCT partition FROM system.parts
    WHERE database = currentDatabase() AND active
-     AND table IN ('ai_labels', 'ai_label_status', 'topic_vectors', 'topic_vector_status')
+     AND table IN ('ai_labels', 'ai_label_status', 'topic_vectors', 'topic_vector_status', 'trace_topics')
    ORDER BY partition;
    ```
 
 2. For one week, count the rows to delete. Put the week (for example `20261116`) in `<week>`, the quoted
    workspace ids (`'a', 'b'`) in `<workspace_ids>`, and the table in `<table>`. Run it for `ai_labels`,
-   `ai_label_status`, `topic_vectors` and `topic_vector_status`. Stop if a count is far larger than you expect.
+   `ai_label_status`, `topic_vectors`, `topic_vector_status` and `trace_topics`. Stop if a count is far larger than
+   you expect.
 
    ```sql
    SELECT count() FROM <table>
@@ -109,8 +112,8 @@ them while a `traces` cutover or backfill is in progress, when `traces` can miss
    SETTINGS max_memory_usage = 2147483648;
    ```
 
-3. Delete them, in this order: `ai_labels`, `ai_label_status`, `topic_vectors`, `topic_vector_status`. Each delete
-   is a synchronous lightweight delete of one partition:
+3. Delete them, in this order: `ai_labels`, `ai_label_status`, `topic_vectors`, `topic_vector_status`,
+   `trace_topics`. Each delete is a synchronous lightweight delete of one partition:
 
    ```sql
    DELETE FROM <table> IN PARTITION <week>
