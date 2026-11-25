@@ -188,7 +188,8 @@ class TopicsRunServiceTest {
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, 250_000).block();
+        var outcome = service.discover(runId, projectId, NIGHT, 250_000)
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(250_000);
@@ -222,7 +223,8 @@ class TopicsRunServiceTest {
         stubAnswer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_BAD_ANSWER);
@@ -242,7 +244,8 @@ class TopicsRunServiceTest {
                 .withBody("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"over quota\",\"retryable\":true}}")));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
@@ -259,7 +262,8 @@ class TopicsRunServiceTest {
         try {
             var runId = start();
 
-            var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+            var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                    .contextWrite(TopicsTestData.context(workspace())).block();
 
             assertThat(outcome.errorCode()).isEqualTo("window_read");
             assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
@@ -283,7 +287,8 @@ class TopicsRunServiceTest {
                 new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL));
         var before = data.topics(projectId);
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(data.topics(projectId)).usingRecursiveFieldByFieldElementComparator()
@@ -304,7 +309,8 @@ class TopicsRunServiceTest {
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM projects WHERE id = ?",
                 projectId.toString()));
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
@@ -368,7 +374,7 @@ class TopicsRunServiceTest {
         var runId = start();
 
         var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
-                .discover(runId, workspace(), projectId, NIGHT, count).block();
+                .discover(runId, projectId, NIGHT, count).contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -460,7 +466,8 @@ class TopicsRunServiceTest {
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = serviceWith(stub).discover(runId, workspace(), projectId, NIGHT, FIXTURE.size())
+        var outcome = serviceWith(stub).discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace()))
                 .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);

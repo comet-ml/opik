@@ -3,6 +3,8 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -27,9 +29,10 @@ import java.util.function.BiFunction;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
- * Plans the Topics runs. One plan, on the leader only: settle the runs in flight ({@link TopicsRunReconciler}), then
- * fill the free slots of {@code topics.runs.maxInFlight}, across the cluster, with labelling passes that did not
- * finish and discovery runs ({@link TopicsDiscoveryCandidates}), one of each in turn. Each run is written
+ * Plans the Topics runs of the workspaces listed at stage {@code build} or later. One plan, on the leader only:
+ * settle the runs in flight ({@link TopicsRunReconciler}), then fill the free slots of {@code topics.runs.maxInFlight},
+ * across the cluster, with labelling passes that did not finish and discovery runs ({@link TopicsDiscoveryCandidates}),
+ * one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -59,7 +62,7 @@ public class TopicsRunPlanner {
     /** One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. */
     public Mono<Integer> plan(@NonNull Instant start) {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
-        return Mono.fromCallable(workspaceService::enabledWorkspaceIds)
+        return Mono.fromCallable(() -> workspaceService.enabledWorkspaceIds(TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(workspaceIds -> store.findInFlight()
                         .flatMap(runs -> reconciler.reconcile(runs, workspaceIds, night, start))
@@ -80,20 +83,18 @@ public class TopicsRunPlanner {
      * {@code ignoreBackfill} is the operator's way to build a project whose backfill cannot drain. The retry wait and
      * {@code maxInFlight} do not apply.
      *
-     * @throws ConflictException when the workspace is not opted in, the window has too few vectors, the project has a
-     *                           list or a run in flight or no trace in the window, or its backfill gate is closed and
-     *                           {@code ignoreBackfill} is false
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, the window has too
+     *                           few vectors, the project has a list or a run in flight or no trace in the window, or
+     *                           its backfill gate is closed and {@code ignoreBackfill} is false
      */
     public Mono<UUID> runByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             boolean ignoreBackfill) {
         var now = Instant.now();
-        return Mono.fromCallable(() -> workspaceService.isEnabled(workspaceId))
+        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> enabled
                         ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(new ConflictException(("Workspace '%s' is not opted in to topics: it needs to "
-                                + "be in topics.enabledWorkspaces and enabled in ai_label_workspaces")
-                                .formatted(workspaceId))))
+                        : Mono.error(notOptedIn(workspaceId)))
                 .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
                         + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
@@ -118,6 +119,34 @@ public class TopicsRunPlanner {
                 })
                 .doOnNext(runId -> log.info("Topics run '{}' queued by hand, workspace '{}', project '{}', window "
                         + "until '{}'", runId, workspaceId, projectId, night));
+    }
+
+    /**
+     * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
+     * workspace comes from the Reactor context.
+     *
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, or the project has
+     *                           no topics row or a run in flight
+     */
+    public Mono<Void> resetByHand(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(enabled -> enabled ? store.resetList(projectId) : Mono.error(notOptedIn(workspaceId)))
+                    .filter(Boolean::booleanValue)
+                    .switchIfEmpty(Mono.error(() -> new ConflictException(
+                            "Project '%s' has no topics row or a run in flight".formatted(projectId))))
+                    .doOnNext(reset -> log.info("Topics list reset by hand, workspace '{}', project '{}'",
+                            workspaceId, projectId))
+                    .then();
+        });
+    }
+
+    private static ConflictException notOptedIn(String workspaceId) {
+        return new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs to be in "
+                + "topics.enabledWorkspaces at stage build or later, and enabled in ai_label_workspaces")
+                .formatted(workspaceId));
     }
 
     /**

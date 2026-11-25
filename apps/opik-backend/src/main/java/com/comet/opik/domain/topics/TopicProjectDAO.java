@@ -40,6 +40,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(TopicRunModeMapper.class)
 @RegisterArgumentFactory(TopicRunErrorMapper.class)
 @RegisterArgumentFactory(TopicCancelReasonMapper.class)
+@RegisterArgumentFactory(TopicRunStatusMapper.class)
 @RegisterColumnMapper(PrototypeVectorsColumnMapper.class)
 @RegisterColumnMapper(TopicRunModeMapper.class)
 @RegisterColumnMapper(TopicRunStatusMapper.class)
@@ -292,6 +293,20 @@ public interface TopicProjectDAO {
             @Nullable @Bind("expectedListRunId") UUID expectedListRunId, @Bind("runId") UUID runId,
             @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
+
+    /**
+     * Forgets the project's saved list, so its next discovery run builds a new one. The run and backfill fields stay.
+     * 0 when the project has no row, or its run is not in one of {@code ended}: a run in flight keeps the list.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, other_vectors = NULL,
+                embed_model = NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            AND (run_status IS NULL OR run_status IN (<ended>))
+            """)
+    int resetList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @BindList("ended") Collection<TopicProject.RunStatus> ended);
 
     /**
      * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that

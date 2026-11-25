@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.ToIntFunction;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -35,6 +36,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 @Singleton
 class TopicRunStore {
+
+    private static final List<TopicProject.RunStatus> ENDED = Stream.of(TopicProject.RunStatus.values())
+            .filter(status -> !status.inFlight())
+            .toList();
 
     private final TopicsConfig.RunConfig runConfig;
     private final TransactionTemplate template;
@@ -222,8 +227,8 @@ class TopicRunStore {
      * longer {@code running} (failed by its timeout, cancelled, abandoned or requeued) rolls the save back.
      *
      * <p>The project's row is not locked. After the commit, one delete removes the run's topics if the project is gone
-     * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until the discovery job's
-     * sweep of deleted projects deletes them.
+     * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until {@code TopicsSweepJob}
+     * deletes them.
      */
     Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
         return jdbi(() -> {
@@ -326,6 +331,25 @@ class TopicRunStore {
             return project.map(found -> new SavedList(found,
                     handle.attach(TopicDAO.class).findByProject(workspaceId, projectId))).orElse(null);
         }));
+    }
+
+    /**
+     * Forgets the project's saved list in one transaction: first the row, a compare-and-set on no run in flight, then
+     * the project's topics, only when the row moved. False when the project has no row or a run in flight. Its
+     * {@code trace_topics} rows stay: no read uses them while the project has no list, and the new run writes a newer
+     * row for each trace it labels. The workspace comes from the Reactor context.
+     */
+    Mono<Boolean> resetList(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return jdbi(() -> template.inTransaction(WRITE, handle -> {
+                if (handle.attach(TopicProjectDAO.class).resetList(workspaceId, projectId, ENDED) != 1) {
+                    return false;
+                }
+                handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, List.of(projectId));
+                return true;
+            }));
+        });
     }
 
     /** Sets {@code labels_complete} for the run, only while the project still names it; false when it no longer does. */

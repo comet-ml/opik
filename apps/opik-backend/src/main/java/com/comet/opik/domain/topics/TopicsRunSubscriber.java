@@ -38,11 +38,13 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private final TopicsRunService runService;
     private final TopicWindowLabelService labelService;
     private final TopicsRunPlanner planner;
+    private final TopicsRunPublisher publisher;
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
             @NonNull TopicRunStore store, @NonNull TopicsRunService runService,
-            @NonNull TopicWindowLabelService labelService, @NonNull TopicsRunPlanner planner) {
+            @NonNull TopicWindowLabelService labelService, @NonNull TopicsRunPlanner planner,
+            @NonNull TopicsRunPublisher publisher) {
         super(config.getRuns(), redisson, TopicsConfig.RunsConfig.PAYLOAD_FIELD, METRICS_NAMESPACE,
                 METRICS_BASE_NAME);
         this.config = config;
@@ -50,6 +52,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         this.runService = runService;
         this.labelService = labelService;
         this.planner = planner;
+        this.publisher = publisher;
     }
 
     @Override
@@ -103,14 +106,20 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 .then();
     }
 
-    /** Blocks the stop until the row is queued again, so the next pod's claim does not wait for the abandon. */
+    /**
+     * Blocks the stop until the row is queued again and the run is published again, so another pod claims it at once.
+     * The stop removes this pod's consumer from the group, so no other pod can claim the message it was delivered.
+     * A failed publish leaves the run queued: the planner publishes it again after {@code topics.runs.republishAfter}.
+     */
     private void requeueOnStop(TopicsRunMessage message) {
         try {
-            log.info("Topics run '{}' requeued '{}', project '{}', its pod stops", message.runId(),
-                    store.requeue(message).block(config.getRuns().getRequeueWait().toJavaDuration()),
-                    message.projectId());
+            var requeued = store.requeue(message)
+                    .flatMap(done -> done ? publisher.publish(message).thenReturn(true) : Mono.just(false))
+                    .block(config.getRuns().getRequeueWait().toJavaDuration());
+            log.info("Topics run '{}' requeued and published again '{}', project '{}', its pod stops",
+                    message.runId(), requeued, message.projectId());
         } catch (RuntimeException exception) {
-            log.warn("Topics run '{}' not requeued, project '{}'; the planner records it abandoned",
+            log.warn("Topics run '{}' not requeued or not published again, project '{}'; the planner settles it",
                     message.runId(), message.projectId(), exception);
         }
     }
@@ -129,15 +138,9 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 .plus(run.getInsertSlack().toJavaDuration());
     }
 
-    /** The run's workspace, which the subscriber puts in the Reactor context. */
-    private static Mono<TopicsMetrics.Workspace> workspace() {
-        return Mono.deferContextual(ctx -> Mono.just(new TopicsMetrics.Workspace(
-                ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.WORKSPACE_NAME))));
-    }
-
     private Mono<Void> run(TopicsRunMessage message, Instant deadline) {
-        return workspace().flatMap(workspace -> switch (message.mode()) {
-            case DISCOVERY -> runService.discover(message.runId(), workspace, message.projectId(), message.night(),
+        return switch (message.mode()) {
+            case DISCOVERY -> runService.discover(message.runId(), message.projectId(), message.night(),
                     message.windowTraces())
                     .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
                     // A build saved after its project was deleted is discarded: nothing is left to label. When the
@@ -148,10 +151,10 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
                             .build()))
                     .then();
-            case LABELS -> label(message, workspace, deadline);
+            case LABELS -> label(message, deadline);
             case UPDATE -> Mono.error(
                     new IllegalStateException("no handler for run mode '%s'".formatted(message.mode())));
-        });
+        };
     }
 
     /**
@@ -160,9 +163,9 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
      * labelled everything is resumed too, and its resume marks them. A pass that failed ends it failed, and waits to
      * retry.
      */
-    private Mono<Void> label(TopicsRunMessage message, TopicsMetrics.Workspace workspace, Instant deadline) {
+    private Mono<Void> label(TopicsRunMessage message, Instant deadline) {
         var passDeadline = deadline.minus(config.getRuns().getHeartbeatInterval().toJavaDuration());
-        return labelService.labelWindow(workspace, message.projectId(), passDeadline, LabelTrigger.RESUME)
+        return labelService.labelWindow(message.projectId(), passDeadline, LabelTrigger.RESUME)
                 .flatMap(outcome -> outcome == LabelPassOutcome.FAILED
                         ? fail(message, RunError.INTERNAL)
                         : store.endLabels(message.projectId(), message.runId()).then());

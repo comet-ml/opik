@@ -2988,9 +2988,10 @@ topics:
     #  Default: topics-runs-consumers
     #  Description: Consumer group of the Topics runs stream
     consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
-    #  Default: 1
-    #  Description: Runs one pod runs at a time; each holds a window in memory. At most 8
-    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-1}
+    #  Default: 2
+    #  Description: Runs one pod runs at a time. Each holds its window in memory (about 200 MiB at 100k traces), so
+    #  this is a per-pod memory budget; set it to maxInFlight so one pod can fill every slot. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-2}
     #  Default: 5s
     #  Description: How often a pod polls the stream for queued runs. At most 10s
     poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
@@ -3032,6 +3033,14 @@ topics:
     #  Default: 2m
     #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+    #  Default: 5m
+    #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them
+    #  plans. Longer than planBudget, at least 10s, at most 1h
+    planInterval: ${TOPICS_RUNS_PLAN_INTERVAL:-5m}
+    #  Default: 1m
+    #  Description: How much longer than planBudget plus topics.run.countTimeout the leader lock lasts, for the queue
+    #  writes and publishes after the counts. At most 5m
+    leaseSlack: ${TOPICS_RUNS_LEASE_SLACK:-1m}
     #  Default: 5s
     #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
     requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
@@ -3065,6 +3074,14 @@ topics:
     #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
     #  bounded however many projects went at once. From 1 to 10000
     deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
+    #  Default: 24h
+    #  Description: How often each pod deletes the topics of deleted projects that the project delete left. At
+    #  least 1h, at most 7d
+    sweepInterval: ${TOPICS_STORAGE_SWEEP_INTERVAL:-24h}
+    #  Default: 5m
+    #  Description: How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire
+    #  sweeps again. At least 10s, at most 30m
+    sweepTimeout: ${TOPICS_STORAGE_SWEEP_TIMEOUT:-5m}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it
