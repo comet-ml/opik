@@ -31,9 +31,9 @@ class TopicsNightlyRulesTest {
     private static final float[] SOUTH = {0, -1};
     private static final float[] WEST = {-1, 0};
 
-    private final LocalDate firstBuild = LocalDate.now(ZoneOffset.UTC)
+    private final LocalDate discoveredOn = LocalDate.now(ZoneOffset.UTC)
             .minusDays(RandomUtils.secure().randomInt(20, 365));
-    private final LocalDate night = firstBuild.plusDays(RandomUtils.secure().randomInt(1, 30));
+    private final LocalDate night = discoveredOn.plusDays(RandomUtils.secure().randomInt(1, 30));
     private final Instant nightStart = night.atStartOfDay(ZoneOffset.UTC).toInstant();
     /** Inside the night's recent days. */
     private final Instant recentDay = nightStart.minus(Duration.ofHours(
@@ -89,7 +89,7 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a topic born after the first build is measured on the whole window, as any other")
+        @DisplayName("a topic born after the discovery run is measured on the whole window, as any other")
         void newborn() {
             var state = state(topic().build(), topic().born(night.minusDays(2)).build());
             var labels = new int[300];
@@ -176,13 +176,13 @@ class TopicsNightlyRulesTest {
                 .build();
     }
 
-    /** A topic born on the first build, with a random id, name and definition and no prototypes. */
+    /** A topic born on the discovery run, with a random id, name and definition and no prototypes. */
     private NightTopic.NightTopicBuilder topic() {
         return NightTopic.builder()
                 .id(TopicsTestAlgorithm.ID_GENERATOR.generateId())
                 .name(RandomStringUtils.secure().nextAlphanumeric(10))
                 .definition(RandomStringUtils.secure().nextAlphanumeric(30))
-                .born(firstBuild)
+                .born(discoveredOn)
                 .prototypes(List.of());
     }
 

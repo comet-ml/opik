@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
+import com.comet.opik.infrastructure.ClickHouseClientPoolMetrics;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
@@ -35,11 +36,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
-        clickHouseClient = databaseAnalyticsFactory.buildClient();
+        // The client itself is built by getClickHouseClient, so it gets the container's pool metrics.
         environment().lifecycle().manage(new Managed() {
             @Override
             public void stop() {
-                clickHouseClient.close();
+                if (clickHouseClient != null) {
+                    clickHouseClient.close();
+                }
             }
         });
 
@@ -80,6 +83,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         factory.setHost(main.getHost());
         factory.setPort(main.getPort());
         factory.setDatabaseName(main.getDatabaseName());
+        factory.setClientMaxOpenConnections(main.getClientMaxOpenConnections());
         factory.setUsername(readOnlyConfig.getUsername());
         factory.setPassword(readOnlyConfig.getPassword());
         factory.setClientSocketTimeout(readOnlyConfig.getSocketTimeout());
@@ -94,7 +98,14 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    public Client getClickHouseClient() {
+    public ClickHouseClientPoolMetrics getClickHouseClientPoolMetrics() {
+        return new ClickHouseClientPoolMetrics();
+    }
+
+    @Provides
+    @Singleton
+    public Client getClickHouseClient(ClickHouseClientPoolMetrics poolMetrics) {
+        clickHouseClient = databaseAnalyticsFactory.buildClient(poolMetrics);
         return clickHouseClient;
     }
 

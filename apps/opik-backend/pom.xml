@@ -25,6 +25,7 @@
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.10.0</clickhouse-java.version>
+        <micrometer.version>1.16.9</micrometer.version>
         <google-protobuf.version>4.36.0</google-protobuf.version>
         <google-common-protos.version>2.78.0</google-common-protos.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
@@ -322,6 +323,12 @@
             <version>${clickhouse-java.version}</version>
         </dependency>
         <dependency>
+            <!-- client-v2 publishes its connection pool stats only through a Micrometer registry -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>${micrometer.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
             <version>5.6.3</version>
@@ -438,6 +445,13 @@
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
             <version>3.8.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- In-memory metric reader for metric tests; the version of the opentelemetry-api the instrumentation brings. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>1.66.0</version>
             <scope>test</scope>
         </dependency>
 

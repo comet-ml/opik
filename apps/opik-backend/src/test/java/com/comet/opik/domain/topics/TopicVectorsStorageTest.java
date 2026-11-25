@@ -654,7 +654,7 @@ class TopicVectorsStorageTest {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
         tables.project(workspaceId, projectId);
-        // A first build created the row: only its own columns are set.
+        // A discovery run created the row: only its own columns are set.
         template.inTransaction(WRITE, handle -> handle.createUpdate("""
                 INSERT INTO topic_projects (workspace_id, project_id, saved_runs) VALUES (:workspaceId, :projectId, 2)
                 """).bind("workspaceId", workspaceId).bind("projectId", projectId.toString()).execute());

@@ -1,4 +1,4 @@
-# The author call of a first build: names topics over the k-means groups and assigns every group to one of them or to
+# The author call of a discovery run: names topics over the k-means groups and assigns every group to one of them or to
 # Other. TopicPrompts fills {{max_topics}} and {{clusters}}; KMeansTopicAlgorithm reads the answer with AuthorAnswer.
 # Bump version when the prompt or the schema changes: the run's stats record it. Topics ignores applies_from: the
 # ai-labels task format requires it, so leave it as it is.
