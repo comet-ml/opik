@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.inference.Question;
 import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -202,14 +203,14 @@ class GuardrailsValidationServiceTest {
     }
 
     @Test
-    void topicMissingFromTheAnswerFailsOpenWithTheError() {
+    void topicMissingFromTheAnswerFailsClosed() {
         var request = request(descriptor(GuardrailType.TOPIC, "{\"restricted_topics\":[\"legal advice\"]}"));
         when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of("0.topic.restricted",
                 choice(Map.of("Legal Advice", 0.9, GuardrailQuestions.NONE_OF_THESE, 0.1))))));
 
-        var response = validate(request);
-
-        assertThat(response.validations().get(0).error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
+        assertThatThrownBy(() -> validate(request))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE);
     }
 
     @Test
@@ -273,23 +274,18 @@ class GuardrailsValidationServiceTest {
         verifyNoInteractions(inference);
     }
 
+    // The cause stays in the log: the caller gets a stable message, not the upstream status or host.
     @Test
-    void inferenceFailureFailsOpenWithTheErrorOnEveryEntry() {
+    void inferenceFailureFailsClosedWithoutAVerdict() {
         var request = request(
                 descriptor(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\"]}"),
                 descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
         when(inference.decide(any(), any())).thenReturn(Mono.error(
                 new ServerErrorException("opik-inference decide request failed, status '503'", 503)));
 
-        var response = validate(request);
-
-        assertThat(response.validationPassed()).isTrue();
-        assertThat(response.validations()).hasSize(2).allSatisfy(result -> {
-            assertThat(result.validationPassed()).isTrue();
-            assertThat(result.error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
-            assertThat(result.validationDetails().path("error").asText())
-                    .isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
-        });
+        assertThatThrownBy(() -> validate(request))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE);
     }
 
     // The limits are the documented contract (254 topics of up to 256 characters), written out rather than read from
@@ -300,9 +296,10 @@ class GuardrailsValidationServiceTest {
                 .mapToObj(i -> i == 0 ? "t".repeat(256) : "topic " + i)
                 .toList();
         var request = request(topicDescriptor(topics));
+        // Accepted means the checks reach inference; what it answers is not this test's concern.
         when(inference.decide(any(), any())).thenReturn(Mono.error(new IllegalStateException("not answered")));
 
-        validate(request);
+        assertThatThrownBy(() -> validate(request)).isInstanceOf(ServiceUnavailableException.class);
 
         var captor = ArgumentCaptor.forClass(DecideRequest.class);
         verify(inference).decide(captor.capture(), any());
