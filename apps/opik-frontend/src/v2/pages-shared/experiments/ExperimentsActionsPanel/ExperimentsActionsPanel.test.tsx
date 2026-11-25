@@ -81,7 +81,7 @@ describe("ExperimentsActionsPanel Compare button", () => {
 
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Compare experiments" }),
+      screen.getByRole("dialog", { name: "Add to compare" }),
     ).toBeInTheDocument();
     expect(mockUseExperimentsList).toHaveBeenLastCalledWith(
       expect.objectContaining({

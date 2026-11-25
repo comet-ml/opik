@@ -21,6 +21,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     guardrails_validations_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="guardrailsValidationsEnabled")
     ]
+    guardrails_training_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsTrainingEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
@@ -52,6 +53,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     custom_charts_enabled_for_workspace: typing_extensions.Annotated[
         typing.Optional[bool], FieldMetadata(alias="customChartsEnabledForWorkspace")
     ] = None
+    topics_enabled: typing_extensions.Annotated[typing.Optional[bool], FieldMetadata(alias="topicsEnabled")] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

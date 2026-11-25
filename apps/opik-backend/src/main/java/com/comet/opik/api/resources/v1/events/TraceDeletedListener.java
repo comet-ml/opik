@@ -8,6 +8,8 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -33,10 +35,12 @@ public class TraceDeletedListener {
     private final @NonNull SpanService spanService;
     private final @NonNull AiLabelsDAO aiLabelsDAO;
     private final @NonNull AiLabelStatusDAO aiLabelStatusDAO;
+    private final @NonNull TopicVectorsDAO topicVectorsDAO;
+    private final @NonNull TraceTopicsDAO traceTopicsDAO;
 
     /**
      * Handles the TracesDeleted event by asynchronously deleting related entities.
-     * This includes feedback scores, comments, attachments, ai-labels and spans associated with the deleted traces.
+     * This includes feedback scores, comments, attachments, ai-labels, topic vectors, trace topics and spans associated with the deleted traces.
      *
      * @param event the TracesDeleted event containing the trace IDs that were deleted
      */
@@ -51,7 +55,7 @@ public class TraceDeletedListener {
                 "Received TracesDeleted event for workspace: '{}', trace count: '{}'. Processing related entity deletion",
                 workspaceId, traceIds.size());
 
-        processTraceDeletion(traceIds, projectId)
+        processTraceDeletion(traceIds, projectId, workspaceId)
                 .doOnError(error -> {
                     log.error(
                             "Failed to process TracesDeleted event for workspace: '{}', trace count: '{}', error: '{}'",
@@ -72,9 +76,10 @@ public class TraceDeletedListener {
      *
      * @param traceIds the set of trace IDs whose related entities should be deleted
      * @param projectId the owning project the event resolved; required, so the span cascade is never workspace-wide
+     * @param workspaceId the event's workspace, for the logs only; the deletes read it from the reactive context
      * @return a Mono that completes when all related entities have been deleted
      */
-    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId) {
+    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId, String workspaceId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
         return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
@@ -87,6 +92,23 @@ public class TraceDeletedListener {
                         .then(aiLabelStatusDAO.deleteByTraceIds(traceIds, projectId))
                         .onErrorResume(error -> {
                             log.error("Failed to delete ai-labels for deleted traces, count '{}'", traceIds.size(),
+                                    error);
+                            return Mono.empty();
+                        })))
+                // Topic vectors hold the summary text, so they go with the trace too. On their own, so neither
+                // delete's failure can skip the other; neither ever blocks the span cascade.
+                .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
+                        .onErrorResume(error -> {
+                            log.warn("Failed to delete topic vectors, workspace '{}', project '{}', traces '{}'",
+                                    workspaceId, projectId, traceIds.size(), error);
+                            return Mono.empty();
+                        })))
+                // A trace's topic goes with it as its vector does, on its own for the same reason.
+                .then(Mono.defer(() -> traceTopicsDAO.deleteByTraceIds(traceIds, projectId)
+                        .onErrorResume(error -> {
+                            log.warn("Failed to delete trace topics for deleted traces, workspace '{}', project '{}', "
+                                    + "count '{}'; they stay until a retention delete", workspaceId, projectId,
+                                    traceIds.size(),
                                     error);
                             return Mono.empty();
                         })))

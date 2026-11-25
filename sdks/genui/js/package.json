@@ -1,6 +1,6 @@
 {
   "name": "opik-genui",
-  "version": "0.1.0",
+  "version": "2.3.4",
   "description": "Opik generative UI engine: the sandboxed iframe host and HTML contract for model-written views",
   "repository": {
     "type": "git",
