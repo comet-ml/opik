@@ -79,48 +79,101 @@ const DATASET_ITEMS = [{ input: 'tab split input', expected_output: 'tab split o
 const FEEDBACK_SCORE_VALUE = 0.75;
 
 /**
+ * How long a seeded read-back is given to settle before it is a failure.
+ *
+ * It needs one at all because the experiments listing is eventually consistent:
+ * a create answers before its row is queryable, so the first read after a seed
+ * can legitimately answer `total=0`. Observed on staging for the 2.3.2 release
+ * pass — the same project reported 0 of 1 and 0 of 3 experiments on different
+ * runs of the same three specs, which reads exactly like the tab split having
+ * dropped the rows. Not a product finding: the next read a second later had
+ * them, every time.
+ *
+ * Timings borrowed from the by-id payload polls in `trace-explore`: generous,
+ * because the cost of being wrong is a red run that names the wrong thing, and
+ * a seed that really did not land still fails — the loop runs out and reports
+ * precisely what it last saw.
+ */
+const SEED_SETTLE_TIMEOUT_MS = 180_000;
+const SEED_SETTLE_INTERVAL_MS = 2_000;
+
+/**
+ * Polls `check` until it returns `null`, then returns. Throws `check`'s own last
+ * message on timeout.
+ *
+ * A plain loop rather than `expect.poll` deliberately: these are fixture
+ * preconditions, not assertions about the product, and they carry hand-written
+ * messages that say what the seed failed to establish and why that makes the
+ * spec unable to fail. `expect.poll` would bury those under a matcher diff.
+ */
+async function settle(check: () => Promise<string | null>): Promise<void> {
+  const deadline = Date.now() + SEED_SETTLE_TIMEOUT_MS;
+  let last = await check();
+  while (last !== null) {
+    if (Date.now() >= deadline) {
+      throw new Error(`${last} (still true after ${SEED_SETTLE_TIMEOUT_MS / 1_000}s)`);
+    }
+    await new Promise((r) => setTimeout(r, SEED_SETTLE_INTERVAL_MS));
+    last = await check();
+  }
+}
+
+/**
  * Both tabs read `dataset_version_summary` off the experiment, which the
  * backend fills from the item source's LATEST version at create time — so the
  * items have to be in place before the experiment is written, or the row comes
  * back version-less and the version column renders a dash for a reason that has
  * nothing to do with the tab.
+ *
+ * Every condition is polled as ONE predicate rather than checked in sequence,
+ * because they settle together: until the rows are queryable, "the count is
+ * wrong" and "the row carries no version name" are the same fact seen from two
+ * angles, and a sequence would report whichever it happened to reach first.
  */
 async function requireStored(
   backendClient: BackendClient,
   projectId: string,
   expected: Array<{ id: string; evaluationMethod: string }>,
 ): Promise<Map<string, ProjectExperimentRef>> {
-  const { total, experiments } = await backendClient.listExperimentsForProject({ projectId });
-  if (total !== expected.length || experiments.length !== expected.length) {
-    throw new Error(
-      `[experimentsTabSplit fixture] project ${projectId} holds total=${total} / ` +
+  let byId = new Map<string, ProjectExperimentRef>();
+
+  await settle(async () => {
+    const { total, experiments } = await backendClient.listExperimentsForProject({ projectId });
+    if (total !== expected.length || experiments.length !== expected.length) {
+      return (
+        `[experimentsTabSplit fixture] project ${projectId} holds total=${total} / ` +
         `${experiments.length} listed experiment(s), expected ${expected.length} — ` +
-        'a tab partition assertion over this project would not be a closed set',
-    );
-  }
-  const byId = new Map(experiments.map((e) => [e.id, e]));
-  for (const want of expected) {
-    const row = byId.get(want.id);
-    if (!row) {
-      throw new Error(
-        `[experimentsTabSplit fixture] experiment ${want.id} is not in project ${projectId}'s list`,
+        'a tab partition assertion over this project would not be a closed set'
       );
     }
-    if (row.evaluationMethod !== want.evaluationMethod) {
-      throw new Error(
-        `[experimentsTabSplit fixture] experiment '${row.name}' was stored under ` +
+    byId = new Map(experiments.map((e) => [e.id, e]));
+    for (const want of expected) {
+      const row = byId.get(want.id);
+      if (!row) {
+        return `[experimentsTabSplit fixture] experiment ${want.id} is not in project ${projectId}'s list`;
+      }
+      if (row.evaluationMethod !== want.evaluationMethod) {
+        // Not polled away: `evaluation_method` is decided at insert, so a wrong
+        // one never becomes right. Returned through the same predicate only so
+        // the seed is reported as a whole; the loop will re-read and time out
+        // on it, which is the correct outcome for a seed that cannot hold.
+        return (
+          `[experimentsTabSplit fixture] experiment '${row.name}' was stored under ` +
           `evaluation_method '${row.evaluationMethod}', expected '${want.evaluationMethod}' — ` +
-          'the seed does not hold the state the spec is about',
-      );
-    }
-    if (!row.datasetVersionName) {
-      throw new Error(
-        `[experimentsTabSplit fixture] experiment '${row.name}' carries no ` +
+          'the seed does not hold the state the spec is about'
+        );
+      }
+      if (!row.datasetVersionName) {
+        return (
+          `[experimentsTabSplit fixture] experiment '${row.name}' carries no ` +
           'dataset_version_summary.version_name — its items were not in place before it ' +
-          'was created, so the version column has nothing to render',
-      );
+          'was created, so the version column has nothing to render'
+        );
+      }
     }
-  }
+    return null;
+  });
+
   return byId;
 }
 
@@ -263,13 +316,19 @@ export const test = baseTest.extend<ExperimentsTabSplitFixtures>({
       // The score has to be visible to the endpoint the per-score columns are
       // built from, or the column assertions in the columns spec compare two
       // empty lists.
-      const scoreNames = await backendClient.listExperimentFeedbackScoreNames(project.id);
-      if (scoreNames.length !== 1 || scoreNames[0] !== feedbackScoreName) {
-        throw new Error(
-          `[experimentsTabSplit fixture] project ${project.id} reports experiment feedback ` +
-            `score names [${scoreNames.join(', ')}], expected exactly ['${feedbackScoreName}']`,
-        );
-      }
+      // Polled for the same reason as `requireStored`: the score was written a
+      // moment ago through a batch endpoint, and the names view is derived from
+      // it, so the first read can legitimately answer an empty list.
+      await settle(async () => {
+        const scoreNames = await backendClient.listExperimentFeedbackScoreNames(project.id);
+        if (scoreNames.length !== 1 || scoreNames[0] !== feedbackScoreName) {
+          return (
+            `[experimentsTabSplit fixture] project ${project.id} reports experiment feedback ` +
+            `score names [${scoreNames.join(', ')}], expected exactly ['${feedbackScoreName}']`
+          );
+        }
+        return null;
+      });
 
       // ---- the two single-method projects ----
       const suiteOnlyProject = await sdkClient.python.createProject({

@@ -103,6 +103,32 @@ test.describe('Playground — the offered OpenRouter catalog is priced', {
     'every OpenRouter model the picker offers has a row in the shipped price file',
     { tag: ['@cap:playground.offered-model-price-coverage'] },
     async () => {
+      // QA: failing on staging for the 2.3.2 release pass, and expected to.
+      // Seven of the 372 labelled OpenRouter ids the deployment offers have no
+      // row in `model_prices_openrouter.json`, so a span logged on any of them
+      // is billed nothing: dots-studio/dots-3-note-preview:free,
+      // mistralai/mistral-medium-3, mistralai/mistral-medium-3.1,
+      // moonshotai/kimi-k2, moonshotai/kimi-k2-0905,
+      // moonshotai/kimi-k2-thinking, xiaomi/mimo-v2.5.
+      //
+      // Cause established, and it is NOT a 2.3.2 regression. opik#9773
+      // ("Update model prices file") landed on main AFTER the 2.3.2 version
+      // bump and took the file from 476 rows to 470, removing exactly these
+      // seven; at 2.3.2 itself all seven are present and this test is green.
+      // The red here is the first thing the failure message tells a reader to
+      // rule out — a checkout ahead of the deployment — except that the skew
+      // runs the other way round for once: the QA branch carries post-release
+      // main, and `llm-models-default.yaml` on that same main still offers all
+      // seven ids. So this is a live money-to-zero defect on main heading for
+      // 2.3.3, not an artefact of the branch.
+      //
+      // Marked rather than allowlisted, deliberately. An allowlist would retire
+      // the relation this spec exists to pin — the unpriced set must be EMPTY,
+      // which is what made the 2.3.0 failure a finding instead of a line of
+      // maintenance. Remove `test.fail()` once a regen restores the rows (or a
+      // catalog sync drops their labels); Playwright reports it when it passes.
+      test.fail();
+
       // QA: was test.fail() for the 2.3.0 review pass, which reproduced the
       // defect this relation exists to catch — 1 of the 372 labelled OpenRouter
       // ids, `dots-studio/dots-3-note-preview:free`, was served by
