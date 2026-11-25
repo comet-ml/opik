@@ -22,7 +22,7 @@ import java.util.concurrent.Callable;
  *   <li>{@link #blocking(Callable)}: JDBI/MySQL, sync Redisson, S3, sync HTTP, DNS. Runs on
  *       {@link Schedulers#boundedElastic()}.</li>
  *   <li>{@link #cpu(Callable)}: CPU that grows with the input (a batch, a page, a window). Runs on
- *       {@link Schedulers#parallel()}, or on the pool an entry point set with {@link #cpuOn(Context, Scheduler)}.
+ *       {@link Schedulers#parallel()}.
  *       A step that runs for seconds also needs a concurrency cap at its caller.</li>
  *   <li>{@link #blockingEach(Flux)}: per-item blocking or CPU side effects of a stream, such as writing response
  *       chunks. Moves the items, which a {@code subscribeOn} can't do.</li>
@@ -36,7 +36,6 @@ import java.util.concurrent.Callable;
 @UtilityClass
 public class Offload {
 
-    private static final String CPU_SCHEDULER = Offload.class.getName() + ".cpuScheduler";
     private static final String ORIGINAL_SCHEDULER = Offload.class.getName() + ".originalScheduler";
 
     /**
@@ -55,22 +54,11 @@ public class Offload {
     }
 
     /**
-     * Runs a CPU step on the pool its entry point set with {@link #cpuOn(Context, Scheduler)}, or on
-     * {@link Schedulers#parallel()} when none is set. The step must not block: {@code parallel} has one thread per
-     * core and also runs every Reactor timer.
+     * Runs a CPU step on {@link Schedulers#parallel()}. The step must not block: {@code parallel} has one thread per
+     * core and also runs every Reactor timer, so a step that runs for seconds needs a concurrency cap at its caller.
      */
     public static <T> Mono<T> cpu(@NonNull Callable<T> step) {
-        return Mono.deferContextual(context -> Mono.fromCallable(step)
-                .subscribeOn(context.getOrDefault(CPU_SCHEDULER, Schedulers.parallel())));
-    }
-
-    /**
-     * Routes every {@link #cpu(Callable)} step upstream of the {@code contextWrite} to {@code scheduler}, for an
-     * entry point whose CPU work runs for seconds and needs its own core-sized pool:
-     * {@code .contextWrite(context -> Offload.cpuOn(context, inference))}.
-     */
-    public static Context cpuOn(@NonNull Context context, @NonNull Scheduler scheduler) {
-        return context.put(CPU_SCHEDULER, scheduler);
+        return Mono.fromCallable(step).subscribeOn(Schedulers.parallel());
     }
 
     /**

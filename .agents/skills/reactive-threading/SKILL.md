@@ -36,7 +36,7 @@ virtual thread, whatever thread posted the event.
 | Work | Call | Runs on |
 |---|---|---|
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
-| CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel`, or the pool an entry point set with `Offload.cpuOn` |
+| CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel` |
 | Per-item blocking in a `Flux`, plus the light work around it | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
 | Back to the entry point's pool after the last client call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.originalOn`: a subscriber's workers, a `request-vt` virtual thread for a resource that sets the request context, or no hop |
 | Light work (map one row, build a DTO, post an event) | nothing | wherever it lands |
@@ -72,16 +72,16 @@ When unsure, open the callee. A name never proves a method is non-blocking.
 3. **CPU that scales with the input gets its own step.** Light work may run where it lands. Work that grows with the
    batch, page or payload (serializing a batch, building CSV, clustering, vector math, sorting a window, parsing large
    JSON) is an `Offload.cpu(...)`, also right after a blocking call: every MySQL, S3 and sync HTTP call waits for a
-   free `boundedElastic` thread. CPU that runs for seconds also needs a concurrency cap, or a core-sized pool the entry
-   point sets with `Offload.cpuOn`. Never route CPU to a subscriber's workers: that pool is sized for waiting.
+   free `boundedElastic` thread. CPU that runs for seconds also needs a concurrency cap at its caller (`flatMap(...,
+   n)` or a semaphore), because `parallel` also runs every timer. Never route CPU to a subscriber's workers: that pool
+   is sized for waiting.
 4. **Per-item work on a stream moves once.** When each item of a `Flux` triggers a blocking side effect (a response
    chunk write, an S3 part, a per-item lookup), put one `Offload.blockingEach(...)` directly before that operator.
    Subscribing on a scheduler does not change where `onNext` runs.
 5. **Timers and retries land on `parallel`.** A retry re-subscribes the source on `parallel`, so a source that blocks
    at subscription blocks there on every retry. Make the retried source an `Offload.blocking(...)`, inside the retry.
 6. **Services don't create schedulers.** Pools sized for a purpose (subscriber consumer and workers, inference pools)
-   live in infrastructure, are bounded and named. Only an entry point picks a pool, through `Offload.originalOn` or
-   `Offload.cpuOn`. Never `publishOn` mid-chain to move one step: it moves every step after it.
+   live in infrastructure, are bounded and named. Only an entry point picks a pool, through `Offload.originalOn`. Never `publishOn` mid-chain to move one step: it moves every step after it.
 
 ## How to Apply
 

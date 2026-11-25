@@ -14,19 +14,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OffloadTest {
 
     @Test
-    void cpuRunsOnParallelUnlessTheEntryPointSetsAPool() {
-        var workers = Schedulers.newSingle("offload-test-workers");
+    void cpuRunsOnParallelAfterAClientCall() {
+        var client = Schedulers.newSingle("offload-test-client");
         try {
-            var defaultThread = Offload.cpu(() -> Thread.currentThread().getName()).block();
-            var routedThread = Mono.just(1)
+            var cpuThread = Mono.just(1).publishOn(client)
                     .flatMap(__ -> Offload.cpu(() -> Thread.currentThread().getName()))
-                    .contextWrite(context -> Offload.cpuOn(context, workers))
                     .block();
 
-            assertThat(defaultThread).startsWith("parallel-");
-            assertThat(routedThread).startsWith("offload-test-workers-");
+            assertThat(cpuThread).startsWith("parallel-");
         } finally {
-            workers.dispose();
+            client.dispose();
         }
     }
 
