@@ -84,7 +84,7 @@ const PriceFormula: React.FC<PriceFormulaProps> = ({ prices, builtIn }) => {
         </AccordionTrigger>
         <AccordionContent className="pb-0 pt-2">
           <div
-            className="comet-body-xs space-y-4 rounded-md border border-border px-5 py-4 text-muted-slate"
+            className="comet-body-xs space-y-4 rounded-md bg-muted px-5 py-4 text-muted-slate"
             data-testid="price-formula"
           >
             <math display="block" className="text-sm text-foreground">
@@ -106,26 +106,18 @@ const PriceFormula: React.FC<PriceFormulaProps> = ({ prices, builtIn }) => {
                 </mfrac>
               </mrow>
             </math>
-            <div className="space-y-1">
-              <p>
-                <math className="text-foreground">
-                  <mi>T</mi>
-                </math>{" "}
-                is the number of tokens in a call. Prices are per 1M tokens.
-              </p>
-              <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1">
-                {terms.map(({ field, sub, tokens, source }) => (
-                  <React.Fragment key={field}>
-                    <math className="text-foreground">
-                      <Variable letter="T" sub={sub} />
-                    </math>
-                    <span>
-                      {tokens}
-                      {source && ` · ${SOURCES[source]}`}
-                    </span>
-                  </React.Fragment>
-                ))}
-              </div>
+            <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1">
+              {terms.map(({ field, sub, tokens, source }) => (
+                <React.Fragment key={field}>
+                  <math className="text-foreground">
+                    <Variable letter="T" sub={sub} />
+                  </math>
+                  <span>
+                    {tokens}
+                    {source && ` · ${SOURCES[source]}`}
+                  </span>
+                </React.Fragment>
+              ))}
             </div>
           </div>
         </AccordionContent>
