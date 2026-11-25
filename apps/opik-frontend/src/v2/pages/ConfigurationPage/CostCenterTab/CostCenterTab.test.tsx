@@ -193,6 +193,7 @@ describe("CostCenterTab", () => {
     refetch.mockReset();
     window.history.replaceState({}, "", "/");
     window.localStorage.clear();
+    window.localStorage.setItem("cost-center:type-default-applied", "true");
     listState.current = undefined;
   });
 
@@ -297,6 +298,7 @@ describe("CostCenterTab", () => {
       expect(rowOf("team-model")).toHaveTextContent(
         "Priced like claude-sonnet-4-5",
       );
+      expect(within(rowOf("team-model")).getByText("Alias")).toBeVisible();
     });
 
     it("shows the columns saved in this browser", () => {
@@ -426,10 +428,68 @@ describe("CostCenterTab", () => {
       ]);
       renderTab(ADMIN);
 
-      expect(shownModels()).toEqual(["acme-llama-70b", "team-model"]);
+      expect(shownModels()).toEqual(["acme-llama-70b"]);
       expect(screen.getByRole("button", { name: /^Type/ })).toHaveTextContent(
         "Custom",
       );
+    });
+
+    it("starts on Not default when the organization has its own prices", async () => {
+      window.localStorage.removeItem("cost-center:type-default-applied");
+      renderTab(ADMIN);
+
+      await waitFor(() =>
+        expect(shownModels()).toEqual([
+          "acme-llama-70b",
+          "gpt-4o",
+          "team-model",
+        ]),
+      );
+      expect(screen.getByRole("button", { name: /^Type/ })).toHaveTextContent(
+        "Not default",
+      );
+    });
+
+    it("keeps the type filter cleared once the user clears it", async () => {
+      window.localStorage.removeItem("cost-center:type-default-applied");
+      const { unmount } = renderTab(ADMIN);
+      await waitFor(() => expect(shownModels()).toHaveLength(3));
+
+      fireEvent.click(screen.getByTestId("filter-chips-clear-all"));
+      await waitFor(() => expect(shownModels()).toHaveLength(5));
+
+      unmount();
+      window.history.replaceState({}, "", "/");
+      renderTab(ADMIN);
+
+      expect(shownModels()).toHaveLength(5);
+    });
+
+    it("shows every price when the organization has none of its own", () => {
+      window.localStorage.removeItem("cost-center:type-default-applied");
+      listState.current = { version: 0, rows: [] };
+      renderTab(ADMIN);
+
+      expect(shownModels()).toEqual([
+        "claude-sonnet-4-5",
+        "gpt-4o",
+        "gpt-4o-mini",
+      ]);
+    });
+
+    it("shows everything the organization changed with Not default", () => {
+      withFilters([
+        {
+          id: "f1",
+          field: "type",
+          type: "string",
+          operator: "=",
+          value: "not_default",
+        },
+      ]);
+      renderTab(ADMIN);
+
+      expect(shownModels()).toEqual(["acme-llama-70b", "gpt-4o", "team-model"]);
     });
 
     it("picks a type from the Type chip list", async () => {

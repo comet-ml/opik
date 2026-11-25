@@ -30,6 +30,8 @@ import {
   CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
+  NOT_DEFAULT_LABEL,
+  NOT_DEFAULT_TYPE,
   buildCatalog,
   filterCatalog,
   builtInLookup,
@@ -56,6 +58,8 @@ const SELECTED_COLUMNS_KEY = "cost-center:selected-columns";
 const COLUMNS_ORDER_KEY = "cost-center:columns-order";
 const COLUMNS_WIDTH_KEY = "cost-center:columns-width";
 const COLUMNS_SORT_KEY = "cost-center:columns-sort";
+const FILTERS_KEY = "cost-center:filters";
+const TYPE_DEFAULT_APPLIED_KEY = "cost-center:type-default-applied";
 const DEFAULT_SORTING: ColumnSort[] = [{ id: "model", desc: false }];
 const IS_LABEL = { "=": "is" } as const;
 
@@ -130,10 +134,14 @@ const CostCenterTab: React.FC = () => {
         kind: "single-select",
         columnType: COLUMN_TYPE.string,
         operator: "=",
-        options: CATALOG_TYPES.map((type) => ({
-          value: type,
-          label: CATALOG_TYPE_LABELS[type],
-        })),
+        options: [
+          { value: "default", label: CATALOG_TYPE_LABELS.default },
+          { value: NOT_DEFAULT_TYPE, label: NOT_DEFAULT_LABEL },
+          ...CATALOG_TYPES.filter((type) => type !== "default").map((type) => ({
+            value: type,
+            label: CATALOG_TYPE_LABELS[type],
+          })),
+        ],
       },
       {
         id: "input_price",
@@ -168,7 +176,29 @@ const CostCenterTab: React.FC = () => {
     definitions: chipDefinitions,
     defaultPinned: ["provider", "type"],
     onChange: () => setPage(1),
+    persistKey: FILTERS_KEY,
   });
+
+  // Applied once per browser: after that the remembered filters are the
+  // user's own choice, including clearing this default.
+  const [isTypeDefaultApplied, setIsTypeDefaultApplied] =
+    useLocalStorageState<boolean>(TYPE_DEFAULT_APPLIED_KEY, {
+      defaultValue: false,
+    });
+  const hasOrganizationPrices = Boolean(list?.rows.length);
+  const hasFilters = chips.filters.length > 0;
+  const { applyValue } = chips;
+  useEffect(() => {
+    if (isTypeDefaultApplied || !hasOrganizationPrices || hasFilters) return;
+    setIsTypeDefaultApplied(true);
+    applyValue("type", { value: NOT_DEFAULT_TYPE });
+  }, [
+    isTypeDefaultApplied,
+    hasOrganizationPrices,
+    hasFilters,
+    applyValue,
+    setIsTypeDefaultApplied,
+  ]);
 
   const [pinned = [], setPinned] = useLocalStorageState<string[]>(
     PINNED_STORAGE_KEY,

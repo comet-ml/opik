@@ -78,9 +78,9 @@ describe("buildCatalog", () => {
     ).toEqual([]);
   });
 
-  it("marks rows without a built-in price, including aliases, as custom", () => {
+  it("marks rows without a built-in price as custom, and aliases as alias", () => {
     expect(byModel("acme-llama", "").type).toBe("custom");
-    expect(byModel("gpt-5", "bifrost").type).toBe("custom");
+    expect(byModel("gpt-5", "bifrost").type).toBe("alias");
     expect(byModel("gpt-5", "bifrost").prices).toEqual({});
   });
 
@@ -143,7 +143,16 @@ describe("buildCatalog", () => {
     ).toEqual(["claude-haiku-4-5"]);
     expect(
       models(filterCatalog(catalog, { filters: [is("type", "Custom")] })),
-    ).toEqual(["acme-llama", "gpt-5"]);
+    ).toEqual(["acme-llama"]);
+    expect(
+      models(filterCatalog(catalog, { filters: [is("type", "alias")] })),
+    ).toEqual(["gpt-5"]);
+    expect(
+      models(filterCatalog(catalog, { filters: [is("type", "not_default")] })),
+    ).not.toContain("claude-haiku-4-5");
+    expect(
+      filterCatalog(catalog, { filters: [is("type", "Not default")] }),
+    ).toHaveLength(3);
     expect(sortCatalog(catalog, "desc")[0].model).toBe("GPT-5");
   });
 

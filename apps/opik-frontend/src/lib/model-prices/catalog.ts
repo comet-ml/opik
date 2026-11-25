@@ -4,15 +4,24 @@ import type { BuiltInPrice } from "./litellm";
 import { canonicalPrice, identityOf } from "./rows";
 import type { BuiltInOf } from "./describe";
 
-export type CatalogType = "default" | "override" | "custom";
+export type CatalogType = "default" | "override" | "custom" | "alias";
 
-export const CATALOG_TYPES: CatalogType[] = ["default", "override", "custom"];
+export const CATALOG_TYPES: CatalogType[] = [
+  "default",
+  "override",
+  "custom",
+  "alias",
+];
 
 export const CATALOG_TYPE_LABELS: Record<CatalogType, string> = {
   default: "Default",
   override: "Override",
   custom: "Custom",
+  alias: "Alias",
 };
+
+export const NOT_DEFAULT_TYPE = "not_default";
+export const NOT_DEFAULT_LABEL = "Not default";
 
 export interface CatalogEntry {
   key: string;
@@ -72,7 +81,7 @@ export const buildCatalog = (
       key: row.kind === "alias" ? `alias:${identity}` : identity,
       model: row.model,
       provider: row.provider ?? "",
-      type: builtIn ? "override" : "custom",
+      type: row.kind === "alias" ? "alias" : builtIn ? "override" : "custom",
       mode: builtIn?.mode,
       builtIn,
       row,
@@ -132,10 +141,12 @@ export interface CatalogFilter {
   filters?: CatalogFieldFilter[];
 }
 
-const TYPE_BY_LABEL: Record<string, CatalogType> = {
+const TYPE_BY_LABEL: Record<string, string> = {
   default: "default",
   override: "override",
   custom: "custom",
+  alias: "alias",
+  [NOT_DEFAULT_LABEL.toLowerCase()]: NOT_DEFAULT_TYPE,
 };
 
 const PRICE_FILTER_FIELDS: Record<string, PriceField> = {
@@ -211,16 +222,17 @@ const matchesFieldFilters = (
     }
     const actual = textOf(entry, field);
     if (actual === undefined) return true;
+    const matches = (filter: CatalogFieldFilter) => {
+      const expected = normalizedValue(field, filter.value);
+      return field === "type" && expected === NOT_DEFAULT_TYPE
+        ? actual !== "default"
+        : expected === actual;
+    };
     const included = group.filter((filter) => filter.operator === "=");
     const excluded = group.filter((filter) => filter.operator === "!=");
     return (
-      (!included.length ||
-        included.some(
-          (filter) => normalizedValue(field, filter.value) === actual,
-        )) &&
-      excluded.every(
-        (filter) => normalizedValue(field, filter.value) !== actual,
-      )
+      (!included.length || included.some(matches)) &&
+      excluded.every((filter) => !matches(filter))
     );
   });
 };

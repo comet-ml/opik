@@ -140,7 +140,8 @@ const typeOf = (
   loadedRow: ModelPriceRow | undefined,
   builtIn: BuiltInPrice | undefined,
 ): CatalogType => {
-  if (loadedRow?.kind === "alias" || !builtIn) return "custom";
+  if (loadedRow?.kind === "alias") return "alias";
+  if (!builtIn) return "custom";
   return loadedRow ? "override" : "default";
 };
 
@@ -198,6 +199,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
     : builtIn
       ? "override"
       : "custom";
+  const isOrganizationOnly = type === "custom" || type === "alias";
   const keepsBuiltIn = Boolean(builtIn);
   const isCustomPrice = !keepsBuiltIn && kind === "fixed";
   const readOnly = !canEdit;
@@ -531,7 +533,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             </div>
           )}
 
-          {canEdit && (isNew || type === "custom") && (
+          {canEdit && (isNew || isOrganizationOnly) && (
             <div className="flex gap-1 rounded-md border p-1" role="group">
               {(["fixed", "alias"] as const).map((option) => (
                 <Button
@@ -819,7 +821,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                     Restore all defaults
                   </Button>
                 )}
-                {type === "custom" && loaded.row && (
+                {isOrganizationOnly && loaded.row && (
                   <Button
                     size="sm"
                     variant="outline"
