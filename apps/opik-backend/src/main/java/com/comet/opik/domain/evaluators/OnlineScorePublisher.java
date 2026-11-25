@@ -11,12 +11,14 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -49,39 +51,42 @@ public interface OnlineScorePublisher {
      * the enqueue to happen; subscribe it within a reactive context carrying the workspace (WORKSPACE_ID /
      * WORKSPACE_NAME) so the enqueue metric is labelled with it.
      *
-     * @param messages the messages to enqueue
-     * @param type     the type of evaluator for which the messages are intended
+     * @param messages       the messages to enqueue
+     * @param type           the type of evaluator for which the messages are intended
+     * @param organizationId stamped onto the messages that can carry an organization and have none; null when unknown
      * @return a {@link Mono} that completes once all messages are enqueued
      */
-    Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
+    Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type, @Nullable String organizationId);
 
     /**
      * Enqueues thread messages for scoring — <b>one stream entry per thread id</b>, not one for the batch.
      * The returned publisher must be subscribed for the enqueue to happen.
      *
-     * @param threadIds   the IDs of the threads to score; one message is published per element
-     * @param ruleId      the ID of the rule to apply
-     * @param projectId   the ID of the project
-     * @param workspaceId the ID of the workspace
-     * @param userName    the name of the user who initiated the scoring
+     * @param threadIds      the IDs of the threads to score; one message is published per element
+     * @param ruleId         the ID of the rule to apply
+     * @param projectId      the ID of the project
+     * @param workspaceId    the ID of the workspace
+     * @param userName       the name of the user who initiated the scoring
+     * @param organizationId the organization the messages carry; null when unknown
      * @return a {@link Mono} that completes once all messages are enqueued
      */
     Mono<Void> enqueueThreadMessage(List<String> threadIds, UUID ruleId, UUID projectId, String workspaceId,
-            String userName);
+            String userName, @Nullable String organizationId);
 
     /**
      * Enqueues thread messages for an already-resolved rule, avoiding the blocking rule lookup that the
      * {@code ruleId} overload performs. Publishes <b>one stream entry per thread id</b>.
      *
-     * @param threadIds   the IDs of the threads to score; one message is published per element
-     * @param rule        the already-resolved automation rule evaluator
-     * @param projectId   the ID of the project
-     * @param workspaceId the ID of the workspace
-     * @param userName    the name of the user who initiated the scoring
+     * @param threadIds      the IDs of the threads to score; one message is published per element
+     * @param rule           the already-resolved automation rule evaluator
+     * @param projectId      the ID of the project
+     * @param workspaceId    the ID of the workspace
+     * @param userName       the name of the user who initiated the scoring
+     * @param organizationId the organization the messages carry; null when unknown
      * @return a {@link Mono} that completes once all messages are enqueued
      */
     Mono<Void> enqueueThreadMessage(List<String> threadIds, AutomationRuleEvaluator<?, ?> rule, UUID projectId,
-            String workspaceId, String userName);
+            String workspaceId, String userName, @Nullable String organizationId);
 }
 
 @Singleton
@@ -123,7 +128,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
+    public Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type,
+            @Nullable String organizationId) {
         var config = streamConfigurations.get(type);
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
@@ -149,6 +155,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
                                     : message)
+                    .map(message -> OrganizationIdStamper.stamp(message, organizationId))
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {
@@ -166,14 +173,16 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     }
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,
-            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName) {
+            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
+            @Nullable String organizationId) {
 
         // Only the id is known here, so resolve the rule first. findById is a blocking JDBC lookup, so do it
         // lazily on a worker thread, then delegate to the rule-based overload (which holds all enqueue logic).
         return Mono.<AutomationRuleEvaluator<?, ?>>fromCallable(
                 () -> automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(rule -> enqueueThreadMessage(threadIds, rule, projectId, workspaceId, userName))
+                .flatMap(rule -> enqueueThreadMessage(threadIds, rule, projectId, workspaceId, userName,
+                        organizationId))
                 .onErrorResume(NotFoundException.class, ex -> {
                     log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
                             workspaceId, ex);
@@ -183,7 +192,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds,
             @NonNull AutomationRuleEvaluator<?, ?> rule, @NonNull UUID projectId, @NonNull String workspaceId,
-            @NonNull String userName) {
+            @NonNull String userName, @Nullable String organizationId) {
 
         // Caller already holds the resolved rule -- no findById needed.
         //
@@ -197,7 +206,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             .map(threadId -> toLlmAsJudgeMessage(threadId, rule.getId(), projectId, workspaceId,
                                     userName, llmAsJudge.getCode()))
                             .toList(),
-                    rule.getType());
+                    rule.getType(), organizationId);
             case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
                 if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
                     yield enqueueMessage(
@@ -205,7 +214,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                                     .map(threadId -> toDefinedMetricPython(threadId, rule.getId(), projectId,
                                             workspaceId, userName, definedMetricPython.getCode()))
                                     .toList(),
-                            rule.getType());
+                            rule.getType(), organizationId);
                 }
                 log.warn("Trace Thread online scoring python evaluator is disabled, skipping enqueueing "
                         + "for ruleId: '{}'", rule.getId());

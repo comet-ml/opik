@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -7,23 +9,34 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics, on the global meter. Every metric of one workspace's work carries {@code workspace_id}
- * and {@code workspace_name}: the caller resolves the name once, at its boundary, so recording never blocks. Only
- * {@code topics.nightly.budget_used_seconds} and {@code topics.nightly.nights}, a whole night's, have neither.
+ * The topic runs' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
+ * carries {@code workspace_id} and {@code workspace_name}: the caller resolves the name once, at its boundary, so
+ * recording never blocks. {@code topics.api.duration_seconds} has neither, where every caller's workspace would add
+ * series; nor has {@code topics.nightly.nights}, a whole night's.
  */
 @Singleton
 public class TopicsMetrics {
 
+    static final String API_STATUS_ERROR = "error";
+
     /** The workspace a metric is recorded for. */
     public record Workspace(@NonNull String id, @NonNull String name) {
+
+        /** The workspace of a run, which its subscriber puts in the Reactor context. */
+        public static Mono<Workspace> fromContext() {
+            return Mono.deferContextual(ctx -> Mono.just(new Workspace(ctx.get(RequestContext.WORKSPACE_ID),
+                    ctx.get(RequestContext.WORKSPACE_NAME))));
+        }
     }
 
     private static final AttributeKey<String> WORKSPACE_ID = stringKey("workspace_id");
@@ -39,9 +52,8 @@ public class TopicsMetrics {
     private static final AttributeKey<String> REASON = stringKey("reason");
     private static final AttributeKey<String> DECISION = stringKey("decision");
 
-    static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
-    static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
-    static final String NIGHTLY_BUDGET_USED = "topics.nightly.budget_used_seconds";
+    private static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
+    private static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
 
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
@@ -50,12 +62,12 @@ public class TopicsMetrics {
     private final LongCounter traceTopicsInserts;
     private final LongCounter labelPasses;
     private final DoubleHistogram otherShare;
+    private final DoubleHistogram apiDuration;
     private final DoubleHistogram liveTopics;
     private final LongCounter retired;
     private final LongCounter born;
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
-    private final DoubleHistogram budgetUsed;
     private final LongCounter nightlyDecisions;
     private final LongCounter nights;
 
@@ -69,8 +81,8 @@ public class TopicsMetrics {
                         + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save (first build); "
-                        + "window, state, update, llm, save (nightly update); label (both)")
+                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save (discovery); "
+                        + "window, state, update, llm, rows, save (nightly update); label (both)")
                 .build();
         this.llmCalls = meter.counterBuilder("topics.llm.calls")
                 .setDescription("LLM calls, by call (author) and outcome: ok, timeout, error, bad_answer")
@@ -84,13 +96,13 @@ public class TopicsMetrics {
                 .build();
         this.labelPasses = meter.counterBuilder("topics.label.passes")
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
-                        + "resume: the first-build job going on with a pass that did not finish) and outcome "
+                        + "resume: the discovery job going on with a pass that did not finish) and outcome "
                         + "(complete; cut by its deadline or its caller; failed)")
                 .build();
         this.liveTopics = meter.histogramBuilder("topics.topics.live")
                 .setDescription("Live topics of a project after each saved nightly update")
                 .build();
-        this.retired = meter.counterBuilder("topics.retired")
+        this.retired = meter.counterBuilder("topics.topics.retired")
                 .setDescription("Topics retired (deleted) by saved nightly updates, by reason: low_share, replaced")
                 .build();
         this.born = meter.counterBuilder("topics.topics.born")
@@ -104,24 +116,26 @@ public class TopicsMetrics {
                 .setDescription("Of the window traces labelled on both the last and this saved night, the share "
                         + "whose label changed, Other included")
                 .build();
-        this.budgetUsed = meter.histogramBuilder(NIGHTLY_BUDGET_USED).setUnit("s")
-                .setDescription("Of a night's budget, the time from the night's start to its last queued run; the "
-                        + "whole budget when the night did not reach every project")
-                .build();
         this.nightlyDecisions = meter.counterBuilder(NIGHTLY_DECISIONS)
-                .setDescription("Projects the night decided on, by decision (nightly_update: queued, skip, "
+                .setDescription("Projects the night decided on, by decision (update: queued, skip, "
                         + "not_reached, count_failed) and, for a skip, reason (small, deleted, paused, already_saved, "
                         + "no_list). A queued run whose claim finds its night saved or no list is counted again, as a "
-                        + "skip")
+                        + "skip. Every series of a workspace listed at startup starts at 0; one listed later starts "
+                        + "at its first decision")
                 .build();
         this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
-                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, or failed for "
-                        + "each plan whose read of the night's projects failed")
+                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, counted by "
+                        + "the one plan that ends the night, or failed once for each plan whose read of the night's "
+                        + "projects failed, for every workspace or for one")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
                         + "or its sample): the other_share of its logged stats")
+                .build();
+        this.apiDuration = meter.histogramBuilder("topics.api.duration_seconds").setUnit("s")
+                .setDescription("Duration of a topics read API request after its project check, by status: ready, "
+                        + "collecting, disabled, error")
                 .build();
     }
 
@@ -167,8 +181,7 @@ public class TopicsMetrics {
         traceTopicsInserts.add(1, attributes(workspace).put(RESULT, success ? "success" : "error").build());
     }
 
-    void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger,
-            @NonNull TopicWindowLabelService.PassOutcome outcome) {
+    void labelPass(@NonNull Workspace workspace, @NonNull LabelTrigger trigger, @NonNull LabelPassOutcome outcome) {
         labelPasses.add(1, attributes(workspace).put(TRIGGER, trigger.getValue()).put(OUTCOME, outcome.getValue())
                 .build());
     }
@@ -177,24 +190,27 @@ public class TopicsMetrics {
         otherShare.record(share, attributes(workspace).build());
     }
 
-    void budgetUsed(@NonNull Duration duration) {
-        budgetUsed.record(duration.toNanos() / 1e9);
-    }
-
     /** {@code reason} is null for a decision other than skip. */
-    void nightlyDecision(@NonNull Workspace workspace, @NonNull String decision, String reason, long projects) {
-        var attributes = attributes(workspace).put(DECISION, decision);
+    void nightlyDecision(@NonNull Workspace workspace, @NonNull NightDecision decision,
+            @Nullable NightSkipReason reason, long projects) {
+        var attributes = attributes(workspace).put(DECISION, decision.getValue());
         if (reason != null) {
-            attributes.put(REASON, reason);
+            attributes.put(REASON, reason.getValue());
         }
         nightlyDecisions.add(projects, attributes.build());
     }
 
-    void night(@NonNull String outcome, long nights) {
-        this.nights.add(nights, Attributes.of(OUTCOME, outcome));
+    void night(@NonNull NightOutcome outcome, long nights) {
+        this.nights.add(nights, Attributes.of(OUTCOME, outcome.getValue()));
     }
 
     private static AttributesBuilder attributes(Workspace workspace) {
         return Attributes.builder().put(WORKSPACE_ID, workspace.id()).put(WORKSPACE_NAME, workspace.name());
+    }
+
+    /** {@code status} is null when the request failed before it had one: recorded as {@code error}. */
+    void apiRequest(@Nullable ProjectTopics.Status status, @NonNull Duration duration) {
+        apiDuration.record(duration.toNanos() / 1e9,
+                Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));
     }
 }

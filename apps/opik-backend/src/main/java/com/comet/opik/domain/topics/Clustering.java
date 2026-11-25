@@ -3,7 +3,7 @@ package com.comet.opik.domain.topics;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
- * A first build up to the LLM call: {@link TopicAlgorithm#cluster} groups the window and writes the author request, the
+ * A discovery run up to the LLM call: {@link TopicAlgorithm#cluster} groups the window and writes the author request, the
  * run makes the call, and {@link #finish} turns the answer into the list. Pure: no I/O, no clock.
  */
 public interface Clustering {
@@ -15,5 +15,5 @@ public interface Clustering {
     ObjectNode stats();
 
     /** The list from the parsed author answer, labelling every window trace. */
-    FirstBuild finish(AuthorAnswer answer);
+    DiscoveredTopics finish(AuthorAnswer answer);
 }

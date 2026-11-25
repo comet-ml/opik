@@ -15,9 +15,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * A project's topics, the {@code topics} rows. A run's save writes them in one transaction with the list fields of the
@@ -58,34 +56,24 @@ public interface TopicDAO {
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId AND id IN (<ids>)")
     int deleteTopics(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @BindList("ids") Collection<UUID> ids);
-
-    /** The projects of {@code workspaceIds} with at least one topic: the nightly update's candidates. */
-    @SqlQuery("SELECT DISTINCT workspace_id, project_id FROM topics WHERE workspace_id IN (<workspaceIds>)")
-    List<TopicProjectKey> findProjectsWithTopics(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    /** Of {@code projectIds}, those the workspace still has. A plain read: it locks no {@code projects} row. */
-    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
-    Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds);
+    /** Deletes the project's topics only when the project is no longer in {@code projects}; 0 when it still is. */
+    @SqlUpdate("""
+            DELETE FROM topics
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            AND NOT EXISTS (SELECT 1 FROM projects WHERE id = :projectId AND workspace_id = :workspaceId)
+            """)
+    int deleteTopicsOfMissingProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
     /**
-     * Deletes the workspaces' topics whose project no longer exists. A plain read finds those projects and the delete
-     * goes by their ids: a delete that joined {@code projects} would lock the rows it read there, and every topics row
-     * it scanned. A deleted project id never comes back, so the read needs no lock.
+     * The workspaces' projects that have topics and no longer exist, for the caller to delete by
+     * {@link #deleteTopicsByProjects} in bounded batches, one transaction each. A plain read: a delete that joined
+     * {@code projects} would lock the rows it read there, and every topics row it scanned. A deleted project id never
+     * comes back, so the read needs no lock.
      */
-    default int deleteTopicsOfMissingProjects(Collection<String> workspaceIds) {
-        return findTopicProjectsOfMissingProjects(workspaceIds).stream()
-                .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
-                        Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
-                .entrySet().stream()
-                .mapToInt(entry -> deleteTopicsByProjects(entry.getKey(), entry.getValue()))
-                .sum();
-    }
-
     @SqlQuery("""
             SELECT DISTINCT t.workspace_id, t.project_id FROM topics t
             LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id

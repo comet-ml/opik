@@ -39,9 +39,35 @@ class FreeFormSqlSubqueries {
     private static final Set<String> SOURCE_PARENTS = Set.of("JOIN TREE", "LEFT TABLE EXPRESSION",
             "RIGHT TABLE EXPRESSION", "TABLE EXPRESSION");
     private static final String STORED_SCALAR = "__getScalar";
+    private static final Pattern TABLE_NODE = Pattern.compile("^TABLE id: \\d+(?:, |$)");
+    private static final Pattern TABLE_FUNCTION_NODE = Pattern.compile("^TABLE_FUNCTION id: \\d+(?:, |$)");
     private static final Pattern TABLE_NAME = Pattern.compile("(?:^|, )table_name: ([^,]+)");
-    private static final Pattern FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
+    private static final Pattern FUNCTION_NODE = Pattern.compile("^FUNCTION id: \\d+(?:, |$)");
+    private static final Pattern FUNCTION_NAME = Pattern.compile("^FUNCTION id: \\d+, function_name: ([^,]+)");
     private static final Pattern SUBQUERY = Pattern.compile("(?:^|, )is_subquery: 1(?:,|$)");
+
+    static Optional<String> resolvedFunctionName(String line) {
+        var matcher = FUNCTION_NAME.matcher(line.stripLeading());
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    static boolean isFunctionNode(String line) {
+        return FUNCTION_NODE.matcher(line.stripLeading()).find();
+    }
+
+    /** A table read, not a section label such as the {@code TABLE EXPRESSION} an ARRAY JOIN prints. */
+    static boolean isTableNode(String line) {
+        return TABLE_NODE.matcher(line.stripLeading()).find();
+    }
+
+    static boolean isTableFunctionNode(String line) {
+        return TABLE_FUNCTION_NODE.matcher(line.stripLeading()).find();
+    }
+
+    static Optional<String> tableName(String line) {
+        var matcher = TABLE_NAME.matcher(line.stripLeading());
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
 
     /** One query tree line: its label ({@code QUERY}, {@code TABLE}, {@code JOIN TREE}, ...) and its attributes. */
     private record Node(String label, String attributes, Node parent, List<Node> children) {
@@ -53,6 +79,10 @@ class FreeFormSqlSubqueries {
         Optional<String> attribute(Pattern pattern) {
             var matcher = pattern.matcher(attributes);
             return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+        }
+
+        Optional<String> functionName() {
+            return is("FUNCTION") ? resolvedFunctionName(label + " " + attributes) : Optional.empty();
         }
 
         boolean is(String expected) {
@@ -106,7 +136,7 @@ class FreeFormSqlSubqueries {
                 }
             });
         }
-        if (node.is("FUNCTION") && node.attribute(FUNCTION_NAME).filter(STORED_SCALAR::equals).isPresent()) {
+        if (node.functionName().filter(STORED_SCALAR::equals).isPresent()) {
             opaque[0] = true;
         }
         node.children().forEach(child -> collect(child, prefix, scalar, filter, opaque));
@@ -138,8 +168,7 @@ class FreeFormSqlSubqueries {
         var arguments = list.parent();
         var function = arguments == null ? null : arguments.parent();
         return list.is("LIST") && arguments != null && arguments.is("ARGUMENTS") && function != null
-                && function.is("FUNCTION")
-                && function.attribute(FUNCTION_NAME).filter(FILTER_FUNCTIONS::contains).isPresent();
+                && function.functionName().filter(FILTER_FUNCTIONS::contains).isPresent();
     }
 
     /** One node per line, indented two spaces per level: {@code LABEL id: n, key: value, ...} or a section label. */

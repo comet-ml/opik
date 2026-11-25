@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicProject.CancelReason;
+import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -32,21 +33,19 @@ class TopicsRunReconciler {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicsRunPublisher publisher;
-    private final @NonNull TopicsFirstBuildCandidates candidates;
+    private final @NonNull TopicsDiscoveryCandidates candidates;
 
     /** Returns the runs still in flight once settled. A run whose step fails stays in flight, for the next plan. */
     Mono<List<InFlightRun>> reconcile(@NonNull List<InFlightRun> runs, @NonNull Collection<String> enabledWorkspaces,
             @NonNull LocalDate night, @NonNull Instant now) {
         var enabled = Set.copyOf(enabledWorkspaces);
         return Flux.fromIterable(runs)
-                .concatMap(run -> settle(run, enabled, night, now)
+                .filterWhen(run -> settle(run, enabled, night, now)
                         .onErrorResume(error -> {
                             log.warn("Topics run '{}' not reconciled, project '{}', status '{}'", run.runId(),
                                     run.projectId(), run.runStatus().getValue(), error);
                             return Mono.just(true);
-                        })
-                        .filter(inFlight -> inFlight)
-                        .map(inFlight -> run))
+                        }))
                 .collectList();
     }
 
@@ -77,7 +76,8 @@ class TopicsRunReconciler {
             }
             // Its pod died before it ended the run: end it as that pod would have.
             case CANCELLING -> run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)
-                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).map(Optional::isEmpty)
+                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).hasElement()
+                            .map(ended -> !ended)
                     : Mono.just(true);
             case SAVED, FAILED -> Mono.just(false);
         };
@@ -91,10 +91,9 @@ class TopicsRunReconciler {
     }
 
     /**
-     * Publishes a run queued before {@code topics.runs.republishAfter} again. A first build is counted again for
+     * Publishes a run queued before {@code topics.runs.republishAfter} again. A discovery run is counted again for
      * {@code night}, as the stream entry carries the window's count; a nightly update for the current night, which
-     * the row does not keep (a night by hand for another date goes again for the current one). A nightly update with no
-     * current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
+     * the row does not keep. A nightly update with no current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
      * window past the next scheduled night.
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {
@@ -104,14 +103,14 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
-        var current = TopicsNightPass.current(config.getNightly().getSchedule(), now).map(TopicsNightPass.Night::date);
-        if (run.runMode() == TopicProject.RunMode.NIGHTLY_UPDATE && current.isEmpty()) {
+        var current = TopicsNight.current(config.getNightly().getSchedule(), now).map(TopicsNight::date);
+        if (run.runMode() == RunMode.UPDATE && current.isEmpty()) {
             return store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE)
                     .map(dropped -> !dropped);
         }
         var counted = switch (run.runMode()) {
-            case FIRST_BUILD -> night;
-            case NIGHTLY_UPDATE -> current.get();
+            case DISCOVERY -> night;
+            case UPDATE -> current.get();
             case LABELS -> null;
         };
         var ready = counted == null

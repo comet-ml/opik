@@ -1,5 +1,6 @@
 import glob
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -145,7 +146,21 @@ class TestExecHandler:
     def test_shell_args__windows(self, handler: ExecHandler) -> None:
         with patch("opik.runner.bridge_handlers.exec_command.platform") as mock_plat:
             mock_plat.system.return_value = "Windows"
-            assert ExecHandler._shell_args("dir") == ["cmd", "/c", "dir"]
+            assert ExecHandler._shell_args("dir") == 'cmd /s /c "dir"'
+            assert (
+                ExecHandler._shell_args('python -c "print(1)"')
+                == 'cmd /s /c "python -c "print(1)""'
+            )
+
+    def test_quoted_arguments__passed_to_program_verbatim(
+        self, handler: ExecHandler
+    ) -> None:
+        result = handler.execute(
+            {"command": f'"{sys.executable}" -c "print(\'a  b\')"'},
+            timeout=30.0,
+        )
+        assert result["exit_code"] == 0, result["stderr"]
+        assert result["stdout"].strip() == "a  b"
 
     def test_shell_args__linux(self, handler: ExecHandler) -> None:
         with patch("opik.runner.bridge_handlers.exec_command.platform") as mock_plat:

@@ -26,10 +26,17 @@ class _Response:
         return self._json_data
 
 
-def _patch_client(monkeypatch, *, response=None, error=None):
-    """Wire ``httpx_client.get`` to a fake client, capturing the probe URL and the
+def _patch_client(monkeypatch, *, response=None, error=None, mcp_response=None):
+    """Wire ``httpx_client.get`` to a fake client that answers the discovery URL
+    with ``response`` (or raises ``error``) and the MCP endpoint with
+    ``mcp_response``, by default the 401 sign-in challenge of a running server;
+    an answer that is an exception is raised. Captures the probed URLs and the
     client kwargs (so tests can assert the TLS flag is forwarded)."""
-    captured = {}
+    captured = {"urls": []}
+    answers = {
+        WELL_KNOWN_URL: error or response,
+        MCP_URL: mcp_response or _Response(401),
+    }
 
     class _Client:
         def __enter__(self):
@@ -39,11 +46,12 @@ def _patch_client(monkeypatch, *, response=None, error=None):
             return False
 
         def get(self, url, timeout=None):
-            captured["url"] = url
+            captured["urls"].append(url)
             captured["timeout"] = timeout
-            if error is not None:
-                raise error
-            return response
+            answer = answers[url]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
 
     def fake_get(**kwargs):
         captured["client_kwargs"] = kwargs
@@ -63,7 +71,7 @@ def test_detect__valid_oauth_metadata__returns_mcp_url(monkeypatch):
     )
 
     assert result == MCP_URL
-    assert captured["url"] == WELL_KNOWN_URL
+    assert captured["urls"] == [WELL_KNOWN_URL, MCP_URL]
 
 
 def test_detect__forwards_tls_flag_without_rereading_config(monkeypatch):
@@ -134,4 +142,53 @@ def test_detect__network_error__returns_none(monkeypatch):
             base_url=BASE_URL, api_url=API_URL, check_tls_certificate=True
         )
         is None
+    )
+
+
+def test_detect__oauth_metadata_but_no_mcp_server__returns_none(monkeypatch):
+    # MCP OAuth is on but no MCP server is deployed: the Opik backend answers
+    # 404 at the MCP path, so registering that URL would leave a dead server.
+    _patch_client(
+        monkeypatch,
+        response=_Response(200, json_data=_VALID_METADATA),
+        mcp_response=_Response(404, json_data={"code": 404}),
+    )
+
+    assert (
+        detection.detect_hosted_mcp_server(
+            base_url=BASE_URL, api_url=API_URL, check_tls_certificate=True
+        )
+        is None
+    )
+
+
+def test_detect__mcp_server_error__returns_mcp_url(monkeypatch):
+    # An outage is not a missing server: keep the hosted one rather than move the
+    # user to the local server.
+    _patch_client(
+        monkeypatch,
+        response=_Response(200, json_data=_VALID_METADATA),
+        mcp_response=_Response(503),
+    )
+
+    assert (
+        detection.detect_hosted_mcp_server(
+            base_url=BASE_URL, api_url=API_URL, check_tls_certificate=True
+        )
+        == MCP_URL
+    )
+
+
+def test_detect__mcp_server_unreachable__returns_mcp_url(monkeypatch):
+    _patch_client(
+        monkeypatch,
+        response=_Response(200, json_data=_VALID_METADATA),
+        mcp_response=httpx.ReadTimeout("timed out"),
+    )
+
+    assert (
+        detection.detect_hosted_mcp_server(
+            base_url=BASE_URL, api_url=API_URL, check_tls_certificate=True
+        )
+        == MCP_URL
     )

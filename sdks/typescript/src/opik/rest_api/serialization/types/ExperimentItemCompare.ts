@@ -10,6 +10,7 @@ import { ExperimentItemCompareStatus } from "./ExperimentItemCompareStatus.js";
 import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode.js";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare.js";
 import { JsonListStringCompare } from "./JsonListStringCompare.js";
+import { JsonNode } from "./JsonNode.js";
 
 export const ExperimentItemCompare: core.serialization.ObjectSchema<
     serializers.ExperimentItemCompare.Raw,
@@ -46,6 +47,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         core.serialization.list(AssertionResultCompare).optional(),
     ),
     status: ExperimentItemCompareStatus.optional(),
+    datasetItemData: core.serialization.property("dataset_item_data", JsonNode.optional()),
 });
 
 export declare namespace ExperimentItemCompare {
@@ -72,5 +74,6 @@ export declare namespace ExperimentItemCompare {
         execution_policy?: ExecutionPolicyCompare.Raw | null;
         assertion_results?: AssertionResultCompare.Raw[] | null;
         status?: ExperimentItemCompareStatus.Raw | null;
+        dataset_item_data?: JsonNode.Raw | null;
     }
 }

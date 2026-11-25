@@ -157,10 +157,15 @@ $RUNBOOK/scripts/estimate.sh --database opik --max-rows-per-insert 400 --pause-s
 python tests_load/tests/spans-local-v2-cutover/live_traffic.py   --tps 6 --spans-per-trace 4 --duration 1200 --update-ratio 0.2 --in-progress-ratio 0.15
 python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 2 --duration 1200 --resurrect-ratio 0.05
 
-# 4. Backfill. A small --max-rows-per-insert exercises the adaptive sub-window splitting on modest data. Record the
-#    backfill_start it prints.
+# 4. Backfill, in two runs so every rehearsal takes the resume path. A small --max-rows-per-insert exercises the
+#    adaptive sub-window splitting on modest data. Record the backfill_start the first run prints; the second reuses it
+#    from the state file. The first run ends with a ratio line labelled a mid-run sample. The second logs
+#    "Capacity (resume)", crediting what spans_local_v2 already holds, and ends with the ratio "at completion". The
+#    split needs at least four seeded weeks (step 1's --weeks), or the second run has nothing left to copy.
 $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1 \
-    --max-partitions-per-insert-block 20000
+    --max-partitions-per-insert-block 20000 --to-week 2
+$RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1 \
+    --max-partitions-per-insert-block 20000 --from-week 3
 #    TWO EXPERIMENTS WORTH RUNNING ONCE — AND BOTH NEED AN EMPTY DESTINATION, which is the part that is easy to get
 #    wrong. backfill.sh's resume guard skips any window whose destination already holds at least as many logical rows
 #    as the source, BEFORE issuing the INSERT, so simply re-running with a different setting copies nothing and the
