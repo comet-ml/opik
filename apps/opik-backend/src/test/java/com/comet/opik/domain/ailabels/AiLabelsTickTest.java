@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.v1.jobs.AiLabelsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -996,8 +997,8 @@ class AiLabelsTickTest {
         @DisplayName("a trace deleted while its jobs are in flight keeps no rows; the same id in another project does")
         void traceDeletedWhileInFlight() {
             var workspaceId = enabledWorkspace();
-            var deletedProject = UUID.randomUUID();
-            var keptProject = UUID.randomUUID();
+            var deletedProject = ID_GENERATOR.generateId();
+            var keptProject = ID_GENERATOR.generateId();
             // One id in two projects: the kept project's copy is labeled first, as a tick takes one copy at a time.
             var traceId = trace(workspaceId, keptProject, 1);
             tick();
@@ -1022,10 +1023,23 @@ class AiLabelsTickTest {
                                 .put(RequestContext.USER_NAME, "test"))
                         .block();
                 // The vectors tick embeds the done status before the check: a status its own check would trust.
+                topicVectorsDAO.insert(List.of(TopicVector.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(deletedProject)
+                        .task(GENERATE_TASK)
+                        .traceId(traceId)
+                        .traceCreatedAt(Instant.now())
+                        .taskVersion(1)
+                        .embedModel("test")
+                        .embedDimensions(2)
+                        .text("summary")
+                        .vector(new float[]{1, 0})
+                        .build())).block();
+                // TopicVectorStatus is package-private to the topics domain, so the row goes in as SQL.
                 execute("""
-                        INSERT INTO %s.topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at,
-                            task_version, embed_model, embed_dimensions, text, vector)
-                        VALUES ('%s', '%s', '%s', '%s', now64(6), 1, 'test', 2, 'summary', [1, 0])
+                        INSERT INTO %s.topic_vector_status (workspace_id, project_id, task, trace_id,
+                            trace_created_at, task_version, reason)
+                        VALUES ('%s', '%s', '%s', '%s', now64(6), 1, 'invalid_vector')
                         """.formatted(DATABASE_NAME, workspaceId, deletedProject, GENERATE_TASK, traceId));
                 return invocation.callRealMethod();
             }).when(deleting).insert(anyList());
@@ -1042,15 +1056,18 @@ class AiLabelsTickTest {
                     .filteredOn(status -> !status.projectId().equals(deletedProject) || status.traceId().equals(live))
                     .hasSize(2 * TASKS.size())
                     .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
-            assertThat(count("SELECT count() FROM %s.topic_vectors WHERE workspace_id = '%s' AND trace_id = '%s'"
-                    .formatted(DATABASE_NAME, workspaceId, traceId))).isZero();
+            for (var table : List.of("topic_vectors", "topic_vector_status")) {
+                assertThat(count("SELECT count() FROM %s.%s WHERE workspace_id = '%s' AND trace_id = '%s'"
+                        .formatted(DATABASE_NAME, table, workspaceId, traceId))).as(table).isZero();
+            }
         }
 
         @Test
         @DisplayName("the deleted-trace check fails: the jobs stay submitted and the next tick loads them")
         void deletedTraceCheckFails() {
             var workspaceId = enabledWorkspace();
-            var traceIds = List.of(trace(workspaceId, UUID.randomUUID(), 1), trace(workspaceId, UUID.randomUUID(), 0));
+            var traceIds = List.of(trace(workspaceId, ID_GENERATOR.generateId(), 1),
+                    trace(workspaceId, ID_GENERATOR.generateId(), 0));
 
             tick();
             completeJobs(workspaceId);
@@ -1075,7 +1092,8 @@ class AiLabelsTickTest {
                 + "loads them")
         void deletedTraceCheckOutOfBudget() {
             var workspaceId = enabledWorkspace();
-            var traceIds = List.of(trace(workspaceId, UUID.randomUUID(), 1), trace(workspaceId, UUID.randomUUID(), 0));
+            var traceIds = List.of(trace(workspaceId, ID_GENERATOR.generateId(), 1),
+                    trace(workspaceId, ID_GENERATOR.generateId(), 0));
 
             tick();
             completeJobs(workspaceId);
@@ -1102,7 +1120,7 @@ class AiLabelsTickTest {
         void deletedTraceCheckStopsPartway() {
             var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
             var traceIds = workspaceIds.stream()
-                    .collect(Collectors.toMap(Function.identity(), id -> trace(id, UUID.randomUUID(), 0)));
+                    .collect(Collectors.toMap(Function.identity(), id -> trace(id, ID_GENERATOR.generateId(), 0)));
 
             tick();
             workspaceIds.forEach(AiLabelsTickTest.this::completeJobs);
