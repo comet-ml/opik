@@ -164,7 +164,10 @@ public interface TopicProjectDAO {
     int endCancelled(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("now") Instant now);
 
-    /** {@code running | cancelling -> failed} with {@code abandoned} when its heartbeat is older than {@code before}. */
+    /**
+     * {@code running | cancelling -> failed} with {@code abandoned} when its heartbeat is older than {@code before}, or
+     * it has none: a row left running before the heartbeat column existed.
+     */
     @SqlUpdate("""
             UPDATE topic_projects
             SET run_error_code = 'abandoned',
@@ -172,7 +175,7 @@ public interface TopicProjectDAO {
                 first_failed_at = IF(run_mode = 'labels', first_failed_at, COALESCE(first_failed_at, run_started_at)),
                 run_finished_at = :now, run_status = 'failed'
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
-            AND run_status IN ('running', 'cancelling') AND heartbeat_at < :before
+            AND run_status IN ('running', 'cancelling') AND (heartbeat_at IS NULL OR heartbeat_at < :before)
             """)
     int abandon(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("before") Instant before, @Bind("now") Instant now);

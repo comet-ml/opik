@@ -140,8 +140,8 @@ class TopicsDiscoveryCandidates {
                         Collectors.mapping(Gated::project, Collectors.toList())))
                 .forEach((workspaceId, projects) -> log.warn(
                         "Topics discovery runs held back: the vectors tick stopped checking the workspace, or a "
-                                + "backfill ran past topics.discovery.backfillMaxWait '{}' with too few traces "
-                                + "embedded, workspace '{}', projects '{}', longest wait seconds '{}'",
+                                + "backfill ran past topics.discovery.backfillMaxWait with too few traces embedded; "
+                                + "backfillMaxWait '{}', workspace '{}', projects '{}', longest wait seconds '{}'",
                         config.getDiscovery().getBackfillMaxWait(), workspaceId, projects.size(),
                         projects.stream().map(project -> TopicsBackfillGate.waited(project, now))
                                 .max(Comparator.naturalOrder()).orElse(Duration.ZERO).toSeconds()));
@@ -154,14 +154,13 @@ class TopicsDiscoveryCandidates {
     private Mono<List<Candidate>> count(String workspaceId, List<UUID> projectIds, Instant from, Instant to) {
         return countAll(workspaceId, projectIds, from, to)
                 .onErrorResume(error -> {
-                    log.warn("Topics discovery runs count failed, workspace '{}', projects '{}'; counting each project",
+                    log.warn("Topics discovery runs count failed, counting each project; workspace '{}', projects '{}'",
                             workspaceId, projectIds.size(), error);
                     return Flux.fromIterable(projectIds)
                             .concatMap(projectId -> countAll(workspaceId, List.of(projectId), from, to)
                                     .onErrorResume(projectError -> {
-                                        log.warn("Topics discovery runs count failed, workspace '{}', project '{}'; it "
-                                                + "is counted again the next plan", workspaceId, projectId,
-                                                projectError);
+                                        log.warn("Topics discovery runs count failed, counted again the next plan; "
+                                                + "workspace '{}', project '{}'", workspaceId, projectId, projectError);
                                         return Mono.just(Map.of());
                                     }))
                             .collect(LinkedHashMap<UUID, Long>::new, Map::putAll);

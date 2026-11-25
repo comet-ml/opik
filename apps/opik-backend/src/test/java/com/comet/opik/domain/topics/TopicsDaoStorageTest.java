@@ -862,13 +862,10 @@ class TopicsDaoStorageTest {
         var listed = newId();
         var buildRun = newId();
 
-        var moves = template.inTransaction(WRITE, handle -> {
+        var queued = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             dao.ensureRow(workspaceId, listless);
-            TopicsTestData.startRun(dao, workspaceId, listed, buildRun, TopicProject.RunMode.DISCOVERY, NIGHT);
-            dao.saveList(workspaceId, listed, null, buildRun, NIGHT, NIGHT,
-                    new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL);
-            dao.markSaved(workspaceId, listed, buildRun, NIGHT);
+            saveDiscovery(dao, workspaceId, listed, buildRun, NIGHT);
             var refused = List.of(
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.LABELS, NIGHT),
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.UPDATE, NIGHT),
@@ -880,7 +877,8 @@ class TopicsDaoStorageTest {
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.DISCOVERY, NIGHT));
         });
 
-        assertThat(moves).containsExactly(0, 0, 0, 0, 1, 1);
+        // 1 queued, 0 refused.
+        assertThat(queued).containsExactly(0, 0, 0, 0, 1, 1);
     }
 
     @Test
@@ -897,11 +895,7 @@ class TopicsDaoStorageTest {
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, projectId, buildRun, TopicProject.RunMode.DISCOVERY,
-                    NIGHT.minusSeconds(10));
-            dao.saveList(workspaceId, projectId, null, buildRun, NIGHT.minusSeconds(5), NIGHT,
-                    new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL);
-            dao.markSaved(workspaceId, projectId, buildRun, NIGHT.minusSeconds(5));
+            saveDiscovery(dao, workspaceId, projectId, buildRun, NIGHT.minusSeconds(10));
             TopicsTestData.startRun(dao, workspaceId, projectId, updateRun, TopicProject.RunMode.UPDATE, NIGHT);
             dao.markFailed(workspaceId, projectId, updateRun, NIGHT.plusSeconds(1), TopicProject.RunError.LLM_ERROR);
             TopicsTestData.startRun(dao, workspaceId, projectId, failedPass, TopicProject.RunMode.LABELS,
@@ -919,6 +913,34 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(projectId)).extracting(TopicProject::runId, TopicProject::runStatus,
                 TopicProject::failedRuns, TopicProject::firstFailedAt)
                 .containsExactly(savedPass, TopicProject.RunStatus.SAVED, 1, NIGHT);
+    }
+
+    @Test
+    @DisplayName("a run left running with no heartbeat, as before the heartbeat column existed, is abandoned")
+    void abandonsARunWithNoHeartbeat() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        var runId = newId();
+
+        int abandoned = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, NIGHT);
+            // No statement leaves a claimed run without a heartbeat: only a row from before migration 000124 has none.
+            handle.execute("UPDATE topic_projects SET heartbeat_at = NULL WHERE project_id = ?", projectId.toString());
+            return dao.abandon(workspaceId, projectId, runId, NIGHT.plusSeconds(60), NIGHT.plusSeconds(61));
+        });
+
+        assertThat(abandoned).isEqualTo(1);
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runStatus, TopicProject::runErrorCode)
+                .containsExactly(TopicProject.RunStatus.FAILED, TopicProject.RunError.ABANDONED);
+    }
+
+    /** A discovery run of the project started at {@code at} and saved its list a second later. */
+    private static void saveDiscovery(TopicProjectDAO dao, String workspaceId, UUID projectId, UUID runId, Instant at) {
+        TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, at);
+        dao.saveList(workspaceId, projectId, null, runId, at.plusSeconds(1), NIGHT,
+                new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL);
+        dao.markSaved(workspaceId, projectId, runId, at.plusSeconds(1));
     }
 
     private List<UUID> unlabelledIds(String workspaceId, UUID projectId, UUID runId, String after, int limit) {

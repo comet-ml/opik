@@ -410,6 +410,7 @@ public class TopicsConfig {
 
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
         private Duration poolingInterval;
 
         @NotNull @JsonProperty
@@ -418,7 +419,7 @@ public class TopicsConfig {
         private Duration longPollingDuration;
 
         @JsonProperty
-        @Min(2) private int claimIntervalRatio;
+        @Min(2) @Max(100) private int claimIntervalRatio;
 
         /**
          * A delivered message no pod acked for this long goes to another pod: a stopped pod's runs, put back to
@@ -427,6 +428,7 @@ public class TopicsConfig {
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
         private Duration pendingMessageDuration;
 
         @JsonProperty
