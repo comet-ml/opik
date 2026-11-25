@@ -283,7 +283,8 @@ A query with a topic filter has two guards on the whole query, the trace read an
 a query without a topic filter has neither. A query that stops at a guard answers `503` with `Retry-After: 5` (see
 "Errors"). The search stream has already sent its status then, so it ends with an error, as for any ClickHouse error.
 A project whose "All time" filter trips a guard on every retry needs a narrower date range, or a higher limit if
-ClickHouse has the memory.
+ClickHouse has the memory. The time guard takes at most 4 minutes: a longer query outlives the progress headers the
+driver can take at the default `ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS`, and fails instead of answering `503`.
 
 ### Errors
 

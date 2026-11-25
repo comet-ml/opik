@@ -20,7 +20,7 @@ class TopicsFilterConfigTest {
 
     static Stream<Arguments> maxExecutionTimes() {
         return Stream.of(
-                arguments(Duration.seconds(2), List.of()),
+                arguments(Duration.minutes(4), List.of()),
                 arguments(Duration.milliseconds(1500), List.of("maxExecutionTimeWholeSeconds")));
     }
 

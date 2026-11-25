@@ -348,10 +348,14 @@ public class TopicsConfig {
     @Data
     public static class FilterConfig {
 
-        /** ClickHouse's {@code max_execution_time}, in whole seconds. */
+        /**
+         * ClickHouse's {@code max_execution_time}, in whole seconds. At most 4 minutes: a longer query outlives the
+         * progress headers the r2dbc driver can take ({@code databaseAnalytics.httpHeadersProgressIntervalMs}), so it
+         * fails to parse instead of answering 503.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 4, unit = TimeUnit.MINUTES)
         private Duration maxExecutionTime;
 
         /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */

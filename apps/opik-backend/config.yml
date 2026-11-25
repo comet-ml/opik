@@ -2910,7 +2910,8 @@ topics:
   # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
   filter:
     #  Default: 30s
-    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 10m
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 4m. A longer query outlives
+    #  the progress headers the driver can take at the default databaseAnalytics.httpHeadersProgressIntervalMs
     maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
     #  Default: 4294967296 (4 GiB)
     #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.

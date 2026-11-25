@@ -62,6 +62,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -283,29 +284,20 @@ class TracesFilterByTopicResourceTest {
                 TraceTopic.OTHER, 2L + notInLogs.get(TraceTopic.OTHER)));
     }
 
-    @Test
-    @DisplayName("a workspace without Topics: = and != give no trace, with no error")
-    void workspaceWithoutTopics() {
+    @ParameterizedTest(name = "no live topic, workspace opted in {0}: = and != give no trace, with no error")
+    @ValueSource(booleans = {false, true})
+    void noLiveTopic(boolean optedIn) {
         var caller = topics.caller();
         var projectId = topics.project(caller);
-        topics.createTraces(caller, projectId, 2);
-        var topicId = ID_GENERATOR.generateId().toString();
-
-        for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
-            assertFilter(caller, projectId, operator, topicId, List.of());
+        if (optedIn) {
+            topics.optIn(caller.workspaceId());
         }
-    }
-
-    @Test
-    @DisplayName("a project with no live topic in a workspace with Topics: = and != give no trace, with no error")
-    void projectWithoutTopics() {
-        var caller = topics.caller();
-        var projectId = topics.project(caller);
-        topics.optIn(caller.workspaceId());
         topics.createTraces(caller, projectId, 2);
 
-        for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
-            assertFilter(caller, projectId, operator, OTHER, List.of());
+        for (var value : List.of(ID_GENERATOR.generateId().toString(), OTHER)) {
+            for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
+                assertFilter(caller, projectId, operator, value, List.of());
+            }
         }
     }
 
@@ -318,41 +310,30 @@ class TracesFilterByTopicResourceTest {
         assertFilter(seed, Operator.EQUAL, seed.labelled().id().toString(), List.of());
     }
 
-    @Test
-    @DisplayName("trace KPI cards: a topic filter counts the traces the list keeps; with topics off, none")
-    void kpiCards() {
+    Stream<Arguments> counters() {
+        return Stream.of(
+                arguments("trace KPI cards", (BiFunction<Seed, List<TraceFilter>, Long>) this::kpiCount),
+                arguments("project metrics", (BiFunction<Seed, List<TraceFilter>, Long>) this::metricCount));
+    }
+
+    @ParameterizedTest(name = "{0}: a topic filter counts the traces the list keeps; with topics off, none")
+    @MethodSource("counters")
+    void counts(String endpoint, BiFunction<Seed, List<TraceFilter>, Long> count) {
         var seed = seed();
         var labelled = List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, seed.labelled().id().toString()));
         var other = List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, OTHER));
         var notArrived = List.of(filter(TraceField.TOPIC_ID, Operator.NOT_EQUAL,
                 seed.arrived().id().toString()));
 
-        assertThat(kpiCount(seed, labelled)).isEqualTo(seed.traces("labelled", "labelled again").size());
-        assertThat(kpiCount(seed, other)).isEqualTo(seed.traces("retired topic", "other").size());
-        assertThat(kpiCount(seed, notArrived)).isEqualTo(list(seed.caller(), seed.projectId(), notArrived).total());
-        assertThat(kpiCount(seed, List.of())).isEqualTo(7);
-
-        opikConfig.getTopics().setEnabled(false);
-
-        assertThat(kpiCount(seed, labelled)).isZero();
-    }
-
-    @Test
-    @DisplayName("project metrics: a topic filter counts the traces the list keeps; with topics off, none")
-    void projectMetrics() {
-        var seed = seed();
-        var labelled = List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, seed.labelled().id().toString()));
-        var notArrived = List.of(filter(TraceField.TOPIC_ID, Operator.NOT_EQUAL,
-                seed.arrived().id().toString()));
-
-        assertThat(metricCount(seed, labelled)).isEqualTo(seed.traces("labelled", "labelled again").size());
-        assertThat(metricCount(seed, notArrived))
+        assertThat(count.apply(seed, labelled)).isEqualTo(seed.traces("labelled", "labelled again").size());
+        assertThat(count.apply(seed, other)).isEqualTo(seed.traces("retired topic", "other").size());
+        assertThat(count.apply(seed, notArrived))
                 .isEqualTo(list(seed.caller(), seed.projectId(), notArrived).total());
-        assertThat(metricCount(seed, List.of())).isEqualTo(7);
+        assertThat(count.apply(seed, List.of())).isEqualTo(7);
 
         opikConfig.getTopics().setEnabled(false);
 
-        assertThat(metricCount(seed, labelled)).isZero();
+        assertThat(count.apply(seed, labelled)).isZero();
     }
 
     @Test
