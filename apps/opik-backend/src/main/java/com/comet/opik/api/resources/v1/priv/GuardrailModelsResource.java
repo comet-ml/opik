@@ -216,9 +216,7 @@ public class GuardrailModelsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
         checkAccess();
 
-        // A model the workspace does not have is a 404, not an empty page.
-        modelService.get(id);
-        return Response.ok(trainingService.find(id, page, size)).build();
+        return Response.ok(modelService.findRuns(id, page, size)).build();
     }
 
     @GET

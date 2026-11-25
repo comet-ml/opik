@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.GuardrailModel;
 import com.comet.opik.api.GuardrailModel.GuardrailModelPage;
 import com.comet.opik.api.GuardrailTrainingRun;
+import com.comet.opik.api.GuardrailTrainingRun.GuardrailTrainingRunPage;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -53,6 +54,9 @@ public interface GuardrailModelService {
             GuardrailTrainingRunStatus latestRunStatus, List<SortingField> sortingFields);
 
     void updateDescription(UUID id, String description);
+
+    /** The model's runs, newest first. 404 for a model the workspace does not have, rather than an empty page. */
+    GuardrailTrainingRunPage findRuns(UUID id, int page, int size);
 
     /** A new training of the model, its run's id. 409 while a run of the model is in flight. */
     UUID retrain(UUID id);
@@ -151,6 +155,19 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     }
 
     @Override
+    public GuardrailTrainingRunPage findRuns(@NonNull UUID id, int page, int size) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        // One transaction, whose snapshot both reads see, so a model deleted in between is a 404, not an empty page.
+        return template.inTransaction(READ_ONLY, handle -> {
+            if (!handle.attach(GuardrailModelDAO.class).exists(id, workspaceId)) {
+                throw new NotFoundException(MODEL_NOT_FOUND);
+            }
+            return trainingService.find(id, page, size);
+        });
+    }
+
+    @Override
     public UUID retrain(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -176,7 +193,9 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Under the model row's lock, so no retrain starts a run between the runs' delete and the model's.
+        // Under the model row's lock, so no retrain starts a run between the runs' delete and the model's. Writing a
+        // policy rule that names a model, which policies do not accept yet, has to take it too: otherwise a rule
+        // committed between the check below and the model's delete names a deleted model.
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(GuardrailModelDAO.class);
             if (dao.lock(id, workspaceId).isEmpty()) {

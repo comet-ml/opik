@@ -48,6 +48,9 @@ public interface GuardrailModelDAO {
             """)
     Optional<GuardrailModel> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    @SqlQuery("SELECT EXISTS (SELECT 1 FROM guardrail_models WHERE id = :id AND workspace_id = :workspaceId)")
+    boolean exists(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
     // Holds the model row until the transaction ends, so writes that start or remove its runs run one at a time per
     // model. Plain reads do not wait for it.
     @SqlQuery("SELECT id FROM guardrail_models WHERE id = :id AND workspace_id = :workspaceId FOR UPDATE")
