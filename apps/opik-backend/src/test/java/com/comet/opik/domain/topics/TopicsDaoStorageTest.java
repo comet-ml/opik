@@ -1088,7 +1088,7 @@ class TopicsDaoStorageTest {
         });
 
         var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                .findNightDue(List.of(workspaceId), night));
+                .findNightDue(List.of(workspaceId), night, TopicsNight.windowTo(night)));
 
         assertThat(found).singleElement().isEqualTo(data.topicProject(due));
     }
@@ -1128,6 +1128,88 @@ class TopicsDaoStorageTest {
                 .isEqualTo(lookedBefore.toBuilder().lastNight(secondNight).notReachedNights(0).build());
         assertThat(data.topicProject(starved))
                 .isEqualTo(starvedBefore.toBuilder().lastNight(null).notReachedNights(2).build());
+    }
+
+    @Test
+    @DisplayName("the nightly pause counts from the last failed update: a labelling pass queued and claimed later "
+            + "neither ends it early nor moves it, and it ends pauseNights after that failure")
+    void pauseCountsFromTheLastFailure() {
+        int pauseFailures = 3;
+        int pauseNights = 7;
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        var failedAt = NIGHT.plus(Duration.ofDays(1));
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            for (int i = 0; i < pauseFailures; i++) {
+                var runId = newId();
+                dao.queue(workspaceId, projectId, runId, TopicProject.RunMode.UPDATE, failedAt);
+                dao.claim(workspaceId, projectId, runId, failedAt, failedAt.plus(Duration.ofHours(1)));
+                dao.markFailed(workspaceId, projectId, runId, failedAt, TopicProject.RunError.LLM_ERROR);
+            }
+            return null;
+        });
+        var failedDate = LocalDate.ofInstant(failedAt, ZoneOffset.UTC);
+        var labelsAt = failedAt.plus(Duration.ofDays(2));
+        var labelsRun = newId();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            assertThat(dao.queue(workspaceId, projectId, labelsRun, TopicProject.RunMode.LABELS, labelsAt))
+                    .isEqualTo(1);
+            assertThat(dao.claim(workspaceId, projectId, labelsRun, labelsAt, labelsAt.plus(Duration.ofHours(1))))
+                    .isEqualTo(1);
+            return null;
+        });
+        assertThat(paused(workspaceId, projectId, failedDate.plusDays(3), pauseFailures, pauseNights)).isTrue();
+
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .markFailed(workspaceId, projectId, labelsRun, labelsAt, TopicProject.RunError.LLM_ERROR));
+
+        assertThat(data.topicProject(projectId).lastFailedAt()).isEqualTo(failedAt);
+        assertThat(paused(workspaceId, projectId, failedDate.plusDays(pauseNights), pauseFailures, pauseNights))
+                .isTrue();
+        assertThat(paused(workspaceId, projectId, failedDate.plusDays(pauseNights + 1), pauseFailures, pauseNights))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("an update queued tonight that failed with no last_night written is not due again tonight nor not "
+            + "reached; the next night it is due")
+    void failedUpdateTonightWaitsForTheNextNight() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        var night = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC).plusDays(1);
+        var nightStart = TopicsNight.windowTo(night).plus(Duration.ofHours(2));
+        var runId = newId();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.queue(workspaceId, projectId, runId, TopicProject.RunMode.UPDATE, nightStart.plusSeconds(60));
+            dao.claim(workspaceId, projectId, runId, nightStart.plusSeconds(61), nightStart.plus(Duration.ofHours(1)));
+            dao.markFailed(workspaceId, projectId, runId, nightStart.plusSeconds(120), TopicProject.RunError.LLM_ERROR);
+            return null;
+        });
+        var next = night.plusDays(1);
+
+        var tonight = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findNightDue(List.of(workspaceId), night, nightStart));
+        var notReached = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findNotReached(List.of(workspaceId), night, nightStart));
+        var nextNight = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findNightDue(List.of(workspaceId), next, nightStart.plus(Duration.ofDays(1))));
+
+        assertThat(tonight).isEmpty();
+        assertThat(notReached).isEmpty();
+        assertThat(nextNight).singleElement().isEqualTo(data.topicProject(projectId));
+    }
+
+    /** Whether the night's triage pauses the project, as the night pass reads it. */
+    private boolean paused(String workspaceId, UUID projectId, LocalDate night, int pauseFailures, int pauseNights) {
+        var row = data.topicProject(projectId);
+        var nightOf = TopicsNight.builder().date(night).start(TopicsNight.windowTo(night)).build();
+        return NightTriage.triage(List.of(row), Set.of(new TopicProjectKey(workspaceId, projectId)), nightOf,
+                pauseFailures, pauseNights).skipped().containsKey(NightSkipReason.PAUSED);
     }
 
     @Test
@@ -1192,7 +1274,7 @@ class TopicsDaoStorageTest {
 
     private List<TopicProjectKey> notReached(String workspaceId, LocalDate night) {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                .findNotReached(List.of(workspaceId), night));
+                .findNotReached(List.of(workspaceId), night, TopicsNight.windowTo(night)));
     }
 
     private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {

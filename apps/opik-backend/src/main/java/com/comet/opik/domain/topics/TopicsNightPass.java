@@ -203,7 +203,7 @@ class TopicsNightPass implements Managed {
      */
     private NightRead due(TopicsNight night, Collection<String> workspaceIds) {
         var rows = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date()));
+                handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date(), night.start()));
         var existing = new HashSet<TopicProjectKey>();
         var failed = new HashMap<String, RuntimeException>();
         rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId,
@@ -273,7 +273,7 @@ class TopicsNightPass implements Managed {
         var endKey = new LockService.Lock("topics:nightly:end:" + night.date());
         return jdbi(() -> {
             var left = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                    .findNotReached(workspaceIds, night.date()));
+                    .findNotReached(workspaceIds, night.date(), night.start()));
             if (!left.isEmpty()) {
                 record(night, left, NightDecision.NOT_REACHED, null);
             }
@@ -281,7 +281,8 @@ class TopicsNightPass implements Managed {
         })
                 // Counted before the key: a failed count leaves the key free for the next plan.
                 .then(jdbi(() -> template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(TopicProjectDAO.class).countNight(workspaceIds, night.date()))))
+                        handle -> handle.attach(TopicProjectDAO.class).countNight(workspaceIds, night.date(),
+                                night.start()))))
                 // The key outlives every plan of the night: no later plan sees this night as current.
                 .filterWhen(counts -> Mono
                         .defer(() -> lockService.lockUsingToken(endKey, Duration.between(now, night.currentUntil())))

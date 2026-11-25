@@ -355,13 +355,13 @@ class TopicsNightlyIntegrationTest {
         return projectId;
     }
 
-    /** {@code runs} update runs of the project that failed, the last one now. */
+    /** {@code runs} update runs of the project that failed on the nights before, the last one yesterday. */
     private void failRuns(String workspaceId, UUID projectId, int runs) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             for (int i = 0; i < runs; i++) {
                 var runId = ID_GENERATOR.generateId();
-                var at = Instant.now();
+                var at = yesterdayStart().plusSeconds(i);
                 TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.UPDATE, at);
                 dao.markFailed(workspaceId, projectId, runId, at, TopicProject.RunError.LLM_ERROR);
             }

@@ -87,7 +87,7 @@ class TopicsNightPassTest {
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
 
         // As the query: a saved list, not looked at on the night, no run in flight.
-        when(projectDAO.findNightDue(anyCollection(), any())).thenAnswer(invocation -> rows.values().stream()
+        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenAnswer(invocation -> rows.values().stream()
                 .filter(row -> row.listRunId() != null)
                 .filter(row -> row.lastNight() == null || row.lastNight().isBefore(invocation.getArgument(1)))
                 .filter(row -> row.runStatus() == null || !row.runStatus().inFlight())
@@ -176,14 +176,14 @@ class TopicsNightPassTest {
     @DisplayName("a pass whose read fails is counted as a failed night and queues nothing; with no workspace at stage "
             + "nightly nothing is read")
     void failedReadAndNoNightlyWorkspace() {
-        when(projectDAO.findNightDue(anyCollection(), any())).thenThrow(new IllegalStateException("MySQL down"));
+        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenThrow(new IllegalStateException("MySQL down"));
 
         assertThat(plan(IN_BUDGET, 2)).isZero();
         assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
 
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of());
         assertThat(plan(IN_BUDGET, 2)).isZero();
-        verify(projectDAO).findNightDue(anyCollection(), any());
+        verify(projectDAO).findNightDue(anyCollection(), any(), any());
     }
 
     @Test
@@ -244,8 +244,8 @@ class TopicsNightPassTest {
             + "night once")
     void failedNightCountKeepsTheEndKey() {
         var afterBudget = START.plus(config.getNightly().getBudget().toJavaDuration()).plusSeconds(60);
-        when(projectDAO.findNotReached(anyCollection(), any())).thenReturn(List.of());
-        when(projectDAO.countNight(anyCollection(), any())).thenThrow(new IllegalStateException("MySQL down"))
+        when(projectDAO.findNotReached(anyCollection(), any(), any())).thenReturn(List.of());
+        when(projectDAO.countNight(anyCollection(), any(), any())).thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(new TopicProjectDAO.NightCounts(1, 0));
         when(lockService.lockUsingToken(any(), any())).thenReturn(Mono.just(true));
 
