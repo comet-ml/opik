@@ -349,7 +349,8 @@ public class AiLabelsTickService {
      * Polls every submitted job in groups of up to 1,000 per call, then loads the finished ones and the lost ones (left
      * out of the response) until {@code deadline} or {@code loadMaxRows}. Their rows are written as one insert per
      * table, and only then are the jobs marked loaded, so a crash in between means they load again. The check of the
-     * written rows for deleted traces starts no query after {@code tickEnd}.
+     * written rows for deleted traces starts no query after {@code tickEnd}, and caps each query's time limit at the
+     * time left.
      */
     void pollAndLoad(Instant deadline, Instant tickEnd) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());
@@ -402,14 +403,18 @@ public class AiLabelsTickService {
     }
 
     private record WrittenTrace(String workspaceId, UUID projectId, UUID traceId) {
+
+        WrittenProject project() {
+            return new WrittenProject(workspaceId, projectId);
+        }
     }
 
     private record WrittenProject(String workspaceId, UUID projectId) {
     }
 
     /**
-     * Writes the loaded jobs' rows and marks loaded the ones {@link #dropDeleted} checked, then publishes the jobs still
-     * open: {@code polled}, every job the poll found, less the ones marked.
+     * Writes the loaded jobs' rows and marks loaded the ones {@link #dropDeleted} checked, then publishes the jobs
+     * still open: {@code polled}, every job the poll found, less the ones marked.
      */
     private void write(List<AiLabelJob> polled, List<LoadedJob> loaded, Instant tickEnd) {
         if (loaded.isEmpty()) {
@@ -424,11 +429,11 @@ public class AiLabelsTickService {
                     exception);
             return;
         }
-        var checked = dropDeleted(loaded, tickEnd);
-        if (checked.isEmpty()) {
+        var checkedJobs = dropDeleted(loaded, tickEnd);
+        if (checkedJobs.isEmpty()) {
             return;
         }
-        var jobIds = checked.stream().map(result -> result.job().jobId()).toList();
+        var jobIds = checkedJobs.stream().map(result -> result.job().jobId()).toList();
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AiLabelJobDAO.class);
@@ -438,7 +443,7 @@ public class AiLabelsTickService {
         });
         var loadedIds = Set.copyOf(jobIds);
         lastJobs = JobsObservation.of(polled.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
-        for (var result : checked) {
+        for (var result : checkedJobs) {
             countOutcomes(result.job().endpoint(), result.statuses());
             inFlightBytes.addAndGet(-result.job().bytes());
             jobAge.record(Duration.between(result.job().submittedAt(), now).toMillis() / 1_000.0,
@@ -451,56 +456,78 @@ public class AiLabelsTickService {
      * ran too early to find. A trace's row goes before its cascade starts, so a cascade that missed these rows shows
      * here as a trace with no row. The trace's topic vectors go too, in the cascade's order: the vectors tick may have
      * embedded the done status in between, and its own check trusts that status. Returns the jobs whose rows were all
-     * checked. That is fewer than {@code loaded} when the check or a delete fails, or when {@code deadline} passes
+     * checked. That is fewer than {@code loaded} when the check or a delete fails, or when {@code tickEnd} passes
      * before the last check query starts, so the queries stay within the leader lease: the other jobs stay submitted,
      * and the next tick writes and checks them again.
      */
-    private List<LoadedJob> dropDeleted(List<LoadedJob> loaded, Instant deadline) {
-        var written = Stream.concat(
-                loaded.stream().flatMap(result -> result.labels().stream())
-                        .map(label -> new WrittenTrace(label.workspaceId(), label.projectId(), label.traceId())),
-                loaded.stream().flatMap(result -> result.statuses().stream())
-                        .map(status -> new WrittenTrace(status.workspaceId(), status.projectId(), status.traceId())))
-                .collect(Collectors.groupingBy(WrittenTrace::workspaceId, Collectors.groupingBy(
-                        WrittenTrace::projectId, Collectors.mapping(WrittenTrace::traceId, Collectors.toSet()))));
-        var checked = new HashSet<WrittenProject>();
+    private List<LoadedJob> dropDeleted(List<LoadedJob> loaded, Instant tickEnd) {
+        var traceIdsByProject = loaded.stream().flatMap(AiLabelsTickService::written)
+                .collect(Collectors.groupingBy(WrittenTrace::project,
+                        Collectors.mapping(WrittenTrace::traceId, Collectors.toSet())));
+        var checkedProjects = new HashSet<WrittenProject>();
         try {
-            written.forEach((workspaceId, projects) -> projects.forEach((projectId, traceIds) -> {
-                var gone = new HashSet<>(traceIds);
-                for (var batch : Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE)) {
-                    if (!Instant.now().isBefore(deadline)) {
-                        throw new IllegalStateException("the tick's budget ran out before the check finished");
-                    }
-                    gone.removeAll(labelsDAO.findLiveTraceIds(workspaceId, projectId, batch,
-                            config.getRenderMaxExecutionTime().toSeconds()).block());
+            for (var project : traceIdsByProject.entrySet()) {
+                if (!dropDeletedOf(project.getKey(), project.getValue(), tickEnd)) {
+                    var checkedJobs = checkedJobs(loaded, checkedProjects);
+                    log.info("ai-labels reached the tick's budget before the deleted-trace check finished; loading "
+                            + "the unchecked jobs again next tick, jobs '{}'", loaded.size() - checkedJobs.size());
+                    return checkedJobs;
                 }
-                if (!gone.isEmpty()) {
-                    labelsDAO.deleteByTraceIds(gone, projectId)
-                            .then(statusDAO.deleteByTraceIds(gone, projectId))
-                            .then(topicVectorsDAO.deleteByTraceIds(gone, projectId))
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                    .put(RequestContext.USER_NAME, DELETE_USER))
-                            .block();
-                    log.info("ai-labels dropped the rows of traces deleted while in flight, workspace '{}', project "
-                            + "'{}', traces '{}'", workspaceId, projectId, gone.size());
-                }
-                checked.add(new WrittenProject(workspaceId, projectId));
-            }));
+                checkedProjects.add(project.getKey());
+            }
         } catch (RuntimeException exception) {
-            var done = loaded.stream().filter(result -> checked.containsAll(projects(result))).toList();
+            var checkedJobs = checkedJobs(loaded, checkedProjects);
             log.error("ai-labels failed to check the loaded jobs for deleted traces; loading the unchecked ones again "
-                    + "next tick, jobs '{}'", loaded.size() - done.size(), exception);
-            return done;
+                    + "next tick, jobs '{}'", loaded.size() - checkedJobs.size(), exception);
+            return checkedJobs;
         }
         return loaded;
     }
 
-    private static Set<WrittenProject> projects(LoadedJob loaded) {
+    /**
+     * Checks one project's traces. False when {@code tickEnd} passes before its last check query starts. Each check
+     * query's time limit is the smaller of {@code renderMaxExecutionTime} and the time left until {@code tickEnd}.
+     */
+    private boolean dropDeletedOf(WrittenProject project, Set<UUID> traceIds, Instant tickEnd) {
+        var gone = new HashSet<>(traceIds);
+        for (var batch : Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE)) {
+            var timeLeft = Duration.between(Instant.now(), tickEnd);
+            if (!timeLeft.isPositive()) {
+                return false;
+            }
+            // ClickHouse takes whole seconds and reads 0 as no limit, so the time left is rounded up.
+            var maxExecutionSeconds = Math.min(config.getRenderMaxExecutionTime().toSeconds(),
+                    Math.max(1, Math.ceilDiv(timeLeft.toMillis(), 1_000)));
+            gone.removeAll(labelsDAO.findLiveTraceIds(project.workspaceId(), project.projectId(), batch,
+                    maxExecutionSeconds).block());
+        }
+        if (!gone.isEmpty()) {
+            labelsDAO.deleteByTraceIds(gone, project.projectId())
+                    .then(statusDAO.deleteByTraceIds(gone, project.projectId()))
+                    .then(topicVectorsDAO.deleteByTraceIds(gone, project.projectId()))
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, project.workspaceId())
+                            .put(RequestContext.USER_NAME, DELETE_USER))
+                    .block();
+            log.info("ai-labels dropped the rows of traces deleted while in flight, workspace '{}', project "
+                    + "'{}', traces '{}'", project.workspaceId(), project.projectId(), gone.size());
+        }
+        return true;
+    }
+
+    /** The traces a loaded job wrote rows for. */
+    private static Stream<WrittenTrace> written(LoadedJob loaded) {
         return Stream.concat(
-                loaded.labels().stream().map(label -> new WrittenProject(label.workspaceId(), label.projectId())),
+                loaded.labels().stream()
+                        .map(label -> new WrittenTrace(label.workspaceId(), label.projectId(), label.traceId())),
                 loaded.statuses().stream()
-                        .map(status -> new WrittenProject(status.workspaceId(), status.projectId())))
-                .collect(Collectors.toSet());
+                        .map(status -> new WrittenTrace(status.workspaceId(), status.projectId(), status.traceId())));
+    }
+
+    /** The jobs whose rows are all in {@code checkedProjects}. */
+    private static List<LoadedJob> checkedJobs(List<LoadedJob> loaded, Set<WrittenProject> checkedProjects) {
+        return loaded.stream()
+                .filter(job -> written(job).map(WrittenTrace::project).allMatch(checkedProjects::contains))
+                .toList();
     }
 
     /** Pages through a finished job's results and maps them; an item it never reports is retryable. */

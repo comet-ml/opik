@@ -57,8 +57,8 @@ public class AiLabelsDAO {
     /**
      * A trace's latest version, as the renderer reads it. The week bound is {@code TraceDAO}'s: an {@code id IN} list
      * alone opens every weekly partition. Sound only because a trace delete returns once every replica applied it (the
-     * server's {@code lightweight_deletes_sync} default): the cascade starts after that, so a check that reads the trace
-     * as live ran before the cascade, which then finds the rows.
+     * server's {@code lightweight_deletes_sync} default): the cascade starts after that, so a check that reads the
+     * trace as live ran before the cascade, which then finds the rows.
      */
     private static final String FIND_LIVE_TRACE_IDS = """
             SELECT id
