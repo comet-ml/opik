@@ -24,9 +24,8 @@ in-container Docker daemon needs it. With the default `process` strategy it runs
   is `docker`. If you set the strategy through `envFrom` or `secretRefs` instead, set
   `component.python-backend.securityContext.privileged: true`. The Python backend container also runs with the
   `RuntimeDefault` seccomp profile now; set `component.python-backend.securityContext.seccompProfile: null` to drop it.
-- **Docker Compose with the `docker` strategy:** set `PYTHON_BACKEND_PRIVILEGED=true` along with
-  `PYTHON_CODE_EXECUTOR_STRATEGY=docker`. Without it the Python backend exits at startup, logging that the Docker daemon
-  did not start and that it needs privileged mode.
+- **Docker Compose:** no change needed. `PYTHON_CODE_EXECUTOR_STRATEGY` also sets privileged mode, through the
+  `python-backend-<strategy>.yaml` file that the Python backend service extends.
 
 The Python backend also logs a warning at startup naming the strategy in use and its trade-off.
 

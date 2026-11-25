@@ -319,7 +319,9 @@ services:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
     hostname: python-backend
-    privileged: ${PYTHON_BACKEND_PRIVILEGED:-false} # Set true with PYTHON_CODE_EXECUTOR_STRATEGY=docker: its in-container Docker daemon needs it
+    extends: # privileged mode, which only the docker strategy needs, follows PYTHON_CODE_EXECUTOR_STRATEGY
+      file: python-backend-${PYTHON_CODE_EXECUTOR_STRATEGY:-process}.yaml
+      service: python-backend
     environment:
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317

@@ -21,7 +21,7 @@ if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
   done
 
   if [ $attempts -ge $MAX_ATTEMPTS ]; then
-    echo "Docker daemon did not start after $MAX_ATTEMPTS attempts. The docker strategy needs the python-backend container to run privileged: set PYTHON_BACKEND_PRIVILEGED=true with Docker Compose; the Helm chart sets it when component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY is docker"
+    echo "Docker daemon did not start after $MAX_ATTEMPTS attempts. The docker strategy needs the python-backend container to run privileged. Docker Compose and the Helm chart set it from PYTHON_CODE_EXECUTOR_STRATEGY; with Helm, set component.python-backend.securityContext.privileged=true if the strategy comes from envFrom or secretRefs"
     exit 1
   fi
 
