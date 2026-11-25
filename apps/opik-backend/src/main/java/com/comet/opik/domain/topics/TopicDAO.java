@@ -51,7 +51,7 @@ public interface TopicDAO {
             ORDER BY project_id, born, id
             """)
     List<Topic> findByProjects(@Bind("workspaceId") String workspaceId,
-            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     /**
      * The nightly update's save of a topic it kept. Only {@code low_nights}, {@code size} and {@code vectors} change:

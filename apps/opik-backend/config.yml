@@ -3006,9 +3006,13 @@ topics:
     enabled: ${TOPICS_ARRIVAL_ENABLED:-true}
     #  Default: 5s
     #  Description: The arrival steps of one workspace in one vectors tick (the saved lists read and the trace_topics
-    #  insert after each vectors insert) take this in total, and each ends before the tick's budget ends. A step that would start with less than 1s left is skipped (over_budget). Any
-    #  failure stops arrival for the rest of the tick
+    #  insert after each vectors insert) take this in total, and each ends before the tick's budget ends. Any failure
+    #  stops arrival for the rest of the tick
     timeout: ${TOPICS_ARRIVAL_TIMEOUT:-5s}
+    #  Default: 1s
+    #  Description: A step starts only with at least this much left of topics.arrival.timeout and of the tick's
+    #  budget; otherwise its traces count as over_budget. Must not be above topics.arrival.timeout
+    minStepTime: ${TOPICS_ARRIVAL_MIN_STEP_TIME:-1s}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each

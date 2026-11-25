@@ -1039,6 +1039,8 @@ These rows hold the old list's topic until the next run of the project.
   `trace_topics` row. It needs `topics.enabled`: without the vectors tick there is no arrival.
 - `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). The arrival steps of one
   workspace in one tick take this in total.
+- `TOPICS_ARRIVAL_MIN_STEP_TIME` (`topics.arrival.minStepTime`, default `1s`, not above the timeout). A step starts
+  only with at least this much left.
 
 ### Failures
 
@@ -1048,9 +1050,9 @@ These rows hold the old list's topic until the next run of the project.
 - A shutdown is not a failure. It cancels the tick, its arrival steps included.
 - The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
   before the tick's deadline.
-  A step that would start with less than 1s left does not start: its traces count as `over_budget`. A step that has
-  built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A read or
-  insert that runs out of time fails with `error_type = TimeoutException`.
+  A step that would start with less than `topics.arrival.minStepTime` left does not start: its traces count as
+  `over_budget`. A step that has built its rows inserts them with the time left; only when no time is left do they
+  count as `over_budget`. A read or insert that runs out of time fails with `error_type = TimeoutException`.
 
 ### What to watch
 

@@ -182,6 +182,21 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
         private Duration timeout;
+
+        /**
+         * A step starts only with at least this much left of {@code timeout} and of the tick's budget: one that starts
+         * with almost no time would time out and count as a failure when it only ran out of budget.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration minStepTime;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.arrival.minStepTime must not be above topics.arrival.timeout") public boolean isMinStepTimeValid() {
+            return minStepTime == null || timeout == null
+                    || minStepTime.toNanoseconds() <= timeout.toNanoseconds();
+        }
     }
 
     /** A topic list build's settings: a first build, a nightly update and their labelling pass. */

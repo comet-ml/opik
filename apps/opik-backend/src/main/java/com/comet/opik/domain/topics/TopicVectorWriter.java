@@ -66,7 +66,7 @@ class TopicVectorWriter {
                         return new ChunkWrite(skipped.plus(TickResult.written(vectors.size())), settled);
                     }))
                     // Only after the insert; arrival never fails, so the handler below sees only insert errors.
-                    .flatMap(result -> arrival.label(workspace.id(), vectors, budget.deadline()).thenReturn(result))
+                    .flatMap(result -> arrival.label(workspace, vectors, budget).thenReturn(result))
                     .onErrorResume(exception -> {
                         log.warn("Topic vectors insert failed, embedding them again next tick, workspace '{}', rows "
                                 + "'{}'", workspace.id(), vectors.size(), exception);
