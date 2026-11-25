@@ -433,6 +433,22 @@ describe("prettifyMessage", () => {
     });
   });
 
+  it("returns the last user message of an OpenTelemetry gen_ai.prompt input", () => {
+    const message = {
+      "gen_ai.prompt": [
+        { role: "system", content: "You are a bank assistant" },
+        { role: "user", content: "What is my balance?" },
+        { role: "assistant", content: "It is 100 EUR" },
+        { role: "user", content: "And my last payment?" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "And my last payment?",
+      prettified: true,
+    });
+  });
+
   it("handles OpenAI input with only system messages by falling back to generic logic", () => {
     const message = {
       messages: [

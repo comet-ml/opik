@@ -859,7 +859,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             // trace ID should be the override, not the mapped one
             assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
@@ -888,7 +888,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
             assertThat(opikSpan.parentSpanId()).isEqualTo(overrideParentSpanId);
@@ -905,7 +905,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             // should use the mapped trace ID (not overridden)
             assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
@@ -923,7 +923,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
             assertThat(opikSpan.parentSpanId()).isNull();
@@ -954,7 +954,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             // opik.trace_id and opik.parent_span_id should NOT appear in input, output, or metadata
             if (opikSpan.input() != null) {
@@ -1094,7 +1094,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             // trace ID should use normal mapping (no override)
             assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
@@ -1115,7 +1115,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
             // parent_span_id == trace_id must resolve to null so the span renders as top-level
@@ -1203,7 +1203,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             assertThat(opikSpan.id()).isEqualTo(overrideSpanId);
             assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
@@ -1238,7 +1238,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             assertThat(opikSpan.id()).isEqualTo(overrideSpanId);
             assertThat(opikSpan.traceId()).isEqualTo(overrideTraceId);
@@ -1284,8 +1284,8 @@ class OpenTelemetryMapperTest {
             var mappedTraceIdB = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceIdB,
                     System.currentTimeMillis());
 
-            var opikParent = OpenTelemetryMapper.toOpikSpan(parentSpan, mappedTraceIdA, null);
-            var opikChild = OpenTelemetryMapper.toOpikSpan(childSpan, mappedTraceIdB, null);
+            var opikParent = OpenTelemetryMapper.toOpikSpan(parentSpan, mappedTraceIdA, null, null);
+            var opikChild = OpenTelemetryMapper.toOpikSpan(childSpan, mappedTraceIdB, null, null);
 
             // Both spans land in the override trace, regardless of which OTEL trace they came from.
             assertThat(opikParent.traceId()).isEqualTo(overrideTraceId);
@@ -1310,7 +1310,7 @@ class OpenTelemetryMapperTest {
             var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
                     System.currentTimeMillis());
 
-            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null, null);
 
             if (opikSpan.input() != null) {
                 assertThat(opikSpan.input().has("opik.span_id")).isFalse();
@@ -1932,7 +1932,7 @@ class OpenTelemetryMapperTest {
         }
 
         private Span map(io.opentelemetry.proto.trace.v1.Span otelSpan) {
-            return OpenTelemetryMapper.toOpikSpan(otelSpan, uuidV7Generator.generate(), null);
+            return OpenTelemetryMapper.toOpikSpan(otelSpan, uuidV7Generator.generate(), null, null);
         }
 
         @Test
@@ -2015,7 +2015,7 @@ class OpenTelemetryMapperTest {
                     .traceId(UUID.randomUUID())
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName, null);
             return spanBuilder.build();
         }
 

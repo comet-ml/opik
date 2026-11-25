@@ -38,6 +38,9 @@ public class OpenTelemetryMappingRuleFactory {
      */
     private static final String CLAUDE_CODE_SPAN_PREFIX = "claude_code.";
 
+    /** Instrumentation scope name of every span that agentgateway exports. */
+    private static final String AGENTGATEWAY_INSTRUMENTATION = "agentgateway";
+
     private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),
             GenAIMappingRules.getRules(),
@@ -97,6 +100,10 @@ public class OpenTelemetryMappingRuleFactory {
      */
     public static boolean isClaudeCodeSpan(String spanName) {
         return spanName != null && spanName.startsWith(CLAUDE_CODE_SPAN_PREFIX);
+    }
+
+    public static boolean isAgentgatewayScope(String scopeName) {
+        return AGENTGATEWAY_INSTRUMENTATION.equals(scopeName);
     }
 
     /**
