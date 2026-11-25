@@ -220,7 +220,7 @@ describe("CostCenterTab", () => {
       openRow("acme-llama-70b");
 
       expect(priceInput("Input")).toHaveAttribute("readonly");
-      expect(screen.queryByRole("button", { name: "Own price" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: "Own price" })).toBeNull();
       expect(screen.queryByText(/Cached tokens are billed/)).toBeNull();
     });
 

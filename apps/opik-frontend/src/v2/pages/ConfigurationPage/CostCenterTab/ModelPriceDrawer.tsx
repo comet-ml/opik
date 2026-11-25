@@ -21,6 +21,8 @@ import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Tag } from "@/ui/tag";
 import { Textarea } from "@/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { Alert, AlertDescription } from "@/ui/alert";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -534,21 +536,24 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
           )}
 
           {canEdit && (isNew || isOrganizationOnly) && (
-            <div className="flex gap-1 rounded-md border p-1" role="group">
-              {(["fixed", "alias"] as const).map((option) => (
-                <Button
-                  key={option}
-                  size="xs"
-                  variant={kind === option ? "secondary" : "ghost"}
-                  onClick={() => {
-                    resetFeedback();
-                    setKind(option);
-                  }}
-                >
-                  {option === "fixed" ? "Own price" : "Same as another model"}
-                </Button>
-              ))}
-            </div>
+            <ToggleGroup
+              type="single"
+              value={kind}
+              onValueChange={(value) => {
+                if (!value) return;
+                resetFeedback();
+                setKind(value as ModelPriceRow["kind"]);
+              }}
+              variant="secondary"
+              className="w-fit"
+            >
+              <ToggleGroupItem value="fixed" size="xs">
+                Own price
+              </ToggleGroupItem>
+              <ToggleGroupItem value="alias" size="xs">
+                Same as another model
+              </ToggleGroupItem>
+            </ToggleGroup>
           )}
 
           {kind === "alias" ? (
@@ -762,11 +767,15 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
           )}
 
           {generalProblems.length > 0 && (
-            <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-              {generalProblems.map((problem, i) => (
-                <li key={i}>{problem.message}</li>
-              ))}
-            </ul>
+            <Alert variant="destructive" size="sm">
+              <AlertDescription size="sm">
+                <ul className="space-y-1">
+                  {generalProblems.map((problem, i) => (
+                    <li key={i}>{problem.message}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           {warnings.length > 0 && (
@@ -786,11 +795,13 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
 
         <div className="space-y-3 border-t px-6 py-4">
           {canEdit && (
-            <div className="comet-body-xs flex items-center gap-2 rounded-md bg-[var(--tag-blue-bg)] px-3 py-2 text-[var(--tag-blue-text)]">
-              <Info className="size-3.5 shrink-0" />
-              New prices apply to new spans only. Existing spans keep their
-              estimated cost.
-            </div>
+            <Alert variant="callout" size="sm">
+              <Info />
+              <AlertDescription size="sm">
+                New prices apply to new spans only. Existing spans keep their
+                estimated cost.
+              </AlertDescription>
+            </Alert>
           )}
           <div className="flex items-center gap-2">
             {canEdit ? (

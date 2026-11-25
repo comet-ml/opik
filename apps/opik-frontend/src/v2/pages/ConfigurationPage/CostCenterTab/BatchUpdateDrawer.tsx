@@ -1,14 +1,6 @@
 import React, { useEffect, useState } from "react";
 import copy from "clipboard-copy";
-import {
-  Check,
-  ChevronRight,
-  Copy,
-  FileJson,
-  Sparkles,
-  Upload,
-  X,
-} from "lucide-react";
+import { Check, ChevronRight, Copy, FileJson, Sparkles, X } from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -21,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import UploadField from "@/shared/UploadField/UploadField";
+import { Alert, AlertDescription } from "@/ui/alert";
 import {
   BuiltInPrice,
   ModelPriceList,
@@ -156,7 +150,6 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview>();
-  const [isDragging, setIsDragging] = useState(false);
   const [isFormatOpen, setIsFormatOpen] = useState(false);
   const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
@@ -284,40 +277,14 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
               </TabsTrigger>
             </TabsList>
             <TabsContent value="json" className="mt-4 space-y-3">
-              <label
-                className={cn(
-                  "flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-center outline-none focus-within:ring-1 focus-within:ring-ring hover:bg-muted/50",
-                  isDragging && "border-primary bg-primary-100",
-                )}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setIsDragging(false);
-                  onFile(event.dataTransfer.files[0]);
-                }}
-                data-testid="batch-dropzone"
-              >
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  className="sr-only"
-                  onChange={(event) => {
-                    onFile(event.target.files?.[0]);
-                    event.target.value = "";
-                  }}
-                />
-                <Upload className="mb-1 size-4 text-muted-slate" />
-                <span className="comet-body-s-accented">
-                  Drop a .json file or click to choose
-                </span>
-                <span className="comet-body-xs text-muted-slate">
-                  The file is read once in your browser and not stored.
-                </span>
-              </label>
+              <UploadField
+                onFileSelect={onFile}
+                accept=".json,application/json"
+                description="Drop a .json file or"
+              />
+              <p className="comet-body-xs text-muted-slate">
+                The file is read once in your browser and not stored.
+              </p>
               <div className="comet-body-xs flex items-center gap-3 text-muted-slate">
                 <span className="h-px flex-1 bg-border" />
                 or paste
@@ -373,18 +340,26 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 </p>
               )}
               {parseErrors.length > 0 && (
-                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-                  {parseErrors.map((error, i) => (
-                    <li key={i}>{error}</li>
-                  ))}
-                </ul>
+                <Alert variant="destructive" size="sm">
+                  <AlertDescription size="sm">
+                    <ul className="space-y-1">
+                      {parseErrors.map((error, i) => (
+                        <li key={i}>{error}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
               )}
               {serverErrors.length > 0 && (
-                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-                  {serverErrors.map((error, i) => (
-                    <li key={i}>{error}</li>
-                  ))}
-                </ul>
+                <Alert variant="destructive" size="sm">
+                  <AlertDescription size="sm">
+                    <ul className="space-y-1">
+                      {serverErrors.map((error, i) => (
+                        <li key={i}>{error}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
               )}
               {described && preview && (
                 <div
