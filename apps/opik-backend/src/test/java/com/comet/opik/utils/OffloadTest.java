@@ -7,6 +7,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OffloadTest {
@@ -82,6 +84,31 @@ class OffloadTest {
 
             assertThat(resumed.isVirtual()).isTrue();
             assertThat(resumed.getName()).startsWith("request-vt-");
+        } finally {
+            client.dispose();
+        }
+    }
+
+    @Test
+    void blockingRunsTheCallAndBlockingEachRunsEveryItemOnBoundedElastic() {
+        var client = Schedulers.newSingle("offload-test-client");
+        try {
+            var callThread = Mono.just(1).publishOn(client)
+                    .flatMap(__ -> Offload.blocking(() -> Thread.currentThread().getName()))
+                    .block();
+            var runnableThread = new AtomicReference<String>();
+            Mono.just(1).publishOn(client)
+                    .flatMap(__ -> Offload.blocking(() -> runnableThread.set(Thread.currentThread().getName())))
+                    .block();
+            var itemThreads = Offload.blockingEach(Flux.just(1, 2, 3).publishOn(client))
+                    .map(__ -> Thread.currentThread().getName().replaceAll("-\\d+$", ""))
+                    .distinct()
+                    .collectList()
+                    .block();
+
+            assertThat(callThread).startsWith("boundedElastic-");
+            assertThat(runnableThread.get()).startsWith("boundedElastic-");
+            assertThat(itemThreads).containsExactly("boundedElastic");
         } finally {
             client.dispose();
         }
