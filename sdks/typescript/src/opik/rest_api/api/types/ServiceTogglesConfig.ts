@@ -7,11 +7,13 @@ export interface ServiceTogglesConfig {
     spanUserDefinedMetricPythonEnabled: boolean;
     guardrailsEnabled: boolean;
     guardrailsValidationsEnabled: boolean;
+    guardrailsTrainingEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
     exportEnabled: boolean;
     costIntelligenceEnabled: boolean;
+    modelPricesEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;
     demoDataEnabled: boolean;
@@ -31,4 +33,5 @@ export interface ServiceTogglesConfig {
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
     customChartsEnabledForWorkspace?: boolean;
+    topicsEnabled?: boolean;
 }

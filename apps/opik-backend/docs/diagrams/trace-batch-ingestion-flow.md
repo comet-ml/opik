@@ -177,22 +177,26 @@ graph TB
 ### **Architectural Layers:**
 
 #### **1. Request Handling Layer**
+
 - **TracesResource.createTraces()**: REST endpoint for batch trace creation
 - **Validation**: Batch size (1-1000 traces), trace data validation
 - **Rate Limiting**: Applied at resource level with workspace and user limits
 
 #### **2. Service Layer**
+
 - **TraceService.create(TraceBatch)**: Main orchestration service
 - **Deduplication**: Removes duplicate traces based on ID and lastUpdatedAt
 - **Project Resolution**: Groups traces by project and ensures projects exist
 - **Data Binding**: Associates traces with their respective project IDs
 
 #### **3. Database Operations**
+
 - **TransactionTemplateAsync.nonTransaction()**: Non-blocking database operations
 - **TraceDAO.batchInsert()**: Optimized batch insert for ClickHouse
 - **ClickHouse**: Time-series database optimized for high-volume data
 
 #### **4. Event-Driven Architecture**
+
 - **TracesCreated Event**: Posted after successful database insertion
 - **EventBus**: Google EventBus for event distribution
 - **Multiple Listeners**: Process different aspects of trace creation
@@ -200,21 +204,25 @@ graph TB
 #### **5. Event Handlers**
 
 ##### **TraceThreadListener**
+
 - Manages conversation threads and thread status
 - Groups traces by project and thread ID
 - Updates thread metadata and status
 
 ##### **OnlineScoringSampler**
+
 - Samples traces for automated scoring
 - Enqueues samples to Redis Stream for processing
 - Supports automation rule evaluation
 
 ##### **ProjectEventListener**
+
 - Updates project metadata
 - Records last updated trace timestamps
 - Maintains project statistics
 
 ##### **BiEventListener**
+
 - Handles business intelligence reporting
 - Tracks first trace creation events
 - Reports usage analytics
@@ -222,17 +230,20 @@ graph TB
 ## Key Features
 
 ### **Performance Optimizations**
+
 - **Batch Processing**: Single SQL statement for multiple traces
 - **Non-blocking I/O**: Reactive programming with Project Reactor
 - **Deduplication**: Prevents duplicate data insertion
 - **Connection Pooling**: Efficient database connection management
 
 ### **Error Handling**
+
 - **Retry Logic**: Automatic retry for transient failures
 - **Error Logging**: Comprehensive error tracking
 - **Graceful Degradation**: Continues processing on partial failures
 
 ### **Observability**
+
 - **OpenTelemetry Spans**: Distributed tracing throughout the flow
 - **Structured Logging**: Consistent log format with context
 - **Metrics**: Performance and error rate monitoring

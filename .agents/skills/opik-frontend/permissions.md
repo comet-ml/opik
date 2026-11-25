@@ -30,6 +30,7 @@ Every new or modified component in `apps/opik-frontend/src/` that performs a gua
 When applying a permission, use the pattern appropriate to the context:
 
 **Page-level access control** — wrap entire pages with a guard component:
+
 ```tsx
 const { permissions: { canViewDashboards } } = usePermissions();
 
@@ -39,6 +40,7 @@ return (
 ```
 
 **Conditional rendering of actions** — hide buttons or menu items:
+
 ```tsx
 const { permissions: { canCreateDatasets } } = usePermissions();
 
@@ -52,6 +54,7 @@ return (
 ```
 
 **Disabling queries** — prevent unnecessary API calls:
+
 ```tsx
 const { permissions: { canViewDatasets } } = usePermissions();
 
@@ -61,6 +64,7 @@ const { data } = useDatasetsList(params, {
 ```
 
 **Read-only component states** — render immutable versions instead of hiding:
+
 ```tsx
 const { permissions: { canTagTrace } } = usePermissions();
 
@@ -87,4 +91,4 @@ Not all UI actions have permission guards yet. This is expected. Do not add guar
 - Permission provider (Comet plugin): `apps/opik-frontend/src/plugins/comet/PermissionsProvider.tsx`
 - Permission computation hook: `apps/opik-frontend/src/plugins/comet/useUserPermission.ts`
 - Backend permission names enum: `apps/opik-frontend/src/plugins/comet/types.ts` (`ManagementPermissionsNames`)
-- Full permissions spec: https://www.notion.so/cometml/Workspace-permissions-and-user-roles-management-2b77124010a380f8b526e7ecb235c419
+- Full permissions spec: <https://www.notion.so/cometml/Workspace-permissions-and-user-roles-management-2b77124010a380f8b526e7ecb235c419>

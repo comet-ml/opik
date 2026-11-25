@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import numbers
 from typing import Any, Callable, Optional, Sequence, Union
 
@@ -15,6 +16,30 @@ except ImportError:  # pragma: no cover - optional dependency
     nltk_chrf_score = None
 
 ChrFFn = Callable[[Sequence[str], Sequence[str]], float]
+
+
+def _text_length(text: Sequence[str], ignore_whitespace: bool) -> int:
+    # Counted the way NLTK counts: without whitespace when it is ignored.
+    if ignore_whitespace:
+        return sum(1 for char in text if not char.isspace())
+    return len(text)
+
+
+def _effective_char_order(
+    candidate: Sequence[str],
+    reference: Sequence[str],
+    char_order: int,
+    ignore_whitespace: bool,
+) -> int:
+    # NLTK averages the f-score over every order up to ``max_len``, and an order
+    # longer than the text has no n-grams and scores 0, which drags even identical
+    # short strings below 1.0. Like sacrebleu's effective order, only average over
+    # orders both sides can produce.
+    shortest = min(
+        _text_length(candidate, ignore_whitespace),
+        _text_length(reference, ignore_whitespace),
+    )
+    return max(1, min(char_order, shortest))
 
 
 class ChrF(BaseMetric):
@@ -48,15 +73,15 @@ class ChrF(BaseMetric):
         chrf_fn: Optional custom scoring callable for testing or offline usage.
 
     Raises:
-        ValueError: If ``beta`` is not a number, or if ``char_order`` is not an
+        ValueError: If ``beta`` is not a finite number, or if ``char_order`` is not an
             integer of at least 1. Two caller-visible details:
 
             - ``bool`` is rejected for both, even though Python treats it as an
               integer -- ``beta=True`` would otherwise score as ``beta=1``.
-            - a numeric ``beta`` is accepted whatever its sign, and the sign is
+            - a finite ``beta`` is accepted whatever its sign, and the sign is
               ignored: chrF combines precision and recall through ``beta ** 2``,
               so ``beta=-2`` scores identically to ``beta=2`` and ``beta=0``
-              scores on precision alone. Only ``char_order`` is range-checked.
+              scores on precision alone.
 
     Example:
         >>> from opik.evaluation.metrics import ChrF
@@ -96,6 +121,9 @@ class ChrF(BaseMetric):
         if not isinstance(beta, (int, float, numbers.Real)) or isinstance(beta, bool):
             raise ValueError(f"beta must be a number, got {type(beta).__name__}.")
 
+        if not math.isfinite(beta):
+            raise ValueError(f"beta must be finite, got {beta}.")
+
         if not isinstance(char_order, (int, numbers.Integral)) or isinstance(
             char_order, bool
         ):
@@ -132,7 +160,12 @@ class ChrF(BaseMetric):
                         nltk_chrf_score.sentence_chrf(
                             reference,
                             candidate,
-                            max_len=self._char_order,
+                            max_len=_effective_char_order(
+                                candidate,
+                                reference,
+                                char_order=self._char_order,
+                                ignore_whitespace=self._ignore_whitespace,
+                            ),
                             beta=self._beta,
                             ignore_whitespace=self._ignore_whitespace,
                         )

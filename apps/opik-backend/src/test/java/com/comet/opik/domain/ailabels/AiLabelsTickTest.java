@@ -182,8 +182,8 @@ class AiLabelsTickTest {
                         new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
                         new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
                         new CustomConfig("aiLabels.enabled", "true"),
-                        new CustomConfig("aiLabels.inference.url", wireMock.server().baseUrl()),
-                        new CustomConfig("aiLabels.inference.credential", "test-credential"),
+                        new CustomConfig("inference.url", wireMock.server().baseUrl()),
+                        new CustomConfig("inference.credential", "test-credential"),
                         new CustomConfig("aiLabels.tasksDir", writeTasks(Map.of(DECIDE_TASK, DECIDE_YAML)).toString()),
                         new CustomConfig("aiLabels.tickInterval", "1h"),
                         new CustomConfig("aiLabels.tickBudget", "30s"),
@@ -253,7 +253,7 @@ class AiLabelsTickTest {
         this.defaultMinItemBytes = config().getMinItemBytes();
         this.defaultPerCallBytes = config().getPerCallBytes();
         this.defaultTickBudget = config().getTickBudget();
-        this.defaultReadTimeout = config().getInference().getReadTimeout();
+        this.defaultReadTimeout = opikConfig.getInference().getReadTimeout();
 
         // The job fires once at startup: wait for that tick to release the leader lock, so it can't race the tests.
         lockService.bestEffortLock(new LockService.Lock("ai_labels:leader"), Mono.just(true), Mono.empty(),
@@ -292,7 +292,7 @@ class AiLabelsTickTest {
         config().setPerCallBytes(defaultPerCallBytes);
         config().setMaxJobBytes(defaultMaxJobBytes);
         config().setTickBudget(defaultTickBudget);
-        config().getInference().setReadTimeout(defaultReadTimeout);
+        opikConfig.getInference().setReadTimeout(defaultReadTimeout);
         config().getSweep().setBuckets(1);
     }
 
@@ -370,7 +370,7 @@ class AiLabelsTickTest {
         assertThat(inFlight(workspaceId)).hasSize(6).allSatisfy(item -> {
             assertThat(item.jobId()).isEqualTo(jobIdByTask.get(item.task()));
             assertThat(item.attempt()).isOne();
-            assertThat(item.taskVersion()).isOne();
+            assertThat(item.taskVersion()).isEqualTo(registry.get(item.task()).version());
             assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
         });
 
@@ -579,7 +579,8 @@ class AiLabelsTickTest {
         var now = new AtomicReference<>(Instant.now());
         var clock = mock(Clock.class);
         when(clock.instant()).thenAnswer(invocation -> now.get());
-        var service = new AiLabelsTickService(config(), template, client, lockService, sweepService, registry,
+        var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
+                sweepService, registry,
                 renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, clock);
 
         tick(service);
@@ -812,7 +813,7 @@ class AiLabelsTickTest {
         @DisplayName("a hung submit is cut at the tick's deadline, so the tick never outlives the leader lease")
         void hungSubmitEndsTheTickOnTime() {
             config().setTickBudget(io.dropwizard.util.Duration.seconds(3));
-            config().getInference().setReadTimeout(io.dropwizard.util.Duration.seconds(2));
+            opikConfig.getInference().setReadTimeout(io.dropwizard.util.Duration.seconds(2));
             var workspaceId = enabledWorkspace();
             trace(workspaceId, UUID.randomUUID(), 0);
             List.of(DECIDE_PATH, GENERATE_PATH).forEach(path -> wireMock.server().stubFor(post(urlEqualTo(path))
@@ -854,7 +855,8 @@ class AiLabelsTickTest {
                     }
                 }));
             }).when(slowRenderer).render(anyString(), anyList(), anyCollection());
-            var service = new AiLabelsTickService(config(), template, client, lockService, sweepService, registry,
+            var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
+                    sweepService, registry,
                     slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO);
 
             tick(service);
@@ -1108,7 +1110,8 @@ class AiLabelsTickTest {
 
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
             AiLabelTaskRegistry registry, AiLabelSweepService sweepService) {
-        return new AiLabelsTickService(config(), template, client, lockService, sweepService, registry, renderer,
+        return new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService, sweepService,
+                registry, renderer,
                 itemBuilder, resultMapper, statusDAO, labelsDAO);
     }
 

@@ -1,0 +1,90 @@
+{
+  "name": "opik-genui",
+  "version": "2.3.3",
+  "description": "Opik generative UI engine: the sandboxed iframe host and HTML contract for model-written views",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comet-ml/opik.git",
+    "directory": "sdks/genui/js"
+  },
+  "homepage": "https://github.com/comet-ml/opik/tree/main/sdks/genui",
+  "author": {
+    "name": "Comet",
+    "email": "support@comet.com",
+    "url": "https://github.com/comet-ml"
+  },
+  "bugs": {
+    "url": "https://github.com/comet-ml/opik/issues",
+    "email": "support@comet.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "opik",
+    "comet",
+    "generative-ui",
+    "mcp-apps",
+    "iframe",
+    "sandbox"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./ViewHost": {
+      "types": "./dist/types/ViewHost.d.ts",
+      "default": "./dist/ViewHost.js"
+    },
+    "./HtmlFrame": {
+      "types": "./dist/types/HtmlFrame.d.ts",
+      "default": "./dist/HtmlFrame.js"
+    },
+    "./contract": {
+      "types": "./dist/types/contract.d.ts",
+      "default": "./dist/contract.js"
+    },
+    "./tokens": {
+      "types": "./dist/types/tokens.d.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./view": {
+      "types": "./dist/types/view.d.ts",
+      "default": "./dist/view.js"
+    },
+    "./libraries/vega.js": "./dist/libraries/vega.js",
+    "./styles.css": "./dist/styles.css",
+    "./libraries/vega.licenses.txt": "./dist/libraries/vega.licenses.txt"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json && cp src/styles.css dist/styles.css && npm run licenses && npm run emit",
+    "emit": "tsx scripts/emit.ts",
+    "licenses": "tsx scripts/licenses.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "2.1.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsup": "9.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^7.0.2",
+    "vega": "^6.4.0",
+    "vega-embed": "^7.3.0",
+    "vega-interpreter": "^2.3.2",
+    "vega-lite": "^6.5.0"
+  }
+}

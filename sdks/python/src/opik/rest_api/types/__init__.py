@@ -81,6 +81,8 @@ from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
+from .attempt import Attempt
+from .attempt_status import AttemptStatus
 from .audio_url import AudioUrl
 from .audio_url_public import AudioUrlPublic
 from .audio_url_write import AudioUrlWrite
@@ -310,6 +312,7 @@ from .dataset_version_public import DatasetVersionPublic
 from .dataset_version_summary import DatasetVersionSummary
 from .dataset_version_summary_public import DatasetVersionSummaryPublic
 from .dataset_visibility import DatasetVisibility
+from .day_count import DayCount
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
@@ -439,6 +442,8 @@ from .group_detail import GroupDetail
 from .group_details import GroupDetails
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
+from .guardrail_model import GuardrailModel
+from .guardrail_model_page import GuardrailModelPage
 from .guardrail_name import GuardrailName
 from .guardrail_policy import GuardrailPolicy
 from .guardrail_policy_execution_scope import GuardrailPolicyExecutionScope
@@ -454,6 +459,9 @@ from .guardrail_policy_rule_write_type import GuardrailPolicyRuleWriteType
 from .guardrail_policy_write import GuardrailPolicyWrite
 from .guardrail_policy_write_execution_scope import GuardrailPolicyWriteExecutionScope
 from .guardrail_result import GuardrailResult
+from .guardrail_training_run import GuardrailTrainingRun
+from .guardrail_training_run_page import GuardrailTrainingRunPage
+from .guardrail_training_run_status import GuardrailTrainingRunStatus
 from .guardrail_write import GuardrailWrite
 from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
@@ -552,6 +560,7 @@ from .optimization_studio_config_write import OptimizationStudioConfigWrite
 from .optimization_studio_log import OptimizationStudioLog
 from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
+from .other_stats import OtherStats
 from .page_columns import PageColumns
 from .param import Param
 from .param_presence import ParamPresence
@@ -580,6 +589,8 @@ from .project_stat_item_object_public import (
 from .project_stats_public import ProjectStatsPublic
 from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
+from .project_topics import ProjectTopics
+from .project_topics_status import ProjectTopicsStatus
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_cache_options import PromptCacheOptions
@@ -706,6 +717,7 @@ from .tool_call_type import ToolCallType
 from .tool_type import ToolType
 from .tools_param import ToolsParam
 from .tools_param_chat_completions import ToolsParamChatCompletions
+from .topic_stats import TopicStats
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
@@ -767,6 +779,16 @@ from .value_entry_source import ValueEntrySource
 from .video_url import VideoUrl
 from .video_url_public import VideoUrlPublic
 from .video_url_write import VideoUrlWrite
+from .view import View
+from .view_area import ViewArea
+from .view_input import ViewInput
+from .view_input_kind import ViewInputKind
+from .view_version import ViewVersion
+from .view_version_author import ViewVersionAuthor
+from .view_version_page import ViewVersionPage
+from .view_version_summary import ViewVersionSummary
+from .view_version_summary_author import ViewVersionSummaryAuthor
+from .view_version_type import ViewVersionType
 from .webhook import Webhook
 from .webhook_examples import WebhookExamples
 from .webhook_public import WebhookPublic
@@ -867,6 +889,8 @@ __all__ = [
     "AssistantMessageRole",
     "Attachment",
     "AttachmentPage",
+    "Attempt",
+    "AttemptStatus",
     "AudioUrl",
     "AudioUrlPublic",
     "AudioUrlWrite",
@@ -1058,6 +1082,7 @@ __all__ = [
     "DatasetVersionSummary",
     "DatasetVersionSummaryPublic",
     "DatasetVisibility",
+    "DayCount",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
@@ -1180,6 +1205,8 @@ __all__ = [
     "GroupDetails",
     "Guardrail",
     "GuardrailBatch",
+    "GuardrailModel",
+    "GuardrailModelPage",
     "GuardrailName",
     "GuardrailPolicy",
     "GuardrailPolicyExecutionScope",
@@ -1195,6 +1222,9 @@ __all__ = [
     "GuardrailPolicyWrite",
     "GuardrailPolicyWriteExecutionScope",
     "GuardrailResult",
+    "GuardrailTrainingRun",
+    "GuardrailTrainingRunPage",
+    "GuardrailTrainingRunStatus",
     "GuardrailWrite",
     "GuardrailWriteName",
     "GuardrailWriteResult",
@@ -1293,6 +1323,7 @@ __all__ = [
     "OptimizationStudioLog",
     "OptimizationWrite",
     "OptimizationWriteStatus",
+    "OtherStats",
     "PageColumns",
     "Param",
     "ParamPresence",
@@ -1319,6 +1350,8 @@ __all__ = [
     "ProjectStatsPublic",
     "ProjectStatsSummary",
     "ProjectStatsSummaryItem",
+    "ProjectTopics",
+    "ProjectTopicsStatus",
     "ProjectVisibility",
     "Prompt",
     "PromptCacheOptions",
@@ -1445,6 +1478,7 @@ __all__ = [
     "ToolType",
     "ToolsParam",
     "ToolsParamChatCompletions",
+    "TopicStats",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
@@ -1506,6 +1540,16 @@ __all__ = [
     "VideoUrl",
     "VideoUrlPublic",
     "VideoUrlWrite",
+    "View",
+    "ViewArea",
+    "ViewInput",
+    "ViewInputKind",
+    "ViewVersion",
+    "ViewVersionAuthor",
+    "ViewVersionPage",
+    "ViewVersionSummary",
+    "ViewVersionSummaryAuthor",
+    "ViewVersionType",
     "Webhook",
     "WebhookExamples",
     "WebhookPublic",

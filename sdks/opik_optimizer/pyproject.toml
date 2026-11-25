@@ -1,5 +1,5 @@
 [project]
-name = "opik_optimizer"
+name = "opik-optimizer"
 version = "3.2.0"
 description = "Open-source automatic agent and prompt optimization toolkit with Opik"
 authors = [
@@ -109,7 +109,7 @@ ignore_missing_imports = false
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-mypy_path = ["typings", "src"]
+mypy_path = ["$MYPY_CONFIG_FILE_DIR/typings", "$MYPY_CONFIG_FILE_DIR/src"]
 exclude = "(^|.*/)scripts/benchmarks/"
 
 [[tool.mypy.overrides]]

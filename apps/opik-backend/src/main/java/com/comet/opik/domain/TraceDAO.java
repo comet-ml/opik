@@ -450,9 +450,6 @@ class TraceDAOImpl implements TraceDAO {
             FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
-    /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
-    private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
-
     /**
      * Reads the latest row per id rather than matching on any row. An out-of-order create leaves an earlier row
      * holding 'unknown' until the real source arrives (see the merge in the batch insert), and matching on any
@@ -3801,9 +3798,7 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        StreamedPayload.bind(statement,
-                TruncationUtils.toJsonString(trace.input()),
-                TruncationUtils.toJsonString(trace.output()),
+        StreamedPayload.bind(statement, streamPayloads(), trace.input(), trace.output(),
                 TruncationUtils.toJsonString(trace.metadata()));
 
         bindEpochSentinel(statement, "end_time", trace.endTime());
@@ -4950,7 +4945,7 @@ class TraceDAOImpl implements TraceDAO {
                     traces,
                     trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
                             traceColumnsNonNullable(),
-                            configuration.getResponseFormatting().getTruncationSize()));
+                            configuration.getResponseFormatting().getTruncationSize(), streamPayloads()));
         });
     }
 
@@ -5492,7 +5487,7 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(UUID[]::new))
                     .bind("ids", traceIds.toArray(UUID[]::new))
-                    .bind("sources", LOGGING_SOURCES);
+                    .bind("sources", Source.loggingSourceDbValues());
 
             idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
@@ -5720,11 +5715,13 @@ class TraceDAOImpl implements TraceDAO {
         return template;
     }
 
-    private static void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
-        StreamedPayload.bind(statement,
-                Objects.toString(traceUpdate.input(), null),
-                Objects.toString(traceUpdate.output(), null),
+    private void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
+        StreamedPayload.bind(statement, streamPayloads(), traceUpdate.input(), traceUpdate.output(),
                 Objects.toString(traceUpdate.metadata(), null));
+    }
+
+    private boolean streamPayloads() {
+        return configuration.getDatabaseAnalytics().isStreamPayloads();
     }
 
     private void bindBulkUpdateParams(TraceUpdate traceUpdate, Statement statement) {

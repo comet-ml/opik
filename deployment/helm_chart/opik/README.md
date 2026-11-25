@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.150](https://img.shields.io/badge/Version-2.2.150-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.150](https://img.shields.io/badge/AppVersion-2.2.150-informational?style=flat-square)
+![Version: 2.3.3](https://img.shields.io/badge/Version-2.3.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.3.3](https://img.shields.io/badge/AppVersion-2.3.3-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -194,9 +194,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.logsMaxCount | int | `3` | Rotated file logs kept (applies to both the server and error log) |
 | clickhouse.logsMaxSize | string | `"100M"` | Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk |
+| clickhouse.monitoring.additionalGrants | list | `[]` | Extra GRANT statements, e.g. column-level SELECT on tables a dashboard reads |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
+| clickhouse.monitoring.grants | list | `["GRANT SELECT ON system.*","GRANT REMOTE ON *.*"]` | GRANT statements for the monitoring user; REMOTE is for cluster() |
+| clickhouse.monitoring.limits | object | `{"max_bytes_to_read":250000000000,"max_concurrent_queries_for_user":20,"max_execution_time":60,"max_memory_usage":10000000000,"max_rows_to_read":1500000000}` | Read caps; a query may lower them but not raise them or set 0 (unlimited) |
+| clickhouse.monitoring.networks | list | `["0.0.0.0/0"]` | Networks the monitoring user may log in from |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
 | clickhouse.monitoring.port | int | `9363` |  |
 | clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
@@ -214,6 +218,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.portName | string | `""` |  |
 | clickhouse.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
+| clickhouse.monitoring.settings | object | `{"constraints/read_overflow_mode/const":1,"read_overflow_mode":"throw","readonly":2}` | Profile settings; readonly 2 because Grafana sends per-query settings (log_comment) |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.namespaceDomainPattern | string | `""` |  |
@@ -451,7 +456,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT | string | `"64"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE | string | `"16m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
@@ -461,7 +466,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"true"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
@@ -561,6 +566,8 @@ Call opik api on http://localhost:5173/api
 | partitionMetrics.enabled | bool | `false` |  |
 | partitionMetrics.interval | string | `"5m"` |  |
 | partitionMetrics.lwdTables | string | `"traces,spans"` |  |
+| partitionMetrics.tieredStorageEnabled | bool | `false` |  |
+| partitionMetrics.tieredStorageLogFlushLag | string | `"15s"` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
@@ -595,7 +602,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.6"` |  |
+| zookeeper.image.tag | string | `"3.9.7"` |  |
 | zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |

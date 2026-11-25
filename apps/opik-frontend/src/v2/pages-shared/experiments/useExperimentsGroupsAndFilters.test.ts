@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 
 import { COLUMN_DATASET_ID } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
+import { DATASET_TYPE } from "@/types/datasets";
 
 // Only the router-coupled half is mocked; storage is real so a saved value is
 // read back exactly as it would be in the browser.
@@ -43,5 +44,83 @@ describe("useExperimentsGroupsAndFilters", () => {
     localStorage.setItem(GROUPS_STORAGE_KEY, "[]");
 
     expect(renderGroups()).toEqual([]);
+  });
+
+  it("limits the item source picker to the tab's dataset type", () => {
+    const { result } = renderHook(() =>
+      useExperimentsGroupsAndFilters({
+        storageKeyPrefix: STORAGE_KEY_PREFIX,
+        sortedColumns: [],
+        filters: [],
+        datasetType: DATASET_TYPE.TEST_SUITE,
+      }),
+    );
+
+    expect(
+      result.current.filtersAndGroupsConfig.rowsMap[COLUMN_DATASET_ID]
+        .keyComponentProps,
+    ).toEqual(
+      expect.objectContaining({
+        filters: [
+          expect.objectContaining({
+            field: "type",
+            operator: "=",
+            value: DATASET_TYPE.TEST_SUITE,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("does not filter the item source picker without a dataset type", () => {
+    const { result } = renderHook(() =>
+      useExperimentsGroupsAndFilters({
+        storageKeyPrefix: STORAGE_KEY_PREFIX,
+        sortedColumns: [],
+        filters: [],
+      }),
+    );
+
+    expect(
+      result.current.filtersAndGroupsConfig.rowsMap[COLUMN_DATASET_ID]
+        .keyComponentProps,
+    ).not.toHaveProperty("filters");
+  });
+
+  it("names the item source after the tab's type in Filter by and Group by", () => {
+    const { result } = renderHook(() =>
+      useExperimentsGroupsAndFilters({
+        storageKeyPrefix: STORAGE_KEY_PREFIX,
+        sortedColumns: [],
+        filters: [],
+        itemSourceLabel: "Test suite",
+      }),
+    );
+
+    expect(
+      result.current.filterAndGroupColumns.find(
+        (column) => column.id === COLUMN_DATASET_ID,
+      )?.label,
+    ).toBe("Test suite");
+    expect(
+      result.current.filtersAndGroupsConfig.rowsMap[COLUMN_DATASET_ID]
+        .keyComponentProps,
+    ).toEqual(expect.objectContaining({ placeholder: "Select a test suite" }));
+  });
+
+  it("keeps the Item source copy without a tab type", () => {
+    const { result } = renderHook(() =>
+      useExperimentsGroupsAndFilters({
+        storageKeyPrefix: STORAGE_KEY_PREFIX,
+        sortedColumns: [],
+        filters: [],
+      }),
+    );
+
+    expect(
+      result.current.filterAndGroupColumns.find(
+        (column) => column.id === COLUMN_DATASET_ID,
+      )?.label,
+    ).toBe("Item source");
   });
 });

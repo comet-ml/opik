@@ -908,8 +908,6 @@ class TestDeploymentFlag:
             ["--deployment", "cloud", "--workspace", "ws"],
             ["--deployment", "local", "--workspace", "ws"],
             ["--url", "http://localhost:5173"],
-            # The workspace is not guessed: one of several would be the wrong one.
-            ["--deployment", "self-hosted", "--url", "https://comet.example.com"],
             ["--deployment", "self-hosted", "--workspace", "ws"],
             # Parsed as given, it reported a down Opik at `localhost:///`.
             ["--deployment", "local", "--url", "localhost:5173"],
@@ -968,20 +966,56 @@ class TestDeploymentFlag:
         assert run.params["api_url"] == "https://comet.acme.com/opik/api/"
         assert "env-key" not in run.result.output
 
-    def test_self_hosted__no_api_key__names_the_variable(self):
-        run = _run_unattended(
-            [
-                "--deployment",
-                "self-hosted",
-                "--url",
-                "https://comet.acme.com",
-                "--workspace",
-                "team-ws",
-            ]
+    def test_self_hosted__runs_the_hosted_server__only_the_url_is_needed(self):
+        """Its hosted MCP server signs in in the browser, and the workspace is
+        picked then."""
+        with patch.object(
+            mcp_cli.mcp_detection,
+            "detect_hosted_mcp_server",
+            return_value="https://comet.acme.com/opik/api/v1/mcp",
+        ) as probe:
+            run = _run_unattended(
+                ["--deployment", "self-hosted", "--url", "https://comet.acme.com"]
+            )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert probe.call_args.kwargs["base_url"] == "https://comet.acme.com/"
+        assert probe.call_args.kwargs["api_url"] == "https://comet.acme.com/opik/api/"
+        assert run.params["api_key"] is None
+        assert (
+            run.params["workspace"] == mcp_cli.opik_config.OPIK_WORKSPACE_DEFAULT_NAME
         )
+        assert run.params["self_hosted_comet"] is True
+        assert run.params["api_url"] == "https://comet.acme.com/opik/api/"
+
+    def test_self_hosted__no_hosted_server_and_no_api_key__names_the_variable(self):
+        with patch.object(
+            mcp_cli.mcp_detection, "detect_hosted_mcp_server", return_value=None
+        ):
+            run = _run_unattended(
+                ["--deployment", "self-hosted", "--url", "https://comet.acme.com"]
+            )
+
+        assert run.result.exit_code != 0
+        assert "runs no hosted MCP server" in run.result.output
+        assert "OPIK_API_KEY" in run.result.output
+        assert run.params is None
+
+    def test_self_hosted__local_server_and_no_api_key__names_the_variable(self):
+        with patch.object(mcp_cli.mcp_detection, "detect_hosted_mcp_server") as probe:
+            run = _run_unattended(
+                [
+                    "--deployment",
+                    "self-hosted",
+                    "--url",
+                    "https://comet.acme.com",
+                    "--local-server",
+                ]
+            )
 
         assert run.result.exit_code != 0
         assert "OPIK_API_KEY" in run.result.output
+        probe.assert_not_called()
         assert run.params is None
 
 

@@ -33,9 +33,29 @@ class GuardrailsInferenceConfigTest {
             String credential, boolean starts) {
         var config = new OpikConfiguration();
         config.getServiceToggles().setGuardrailsValidationsEnabled(guardrailsEnabled);
-        config.getAiLabels().getInference().setUrl(url);
-        config.getAiLabels().getInference().setCredential(credential);
+        config.getInference().setUrl(url);
+        config.getInference().setCredential(credential);
 
         assertThat(VALIDATOR.validateProperty(config, "guardrailsInferenceConfigured")).hasSize(starts ? 0 : 1);
+    }
+
+    static Stream<Arguments> toggles() {
+        return Stream.of(
+                arguments("both off", false, false, true),
+                arguments("validations only", true, false, true),
+                arguments("both on", true, true, true),
+                arguments("training only", false, true, false));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("toggles")
+    void trainingNeedsTheValidationsToggle(String description, boolean validationsEnabled, boolean trainingEnabled,
+            boolean starts) {
+        var config = new OpikConfiguration();
+        config.getServiceToggles().setGuardrailsValidationsEnabled(validationsEnabled);
+        config.getServiceToggles().setGuardrailsTrainingEnabled(trainingEnabled);
+
+        assertThat(VALIDATOR.validateProperty(config, "guardrailsValidationsEnabledForTraining"))
+                .hasSize(starts ? 0 : 1);
     }
 }

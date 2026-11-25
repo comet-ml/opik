@@ -10,6 +10,7 @@ import { ExperimentItemStatus } from "./ExperimentItemStatus.js";
 import { ExperimentItemTraceVisibilityMode } from "./ExperimentItemTraceVisibilityMode.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { JsonListString } from "./JsonListString.js";
+import { JsonNode } from "./JsonNode.js";
 
 export const ExperimentItem: core.serialization.ObjectSchema<serializers.ExperimentItem.Raw, OpikApi.ExperimentItem> =
     core.serialization.object({
@@ -45,6 +46,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
             core.serialization.list(AssertionResult).optional(),
         ),
         status: ExperimentItemStatus.optional(),
+        datasetItemData: core.serialization.property("dataset_item_data", JsonNode.optional()),
     });
 
 export declare namespace ExperimentItem {
@@ -72,5 +74,6 @@ export declare namespace ExperimentItem {
         execution_policy?: ExecutionPolicy.Raw | null;
         assertion_results?: AssertionResult.Raw[] | null;
         status?: ExperimentItemStatus.Raw | null;
+        dataset_item_data?: JsonNode.Raw | null;
     }
 }
