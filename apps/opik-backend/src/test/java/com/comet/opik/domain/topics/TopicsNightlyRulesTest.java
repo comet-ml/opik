@@ -554,8 +554,14 @@ class TopicsNightlyRulesTest {
                     picked = GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0,
                             merged.size(), merged.weights(), sims, examples, examples);
                 }
-                out.add(new LiveTopic(t, topic.getName(), topic.getDefinition(), (double) members.length / n,
-                        (double) recentCount / Math.max(1, recentTotal), picked));
+                out.add(LiveTopic.builder()
+                        .topic(t)
+                        .name(topic.getName())
+                        .definition(topic.getDefinition())
+                        .share((double) members.length / n)
+                        .recentShare((double) recentCount / Math.max(1, recentTotal))
+                        .examples(picked)
+                        .build());
             }
             return out;
         }

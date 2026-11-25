@@ -25,6 +25,28 @@ public class IntentMerger {
         Preconditions.checkArgument(vectors.length == texts.length * dimensions,
                 "vectors must hold one row per text, texts '%s', values '%s', dimensions '%s'", texts.length,
                 vectors.length, dimensions);
+        var groups = group(texts);
+        var firstIndex = groups.firstIndex();
+        var uniqueVectors = new float[groups.size() * dimensions];
+        for (int u = 0; u < groups.size(); u++) {
+            System.arraycopy(vectors, firstIndex[u] * dimensions, uniqueVectors, u * dimensions, dimensions);
+        }
+        return MergedIntents.builder()
+                .texts(groups.texts())
+                .weights(groups.weights())
+                .firstIndex(firstIndex)
+                .textOfTrace(groups.textOfTrace())
+                .vectors(uniqueVectors)
+                .dimensions(dimensions)
+                .build();
+    }
+
+    /**
+     * The grouping alone, with no vector copied.
+     *
+     * @param texts per trace, in time order (earliest first), stripped and non-empty
+     */
+    static IntentGroups group(@NonNull String[] texts) {
         for (int i = 0; i < texts.length; i++) {
             Preconditions.checkArgument(texts[i] != null, "texts must not hold null, index '%s'", i);
         }
@@ -33,23 +55,17 @@ public class IntentMerger {
                 .collect(Collectors.groupingBy(i -> texts[i]));
         var unique = tracesOfText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
         var traces = Arrays.stream(unique).map(tracesOfText::get).toList();
-        var weights = traces.stream().mapToInt(List::size).toArray();
-        var firstIndex = traces.stream().mapToInt(List::getFirst).toArray();
-        var uniqueVectors = new float[unique.length * dimensions];
         var textOfTrace = new int[texts.length];
         for (int u = 0; u < unique.length; u++) {
-            System.arraycopy(vectors, firstIndex[u] * dimensions, uniqueVectors, u * dimensions, dimensions);
             for (int i : traces.get(u)) {
                 textOfTrace[i] = u;
             }
         }
-        return MergedIntents.builder()
+        return IntentGroups.builder()
                 .texts(unique)
-                .weights(weights)
-                .firstIndex(firstIndex)
+                .weights(traces.stream().mapToInt(List::size).toArray())
+                .firstIndex(traces.stream().mapToInt(List::getFirst).toArray())
                 .textOfTrace(textOfTrace)
-                .vectors(uniqueVectors)
-                .dimensions(dimensions)
                 .build();
     }
 }

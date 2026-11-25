@@ -8,7 +8,6 @@ import lombok.experimental.UtilityClass;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -334,42 +333,27 @@ class NightlyUpdate {
     }
 
     /**
-     * A topic's {@code examples} prompt texts among its member traces, picked as a group's: {@link IntentMerger}'s
-     * texts, counts and first members, without copying their vectors. Each text's nearness reads its first member's
-     * row in the window.
+     * A topic's {@code examples} prompt texts among its member traces, picked as a group's: the texts, counts and first
+     * members of {@link IntentMerger#group}, so no vector is copied. Each text's nearness reads its first member's row
+     * in the window.
      */
     private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes, int examples) {
         if (members.length == 0) {
             return List.of();
         }
         int d = window.dimensions();
-        var texts = window.texts();
-        // Per text, its count and its first position in members.
-        var byText = new HashMap<String, int[]>();
-        for (int m = 0; m < members.length; m++) {
-            var seen = byText.get(texts[members[m]]);
-            if (seen == null) {
-                byText.put(texts[members[m]], new int[]{1, m});
-            } else {
-                seen[0]++;
-            }
-        }
-        var unique = byText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
-        var weights = new int[unique.length];
-        var first = new int[unique.length];
-        var sims = new double[unique.length];
-        for (int u = 0; u < unique.length; u++) {
-            var entry = byText.get(unique[u]);
-            weights[u] = entry[0];
-            first[u] = entry[1];
-            int row = members[entry[1]] * d;
+        var groups = IntentMerger.group(window.texts(members));
+        var first = groups.firstIndex();
+        var sims = new double[groups.size()];
+        for (int u = 0; u < sims.length; u++) {
+            int row = members[first[u]] * d;
             sims[u] = Double.NEGATIVE_INFINITY;
             for (var prototype : prototypes) {
                 sims[u] = Math.max(sims[u], VectorMath.dot(window.vectors(), row, prototype, 0, d));
             }
         }
-        return GroupSummaries.pick(unique, first, IntStream.range(0, unique.length).toArray(), 0, unique.length,
-                weights, sims, examples, examples);
+        return GroupSummaries.pick(groups.texts(), first, IntStream.range(0, groups.size()).toArray(), 0,
+                groups.size(), groups.weights(), sims, examples, examples);
     }
 
     /**
