@@ -613,12 +613,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 {problem.message}
               </p>
             ))}
-            {builtIn && (
-              <p className="comet-body-xs col-span-2 text-muted-slate">
-                This model has a built-in price. Saving creates an override for
-                the fields you change.
-              </p>
-            )}
           </div>
         )}
 

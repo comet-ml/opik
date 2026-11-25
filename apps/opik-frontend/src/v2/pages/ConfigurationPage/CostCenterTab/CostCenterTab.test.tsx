@@ -782,6 +782,8 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o");
+      expect(screen.queryByTestId("price-formula")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Cost of a call" }));
       const formula = screen.getByTestId("price-formula");
       expect(formula).toHaveTextContent("Input tokens (not cached) × $2.00");
       expect(formula).toHaveTextContent("+ Output tokens × $10.00 (built-in)");
@@ -804,6 +806,7 @@ describe("CostCenterTab", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
       fireEvent.change(priceInput("Input"), { target: { value: "1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Cost of a call" }));
       const formula = screen.getByTestId("price-formula");
       expect(formula).toHaveTextContent("+ Output tokens × $0 (no price)");
       expect(formula).toHaveTextContent(

@@ -1,5 +1,11 @@
 import React from "react";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/ui/accordion";
+import {
   BuiltInPrice,
   PRICE_FIELDS,
   PriceField,
@@ -45,28 +51,36 @@ type PriceFormulaProps = {
 };
 
 const PriceFormula: React.FC<PriceFormulaProps> = ({ prices, builtIn }) => (
-  <div
-    className="comet-body-xs space-y-1 rounded-md border border-border p-3 text-muted-slate"
-    data-testid="price-formula"
-  >
-    <p className="comet-body-xs-accented text-foreground">Cost of a call</p>
-    {PRICE_FIELDS.map((field, index) => {
-      const { price, source } = termOf(field, prices, builtIn);
-      return (
-        <p key={field}>
-          {index > 0 && "+ "}
-          {TOKENS[field]} ×{" "}
-          <span className="text-foreground">
-            {price ? formatPrice(price) : "$0"}
-          </span>
-          {source && ` (${source})`}
-        </p>
-      );
-    })}
-    <p className="pt-1">
-      Prices are per 1M tokens, so the sum is divided by 1,000,000.
-    </p>
-  </div>
+  <Accordion type="single" collapsible>
+    <AccordionItem value="formula" className="border-b-0">
+      <AccordionTrigger className="comet-body-s-accented h-8 px-0 py-0 text-foreground">
+        Cost of a call
+      </AccordionTrigger>
+      <AccordionContent className="pb-0 pt-2">
+        <div
+          className="comet-body-xs space-y-1 rounded-md border border-border p-3 text-muted-slate"
+          data-testid="price-formula"
+        >
+          {PRICE_FIELDS.map((field, index) => {
+            const { price, source } = termOf(field, prices, builtIn);
+            return (
+              <p key={field}>
+                {index > 0 && "+ "}
+                {TOKENS[field]} ×{" "}
+                <span className="text-foreground">
+                  {price ? formatPrice(price) : "$0"}
+                </span>
+                {source && ` (${source})`}
+              </p>
+            );
+          })}
+          <p className="pt-1">
+            Prices are per 1M tokens, so the sum is divided by 1,000,000.
+          </p>
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  </Accordion>
 );
 
 export default PriceFormula;
