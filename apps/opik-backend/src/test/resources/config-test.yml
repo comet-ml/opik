@@ -1113,6 +1113,8 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     readTimeout: 120s
     countTimeout: 60s
     # Small, so a test's pass takes many pages and slices.
@@ -1150,6 +1152,13 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+    nightlyMinTightness: 0.80
+    nightlyBigShare: 0.02
+    nightlySameMemory: 0.95
+    nightlyVerifyTokensPerPair: 25
+    nightlyTopicExamples: 4
+    verifyTopicExamples: 3
+    verifyGroupExamples: 5
   read:
     maxRowsToRead: 30000000
     maxMemoryUsage: 1073741824

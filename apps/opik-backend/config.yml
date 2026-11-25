@@ -2629,7 +2629,7 @@ inference:
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
     #  Default: 300s
     #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
-    #  topics.run.llmDeadline must not be above it
+    #  topics.run.llmDeadline, namingDeadline and verifyDeadline must not be above it
     maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
@@ -2841,6 +2841,29 @@ topics:
     #  Default: 3
     #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
     retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
+    #  Default: 0.80
+    #  Description: Nightly: a candidate group whose tightness is below this is known Other without a naming call
+    nightlyMinTightness: ${TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS:-0.80}
+    #  Default: 0.02
+    #  Description: Nightly: a candidate whose share of the window is at least this is big, and a new topic needs its
+    #  groups' share to be at least this
+    nightlyBigShare: ${TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE:-0.02}
+    #  Default: 0.95
+    #  Description: Nightly: a known-Other prototype within this cosine of one already kept is not kept again
+    nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
+    #  Default: 25
+    #  Description: Nightly: the verify call's tokens per pair it checks, on top of the max_tokens of
+    #  topics/tasks/verify.yaml
+    nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
+    #  Default: 4
+    #  Description: Nightly: member texts a live topic shows in the naming prompt
+    nightlyTopicExamples: ${TOPICS_ALGORITHM_NIGHTLY_TOPIC_EXAMPLES:-4}
+    #  Default: 3
+    #  Description: Nightly: how many of a live topic's nightlyTopicExamples texts the verify prompt shows per pair
+    verifyTopicExamples: ${TOPICS_ALGORITHM_VERIFY_TOPIC_EXAMPLES:-3}
+    #  Default: 5
+    #  Description: Nightly: how many of a group's nightlyExamples texts the verify prompt shows per pair
+    verifyGroupExamples: ${TOPICS_ALGORITHM_VERIFY_GROUP_EXAMPLES:-5}
   #  A topic run's settings: a discovery run, a nightly update and their labelling pass
   run:
     #  Default: 15m
@@ -2860,6 +2883,13 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
     llmDeadline: ${TOPICS_RUN_LLM_DEADLINE:-120s}
+    #  Default: 30s
+    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
+    #  projectTimeout
+    namingDeadline: ${TOPICS_RUN_NAMING_DEADLINE:-30s}
+    #  Default: 60s
+    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
+    verifyDeadline: ${TOPICS_RUN_VERIFY_DEADLINE:-60s}
     #  Default: 120s
     #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
     #  attempt of its trace_topics insert. At most 30m
