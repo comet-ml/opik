@@ -7,6 +7,7 @@ export interface ServiceTogglesConfig {
     spanUserDefinedMetricPythonEnabled: boolean;
     guardrailsEnabled: boolean;
     guardrailsValidationsEnabled: boolean;
+    guardrailsTrainingEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
@@ -32,4 +33,5 @@ export interface ServiceTogglesConfig {
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
     customChartsEnabledForWorkspace?: boolean;
+    topicsEnabled?: boolean;
 }

@@ -2877,7 +2877,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tfs.metadata,
                         di.description,
                         ei.execution_policy,
-                        arp.assertions_array
+                        arp.assertions_array,
+                        <if(truncate)>mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map()))<else>COALESCE(di.data, map())<endif>
                     )] AS experiment_items_array
                 FROM raw_items AS ei
                 LEFT JOIN dataset_items_resolved AS di ON di.id = ei.stable_dataset_item_id
@@ -3046,7 +3047,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.metadata,
                         di.description,
                         eia.execution_policy,
-                        eia.assertions_array
+                        eia.assertions_array,
+                        <if(truncate)>mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map()))<else>COALESCE(di.data, map())<endif>
                     )] AS experiment_items_array
                 FROM (
                     SELECT
@@ -4401,6 +4403,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             addTracesPartitionedFlag(template);
             addSpanWeeksBound(template);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
             template.add("has_raw", counts.hasRaw());
             template.add("has_aggregated", counts.hasAggregated());
             template.add("cursor_resolved", cursor.isPresent());

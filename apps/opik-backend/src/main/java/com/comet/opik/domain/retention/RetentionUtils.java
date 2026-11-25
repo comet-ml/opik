@@ -1,5 +1,6 @@
 package com.comet.opik.domain.retention;
 
+import com.comet.opik.infrastructure.db.ClickHouseErrorCodes;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -58,13 +59,11 @@ public class RetentionUtils {
     public static boolean isTooManyRowsException(Throwable t) {
         while (t != null) {
             String msg = t.getMessage();
-            if (msg != null && msg.contains("Code: " + CH_TOO_MANY_ROWS)) {
+            if (msg != null && msg.contains("Code: " + ClickHouseErrorCodes.TOO_MANY_ROWS)) {
                 return true;
             }
             t = t.getCause();
         }
         return false;
     }
-
-    private static final int CH_TOO_MANY_ROWS = 158;
 }

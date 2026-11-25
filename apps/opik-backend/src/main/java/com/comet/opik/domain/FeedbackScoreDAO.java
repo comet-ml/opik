@@ -44,7 +44,12 @@ public interface FeedbackScoreDAO {
     Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId,
             @Nullable String author);
 
-    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score);
+    /**
+     * Deletes a score by name from one entity. When {@code projectId} is set, both deletes are limited to that
+     * project, so an entity id that also exists in another project keeps that project's scores. When it is null,
+     * the delete is not scoped by project.
+     */
+    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score, UUID projectId);
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
@@ -81,6 +86,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
             <if(author)>AND <author> = :author<endif>
             <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
             SETTINGS log_comment = '<log_comment>'
@@ -380,7 +386,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score) {
+    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score, UUID projectId) {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
@@ -390,6 +396,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (StringUtils.isNotBlank(score.author())) {
                 deleteFeedbackScore.add("author", "last_updated_by");
+            }
+            if (projectId != null) {
+                deleteFeedbackScore.add("project_id", true);
             }
 
             var statement1 = connection.createStatement(deleteFeedbackScore.render());
@@ -401,6 +410,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (StringUtils.isNotBlank(score.author())) {
                 statement1.bind("author", score.author());
+            }
+            if (projectId != null) {
+                statement1.bind("project_id", projectId);
             }
 
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
@@ -414,6 +426,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
 
             deleteAuthoredFeedbackScore.add("source_queue_id", "source_queue_id");
+            if (projectId != null) {
+                deleteAuthoredFeedbackScore.add("project_id", true);
+            }
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
@@ -429,6 +444,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     score.sourceQueueId() != null
                             ? score.sourceQueueId().toString()
                             : CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE);
+            if (projectId != null) {
+                statement2.bind("project_id", projectId);
+            }
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))

@@ -22,8 +22,10 @@ import java.util.UUID;
 public record DashboardSavedQuery(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @Nullable @Schema(description = "Project the query is bounded to. Omit for every project in the workspace.") UUID projectId,
-        // Well above any generated query, and below ClickHouse's 256 KiB max_query_size.
-        @NotBlank @Size(max = 65_536) String sql,
+        @NotBlank @Size(max = MAX_SQL_LENGTH) String sql,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy) {
+
+    // Well above any generated query, and below ClickHouse's 256 KiB max_query_size.
+    public static final int MAX_SQL_LENGTH = 65_536;
 }

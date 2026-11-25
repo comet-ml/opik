@@ -12,8 +12,8 @@ import java.util.List;
 
 /**
  * A verdict per check, in the order the checks were sent, plus the overall verdict. Same shape as the v1
- * contract, so the SDK reports each entry to the results pipeline unchanged. An entry whose check could not run
- * carries {@code error} and passes: guardrails fail open.
+ * contract, so the SDK reports each entry to the results pipeline unchanged. A request whose checks could not run
+ * gets no response at all but a 503: guardrails fail closed.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)

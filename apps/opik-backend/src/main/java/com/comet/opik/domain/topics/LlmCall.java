@@ -8,7 +8,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum LlmCall {
     /** Names the topics over the groups. */
-    AUTHOR("author");
+    AUTHOR("author"),
+    /** Names a nightly update's new groups. */
+    NAMING("naming"),
+    /** Checks a nightly update's new names. */
+    VERIFY("verify");
 
     private final String value;
 }

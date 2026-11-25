@@ -2,7 +2,7 @@ import os
 
 from setuptools import find_packages, setup
 
-project_urls = {"Source code": "https://github.com/comet-ml/opik"}
+project_urls = {"Repository": "https://github.com/comet-ml/opik"}
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 version = os.environ.get("VERSION")
@@ -54,7 +54,7 @@ setup(
         #   that fixes a published advisory.
         # - A library without a cap always gets its newest release.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
-        "boto3-stubs<=1.44.7",
+        "boto3-stubs<=1.44.9",
         "click",
         "click<=8.5.1",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
