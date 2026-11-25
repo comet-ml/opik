@@ -94,6 +94,11 @@ const ALIAS_TARGET_EMPTY_MESSAGE =
 const SPANS_OWN_PROVIDER_LABEL = "The span's own provider";
 const MAX_MODEL_SUGGESTIONS = 50;
 
+// A grid, not flex-1: the field picker's padding would widen its column, and
+// the line under each price has to start where the boxes above it start.
+const PRICE_ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2";
+
 const CACHE_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
 const CACHE_HINTS: Record<string, string> = {
   "cache_read_price,cache_write_price":
@@ -626,7 +631,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               setKind(value as ModelPriceRow["kind"]);
             }}
             variant="secondary"
-            className="!mt-3 -mb-2 w-fit"
+            className="!-mb-2 !mt-3 w-fit"
           >
             <ToggleGroupItem value="fixed" size="xs">
               Own price
@@ -730,9 +735,9 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 canonicalPrice(line.value) !== builtInValue;
               return (
                 <div key={line.id} className="space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className={cn(PRICE_ROW_GRID, "items-center")}>
                     {line.locked || readOnly ? (
-                      <div className="comet-body-s flex h-8 flex-1 items-center gap-2 rounded-md bg-muted px-3">
+                      <div className="comet-body-s flex h-8 items-center gap-2 rounded-md bg-muted px-3">
                         {line.locked && (
                           <Lock className="size-3.5 text-light-slate" />
                         )}
@@ -740,7 +745,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                       </div>
                     ) : (
                       <SelectBox
-                        className="h-8 flex-1"
+                        className="h-8"
                         value={line.field}
                         onChange={(field: PriceField) =>
                           updateLine(line.id, { field })
@@ -754,7 +759,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                         }))}
                       />
                     )}
-                    <div className="relative flex-1">
+                    <div className="relative">
                       <span className="comet-body-s pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-slate">
                         $
                       </span>
@@ -808,17 +813,21 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                       <span className="w-8" />
                     )}
                   </div>
-                  <div className="comet-body-xs flex gap-2 text-light-slate">
-                    <span className="flex-1 break-words">
+                  <div
+                    className={cn(
+                      PRICE_ROW_GRID,
+                      "comet-body-xs text-light-slate",
+                    )}
+                  >
+                    <span className="break-words">
                       <KeyName name={LITELLM_KEYS[line.field]} />
                     </span>
-                    <span className="flex-1 truncate">
+                    <span className="truncate">
                       {describePerToken(
                         line.value,
                         keepsBuiltIn ? builtInValue : undefined,
                       )}
                     </span>
-                    <span className="w-8 shrink-0" />
                   </div>
                   {fieldProblems(line.field).map((problem, i) => (
                     <p key={i} className="comet-body-xs text-destructive">
