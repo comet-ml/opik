@@ -259,8 +259,8 @@ ignores it: it spans many projects, and a topic belongs to one.
 
 The filter uses the rules of [How it counts](#how-it-counts). Every row counts, each trace goes by its latest row,
 and a topic that is not live is Other. A trace with no counted row fails every operator, `!=` included: `!=` keeps
-only traces that have a topic row, so it is not the opposite of `=`. With topics off, a workspace not opted in, or a
-project with no live topic, the filter returns no trace and no error.
+only traces that have a topic row, so it is not the opposite of `=`. With topics off, a workspace not opted in or
+listed at a stage before `ui`, or a project with no live topic, the filter returns no trace and no error.
 
 The page's link opens Logs with the time range, which bounds the list by the time in the trace id. The read API counts
 by the trace's `created_at`. So the list's `total` can differ from the topic's `count` for traces whose id time is

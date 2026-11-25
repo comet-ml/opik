@@ -10,6 +10,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import jakarta.ws.rs.NotFoundException;
@@ -286,11 +287,11 @@ class TopicReadServiceTest {
         assertThat(filterScope(nameFilter)).isEmpty();
         verifyNoInteractions(workspaces, topicDAO);
 
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(false);
         assertThat(filterScope(topicFilter)).isEmpty();
         verifyNoInteractions(topicDAO);
 
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(true);
         assertThat(filterScope(topicFilter)).hasValueSatisfying(scope -> {
             assertThat(scope.liveIds()).containsExactly(topic.id().toString());
             assertThat(scope.maxExecutionSeconds()).isEqualTo(30L);

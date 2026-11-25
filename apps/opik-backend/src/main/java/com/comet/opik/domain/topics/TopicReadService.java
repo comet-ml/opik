@@ -7,6 +7,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import jakarta.annotation.Nullable;
@@ -151,7 +152,7 @@ public class TopicReadService {
     }
 
     private Optional<TopicFilterScope> readFilterScope(String workspaceId, UUID projectId) {
-        if (!workspaces.isEnabled(workspaceId)) {
+        if (!workspaces.reaches(workspaceId, TopicsStage.UI)) {
             return Optional.empty();
         }
         var live = template.inTransaction(READ_ONLY,
