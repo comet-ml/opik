@@ -20,7 +20,8 @@ class NightTriageTest {
 
     private static final String WORKSPACE_ID = "workspace";
     private static final LocalDate DATE = LocalDate.of(2026, 11, 2);
-    private static final TopicsNight NIGHT = new TopicsNight(DATE, Instant.parse("2026-11-02T02:00:00Z"));
+    private static final TopicsNight NIGHT = TopicsNight.builder().date(DATE)
+            .start(Instant.parse("2026-11-02T02:00:00Z")).build();
     private static final Instant DAY_BEFORE = NIGHT.windowTo().minus(Duration.ofDays(1));
     private static final int PAUSE_FAILURES = 3;
     private static final int PAUSE_NIGHTS = 7;

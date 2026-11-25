@@ -1131,6 +1131,28 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("a list saved for the night after its budget is not reached that night; the next night it is, with a "
+            + "streak of 1")
+    void savedForTheNightIsNotReached() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        var night = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC);
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        var before = data.topicProject(projectId);
+
+        assertThat(notReached(workspaceId, night)).isEmpty();
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .markNotReached(workspaceId, List.of(projectId), night));
+        assertThat(data.topicProject(projectId)).isEqualTo(before);
+
+        var next = night.plusDays(1);
+        assertThat(notReached(workspaceId, next)).containsExactly(new TopicProjectKey(workspaceId, projectId));
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .markNotReached(workspaceId, List.of(projectId), next));
+        assertThat(data.topicProject(projectId)).isEqualTo(before.toBuilder().notReachedNights(1).build());
+    }
+
+    @Test
     @DisplayName("a queued nightly update is claimed only while its list does not cover the night; otherwise it ends "
             + "cancelled, not counted as a failure, and a claimed run is not skipped")
     void updateClaim() {

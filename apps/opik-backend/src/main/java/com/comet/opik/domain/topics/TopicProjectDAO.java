@@ -437,13 +437,14 @@ public interface TopicProjectDAO {
             @Bind("night") LocalDate night);
 
     /**
-     * The projects of {@code workspaceIds} with a list that the night did not look at and whose not-reached streak does
-     * not count the night yet: the ones {@link #markNotReached} writes. The streak expression is the same as there.
+     * The projects of {@code workspaceIds} with a list that the night did not look at, that does not cover the night (a
+     * list saved after the budget does), and whose not-reached streak does not count the night yet: the ones
+     * {@link #markNotReached} writes. The streak expression is the same as there.
      */
     @SqlQuery("""
             SELECT workspace_id, project_id FROM topic_projects
             WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL
-            AND (last_night IS NULL OR last_night < :night)
+            AND (last_night IS NULL OR last_night < :night) AND (window_until IS NULL OR window_until < :night)
             AND not_reached_nights < GREATEST(1, DATEDIFF(:night,
                 GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
                     COALESCE(DATE(last_success_at), last_night, :night))))
@@ -462,7 +463,7 @@ public interface TopicProjectDAO {
                 GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
                     COALESCE(DATE(last_success_at), last_night, :night))))
             WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            AND (last_night IS NULL OR last_night < :night)
+            AND (last_night IS NULL OR last_night < :night) AND (window_until IS NULL OR window_until < :night)
             """)
     int markNotReached(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
             @Bind("night") LocalDate night);
@@ -470,7 +471,8 @@ public interface TopicProjectDAO {
     /** How the night on {@code night} ended for the projects of {@code workspaceIds}, for its end log. */
     @SqlQuery("""
             SELECT COALESCE(SUM(last_night = :night), 0) AS looked,
-                COALESCE(SUM(list_run_id IS NOT NULL AND (last_night IS NULL OR last_night < :night)), 0) AS not_reached
+                COALESCE(SUM(list_run_id IS NOT NULL AND (last_night IS NULL OR last_night < :night)
+                    AND (window_until IS NULL OR window_until < :night)), 0) AS not_reached
             FROM topic_projects
             WHERE workspace_id IN (<workspaceIds>)
             """)

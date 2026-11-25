@@ -713,7 +713,7 @@ queued update whose list covers the night by the time it claims it: the run ends
 not counted in `failed_runs`.
 
 After the budget, no update is queued. The first plan after it adds the night to `not_reached_nights` of each project
-the night did not look at. One plan logs the night's end (`Topics night '<date>' ended`) with the projects looked at
+the night did not look at, unless its list already covers the night (saved after the budget). One plan logs the night's end (`Topics night '<date>' ended`) with the projects looked at
 and not reached; the Redis key `topics:nightly:end:<date>` makes it one.
 
 | Env var | Default | Meaning |
