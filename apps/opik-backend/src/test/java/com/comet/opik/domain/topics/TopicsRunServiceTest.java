@@ -264,12 +264,16 @@ class TopicsRunServiceTest {
     }
 
     @Test
-    @DisplayName("a first save of a project that has a list fails with save and leaves the list as it was")
+    @DisplayName("a discovery run whose project got a list while it ran fails its save with save, and leaves the "
+            + "list as it was")
     void secondSaveIsConflict() {
-        data.savedList(workspaceId, projectId, FIXTURE.night, 5);
-        var before = data.topics(projectId);
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
+        // The queue refuses a discovery run on a project with a list: here the list came after the claim.
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).saveList(workspaceId, projectId,
+                null, TopicsTestData.newId(), Instant.now(), FIXTURE.night,
+                new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL));
+        var before = data.topics(projectId);
 
         var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
 
