@@ -277,7 +277,8 @@ class GuardrailsValidationServiceTest {
         verifyNoInteractions(inference);
     }
 
-    // The cause stays in the log: the caller gets a stable message, not the upstream status or host.
+    // The cause rides along for the log and the error metric: the caller gets a stable message, not the upstream
+    // status or host.
     @Test
     void inferenceFailureFailsClosedWithoutAVerdict() {
         var request = request(
@@ -288,7 +289,8 @@ class GuardrailsValidationServiceTest {
 
         assertThatThrownBy(() -> validate(request))
                 .isInstanceOf(ServiceUnavailableException.class)
-                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE);
+                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE)
+                .hasCauseInstanceOf(ServerErrorException.class);
     }
 
     // The limits are the documented contract (254 topics of up to 256 characters), written out rather than read from

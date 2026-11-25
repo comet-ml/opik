@@ -56,7 +56,10 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
     /** The questions a request may need: two decide calls' worth. */
     static final int MAX_QUESTIONS = 2 * DecideRequest.MAX_QUESTIONS;
-    /** What a caller is told when the checks could not run. The cause is logged, not returned: it may name internal hosts. */
+    /**
+     * What a caller is told when the checks could not run. The cause is attached for the log and the error metric, not
+     * returned: it may name internal hosts.
+     */
     static final String UNAVAILABLE_MESSAGE = "Guardrail checks are unavailable, retry later";
 
     private final @NonNull InferenceClient inferenceClient;
@@ -87,7 +90,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                     .map(answers -> toResponse(rules, rule -> rule.evaluate(answers, thresholds)))
                     .onErrorMap(error -> {
                         log.warn("Guardrails check failed closed on workspaceId '{}'", workspaceId, error);
-                        return new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
+                        return new ServiceUnavailableException(UNAVAILABLE_MESSAGE, (Long) null, error);
                     });
         });
     }

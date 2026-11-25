@@ -330,6 +330,10 @@ customCharts:
   #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
   #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
   enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
+  #  Default: false (public endpoints off)
+  #  Description: Exposes the public Custom Charts endpoints (POST /v1/private/analytics-queries) to API keys and the
+  #   Opik MCP server. Off, they answer 501. Requires enabled above.
+  publicEndpointsEnabled: ${TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -898,6 +902,21 @@ rateLimit:
       userFacingBucketName: dashboard_widget_queries
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
+    analyticsQueries:
+      # Default: 120
+      # Description: how many queries the public analytics-queries endpoint (API keys and the Opik MCP server) allows
+      #   per workspace in the specified time bucket. Separate from dashboardWidgetQueries, so programmatic callers
+      #   cannot use up the budget of dashboard and insights view viewers.
+      limit: ${RATE_LIMIT_ANALYTICS_QUERIES_PER_WORKSPACE_LIMIT:-120}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_ANALYTICS_QUERIES_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Analytics-Queries
+      # Description: User facing bucket name
+      userFacingBucketName: analytics_queries
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for analytics queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
@@ -1667,6 +1686,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: ${LLM_PROVIDER_CLIENT_MAX_ATTEMPTS:-3}
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: ${LLM_PROVIDER_CLIENT_JUDGE_MAX_RETRIES:-0}
   # Default: 500
   # Description: Number of milliseconds to wait between retry attempts
   delayMillis: ${LLM_PROVIDER_CLIENT_DELAY_MILLIS:-500}
@@ -2907,8 +2930,9 @@ topics:
     #  attempt of its trace_topics insert. At most 30m
     readTimeout: ${TOPICS_RUN_READ_TIMEOUT:-120s}
     #  Default: 60s
-    #  Description: The labelling pass's count of its run's window, with its slice bounds, stops after this (or the
-    #  pass's deadline, when sooner). At most 30m
+    #  Description: A ClickHouse count of a window stops after this: the labelling pass's, with its slice bounds (or
+    #  the pass's deadline, when sooner), and the planner's count of each workspace's discovery candidates. At most
+    #  30m
     countTimeout: ${TOPICS_RUN_COUNT_TIMEOUT:-60s}
     #  Default: 25000
     #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
@@ -2924,6 +2948,10 @@ topics:
     #  Default: 500ms
     #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
     insertBackoff: ${TOPICS_RUN_INSERT_BACKOFF:-500ms}
+    #  Default: 30s
+    #  Description: Added to a run's longest trace_topics insert (every attempt and backoff) in its deadline. At most
+    #  10m
+    insertSlack: ${TOPICS_RUN_INSERT_SLACK:-30s}
     #  The ClickHouse guards of the run's reads (window count, window read, unlabelled read, topic counts), apart
     #  from the vectors tick's: the run reads a whole window, the window read about three times
     read:
@@ -2948,6 +2976,85 @@ topics:
       #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_RUN_READ_COUNT_SLICE:-1d}
+  discovery:
+    #  Default: 72h
+    #  Description: A project's discovery run waits for its vectors backfill to drain. Past this long since the backfill
+    #  started, it is built anyway once timedOutShare of the backfill's traces have a vector; with fewer it keeps
+    #  waiting, and the planner logs a warning. At least 1m, at most 30d
+    backfillMaxWait: ${TOPICS_DISCOVERY_BACKFILL_MAX_WAIT:-72h}
+    #  Default: 0.99
+    #  Description: The share of a backfill's traces with a vector that lets a discovery run start past backfillMaxWait.
+    #  Between 0.5 and 1.0
+    timedOutShare: ${TOPICS_DISCOVERY_TIMED_OUT_SHARE:-0.99}
+    #  Default: 1h,6h,1d
+    #  Description: The wait after a project's first, second, ... failed discovery run; the last applies to every later
+    #  one. The first is also the wait after a failed labelling pass. 1 to 10 comma-separated entries
+    retryDelays: ${TOPICS_DISCOVERY_RETRY_DELAYS:-1h,6h,1d}
+  #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
+  #  below. Any pod claims a run with a compare-and-set on its row and runs it
+  runs:
+    #  Default: topics-runs
+    #  Description: Redis stream of queued Topics runs
+    streamName: ${TOPICS_RUNS_STREAM_NAME:-'topics-runs'}
+    #  Default: topics-runs-consumers
+    #  Description: Consumer group of the Topics runs stream
+    consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
+    #  Default: 2
+    #  Description: Runs one pod runs at a time. Each holds its window in memory (about 200 MiB at 100k traces), so
+    #  this is a per-pod memory budget; set it to maxInFlight so one pod can fill every slot. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-2}
+    #  Default: 5s
+    #  Description: How often a pod polls the stream for queued runs. At most 10s
+    poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
+    #  Default: 5s
+    #  Description: Timeout of a blocking read of the stream (long polling). At most 20s
+    longPollingDuration: ${TOPICS_RUNS_LONG_POLLING_DURATION:-5s}
+    #  Default: 2
+    #  Description: Claim pending messages every N polling intervals. From 2 to 100
+    claimIntervalRatio: ${TOPICS_RUNS_CLAIM_INTERVAL_RATIO:-2}
+    #  Default: 5m
+    #  Description: A message no pod acked for this long goes to another pod, which runs it when its row is queued
+    #  again (its pod stopped) and only acks it otherwise. From 1m to 1h
+    pendingMessageDuration: ${TOPICS_RUNS_PENDING_MESSAGE_DURATION:-5m}
+    #  Default: 3
+    #  Description: Deliveries of a message that keeps failing before it is dropped; the planner publishes its run
+    #  again. At most 10
+    maxRetries: ${TOPICS_RUNS_MAX_RETRIES:-3}
+    #  Default: 10000
+    #  Description: Maximum stream length before old entries are trimmed
+    streamMaxLen: ${TOPICS_RUNS_STREAM_MAX_LEN:-10000}
+    #  Default: 100
+    #  Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+    streamTrimLimit: ${TOPICS_RUNS_STREAM_TRIM_LIMIT:-100}
+    #  Default: 2
+    #  Description: Runs queued, running or cancelling across the cluster; the planner queues no more. Each reads a
+    #  window from ClickHouse and calls the LLM. A run started by hand is not capped. At most 100
+    maxInFlight: ${TOPICS_RUNS_MAX_IN_FLIGHT:-2}
+    #  Default: 20s
+    #  Description: How often a running run writes its heartbeat on its row; a write that finds the row no longer
+    #  running (cancelled) stops the run. At most 5m
+    heartbeatInterval: ${TOPICS_RUNS_HEARTBEAT_INTERVAL:-20s}
+    #  Default: 60s
+    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. At
+    #  least 3 times heartbeatInterval, so one or two slow beats do not abandon a healthy run; at most 1h
+    abandonGrace: ${TOPICS_RUNS_ABANDON_GRACE:-60s}
+    #  Default: 10m
+    #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
+    republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
+    #  Default: 2m
+    #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
+    planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+    #  Default: 5m
+    #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them
+    #  plans. Longer than planBudget, at least 10s, at most 1h
+    planInterval: ${TOPICS_RUNS_PLAN_INTERVAL:-5m}
+    #  Default: 1m
+    #  Description: How much longer than planBudget plus topics.run.countTimeout the leader lock lasts, for the queue
+    #  writes and publishes after the counts. At most 5m
+    leaseSlack: ${TOPICS_RUNS_LEASE_SLACK:-1m}
+    #  Default: 5s
+    #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
+    requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After
@@ -2978,6 +3085,14 @@ topics:
     #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
     #  bounded however many projects went at once. From 1 to 10000
     deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
+    #  Default: 24h
+    #  Description: How often each pod deletes the topics of deleted projects that the project delete left. At
+    #  least 1h, at most 7d
+    sweepInterval: ${TOPICS_STORAGE_SWEEP_INTERVAL:-24h}
+    #  Default: 5m
+    #  Description: How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire
+    #  sweeps again. At least 10s, at most 30m
+    sweepTimeout: ${TOPICS_STORAGE_SWEEP_TIMEOUT:-5m}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it
