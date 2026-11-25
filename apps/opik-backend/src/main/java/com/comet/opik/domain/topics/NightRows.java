@@ -96,7 +96,16 @@ record NightRows(@NonNull NightList list, @NonNull NightSave save, @NonNull List
                         ? null
                         : new PrototypeVectors(state.getOtherPrototypes()))
                 .build();
-        return new NightRows(list, save, List.copyOf(retired), traceTopics, born, state.liveCount(), otherShare, churn,
-                stats);
+        return NightRows.builder()
+                .list(list)
+                .save(save)
+                .retired(List.copyOf(retired))
+                .traceTopics(traceTopics)
+                .born(born)
+                .live(state.liveCount())
+                .otherShare(otherShare)
+                .churn(churn)
+                .stats(stats)
+                .build();
     }
 }
