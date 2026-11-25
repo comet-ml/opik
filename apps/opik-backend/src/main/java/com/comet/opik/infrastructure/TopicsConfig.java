@@ -132,6 +132,27 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(1_000) private int retireNights;
 
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyMinTightness;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyBigShare;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlySameMemory;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyGroupExamples;
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
             return nightlyMinGroups <= nightlyMaxGroups;
@@ -214,6 +235,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration llmDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call ({@code verify_naming}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /**
          * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
          * of its {@code trace_topics} insert.
@@ -257,6 +290,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.namingDeadline must be shorter than topics.run.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.verifyDeadline must be shorter than topics.run.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */

@@ -18,8 +18,10 @@ import java.util.function.BiFunction;
 class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
     private static final String INPUT_CHARACTERS_KEY = "input_characters";
-    // One shared instance, so ModelPriceMerger can tell a price that bills nothing from one priced per unit.
+    // Shared instances, so a price can be told apart by its calculator: each method reference is a new object.
     static final BiFunction<ModelPrice, SpanUsage, BigDecimal> DEFAULT_COST_CALCULATOR = SpanCostCalculator::defaultCost;
+    static final BiFunction<ModelPrice, SpanUsage, BigDecimal> AUDIO_SPEECH_CALCULATOR = SpanCostCalculator::audioSpeechCost;
+    static final BiFunction<ModelPrice, SpanUsage, BigDecimal> VIDEO_GENERATION_CALCULATOR = SpanCostCalculator::videoGenerationCost;
 
     /**
      * Prices the provider's own usage record, so every token bucket gets its own rate whatever client logged it. Usage

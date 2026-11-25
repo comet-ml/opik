@@ -3,6 +3,8 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -19,8 +21,9 @@ import java.util.concurrent.Callable;
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
- * It owns the run's time limit and its cancel. Its CPU steps, clustering and assignment, run on {@code parallel()}, off
- * the ClickHouse driver's and the inference client's threads that emit their inputs.
+ * It also drives a nightly update's steps ({@link #update}). It owns the run's time limit and its cancel. Its CPU
+ * steps, clustering, assignment and a nightly update's steps, run on {@code parallel()}, off the ClickHouse driver's and
+ * the inference client's threads that emit their inputs.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -110,6 +113,47 @@ public class TopicsRunService {
                 + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
                 rows.topics().stream().map(Topic::size).toList(), TopicText.fixed(rows.otherShare(), 3));
         return rows.toBuilder().stats(stats).build();
+    }
+
+    /**
+     * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
+     * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
+     */
+    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
+        return cpu(run, "update", () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
+                .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
+    }
+
+    /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
+    private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step, ObjectNode calls) {
+        return switch (step) {
+            case NightStep.Done<TopicUpdate> done -> {
+                var stats = calls.deepCopy();
+                stats.setAll(done.result().stats());
+                yield Mono.just(done.result().toBuilder().stats(stats).build());
+            }
+            case NightStep.Ask<TopicUpdate> ask ->
+                timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
+                        .flatMap(answer -> cpu(run, "update", () -> ask.next().apply(answer.value()))
+                                .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
+        };
+    }
+
+    /**
+     * The calls' stats with one more call's: numbers add up, and any other field takes the last call's value, as a
+     * nightly update makes several calls.
+     */
+    private static ObjectNode plus(ObjectNode calls, ObjectNode call) {
+        var sum = calls.deepCopy();
+        call.properties().forEach(field -> {
+            if (field.getValue().isNumber()) {
+                sum.put(field.getKey(), sum.path(field.getKey()).asLong(0) + field.getValue().asLong());
+            } else {
+                sum.set(field.getKey(), field.getValue());
+            }
+        });
+        return sum;
     }
 
     private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows) {

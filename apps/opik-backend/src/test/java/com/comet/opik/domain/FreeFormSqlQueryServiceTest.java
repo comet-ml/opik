@@ -8,14 +8,17 @@ import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -30,10 +33,10 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -114,6 +117,173 @@ class FreeFormSqlQueryServiceTest {
         var config = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         config.setUsername(user);
         return config;
+    }
+
+    @Test
+    @DisplayName("a table function is rejected before its arguments can be resolved")
+    void tableFunctionIsRejectedBeforeResolution() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY)).thenReturn(CompletableFuture.completedFuture(List.of(
+                "SelectQuery (children 1)", "  TableExpression (children 1)", "   Function remote (children 1)")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static Stream<Arguments> forbiddenResolvedTables() {
+        return Stream.of(
+                arguments("system catalog", FreeFormSqlAccount.STANDARD, "TABLE id: 1, table_name: system.tables"),
+                arguments("information schema", FreeFormSqlAccount.STANDARD,
+                        "TABLE id: 1, table_name: information_schema.tables"),
+                arguments("other database", FreeFormSqlAccount.STANDARD, "TABLE id: 1, table_name: other.traces"),
+                arguments("extended-only table", FreeFormSqlAccount.STANDARD,
+                        "TABLE id: 1, table_name: opik.experiments"),
+                arguments("ungranted analytics table", FreeFormSqlAccount.EXTENDED,
+                        "TABLE id: 1, table_name: opik.projects"),
+                arguments("physical local table", FreeFormSqlAccount.EXTENDED,
+                        "TABLE id: 1, table_name: opik.traces_local"),
+                arguments("missing table name", FreeFormSqlAccount.STANDARD, "TABLE id: 1, alias: hidden"),
+                arguments("table function", FreeFormSqlAccount.STANDARD,
+                        "TABLE_FUNCTION id: 1, table_function_name: merge"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenResolvedTables")
+    @DisplayName("resolved reads outside the account's tables are rejected in audit mode")
+    void forbiddenResolvedTableIsRejected(String label, FreeFormSqlAccount account, String tableNode) {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainQueryTree(account, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, QUERY))
+                .thenReturn(
+                        CompletableFuture.completedFuture(List.of("QUERY id: 0", "  JOIN TREE", "    " + tableNode)));
+
+        assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static Stream<Arguments> forbiddenAstNodes() {
+        return Stream.of(
+                arguments("forbidden function call", "Function currentUser (children 1)"),
+                arguments("alias spelling of a forbidden function", "Function authUser (children 1)"),
+                arguments("bare forbidden name", "Identifier currentUser"),
+                arguments("bare forbidden name with an alias", "Identifier database (alias n)"),
+                arguments("forbidden name as an expression alias", "Literal UInt64_1 (alias currentUser)"),
+                arguments("forbidden name as a function alias", "Function count (alias USER) (children 1)"),
+                arguments("forbidden name as a CTE reference", "TableIdentifier currentDatabase"),
+                arguments("forbidden name as a table alias", "TableIdentifier traces (alias schema)"),
+                arguments("catalog table", "TableIdentifier system.tables"),
+                arguments("catalog column without FROM", "Identifier system.one.dummy"),
+                arguments("information schema column", "Identifier INFORMATION_SCHEMA.TABLES.table_name"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenAstNodes")
+    @DisplayName("forbidden names and catalog references are rejected on the AST, before ClickHouse analyses the query")
+    void forbiddenAstNodeIsRejectedBeforeAnalysis(String label, String node) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY)).thenReturn(CompletableFuture.completedFuture(
+                List.of("SelectWithUnionQuery (children 1)", "    " + node)));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static Stream<Arguments> allowedAstNodes() {
+        return Stream.of(
+                arguments("column qualified by a table alias", "Identifier t.user"),
+                arguments("name containing a forbidden name", "Identifier user_count (alias users)"),
+                arguments("alias named after a function ClickHouse never calls bare",
+                        "Identifier trace_id (alias tid)"),
+                arguments("string literal mentioning an alias", "Literal \\'x (alias user)\\'"),
+                arguments("allowed table", "TableIdentifier traces (alias t)"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allowedAstNodes")
+    @DisplayName("names that only contain, qualify or reuse a forbidden name safely pass the AST check")
+    void allowedAstNodePassesToAnalysis(String label, String node) {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY)).thenReturn(CompletableFuture.completedFuture(
+                List.of("SelectWithUnionQuery (children 1)", "    " + node)));
+
+        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join();
+
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a function the AST check misses is rejected by its resolved name, as a backstop")
+    void resolvedFunctionAliasIsRejected() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainAst(FreeFormSqlAccount.STANDARD, QUERY))
+                .thenReturn(CompletableFuture.completedFuture(List.of("Function unexpectedAlias")));
+        when(dao.explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, QUERY))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, function_name: currentUser, result_type: String")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a failed resolved-tree preflight withholds execution in audit mode")
+    void resolvedTreeFailureBlocksExecution() {
+        givenClickHouseReturnsOneRow();
+        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
+        when(dao.explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, QUERY))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("tree unavailable")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a FUNCTION node whose name cannot be read is rejected, so a tree format change fails closed")
+    void unreadableFunctionNodeIsRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, FreeFormSqlQueryDAO.PROJECT_ID_ALL, QUERY))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, alias: u, function_name: currentUser, result_type: String")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null, QUERY).join())
+                .cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
+                });
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private static void assertExecutionFailed(Throwable error) {
+        assertThat(error).isExactlyInstanceOf(ServiceUnavailableException.class);
+        var response = ((WebApplicationException) error).getResponse();
+        assertThat(response.getStatus()).isEqualTo(Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+        assertThat(response.getEntity())
+                .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.EXECUTION_FAILED_MESSAGE)));
     }
 
     @Test
@@ -245,23 +415,31 @@ class FreeFormSqlQueryServiceTest {
     void checksTheExecutedQuery() {
         givenClickHouseReturnsOneRow();
 
-        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
+        var projectId = UUID.randomUUID();
+        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, projectId, QUERY).join();
+
+        verify(dao).explainAst(FreeFormSqlAccount.STANDARD, QUERY);
+        verify(dao).explainQueryTree(FreeFormSqlAccount.STANDARD, WORKSPACE, projectId.toString(), QUERY);
 
         var queryId = ArgumentCaptor.forClass(String.class);
-        verify(dao).execute(any(), anyString(), anyString(), anyString(), queryId.capture());
+        verify(dao).execute(eq(FreeFormSqlAccount.STANDARD), eq(WORKSPACE), eq(projectId.toString()), eq(QUERY),
+                queryId.capture());
         verify(queryLogReader).entries(queryId.getValue(), STANDARD_USER);
     }
 
-    @Test
-    @DisplayName("enforce: a scalar subquery reading a table is rejected before running, with the rewrite")
-    void enforceRejectsScalarReads() {
+    @ParameterizedTest
+    @EnumSource(FreeFormSqlPostRunCheckConfig.Mode.class)
+    @DisplayName("a scalar subquery reading a table is rejected before execution in every mode")
+    void rejectsScalarReadsBeforeExecution(FreeFormSqlPostRunCheckConfig.Mode mode) {
         givenClickHouseReturnsOneRow();
+        inMode(mode);
         givenScalarReadOfSpans();
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).cause().isInstanceOf(BadRequestException.class)
-                .satisfies(error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse()
-                        .getEntity())).contains("this one reads spans"));
+                .join()).cause().isExactlyInstanceOf(BadRequestException.class)
+                .satisfies(error -> assertThat(((WebApplicationException) error).getResponse().getEntity())
+                        .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.SCALAR_SUBQUERY_MESSAGE
+                                .formatted("spans")))));
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
@@ -286,8 +464,6 @@ class FreeFormSqlQueryServiceTest {
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         when(dao.explainPlan(any(), anyString(), anyString(), anyString()))
                 .thenThrow(new IllegalStateException("thrown before any future"));
-        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
-                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
 
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
@@ -295,62 +471,45 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
-    @DisplayName("audit: a query tree that cannot be explained still leaves the log and plan checked")
-    void auditChecksDespiteTreeFailure() {
+    @DisplayName("audit: a query tree that cannot be explained blocks execution")
+    void auditRejectsTreeFailureBeforeCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("query tree unavailable")));
 
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
-        verify(dao).explainPlan(any(), anyString(), anyString(), anyString());
-        verify(queryLogReader).entries(anyString(), eq(STANDARD_USER));
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+        verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("audit: a returned tree that cannot be classified fails the check rather than counting as unavailable")
-    void auditClassifierFailureFailsTheCheck() {
+    @DisplayName("audit: a malformed resolved tree blocks execution")
+    void auditRejectsMalformedTreeBeforeCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
         // A null line makes the parser throw on a tree ClickHouse did return.
         when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(Stream.of("QUERY id: 0", (String) null).toList()));
 
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(FreeFormSqlQueryServiceTest::assertExecutionFailed);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());
     }
 
     @Test
-    @DisplayName("audit: a scalar subquery reading a table is reported, and the query runs; its tree is explained after")
-    void auditRunsScalarReads() {
-        givenClickHouseReturnsOneRow();
-        inMode(FreeFormSqlPostRunCheckConfig.Mode.AUDIT);
-        givenScalarReadOfSpans();
-
-        var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
-
-        assertThat(response.results()).isEqualTo(chRows);
-        var order = inOrder(dao);
-        order.verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
-        order.verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("off: neither the scalar subquery gate nor the post-run check runs")
+    @DisplayName("off: a valid query runs without the post-run check")
     void offRunsNoCheck() {
         givenClickHouseReturnsOneRow();
         inMode(FreeFormSqlPostRunCheckConfig.Mode.OFF);
-        givenScalarReadOfSpans();
 
         var response = service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY).join();
 
         assertThat(response.results()).isEqualTo(chRows);
-        verify(dao, never()).explainQueryTree(any(), anyString(), anyString(), anyString());
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
         verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
         verify(queryLogReader, never()).entries(anyString(), anyString());
     }

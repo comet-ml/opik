@@ -269,10 +269,9 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: audit
   #  Default: 10s
@@ -822,6 +821,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: 2
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: 0
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -1113,6 +1116,8 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     readTimeout: 120s
     countTimeout: 60s
     # Small, so a test's pass takes many pages and slices.
@@ -1174,6 +1179,13 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+    nightlyMinTightness: 0.80
+    nightlyBigShare: 0.02
+    nightlySameMemory: 0.95
+    nightlyVerifyTokensPerPair: 25
+    nightlyTopicExamples: 4
+    verifyTopicExamples: 3
+    verifyGroupExamples: 5
   read:
     maxRowsToRead: 30000000
     maxMemoryUsage: 1073741824

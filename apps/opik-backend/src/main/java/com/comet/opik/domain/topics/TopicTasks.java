@@ -23,11 +23,25 @@ public class TopicTasks {
 
     /** Names topics over a discovery run's groups: {@link TopicPrompts#author}. */
     public static final String AUTHOR = LlmCall.AUTHOR.getValue();
+    /** A nightly update's first naming call: {@link TopicPrompts#naming}. */
+    static final String NAMING = "naming";
+    /** A nightly update's second naming call, over the groups the verify rejected. */
+    static final String NAMING_NEW = "naming_new";
+    /** A nightly update's verify of the first naming call's assigns: {@link TopicPrompts#verify}. */
+    static final String VERIFY = LlmCall.VERIFY.getValue();
     public static final String MAX_TOPICS_PLACEHOLDER = "{{max_topics}}";
     public static final String CLUSTERS_PLACEHOLDER = "{{clusters}}";
+    static final String TOPICS_PLACEHOLDER = "{{topics}}";
+    static final String PAIRS_PLACEHOLDER = "{{pairs}}";
+
+    private static final TaskPlaceholders NAMING_PLACEHOLDERS = new TaskPlaceholders(
+            Set.of(TOPICS_PLACEHOLDER, CLUSTERS_PLACEHOLDER), Set.of(), Set.of());
 
     static final Map<String, TaskPlaceholders> PLACEHOLDERS = Map.of(
-            AUTHOR, new TaskPlaceholders(Set.of(CLUSTERS_PLACEHOLDER), Set.of(), Set.of(MAX_TOPICS_PLACEHOLDER)));
+            AUTHOR, new TaskPlaceholders(Set.of(CLUSTERS_PLACEHOLDER), Set.of(), Set.of(MAX_TOPICS_PLACEHOLDER)),
+            NAMING, NAMING_PLACEHOLDERS,
+            NAMING_NEW, NAMING_PLACEHOLDERS,
+            VERIFY, new TaskPlaceholders(Set.of(PAIRS_PLACEHOLDER), Set.of(), Set.of()));
 
     private final Map<String, AiLabelTask> tasks;
 
@@ -47,5 +61,17 @@ public class TopicTasks {
 
     public AiLabelTask author() {
         return tasks.get(AUTHOR);
+    }
+
+    AiLabelTask naming() {
+        return tasks.get(NAMING);
+    }
+
+    AiLabelTask namingNew() {
+        return tasks.get(NAMING_NEW);
+    }
+
+    AiLabelTask verify() {
+        return tasks.get(VERIFY);
     }
 }

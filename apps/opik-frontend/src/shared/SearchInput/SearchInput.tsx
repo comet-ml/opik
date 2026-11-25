@@ -36,6 +36,7 @@ const SEARCH_STYLE_BY_DIMENSION: Partial<
 };
 
 export type SearchInputProps = {
+  id?: string;
   searchText?: string;
   setSearchText: (value: string) => void;
   placeholder?: string;
@@ -49,6 +50,7 @@ export type SearchInputProps = {
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
   (
     {
+      id,
       searchText = "",
       setSearchText,
       placeholder = "Search",
@@ -72,6 +74,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         </div>
         <DebounceInput
           ref={ref}
+          id={id}
           className={style.input}
           delay={disableDebounce ? 0 : SEARCH_TEXT_DELAY}
           onValueChange={setSearchText as (value: unknown) => void}
