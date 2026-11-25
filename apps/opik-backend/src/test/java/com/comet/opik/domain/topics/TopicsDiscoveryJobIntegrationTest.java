@@ -275,6 +275,46 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
+    @DisplayName("the internal reset forgets a saved list and deletes its topics, so a new discovery run builds one; with "
+            + "a run in flight it is refused (409) and changes nothing")
+    void resetByHand() {
+        var workspaceId = enabledWorkspace();
+        var projectId = TopicsTestData.newId();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        var firstRun = awaitSaved(projectId);
+        assertThat(data.topics(projectId)).isNotEmpty();
+
+        try (var response = resetProject(workspaceId, projectId)) {
+            assertThat(response.getStatus()).isEqualTo(204);
+        }
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.topicProject(projectId).listRunId()).isNull();
+        try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        assertThat(awaitSaved(projectId)).isNotEqualTo(firstRun);
+
+        var inFlight = TopicsTestData.newId();
+        data.savedList(workspaceId, inFlight, tomorrowStart(), FIXTURE.size());
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).queue(workspaceId, inFlight,
+                TopicsTestData.newId(), TopicProject.RunMode.UPDATE, Instant.now()));
+        var listRun = data.topicProject(inFlight).listRunId();
+        try (var response = resetProject(workspaceId, inFlight)) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("a run in flight");
+        }
+        assertThat(data.topicProject(inFlight).listRunId()).isEqualTo(listRun);
+        assertThat(data.topics(inFlight)).hasSize(1);
+        try (var response = resetProject(aiLabelsOnlyWorkspace(), inFlight)) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("not opted in");
+        }
+    }
+
+    @Test
     @DisplayName("deleting projects deletes their topics, with their prototype vectors, in batches, and keeps another "
             + "project's")
     void projectDeleteDeletesItsTopics() {
@@ -361,6 +401,13 @@ class TopicsDiscoveryJobIntegrationTest {
         return client.target("%s/v1/internal/topics/projects/%s/run".formatted(baseUrl, projectId))
                 .queryParam("workspace_id", workspaceId)
                 .queryParam("night", night)
+                .request(MediaType.APPLICATION_JSON_TYPE)
+                .post(Entity.json(""));
+    }
+
+    private Response resetProject(String workspaceId, UUID projectId) {
+        return client.target("%s/v1/internal/topics/projects/%s/reset".formatted(baseUrl, projectId))
+                .queryParam("workspace_id", workspaceId)
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));
     }

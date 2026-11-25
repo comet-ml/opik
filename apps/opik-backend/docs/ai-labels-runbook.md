@@ -586,18 +586,23 @@ from the vectors it has so far; the call logs a WARN `ignores the vectors backfi
 | `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill reaches. |
 | `503` | The run could not be started, so nothing is queued. Try again. |
 
-To build a project that already has a list again (for example after a bad discovery run), delete its list first. Keep
-the project's `topic_projects` row: its `backfill_*` columns are the vectors tick's, and the discovery run waits for
-them. Its `trace_topics` rows stay until the new run replaces them:
+To build a project that already has a list again (for example after a bad discovery run), forget its list first. An
+internal endpoint does it in one transaction: it clears the list on the project's `topic_projects` row, only when the
+project has no run in flight, and then deletes the project's topics.
 
-```sql
--- MySQL: forget a project's list, so the next plan (or the endpoint) builds it again. Not while a run is in flight.
-DELETE FROM topics WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
-UPDATE topic_projects
-SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
-WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
-AND (run_status IS NULL OR run_status IN ('saved', 'failed'));
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/reset?workspace_id=<workspace_id>"
 ```
+
+The row stays, with its run state and its `backfill_*` columns: those are the vectors tick's, and the discovery run waits
+for them. The project's `trace_topics` rows stay too. No read uses them while the project has no list, and the new run
+writes a newer row for each trace it labels. A trace the new run does not label keeps its old row, whose topic is gone,
+so it counts under Other. The next plan, or the run endpoint above, builds the list again.
+
+| Answer | Meaning |
+|---|---|
+| `204` | The list is forgotten and the project's topics are deleted. |
+| `409` | The workspace is not opted in at stage `build` or later (or topics are off), or the project has no `topic_projects` row or a run in flight. Nothing changed. The body's message says which. |
 
 ### Discovery runs and the vectors backfill
 

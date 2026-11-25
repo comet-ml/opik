@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,9 +31,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Queues a project's discovery run by hand instead of waiting for the leader's next plan. Internal and
- * cross-workspace, so it is reachable only from inside the cluster: like the other {@code /v1/internal} resources it is
- * not authenticated by {@code AuthFilter}. For the runbook.
+ * Queues a project's discovery run by hand instead of waiting for the leader's next plan, and forgets a project's list
+ * so the next discovery run builds it again. Internal and cross-workspace, so it is reachable only from inside the
+ * cluster: like the other {@code /v1/internal} resources it is not authenticated by {@code AuthFilter}. For the runbook.
  */
 @Path("/v1/internal/topics")
 @Produces(MediaType.APPLICATION_JSON)
@@ -62,6 +63,17 @@ public class TopicsResource {
         }
         var runId = planner.runByHand(workspaceId, projectId, night(night), ignoreBackfill).block();
         return Response.accepted(Map.of("run_id", runId)).build();
+    }
+
+    @POST
+    @Path("/projects/{projectId}/reset")
+    @Operation(operationId = "resetProjectTopics", summary = "Forget a project's topic list", description = "Deletes the project's topics and clears the list on its topic_projects row, in one transaction, so its next discovery run, planned or by hand, builds a new list. The row's run and vectors backfill state stay. The workspace is opted in to topics at stage build or later, and the project has a topic_projects row and no run in flight.", responses = {
+            @ApiResponse(responseCode = "204", description = "The list is forgotten"),
+            @ApiResponse(responseCode = "409", description = "The workspace is not opted in at stage build or later, or topics are off, or the project has no topic_projects row or a run in flight; nothing changed")})
+    public Response resetProject(@PathParam("projectId") UUID projectId,
+            @QueryParam("workspace_id") @NotBlank String workspaceId) {
+        planner.resetByHand(projectId).contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)).block();
+        return Response.noContent().build();
     }
 
     /** Default today (UTC). Tomorrow's window ends at tomorrow's start, so it holds today's traces so far; a later
