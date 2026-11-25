@@ -5,7 +5,6 @@ import com.comet.opik.api.GuardrailTrainingRun.GuardrailTrainingRunPage;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.JsonUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -52,8 +51,7 @@ public interface GuardrailTrainingService {
      */
     void cancel(UUID modelId, UUID runId);
 
-    /** Deletes the model's runs and returns their ids, from which their S3 keys derive. */
-    List<UUID> deleteByModel(UUID modelId);
+    void deleteByModel(UUID modelId);
 }
 
 @Slf4j
@@ -62,7 +60,6 @@ public interface GuardrailTrainingService {
 class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
 
     private static final String RUN_NOT_FOUND = "Guardrail training run not found";
-    private static final String FILES_LAYOUT = "v1";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -74,13 +71,9 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // The S3 key layout the run's dataset and adapter are written with, so a later layout leaves this run readable.
-        var metadata = JsonUtils.createObjectNode();
-        metadata.putObject("files").put("layout", FILES_LAYOUT);
-
         var run = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(GuardrailTrainingRunDAO.class);
-            dao.insert(runId, modelId, workspaceId, 1, metadata, userName);
+            dao.insert(runId, modelId, workspaceId, 1, userName);
             return dao.findById(runId, workspaceId).orElseThrow();
         });
         log.info("Created guardrail training run, id '{}', modelId '{}', workspaceId '{}'", runId, modelId,
@@ -155,17 +148,12 @@ class GuardrailTrainingServiceImpl implements GuardrailTrainingService {
     }
 
     @Override
-    public List<UUID> deleteByModel(@NonNull UUID modelId) {
+    public void deleteByModel(@NonNull UUID modelId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        var runIds = template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(GuardrailTrainingRunDAO.class);
-            var ids = dao.findIdsByModel(modelId, workspaceId);
-            dao.deleteByModel(modelId, workspaceId);
-            return ids;
-        });
+        int deleted = template.inTransaction(WRITE, handle -> handle.attach(GuardrailTrainingRunDAO.class)
+                .deleteByModel(modelId, workspaceId));
         log.info("Deleted guardrail training runs, modelId '{}', workspaceId '{}', count '{}'", modelId, workspaceId,
-                runIds.size());
-        return runIds;
+                deleted);
     }
 }

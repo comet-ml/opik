@@ -1,10 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailTrainingRun;
-import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.JsonNodeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -20,7 +18,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterArgumentFactory(JsonNodeArgumentFactory.class)
 @RegisterColumnMapper(JsonNodeColumnMapper.class)
 @RegisterConstructorMapper(GuardrailTrainingRun.class)
 public interface GuardrailTrainingRunDAO {
@@ -62,21 +59,17 @@ public interface GuardrailTrainingRunDAO {
     @SqlQuery("SELECT COUNT(*) FROM guardrail_training_runs WHERE model_id = :modelId AND workspace_id = :workspaceId")
     long countByModel(@Bind("modelId") UUID modelId, @Bind("workspaceId") String workspaceId);
 
-    // The ids a model's delete derives every run's S3 keys from.
-    @SqlQuery("SELECT id FROM guardrail_training_runs WHERE model_id = :modelId AND workspace_id = :workspaceId")
-    List<UUID> findIdsByModel(@Bind("modelId") UUID modelId, @Bind("workspaceId") String workspaceId);
-
     @SqlUpdate("DELETE FROM guardrail_training_runs WHERE model_id = :modelId AND workspace_id = :workspaceId")
     int deleteByModel(@Bind("modelId") UUID modelId, @Bind("workspaceId") String workspaceId);
 
-    // A run starts QUEUED, before any job exists: attempt 1 for a create or a retrain.
+    // A run starts QUEUED, before any job exists, with empty metadata: attempt 1 for a create or a retrain.
     @SqlUpdate("""
             INSERT INTO guardrail_training_runs(id, model_id, workspace_id, status, attempt, metadata, created_by,
                 last_updated_by)
-            VALUES (:id, :modelId, :workspaceId, 'QUEUED', :attempt, :metadata, :userName, :userName)
+            VALUES (:id, :modelId, :workspaceId, 'QUEUED', :attempt, '{}', :userName, :userName)
             """)
     void insert(@Bind("id") UUID id, @Bind("modelId") UUID modelId, @Bind("workspaceId") String workspaceId,
-            @Bind("attempt") int attempt, @Bind("metadata") JsonNode metadata, @Bind("userName") String userName);
+            @Bind("attempt") int attempt, @Bind("userName") String userName);
 
     // One write from either status in flight, so a run that moved from QUEUED to RUNNING since the caller read it is
     // still cancelled. Zero rows: the run is not the model's, is already cancelled, or has completed or failed.
