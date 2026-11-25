@@ -1,6 +1,7 @@
 package com.comet.opik.domain.threads;
 
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 class TraceThreadOnlineScorerPublisher {
 
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final @NonNull OrganizationResolver organizationResolver;
 
     public Mono<Void> publish(@NonNull UUID projectId, @NonNull List<TraceThreadModel> closeThreads) {
         return Mono.deferContextual(ctx -> {
@@ -43,22 +45,28 @@ class TraceThreadOnlineScorerPublisher {
                     .collect(Collectors.groupingBy(Map.Entry::getKey,
                             Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
 
-            return Flux.fromIterable(sampledThreadByRule.entrySet())
-                    .flatMap(ruleIdToThreadIds -> {
-                        UUID ruleId = ruleIdToThreadIds.getKey();
-                        Set<String> threadIds = ruleIdToThreadIds.getValue();
+            if (sampledThreadByRule.isEmpty()) {
+                return Mono.empty();
+            }
 
-                        log.info(
-                                "Enqueuing trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
-                                threadIds.size(), ruleId, projectId, workspaceId);
+            return organizationResolver.organizationId().singleOptional()
+                    .flatMapMany(organizationId -> Flux.fromIterable(sampledThreadByRule.entrySet())
+                            .flatMap(ruleIdToThreadIds -> {
+                                UUID ruleId = ruleIdToThreadIds.getKey();
+                                Set<String> threadIds = ruleIdToThreadIds.getValue();
 
-                        // Composed into the deferContextual chain so the enqueue inherits this workspace context.
-                        return onlineScorePublisher.enqueueThreadMessage(List.copyOf(threadIds), ruleId, projectId,
-                                workspaceId, userName)
-                                .doOnSuccess(unused -> log.info(
-                                        "Enqueued trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
-                                        threadIds.size(), ruleId, projectId, workspaceId));
-                    })
+                                log.info(
+                                        "Enqueuing trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
+                                        threadIds.size(), ruleId, projectId, workspaceId);
+
+                                // Composed into the deferContextual chain so the enqueue inherits this workspace
+                                // context.
+                                return onlineScorePublisher.enqueueThreadMessage(List.copyOf(threadIds), ruleId,
+                                        projectId, workspaceId, userName, organizationId.orElse(null))
+                                        .doOnSuccess(unused -> log.info(
+                                                "Enqueued trace threads: count='{}' ruleId='{}' projectId='{}' workspaceId='{}'",
+                                                threadIds.size(), ruleId, projectId, workspaceId));
+                            }))
                     .then();
         });
     }
