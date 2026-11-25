@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
@@ -52,6 +53,8 @@ class GuardrailsValidationServiceTest {
     @BeforeEach
     void setUp() {
         configuration = new OpikConfiguration();
+        // config-test.yml's inference block: a 5s decide deadline and a 1s margin
+        configuration.setInference(TestConfigUtils.loadConfigTest().getInference());
         service = new GuardrailsValidationServiceImpl(inference, configuration);
     }
 
@@ -105,7 +108,7 @@ class GuardrailsValidationServiceTest {
         assertThat(sent.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(sent.state().asText()).isEqualTo(TEXT);
         assertThat(sent.lane()).isEqualTo(DecideRequest.REALTIME_LANE);
-        // opik-inference's longest realtime deadline, and a second more for the client.
+        // inference.realtime.decideDeadline, and decideMargin more for the client.
         assertThat(sent.deadlineMs()).isEqualTo(5_000L);
         assertThat(Duration.between(Instant.now(), deadline.getValue()))
                 .isBetween(Duration.ofSeconds(5), Duration.ofSeconds(6));

@@ -242,8 +242,7 @@ public class OpikConfiguration extends JobConfiguration {
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: the backend runs guardrail checks on opik-inference")
     public boolean isGuardrailsInferenceConfigured() {
-        return !serviceToggles.isGuardrailsValidationsEnabled()
-                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+        return !serviceToggles.isGuardrailsValidationsEnabled() || inference.isConfigured();
     }
 
     // Every guardrail models endpoint passes the guardrails gate, which needs the validations toggle: training alone
@@ -257,8 +256,7 @@ public class OpikConfiguration extends JobConfiguration {
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
     public boolean isAiLabelsInferenceConfigured() {
-        return !aiLabels.isEnabled()
-                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+        return !aiLabels.isEnabled() || inference.isConfigured();
     }
 
     @Valid @NotNull @JsonProperty
@@ -279,9 +277,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     // Topics embeds ai-labels' summaries through ai-labels' opik-inference deployment: without labels there is nothing.
     @JsonIgnore
-    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED) and inference.url (OPIK_INFERENCE_URL)")
+    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED), inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL)")
     public boolean isTopicsAiLabelsEnabled() {
-        return !topics.isEnabled() || (aiLabels.isEnabled() && StringUtils.isNotBlank(inference.getUrl()));
+        return !topics.isEnabled() || (aiLabels.isEnabled() && inference.isConfigured());
     }
 
     @JsonIgnore

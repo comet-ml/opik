@@ -1082,6 +1082,9 @@ inference:
     maxRetries: 2
     baseBackoff: 100ms
     submitBytesPerSecond: 1048576
+  realtime:
+    decideDeadline: 5s
+    decideMargin: 1s
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
