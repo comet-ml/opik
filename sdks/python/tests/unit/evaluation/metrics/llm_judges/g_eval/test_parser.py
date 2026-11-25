@@ -702,3 +702,76 @@ async def test_geval_litellm_path_scores_end_to_end_async(
     assert captured["top_logprobs"] == 20
     assert result.value == pytest.approx(expected_value, abs=1e-9)
     assert result.reason == expected_reason
+
+
+# --- reason read on the logprob path ------------------------------------------
+# The logprob branch computes the score from the token stream, then reads the
+# reason from the message content. That read must accept the same wrappers as
+# the text path (code fence, leading prose), otherwise a score that was already
+# computed is discarded and the metric fails.
+
+
+def _score_seven_entries(prefix_tokens, suffix_tokens):
+    return [
+        *(_entry(token, -0.01) for token in prefix_tokens),
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry(",", -0.01),
+        _entry(" ", -0.01),
+        _entry('"', -0.01),
+        _entry("reason", -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry('"ok"', -0.01),
+        _entry("}", -0.01),
+        *(_entry(token, -0.01) for token in suffix_tokens),
+    ]
+
+
+@pytest.mark.parametrize(
+    "content, prefix_tokens, suffix_tokens",
+    [
+        (
+            '```json\n{"score":7, "reason": "ok"}\n```',
+            ["```", "json", "\n"],
+            ["\n", "```"],
+        ),
+        (
+            'Here is my evaluation:\n{"score":7, "reason": "ok"}',
+            ["Here", " is", " my", " evaluation", ":\n"],
+            [],
+        ),
+    ],
+    ids=["code_fence", "leading_prose"],
+)
+def test_logprob_path_reads_reason_from_wrapped_json_like_the_text_path(
+    content, prefix_tokens, suffix_tokens
+):
+    bare = parser.parse_litellm_model_output(
+        _response('{"score":7, "reason": "ok"}', _score_seven_entries([], [])),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+
+    wrapped = parser.parse_litellm_model_output(
+        _response(content, _score_seven_entries(prefix_tokens, suffix_tokens)),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+
+    # The weighted logprob score, not the text-path score of 0.7.
+    assert bare.value == pytest.approx(0.6219349153822014, abs=1e-12)
+    assert wrapped.value == pytest.approx(bare.value, abs=1e-12)
+    assert wrapped.reason == "ok"
+    text_path = parser.parse_litellm_model_output(
+        _response(content, _score_seven_entries(prefix_tokens, suffix_tokens)),
+        name="g_eval",
+        log_probs_supported=False,
+    )
+    assert wrapped.reason == text_path.reason

@@ -1,5 +1,4 @@
 import logging
-import json
 import math
 import re
 from typing import Any, Dict, TYPE_CHECKING
@@ -108,7 +107,9 @@ def parse_litellm_model_output(
                 f"Failed to compute final score from log_probs, the value is out of [0, 1] range: {final_score}"
             )
 
-        reason_data = json.loads(_extract_message_content(choice_dict))
+        reason_data = parsing_helpers.extract_json_content_or_raise(
+            _extract_message_content(choice_dict)
+        )
         reason = reason_data["reason"]
         return score_result.ScoreResult(name=name, value=final_score, reason=reason)
     except Exception as exception:
