@@ -49,6 +49,7 @@ import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtil
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -97,7 +98,7 @@ class OnlineScoringSpanSamplerTest {
                 onlineScorePublisher);
 
         // enqueueMessage is reactive now; the sampler chains .contextWrite(...).subscribe() on the result.
-        lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+        lenient().when(onlineScorePublisher.enqueueMessage(any(), any(), any())).thenReturn(Mono.empty());
 
         projectId = UUID.randomUUID();
         workspaceId = "workspace-123";
@@ -132,7 +133,7 @@ class OnlineScoringSpanSamplerTest {
                     eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
             verify(ruleEvaluatorService, never()).findAll(any(), any(),
                     eq(AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -163,7 +164,7 @@ class OnlineScoringSpanSamplerTest {
             verify(ruleEvaluatorService, never()).findAll(
                     any(), any(), eq(AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
             verify(onlineScorePublisher, times(1)).enqueueMessage(any(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
         }
 
         @ParameterizedTest
@@ -196,7 +197,7 @@ class OnlineScoringSpanSamplerTest {
             // Then
             ArgumentCaptor<List<SpanToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher, times(1)).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
 
             List<SpanToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -251,7 +252,7 @@ class OnlineScoringSpanSamplerTest {
 
             // Then
             verify(onlineScorePublisher, times(1)).enqueueMessage(any(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
         }
 
         @Test
@@ -272,7 +273,7 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -301,7 +302,7 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -333,7 +334,7 @@ class OnlineScoringSpanSamplerTest {
             ArgumentCaptor<List<SpanFilter>> filterCaptor = ArgumentCaptor.forClass(List.class);
             verify(filterEvaluationService, times(1)).matchesAllFilters(filterCaptor.capture(), eq(span));
             verify(onlineScorePublisher, times(1)).enqueueMessage(any(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
 
             // Verify the converted filters
             List<SpanFilter> convertedFilters = filterCaptor.getValue();
@@ -370,7 +371,7 @@ class OnlineScoringSpanSamplerTest {
             // Then
             ArgumentCaptor<List<SpanToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher, times(1)).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
             // With rate 1.0, both spans should be sampled (though randomness may affect this in real scenarios)
             assertThat(captor.getValue().size()).isGreaterThanOrEqualTo(0);
         }
@@ -397,7 +398,7 @@ class OnlineScoringSpanSamplerTest {
 
             // Then
             // With rate 0.0, no spans should be sampled
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -462,7 +463,7 @@ class OnlineScoringSpanSamplerTest {
             verify(ruleEvaluatorService, times(1)).findAll(projectId2, workspaceId,
                     AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
             verify(onlineScorePublisher, times(2)).enqueueMessage(any(),
-                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE), isNull());
         }
     }
 
@@ -481,7 +482,7 @@ class OnlineScoringSpanSamplerTest {
 
             // Then
             verify(ruleEvaluatorService, never()).findAll(any(), any(), any());
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -500,7 +501,7 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
     }
 

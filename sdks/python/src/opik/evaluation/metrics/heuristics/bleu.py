@@ -164,6 +164,11 @@ class SentenceBLEU(BaseBLEU):
             MetricComputationError:
                 - If the candidate or any reference is empty.
         """
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"SentenceBLEU metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty (single-sentence BLEU).")
 
@@ -182,6 +187,11 @@ class SentenceBLEU(BaseBLEU):
                 )
             ref_lists = []
             for ref_str in reference:
+                if not isinstance(ref_str, str):
+                    raise MetricComputationError(
+                        "SentenceBLEU metric requires string 'reference' items, "
+                        f"got {type(ref_str).__name__}"
+                    )
                 if not ref_str.strip():
                     raise MetricComputationError(
                         "Encountered empty reference (single-sentence BLEU)."

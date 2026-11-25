@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /**
  * Every statement on {@code topic_projects}, a project's current topics state, never its history. Each group of
- * columns has its own writer and is never set by another: the run fields (the current or last run, first build or
+ * columns has its own writer and is never set by another: the run fields (the current or last run, discovery run or
  * nightly update), the list fields (the saved list, written by a run's save), and the backfill fields (the topic
  * vectors tick). A run starts {@code running} and moves once, to {@code saved} or {@code failed}; only a
  * {@code running} attempt moves. {@code failed_runs} and {@code first_failed_at} count the failed attempts since the
@@ -97,7 +97,7 @@ public interface TopicProjectDAO {
 
     /**
      * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
-     * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
+     * {@code expectedListRunId}, null for a discovery run. 0 when another run saved the project meanwhile, or the row is
      * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
      */
     @SqlUpdate("""
@@ -137,7 +137,7 @@ public interface TopicProjectDAO {
 
     /**
      * Of the projects of {@code workspaceIds}, those with no saved list and a trace written at or after {@code since}:
-     * the ones a first build may be due for.
+     * the ones a discovery run may be due for.
      */
     @SqlQuery("""
             SELECT p.workspace_id, p.id AS project_id FROM projects p
