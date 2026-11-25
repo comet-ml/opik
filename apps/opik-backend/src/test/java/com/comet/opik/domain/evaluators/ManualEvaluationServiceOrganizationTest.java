@@ -3,9 +3,11 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
@@ -26,6 +28,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -122,6 +125,34 @@ class ManualEvaluationServiceOrganizationTest {
         verify(onlineScorePublisher, times(threadJudges.size())).enqueueThreadMessage(anyList(),
                 any(AutomationRuleEvaluator.class), eq(projectId), eq(workspaceId), eq(userName), isNull());
         assertThat(resolver.lookups()).isOne();
+    }
+
+    @Test
+    @DisplayName("Span requests don't look the organization up")
+    void spanRequestsDoNotLookTheOrganizationUp() {
+        var resolver = FixedOrganizationResolver.of(organizationId);
+        var spanJudge = PODAM_FACTORY.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class);
+        var spans = Stream.generate(() -> Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(projectId)
+                .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                .startTime(Instant.now())
+                .build())
+                .limit(2)
+                .toList();
+        var spanIds = spans.stream().map(Span::id).toList();
+        when(projectService.get(projectId, workspaceId)).thenReturn(Project.builder()
+                .id(projectId)
+                .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                .build());
+        when(spanService.getByIds(new HashSet<>(spanIds))).thenReturn(Flux.fromIterable(spans));
+        when(onlineScorePublisher.enqueueMessage(anyList(), any(), any())).thenReturn(Mono.empty());
+
+        evaluate(resolver, ManualEvaluationEntityType.SPAN, spanIds, List.of(spanJudge));
+
+        verify(onlineScorePublisher).enqueueMessage(anyList(), eq(spanJudge.getType()), isNull());
+        assertThat(resolver.lookups()).isZero();
     }
 
     private void evaluate(OrganizationResolver resolver, ManualEvaluationEntityType entityType, List<UUID> entityIds,

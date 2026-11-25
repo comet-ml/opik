@@ -1,5 +1,6 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.PromptType;
@@ -36,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -102,8 +104,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                 "Starting manual evaluation for '{}' entities of type '{}' with '{}' rules in project '{}', workspace '{}'",
                 request.entityIds().size(), request.entityType(), request.ruleIds().size(), projectId, workspaceId);
 
+        // Span messages can't carry an organization, so a span request has nothing to wait for
+        var organization = request.entityType() == ManualEvaluationEntityType.SPAN
+                ? Mono.just(Optional.<String>empty())
+                : organizationResolver.organizationId().singleOptional();
+
         // First in the zip, so it runs while findByIds blocks the thread instead of after it
-        return Mono.zip(organizationResolver.organizationId().singleOptional(), Mono.fromCallable(() -> {
+        return Mono.zip(organization, Mono.fromCallable(() -> {
             Set<UUID> ruleIdSet = new HashSet<>(request.ruleIds());
             List<?> rawRules = automationRuleEvaluatorService.findByIds(ruleIdSet, Set.of(projectId), workspaceId);
             @SuppressWarnings("unchecked")
