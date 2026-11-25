@@ -31,7 +31,7 @@ import java.util.concurrent.Callable;
  * </ul>
  *
  * <p>Light work (mapping one row, building a small DTO) needs none of these. The rules are in
- * {@code .agents/skills/opik-backend/reactive-threading.md}.
+ * {@code .agents/skills/reactive-threading/SKILL.md}.
  */
 @UtilityClass
 public class Offload {

@@ -1,0 +1,14 @@
+---
+description: Reactive threading in the Java backend
+globs: apps/opik-backend/src/main/java/**/*.java
+alwaysApply: false
+---
+# Backend Reactive Threading
+
+Before writing or reviewing a `Mono` or `Flux` chain, load the `reactive-threading` skill and run its "Validate" steps.
+
+- A blocking call (I/O that returns a plain value: S3, JDBI, sync Redisson, `@Cacheable` getters, sync HTTP) runs in
+  its own `Offload.blocking(...)`.
+- CPU that grows with the input runs in `Offload.cpu(...)`, never on `boundedElastic` or a client thread.
+- Never block on `ClickHouseWorker`, `chc-operation`, `redisson-netty` or `parallel`; `block()` only at the edge.
+- Light work gets no hop.

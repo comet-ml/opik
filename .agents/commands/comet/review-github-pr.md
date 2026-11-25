@@ -126,7 +126,7 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - API: RESTful conventions, proper HTTP status codes, input validation
 - Migrations: Backward-compatible schema changes, proper rollback support
 - Logging: Appropriate log levels, no sensitive data in logs
-- Reactive threading: apply the "Critical: Always Request Changes" list in `.agents/skills/opik-backend/reactive-threading.md`. A blocking call (S3, JDBI, sync Redis or `@Cacheable`, sync HTTP) after a ClickHouse or Redis call without `Offload.blocking` is a blocker
+- Reactive threading: apply the "Review" section of `.agents/skills/reactive-threading/SKILL.md`. A blocking call (S3, JDBI, sync Redis or `@Cacheable`, sync HTTP) after a ClickHouse or Redis call without `Offload.blocking` is a blocker
 
 #### Frontend (`apps/opik-frontend/**`)
 
