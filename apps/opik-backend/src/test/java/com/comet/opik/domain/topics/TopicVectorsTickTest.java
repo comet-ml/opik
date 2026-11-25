@@ -1308,8 +1308,9 @@ class TopicVectorsTickTest {
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
             assertThat(countTraceTopicRows(workspaceId)).isZero();
-            // The lists read comes before the embed, so its failure leaves all 5 traces untried. An insert or a labelling
-            // takes the read's 5 traces at once, after its last chunk: nothing is left for a later step.
+            // The lists read, the labelling and the insert run once, after the read's last chunk, so any failure leaves
+            // all 5 written traces without a row. After a failed lists read, the labelling counts them as after_failure;
+            // a failed labelling or insert is the step's own failure.
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
                     .containsExactly(failure(workspaceId, phase, "IllegalStateException"));
             switch (phase) {
@@ -1408,7 +1409,7 @@ class TopicVectorsTickTest {
             verify(hanging, times(1)).readSavedLists(any(), any());
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.duration_seconds")).singleElement()
                     .satisfies(point -> assertThat(point.value()).isLessThan(3.0));
-            // The read comes before the embed: none of the 5 traces is tried.
+            // The lists read runs after the read's chunks: its failure leaves all 5 written traces without a row.
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
                     "workspace_id", workspaceId))
                     .isEqualTo(5);

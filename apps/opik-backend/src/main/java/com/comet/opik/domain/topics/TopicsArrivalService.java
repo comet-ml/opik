@@ -14,8 +14,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +27,9 @@ import java.util.stream.Collectors;
  * source {@code arrival} and no run id: one labelling and one insert per read.
  *
  * <p>The rule is the algorithm's {@link TopicAlgorithm#labeller}, the same one the labelling pass uses, made from the
- * project's topics and the list's known-Other vectors. A workspace's turn reads the saved lists of its read's projects
- * once, before their embed calls ({@link TopicRunStore#readSavedLists}). A project with no saved list, or a list with
+ * project's topics and the list's known-Other vectors. After a workspace read's chunks are written, arrival reads the
+ * saved lists of their live vectors' projects ({@link TopicRunStore#readSavedLists}), labels and inserts, back to
+ * back, so a list a run saves meanwhile is missed only for that one step. A project with no saved list, or a list with
  * no topic, has no labeller: its traces get no row and wait for the project's next run. The labelling runs on
  * {@link Schedulers#parallel()}. Only a workspace listed at the arrival stage or a later one gets rows: the
  * vectors tick gives the others {@link ArrivalSteps#OFF}.
@@ -64,17 +63,17 @@ class TopicsArrivalService {
     private final @NonNull TopicsArrivalMetrics metrics;
 
     /**
-     * Reads the saved lists of those of {@code projectIds} not read yet this tick, in one read-only transaction, and
-     * asks the algorithm for each list's labeller.
+     * Reads the saved lists of {@code projectIds}, in one read-only transaction, and asks the algorithm for each
+     * list's labeller. Called right before {@link #label}, so the lists are as fresh as the insert that follows.
      *
-     * @return {@code steps} with those projects read and their labellers; unchanged when arrival is off or stopped,
-     *         every project is read already, or less than {@code topics.arrival.minStepTime} is left; stopped when the
+     * @return {@code steps} with exactly those projects read and their labellers; unchanged when arrival is off or
+     *         stopped, there is no project, or less than {@code topics.arrival.minStepTime} is left; stopped when the
      *         read fails
      */
     Mono<ArrivalSteps> loadLabellers(@NonNull TopicVectorsMetrics.Workspace workspace,
             @NonNull Collection<UUID> projectIds,
             @NonNull TickBudget budget, @NonNull ArrivalSteps steps) {
-        var toRead = projectIds.stream().filter(projectId -> !steps.read().contains(projectId)).distinct().toList();
+        var toRead = projectIds.stream().distinct().toList();
         if (!steps.on() || steps.stopped() || toRead.isEmpty()) {
             return Mono.just(steps);
         }
@@ -86,14 +85,11 @@ class TopicsArrivalService {
         return timed(workspace, steps, store.readSavedLists(workspace.id(), toRead)
                 .timeout(left)
                 .map(saved -> {
-                    var read = new HashSet<>(steps.read());
-                    read.addAll(toRead);
-                    var labellers = new HashMap<>(steps.labellers());
                     // A list with no topic would label every trace Other: it gets no row, as no list.
-                    saved.stream().filter(list -> !list.topics().isEmpty())
-                            .forEach(list -> labellers.put(list.project().projectId(),
-                                    algorithm.labeller(list.topics(), list.project().otherVectors())));
-                    return steps.toBuilder().read(Set.copyOf(read)).labellers(Map.copyOf(labellers)).build();
+                    var labellers = saved.stream().filter(list -> !list.topics().isEmpty())
+                            .collect(Collectors.toUnmodifiableMap(list -> list.project().projectId(),
+                                    list -> algorithm.labeller(list.topics(), list.project().otherVectors())));
+                    return steps.toBuilder().read(Set.copyOf(toRead)).labellers(labellers).build();
                 })
                 .onErrorResume(exception -> {
                     log.warn("Topic arrival read failed, arrival stops for the workspace this tick, workspace '{}', "

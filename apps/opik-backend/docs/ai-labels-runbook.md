@@ -710,9 +710,9 @@ Only a workspace listed at stage `arrival` or later in `TOPICS_ENABLED_WORKSPACE
 ### What it writes
 
 - One `trace_topics` row per trace: `source = 'arrival'`, `run_id` null, the topic's id or the all-zeros id for Other.
-- The list comes from MySQL, in one read-only transaction for the projects of a workspace's read, before their embed
-  calls, once per project per tick: the projects' `topics` rows (their `vectors`) and `topic_projects.other_vectors`.
-  There is no cache.
+- The list comes from MySQL, in one read-only transaction for the projects of a workspace read's live vectors, right
+  before the labelling and the insert: the projects' `topics` rows (their `vectors`) and
+  `topic_projects.other_vectors`. There is no cache.
 - A project with no saved list (`list_run_id` or `window_until` null), or a list with no topic, has no labeller. Its
   traces get no row and wait for the project's next run.
 - The insert goes through the same path as a run's `trace_topics` insert: retried on a transient error, counted in
@@ -724,8 +724,9 @@ Readers take the latest row per trace by `last_updated_at`. A run writes its row
 id, later than the arrival row, so the run's row wins. On an equal `last_updated_at`, the run's row still wins:
 readers then take the row with `source = 'run'`.
 
-One race is left. A tick that read the old list just before a run saves can insert a few rows after the run's rows.
-These rows hold the old list's topic until the next run of the project.
+One race is left. An arrival step reads the lists, labels and inserts back to back. A step that read the old list just
+before a run saves can insert a few rows after the run's rows. These rows hold the old list's topic until the next run
+of the project labels those traces.
 
 ### Settings and turning it off
 

@@ -13,7 +13,7 @@ import java.util.UUID;
  * {@link TopicsArrivalService} returns the next value, and the vectors tick carries it from one workspace read to the next.
  *
  * @param on the workspace is listed at the arrival stage or a later one
- * @param read the projects whose saved list was read this tick
+ * @param read the projects whose saved list the last lists read read
  * @param labellers of the projects read, those whose list has a topic
  * @param spent the time the workspace's steps took this tick
  * @param stopped a step failed: arrival does nothing more for the workspace this tick

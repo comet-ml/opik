@@ -35,9 +35,9 @@ class TopicVectorWriter {
     private final @NonNull TopicsArrivalService arrival;
 
     /**
-     * Reads the saved lists of the candidates' projects for topic on arrival, embeds the candidates and writes each
-     * chunk, then labels the live vectors of all its chunks in one arrival step. A read that ends early (a cut
-     * budget, a failed chunk) still labels the vectors written before.
+     * Embeds the candidates and writes each chunk, then gives the live vectors of all its chunks their topic on
+     * arrival: the saved lists of their projects are read, and the vectors labelled and inserted, back to back. A read
+     * that ends early (a cut budget, a failed chunk) still labels the vectors written before.
      *
      * @param missedBefore with the long-window pass, the short window's start: the vectors written for statuses before it
      *        are rows the fresh reads missed, and are counted as such
@@ -51,17 +51,20 @@ class TopicVectorWriter {
                 : candidates.stream().filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
                         .map(VectorKey::of)
                         .collect(Collectors.toUnmodifiableSet());
-        var projectIds = candidates.stream().map(Candidate::projectId).collect(Collectors.toUnmodifiableSet());
-        return arrival.loadLabellers(workspace, projectIds, budget, steps)
-                .flatMap(read -> embedder.embed(workspace, candidates, budget)
-                        .concatMap(outcome -> write(workspace, outcome, missed))
-                        // The error ends the fold as a value, so the chunks written before it still get labelled.
-                        .onErrorResume(error -> Mono.just(Written.failed(error)))
-                        .reduce(Written.EMPTY, Written::plus)
-                        .flatMap(written -> arrival.label(workspace, written.live(), budget, read)
-                                .flatMap(next -> written.error() == null
-                                        ? Mono.just(new ChunkWrite(written.result(), written.settled(), next))
-                                        : Mono.error(written.error()))));
+        return embedder.embed(workspace, candidates, budget)
+                .concatMap(outcome -> write(workspace, outcome, missed))
+                // The error ends the fold as a value, so the chunks written before it still get labelled.
+                .onErrorResume(error -> Mono.just(Written.failed(error)))
+                .reduce(Written.EMPTY, Written::plus)
+                .flatMap(written -> {
+                    var projectIds = written.live().stream().map(TopicVector::projectId)
+                            .collect(Collectors.toUnmodifiableSet());
+                    return arrival.loadLabellers(workspace, projectIds, budget, steps)
+                            .flatMap(read -> arrival.label(workspace, written.live(), budget, read))
+                            .flatMap(next -> written.error() == null
+                                    ? Mono.just(new ChunkWrite(written.result(), written.settled(), next))
+                                    : Mono.error(written.error()));
+                });
     }
 
     /**
