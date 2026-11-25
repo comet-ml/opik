@@ -330,6 +330,10 @@ customCharts:
   #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
   #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
   enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
+  #  Default: false (public endpoints off)
+  #  Description: Exposes the public Custom Charts endpoints (POST /v1/private/analytics-queries) to API keys and the
+  #   Opik MCP server. Off, they answer 501. Requires enabled above.
+  publicEndpointsEnabled: ${TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -898,6 +902,21 @@ rateLimit:
       userFacingBucketName: dashboard_widget_queries
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
+    analyticsQueries:
+      # Default: 120
+      # Description: how many queries the public analytics-queries endpoint (API keys and the Opik MCP server) allows
+      #   per workspace in the specified time bucket. Separate from dashboardWidgetQueries, so programmatic callers
+      #   cannot use up the budget of dashboard and insights view viewers.
+      limit: ${RATE_LIMIT_ANALYTICS_QUERIES_PER_WORKSPACE_LIMIT:-120}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_ANALYTICS_QUERIES_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Analytics-Queries
+      # Description: User facing bucket name
+      userFacingBucketName: analytics_queries
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for analytics queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
