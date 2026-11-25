@@ -620,11 +620,9 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       openRowMenu("acme-llama-70b");
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
       fireEvent.click(
-        await screen.findByRole("menuitem", { name: "Remove model" }),
-      );
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Remove model" }),
+        await screen.findByRole("button", { name: "Delete model" }),
       );
 
       await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
@@ -730,13 +728,13 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       openRow("acme-llama-70b");
-      fireEvent.click(screen.getByRole("button", { name: /Remove model/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Delete model/ }));
 
       expect(mutateAsync).not.toHaveBeenCalled();
       fireEvent.click(
         within(
-          screen.getByRole("dialog", { name: "Remove acme-llama-70b?" }),
-        ).getByRole("button", { name: "Remove model" }),
+          screen.getByRole("dialog", { name: "Delete acme-llama-70b" }),
+        ).getByRole("button", { name: "Delete model" }),
       );
 
       await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
@@ -996,7 +994,7 @@ describe("CostCenterTab", () => {
           screen.getByTestId("model-price-changed-elsewhere"),
         ).toHaveTextContent("removed");
         expect(
-          screen.queryByRole("button", { name: /Remove model/ }),
+          screen.queryByRole("button", { name: /Delete model/ }),
         ).toBeNull();
       });
 
@@ -1037,7 +1035,7 @@ describe("CostCenterTab", () => {
           screen.getByRole("button", { name: /Restore all defaults/ }),
         ).toBeVisible();
         expect(
-          screen.queryByRole("button", { name: /Remove model/ }),
+          screen.queryByRole("button", { name: /Delete model/ }),
         ).toBeNull();
       });
 
@@ -1062,7 +1060,7 @@ describe("CostCenterTab", () => {
 
         expect(screen.getByLabelText("Priced like")).toHaveValue("gpt-4.1");
         expect(
-          screen.getByRole("button", { name: /Remove model/ }),
+          screen.getByRole("button", { name: /Delete model/ }),
         ).toBeVisible();
         expect(
           screen.queryByRole("button", { name: /Restore all defaults/ }),

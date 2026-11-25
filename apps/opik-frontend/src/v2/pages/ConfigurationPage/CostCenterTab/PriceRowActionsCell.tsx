@@ -43,14 +43,14 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
             title={
               isOverride
                 ? `Restore the defaults of ${entry.model}?`
-                : `Remove ${entry.model}?`
+                : `Delete ${entry.model}`
             }
             description={
               isOverride
                 ? "Spans saved after this use Opik's built-in price. Spans already saved keep their cost."
                 : "Spans saved after this won't have a price for this model. Spans already saved keep their cost."
             }
-            confirmText={isOverride ? "Restore all defaults" : "Remove model"}
+            confirmText={isOverride ? "Restore all defaults" : "Delete model"}
             confirmButtonVariant="destructive"
           />
           <DropdownMenu>
@@ -66,14 +66,20 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsConfirmOpen(true)}>
-                {isOverride ? (
+              {isOverride ? (
+                <DropdownMenuItem onClick={() => setIsConfirmOpen(true)}>
                   <RotateCcw className="mr-2 size-4" />
-                ) : (
+                  Restore all defaults
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => setIsConfirmOpen(true)}
+                  variant="destructive"
+                >
                   <Trash className="mr-2 size-4" />
-                )}
-                {isOverride ? "Restore all defaults" : "Remove model"}
-              </DropdownMenuItem>
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </>

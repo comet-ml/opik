@@ -844,7 +844,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                     onClick={() => setConfirming("remove")}
                   >
                     <Trash2 className="mr-1.5 size-3.5" />
-                    Remove model
+                    Delete model
                   </Button>
                 )}
               </>
@@ -870,9 +870,9 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
         open={confirming === "remove"}
         setOpen={(next) => !next && setConfirming(undefined)}
         onConfirm={() => save(true)}
-        title={`Remove ${title}?`}
+        title={`Delete ${title}`}
         description="Spans saved after this won't have a price for this model. Spans already saved keep their cost."
-        confirmText="Remove model"
+        confirmText="Delete model"
         confirmButtonVariant="destructive"
       />
     </Sheet>
