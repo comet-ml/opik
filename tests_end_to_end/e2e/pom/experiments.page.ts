@@ -208,13 +208,13 @@ export class ExperimentsPage {
   /**
    * The same-dataset picker, raised when exactly one experiment is selected.
    *
-   * Titled "Compare experiments" — distinct from the mixed-dataset guard
+   * Titled "Add to compare" — distinct from the mixed-dataset guard
    * below, which is a different dialog with a different title, and telling the
    * two apart is most of what this PR's branches are about.
    */
   get comparePickerDialog(): Locator {
     return this.page.getByRole('dialog').filter({
-      has: this.page.getByRole('heading', { name: 'Compare experiments' }),
+      has: this.page.getByRole('heading', { name: 'Add to compare' }),
     });
   }
 

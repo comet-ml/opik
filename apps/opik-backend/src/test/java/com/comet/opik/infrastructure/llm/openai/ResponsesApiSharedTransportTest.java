@@ -105,12 +105,12 @@ class ResponsesApiSharedTransportTest {
             var params = ResponseCreateParams.builder().model(model).input("hello").build();
             var expectedConnections = 1;
 
-            var closedClient = generator.newResponsesApiClient(config, model, null, false);
+            var closedClient = generator.newResponsesApiClient(config, model, null, false, null);
             closedClient.responses().create(params);
             closedClient.close();
 
             // OpenAIClient has close() but isn't AutoCloseable
-            var nextClient = generator.newResponsesApiClient(config, model, null, false);
+            var nextClient = generator.newResponsesApiClient(config, model, null, false, null);
             try {
                 var actualResponse = nextClient.responses().create(params);
 

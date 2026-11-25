@@ -77,9 +77,10 @@ public class TopicWindowDAO {
      *
      * <p>The bounds come from numbering the live traces in creation order, not from an array of all their times: the
      * sort spills to disk past {@code max_bytes_before_external_sort}, an eighth of the memory guard, and the frame of
-     * one row lets the numbering drop each block once it is read. So the memory follows the guard, not the window: at
-     * 30 million traces 84 MiB, where sorting an array of every time took 1.5 GiB. The ratio setting is off, as it
-     * would override the byte limit.
+     * one row lets the numbering drop each block once it is read. The ratio setting is off, as it would override the
+     * byte limit. What still grows with the window is the per-trace {@code GROUP BY trace_id} before the numbering,
+     * about 12 MiB per million live traces: 376 MiB at 30 million under the 1 GiB guard, so the guard is reached again
+     * at about 70 to 80 million (extrapolated).
      */
     private static final String COUNT_AND_BOUNDS = """
             SELECT max(n) AS traces,

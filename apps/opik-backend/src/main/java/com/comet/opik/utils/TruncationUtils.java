@@ -151,11 +151,15 @@ public final class TruncationUtils {
      * node. For a node parsed from JSON, both match {@code toJsonString(node)} and
      * {@code createSlimJsonString(toJsonString(node))}, the string path's columns.
      *
-     * <p>Only for a node parsed from JSON. In a node built in code, a value can render differently once reparsed, so
-     * the slim copy can differ from the string path's while the full JSON matches. A {@code BigDecimal} of 10, as
-     * {@code valueToTree} builds online-evaluation scores, renders as {@code 1E+1}: kept here, {@code 10.0} once
-     * reparsed. Float, binary and POJO values differ the same way. Reads parse the slim JSON, so they get the same
-     * value either way.
+     * <p>Only for a node parsed from JSON. In a node built in code, the slim copy can differ from the string path's
+     * while the full JSON matches:
+     * <ul>
+     *   <li>A {@code BigDecimal} renders differently once reparsed. Of 10, as {@code valueToTree} builds
+     *   online-evaluation scores, it is {@code 1E+1} here and {@code 10.0} on the string path. Reads parse the slim
+     *   JSON, so they get the same number either way.</li>
+     *   <li>A binary or POJO value is not a string node, so it is kept whole here, while the string path reparses it
+     *   into strings and cuts the long ones. Past the slim limit, reads get different values.</li>
+     * </ul>
      *
      * @param node the payload node (may be null)
      * @return the full and slim JSON strings, both empty if the node is null

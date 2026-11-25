@@ -586,10 +586,10 @@ class TopicsReadResourceTest {
     private void attempt(String workspaceId, UUID projectId, TopicProject.RunStatus status, Instant startedAt) {
         var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
-            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, startedAt);
+            TopicsReadTestUtils.startRun(handle, workspaceId, projectId, runId, startedAt);
             if (status == TopicProject.RunStatus.FAILED) {
-                runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
+                handle.attach(TopicProjectDAO.class).markFailed(workspaceId, projectId, runId,
+                        startedAt.plus(Duration.ofMinutes(5)),
                         TopicProject.RunError.ABANDONED);
             }
             return null;
