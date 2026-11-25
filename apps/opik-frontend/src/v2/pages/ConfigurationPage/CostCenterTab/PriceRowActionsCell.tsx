@@ -26,7 +26,7 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
+      className="justify-center px-0"
       stopClickPropagation
     >
       {entry.row && (
@@ -50,13 +50,12 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
           />
           <TooltipWrapper content={actionLabel}>
             <Button
-              variant="ghost"
-              size="icon-sm"
-              className="-mr-2.5"
+              variant="minimal"
+              size="icon-2xs"
               aria-label={`${actionLabel}: ${entry.model}`}
               onClick={() => setIsConfirmOpen(true)}
             >
-              <Icon className="size-4 text-light-slate" />
+              <Icon />
             </Button>
           </TooltipWrapper>
         </>

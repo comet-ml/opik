@@ -43,7 +43,7 @@ import {
 } from "./format";
 
 const NO_VALUE = "-";
-const PIN_COLUMN_SIZE = 32;
+const ICON_COLUMN_SIZE = 32;
 
 const TypeCell = (context: CellContext<CatalogEntry, unknown>) => {
   const { type } = context.row.original;
@@ -191,9 +191,9 @@ const PricesTable: React.FC<PricesTableProps> = ({
 }) => {
   const columns = useMemo<ColumnDef<CatalogEntry>[]>(
     () => [
-      // DataTable stretches every column to fill the row, so the shared 40 px
-      // pin column starts smaller here to end up near 40 px once stretched.
-      { ...generatePinColumDef<CatalogEntry>(), size: PIN_COLUMN_SIZE },
+      // DataTable stretches every column to fill the row, so the icon-only
+      // pin and actions columns start smaller to end up near 40 px.
+      { ...generatePinColumDef<CatalogEntry>(), size: ICON_COLUMN_SIZE },
       ...convertColumnDataToColumn<CatalogEntry, CatalogEntry>([MODEL_COLUMN], {
         sortableColumns: ["model"],
       }),
@@ -203,10 +203,13 @@ const PricesTable: React.FC<PricesTableProps> = ({
       }),
       ...(canEdit
         ? [
-            generateActionsColumDef<CatalogEntry>({
-              cell: PriceRowActionsCell as never,
-              customMeta: { onRemove } satisfies PriceRowActions,
-            }),
+            {
+              ...generateActionsColumDef<CatalogEntry>({
+                cell: PriceRowActionsCell as never,
+                customMeta: { onRemove } satisfies PriceRowActions,
+              }),
+              size: ICON_COLUMN_SIZE,
+            },
           ]
         : []),
     ],
