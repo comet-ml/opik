@@ -132,10 +132,14 @@ class TopicsRunsIntegrationTest {
     private TopicsTestData data;
     private ProjectResourceClient projects;
 
+    private TopicsNightPass nightPass;
+
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, ClientSupport client) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicsNightPass nightPass,
+            ClientSupport client) {
+        this.nightPass = nightPass;
         ClientSupportUtils.config(client);
         this.projects = new ProjectResourceClient(client, TestUtils.getBaseUrl(client),
                 PodamFactoryUtils.newPodamFactory());
@@ -334,7 +338,7 @@ class TopicsRunsIntegrationTest {
             }
         };
         return new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
-                new TopicsBackfillGate(config));
+                new TopicsBackfillGate(config), nightPass);
     }
 
     @Test
@@ -451,7 +455,8 @@ class TopicsRunsIntegrationTest {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
-        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        // A list of the night before the update's: a pod skips an update whose night the list already covers.
+        planner.runByHand(workspaceId, projectId, tomorrow().minusDays(1), false).block();
         awaitBuilt(projectId);
         awaitLabelsComplete(projectId);
         var before = data.topics(projectId);
@@ -479,7 +484,8 @@ class TopicsRunsIntegrationTest {
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         // One topic whose only vector is far from every trace: no trace tonight, so it retires.
-        data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
+        // A list of the night before the update's: a pod skips an update whose night the list already covers.
+        data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
         store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
 

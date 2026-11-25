@@ -1064,6 +1064,115 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(other).listRunId()).isNotNull();
     }
 
+    @Test
+    @DisplayName("the night's candidates are the projects with a saved list that the night has not looked at and that "
+            + "have no run in flight, of the given workspaces only")
+    void nightDue() {
+        var workspaceId = newId().toString();
+        var due = newId();
+        var looked = newId();
+        var inFlight = newId();
+        var listless = newId();
+        var elsewhere = newId();
+        var night = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC).plusDays(1);
+        for (var projectId : List.of(due, looked, inFlight)) {
+            data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        }
+        data.savedList(newId().toString(), elsewhere, NIGHT, BUILT);
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.ensureRow(workspaceId, listless);
+            dao.markLooked(workspaceId, List.of(looked), night);
+            dao.queue(workspaceId, inFlight, newId(), TopicProject.RunMode.UPDATE, NIGHT);
+            return null;
+        });
+
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findNightDue(List.of(workspaceId), night));
+
+        assertThat(found).singleElement().isEqualTo(data.topicProject(due));
+    }
+
+    @Test
+    @DisplayName("the night fields: a project looked at gets the night and resets its not-reached streak; one not "
+            + "reached counts each night once, however often it is written, and is found until then")
+    void nightFields() {
+        var workspaceId = newId().toString();
+        var looked = newId();
+        var starved = newId();
+        var firstNight = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC).plusDays(1);
+        var secondNight = firstNight.plusDays(1);
+        for (var projectId : List.of(looked, starved)) {
+            data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        }
+        var lookedBefore = data.topicProject(looked);
+        var starvedBefore = data.topicProject(starved);
+
+        assertThat(notReached(workspaceId, firstNight)).containsExactlyInAnyOrder(
+                new TopicProjectKey(workspaceId, looked), new TopicProjectKey(workspaceId, starved));
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.markNotReached(workspaceId, List.of(looked, starved), firstNight);
+            dao.markNotReached(workspaceId, List.of(looked, starved), firstNight);
+            return null;
+        });
+        assertThat(notReached(workspaceId, firstNight)).isEmpty();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.markLooked(workspaceId, List.of(looked), secondNight);
+            dao.markNotReached(workspaceId, List.of(looked, starved), secondNight);
+            return null;
+        });
+
+        assertThat(data.topicProject(looked))
+                .isEqualTo(lookedBefore.toBuilder().lastNight(secondNight).notReachedNights(0).build());
+        assertThat(data.topicProject(starved))
+                .isEqualTo(starvedBefore.toBuilder().lastNight(null).notReachedNights(2).build());
+    }
+
+    @Test
+    @DisplayName("a queued nightly update is claimed only while its list does not cover the night; otherwise it ends "
+            + "cancelled, not counted as a failure, and a claimed run is not skipped")
+    void updateClaim() {
+        var workspaceId = newId().toString();
+        var covered = newId();
+        var due = newId();
+        var coveredRun = newId();
+        var dueRun = newId();
+        for (var projectId : List.of(covered, due)) {
+            data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        }
+        var now = NIGHT.plus(Duration.ofDays(1));
+        var deadline = now.plus(Duration.ofHours(1));
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.queue(workspaceId, covered, coveredRun, TopicProject.RunMode.UPDATE, now);
+            dao.queue(workspaceId, due, dueRun, TopicProject.RunMode.UPDATE, now);
+            return null;
+        });
+        var coveredBefore = data.topicProject(covered);
+
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            // The list's window ends at NIGHT: a night whose window ends there is covered, the next one is not.
+            assertThat(dao.claimUpdate(workspaceId, covered, coveredRun, now, deadline, NIGHT)).isZero();
+            assertThat(dao.skipUpdate(workspaceId, covered, coveredRun, now, NIGHT)).isEqualTo(1);
+            assertThat(dao.claimUpdate(workspaceId, due, dueRun, now, deadline, now)).isEqualTo(1);
+            assertThat(dao.skipUpdate(workspaceId, due, dueRun, now, now)).isZero();
+            return null;
+        });
+
+        assertThat(data.topicProject(covered)).isEqualTo(coveredBefore.toBuilder()
+                .runStatus(TopicProject.RunStatus.FAILED).runErrorCode(TopicProject.RunError.CANCELLED)
+                .runFinishedAt(now).build());
+        assertThat(data.topicProject(due).runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+    }
+
+    private List<TopicProjectKey> notReached(String workspaceId, LocalDate night) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findNotReached(List.of(workspaceId), night));
+    }
+
     private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {
         return TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(traces).build();
     }

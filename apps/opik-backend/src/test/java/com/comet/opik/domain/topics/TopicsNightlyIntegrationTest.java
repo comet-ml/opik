@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -42,8 +43,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -60,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The night pass of the planner as a black box, against real MySQL, ClickHouse and Redis, with opik-inference's
  * {@code /v1/generate} stubbed in WireMock. The night starts at today's midnight (UTC); each test sets its budget. A
- * project gets its list from a real first build for yesterday, so tonight's window holds the same traces.
+ * project gets its list from a real discovery run for yesterday, so tonight's window holds the same traces.
  */
 @DisplayName("topics nightly updates on the run queue")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -142,23 +143,21 @@ class TopicsNightlyIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Each test plans its own workspace: the earlier ones must not take a slot or be decided again.
-        template.inTransaction(WRITE, handle -> {
-            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
-            handle.execute("UPDATE topic_projects SET run_status = 'failed' "
-                    + "WHERE run_status IN ('queued', 'running', 'cancelling')");
-            return null;
-        });
+        // Each test plans its own workspace: the earlier ones must not take a slot or be decided again. Topics takes a
+        // workspace only while it is listed, so clearing the list drops theirs; their runs still in flight would take
+        // slots of topics.runs.maxInFlight, which is cluster-wide.
+        template.inTransaction(WRITE, handle -> handle.execute("UPDATE topic_projects SET run_status = 'failed' "
+                + "WHERE run_status IN ('queued', 'running', 'cancelling')"));
         var topics = opikConfig.getTopics();
         topics.setEnabledWorkspaces("");
         topics.getRuns().setMaxInFlight(10);
         topics.getNightly().setBudget(Duration.days(1));
-        stubAnswer(FIXTURE.firstBuildAnswer);
+        stubAnswer(FIXTURE.discoveryAnswer);
     }
 
     @Test
     @DisplayName("two plans of one night queue one nightly update per project with a list, and skip one under "
-            + "minVectors; a pod saves each update and then runs its labelling pass; a later plan queues nothing")
+            + "minVectors; a pod saves each update and then runs its labelling pass; a plan after that queues nothing")
     void oneNightlyUpdatePerProjectPerNight() {
         var workspaceId = enabledWorkspace();
         var first = builtYesterday(workspaceId);
@@ -168,22 +167,19 @@ class TopicsNightlyIntegrationTest {
         listedYesterday(workspaceId, small);
         stubAnswer(emptyNaming());
 
-        assertThat(planner.plan(Instant.now()).block()).isEqualTo(2);
-        var nightlyRuns = new HashMap<UUID, UUID>();
-        for (var projectId : List.of(first, second)) {
-            assertThat(data.topicProject(projectId)).satisfies(project -> {
-                assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.NIGHTLY_UPDATE);
-                assertThat(project.lastNight()).isEqualTo(today());
-                nightlyRuns.put(projectId, project.runId());
-            });
-        }
-        assertThat(planner.plan(Instant.now()).block()).isZero();
+        var discoveryLists = Map.of(first, data.topicProject(first).listRunId(), second,
+                data.topicProject(second).listRunId());
+
+        // At least the two updates: a pod can save one before this plan's labels pass reads, which then queues its
+        // labelling pass too. The rows below show what the night decided.
+        assertThat(planner.plan(Instant.now()).block()).isGreaterThanOrEqualTo(2);
 
         for (var projectId : List.of(first, second)) {
             Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(data.topicProject(projectId))
                             .satisfies(project -> {
-                                assertThat(project.listRunId()).isEqualTo(nightlyRuns.get(projectId));
+                                assertThat(project.listRunId()).isNotEqualTo(discoveryLists.get(projectId));
+                                assertThat(project.lastNight()).isEqualTo(today());
                                 assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
                                 assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
                                 assertThat(project.labelsComplete()).isTrue();
@@ -192,7 +188,7 @@ class TopicsNightlyIntegrationTest {
         }
         assertThat(data.topicProject(small)).satisfies(project -> {
             assertThat(project.lastNight()).isEqualTo(today());
-            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.FIRST_BUILD);
+            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
         });
 
         assertThat(planner.plan(Instant.now()).block()).isZero();
@@ -212,7 +208,7 @@ class TopicsNightlyIntegrationTest {
             data.seed(workspaceId, projectId, 0, FIXTURE.size(), todayStart());
             listedYesterday(workspaceId, projectId);
         }
-        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectNightDAO.class)
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLooked(workspaceId, List.of(looked), today()));
         opikConfig.getTopics().getNightly().setBudget(Duration.milliseconds(1));
 
@@ -222,7 +218,7 @@ class TopicsNightlyIntegrationTest {
         assertThat(data.topicProject(notReached)).satisfies(project -> {
             assertThat(project.notReachedNights()).isEqualTo(1);
             assertThat(project.lastNight()).isNull();
-            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.FIRST_BUILD);
+            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
         });
         assertThat(data.topicProject(looked).notReachedNights()).isZero();
     }
@@ -254,7 +250,34 @@ class TopicsNightlyIntegrationTest {
         assertThat(data.topicProject(projectId).lastNight()).isNull();
     }
 
-    /** A project with a list from a real first build for yesterday, its labels complete. */
+    @Test
+    @DisplayName("a workspace listed at stage vectors gets no nightly update, and is refused one by hand (409); one "
+            + "listed at nightly gets its update")
+    void stageBeforeNightlyIsSkipped() {
+        var atNightly = enabledWorkspace();
+        var projectId = builtYesterday(atNightly);
+        var vectorsOnly = ID_GENERATOR.generateId().toString();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(vectorsOnly, true, "test");
+            return null;
+        });
+        var skipped = ID_GENERATOR.generateId();
+        data.seed(vectorsOnly, skipped, 0, FIXTURE.size(), todayStart());
+        listedYesterday(vectorsOnly, skipped);
+        opikConfig.getTopics().setEnabledWorkspaces(atNightly + ":nightly," + vectorsOnly + ":vectors");
+        var before = data.topicProject(skipped);
+        stubAnswer(emptyNaming());
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+
+        assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.UPDATE);
+        assertThat(data.topicProject(skipped)).isEqualTo(before);
+        assertThatThrownBy(() -> planner.nightByHand(vectorsOnly, skipped, today()).block())
+                .isInstanceOfSatisfying(ConflictException.class, error -> assertThat(
+                        ((ErrorMessage) error.getResponse().getEntity()).getMessage()).contains("not opted in"));
+    }
+
+    /** A project with a list from a real discovery run for yesterday, its labels complete. */
     private UUID builtYesterday(String workspaceId) {
         var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), yesterdayStart());
@@ -304,7 +327,7 @@ class TopicsNightlyIntegrationTest {
 
     /**
      * Opted in to both, and seen by the vectors tick with no backlog: one drained backfill row, of another project,
-     * so a first build by hand does not wait.
+     * so a discovery run by hand does not wait.
      */
     private String enabledWorkspace() {
         var workspaceId = ID_GENERATOR.generateId().toString();
@@ -321,9 +344,9 @@ class TopicsNightlyIntegrationTest {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
             var projectId = ID_GENERATOR.generateId();
-            dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
+            dao.startBackfills(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                     .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
-            dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
+            dao.recordBackfills(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                     .projectId(projectId).drainedAt(now).build()));
             return null;
         });

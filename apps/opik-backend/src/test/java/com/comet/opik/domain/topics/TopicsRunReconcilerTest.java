@@ -35,9 +35,9 @@ class TopicsRunReconcilerTest {
         var now = Instant.parse("2026-11-18T12:00:00Z");
         var store = mock(TopicRunStore.class);
         var publisher = mock(TopicsRunPublisher.class);
-        var candidates = mock(TopicsFirstBuildCandidates.class);
+        var candidates = mock(TopicsDiscoveryCandidates.class);
         var run = InFlightRun.builder().workspaceId(WORKSPACE_ID).projectId(ID_GENERATOR.generateId())
-                .runId(ID_GENERATOR.generateId()).runMode(TopicProject.RunMode.NIGHTLY_UPDATE)
+                .runId(ID_GENERATOR.generateId()).runMode(TopicProject.RunMode.UPDATE)
                 .runStatus(TopicProject.RunStatus.QUEUED).runQueuedAt(now.minus(1, ChronoUnit.DAYS)).build();
         when(store.dropQueued(any(), any(), any(), any())).thenReturn(Mono.just(true));
 
