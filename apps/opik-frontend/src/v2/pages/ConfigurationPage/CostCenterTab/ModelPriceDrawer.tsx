@@ -580,7 +580,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               <Input
                 id="model-price-model"
                 dimension="sm"
-                className="font-mono"
                 placeholder="e.g. acme-finetune-v3"
                 value={model}
                 onChange={(event) => {
@@ -666,7 +665,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 <Input
                   aria-labelledby="model-price-alias-model"
                   dimension="sm"
-                  className={cn("font-mono", READ_ONLY_INPUT)}
+                  className={READ_ONLY_INPUT}
                   placeholder="e.g. gpt-4o"
                   value={aliasModel}
                   readOnly
@@ -675,7 +674,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 <Autocomplete
                   aria-labelledby="model-price-alias-model"
                   dimension="sm"
-                  className="font-mono"
                   placeholder="e.g. gpt-4o"
                   value={aliasModel}
                   items={modelsMatching(aliasModel)}
@@ -750,7 +748,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                       <Input
                         dimension="sm"
                         className={cn(
-                          "pl-6 pr-16 font-mono",
+                          "pl-6 pr-16",
                           readOnly && READ_ONLY_INPUT,
                         )}
                         aria-label={`${
@@ -763,7 +761,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                           updateLine(line.id, { value: event.target.value })
                         }
                       />
-                      <span className="comet-body-xs absolute right-3 top-1/2 -translate-y-1/2 font-mono text-light-slate">
+                      <span className="comet-body-xs absolute right-3 top-1/2 -translate-y-1/2 text-light-slate">
                         {PRICE_UNIT_SUFFIX}
                       </span>
                     </div>
@@ -797,7 +795,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                       <span className="w-8" />
                     )}
                   </div>
-                  <div className="comet-body-xs flex gap-2 font-mono text-light-slate">
+                  <div className="comet-body-xs flex gap-2 text-light-slate">
                     <span className="flex-1 break-words pl-3">
                       <KeyName name={LITELLM_KEYS[line.field]} />
                     </span>

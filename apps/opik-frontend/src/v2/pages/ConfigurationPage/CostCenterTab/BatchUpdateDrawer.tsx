@@ -272,7 +272,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 <span className="h-px flex-1 bg-border" />
               </div>
               <Textarea
-                className="min-h-[200px] font-mono placeholder:text-light-slate"
+                className="min-h-[200px] placeholder:text-light-slate"
                 placeholder={EXAMPLE}
                 spellCheck={false}
                 value={text}
