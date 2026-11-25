@@ -103,7 +103,8 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
                     feature.getValue(), caller.getWorkspaceId(), lookupFailed);
             throw new ServiceUnavailableException(
                     "Could not verify that '%s' is enabled for this workspace, retry later".formatted(
-                            feature.getValue()));
+                            feature.getValue()),
+                    (Long) null, lookupFailed);
         }
         if (answer == PlatformAnswer.REFUSED) {
             log.debug("The platform refused the caller's credential, feature '{}', workspaceId '{}'",
