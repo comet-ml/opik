@@ -143,20 +143,22 @@ describe("ExperimentsActionsPanel mixed item sources", () => {
   });
 
   it.each([
-    [EVALUATION_METHOD.TEST_SUITE, "test suite"],
-    [EVALUATION_METHOD.DATASET, "dataset"],
-    [undefined, "dataset"],
+    [EVALUATION_METHOD.TEST_SUITE, EVALUATION_METHOD.TEST_SUITE, "test suite"],
+    [EVALUATION_METHOD.DATASET, EVALUATION_METHOD.DATASET, "dataset"],
+    [undefined, EVALUATION_METHOD.DATASET, "dataset"],
+    [EVALUATION_METHOD.DATASET, EVALUATION_METHOD.TEST_SUITE, "item source"],
+    [EVALUATION_METHOD.TEST_SUITE, undefined, "item source"],
   ])(
-    "names the item source type in the tooltip (%s → %s)",
-    async (evaluationMethod, label) => {
+    "names the item source type in the tooltip (%s + %s → %s)",
+    async (firstMethod, secondMethod, label) => {
       renderPanel([
         {
           ...buildExperiment("exp-1", "dataset-1"),
-          evaluation_method: evaluationMethod,
+          evaluation_method: firstMethod,
         },
         {
           ...buildExperiment("exp-2", "dataset-2"),
-          evaluation_method: evaluationMethod,
+          evaluation_method: secondMethod,
         },
       ]);
 

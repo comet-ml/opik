@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Split, Trash, Tag } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { Button, ButtonProps } from "@/ui/button";
-import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
-import { useNavigate } from "@tanstack/react-router";
+import { Experiment } from "@/types/datasets";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import CompareExperimentsDialog from "@/v2/pages-shared/experiments/CompareExperimentsDialog/CompareExperimentsDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
@@ -16,14 +17,19 @@ import { Separator } from "@/ui/separator";
 import AddTagDialog from "@/v2/pages-shared/experiments/AddTagDialog/AddTagDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-// Legacy experiments carry no evaluation_method; like the Datasets tab, treat
-// anything that isn't a test suite as a dataset.
-const getMixedItemSourcesTooltip = (experiment: Experiment) =>
-  `Select experiments from the same ${
-    experiment.evaluation_method === EVALUATION_METHOD.TEST_SUITE
+// Names the source type when the selection shares one; a selection mixing
+// datasets and test suites falls back to "item source". Legacy experiments
+// (no evaluation_method) count as datasets, like the Datasets tab.
+const getMixedItemSourcesTooltip = (experiments: Experiment[]) => {
+  const testSuiteCount = experiments.filter(isTestSuiteExperiment).length;
+  const label =
+    testSuiteCount === experiments.length
       ? "test suite"
-      : "dataset"
-  } to compare them`;
+      : testSuiteCount === 0
+        ? "dataset"
+        : "item source";
+  return `Select experiments from the same ${label} to compare them`;
+};
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
@@ -143,7 +149,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       )}
       <div className="inline-flex items-center gap-2">
         {hasMixedItemSources ? (
-          <TooltipWrapper content={getMixedItemSourcesTooltip(experiments[0])}>
+          <TooltipWrapper content={getMixedItemSourcesTooltip(experiments)}>
             <span className="inline-block cursor-not-allowed">
               {compareButton}
             </span>
