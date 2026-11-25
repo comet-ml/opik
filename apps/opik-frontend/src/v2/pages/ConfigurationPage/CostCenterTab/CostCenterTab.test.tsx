@@ -1,6 +1,7 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -186,6 +187,14 @@ const replaceResult = (dryRun: boolean, warnings: unknown[] = []) => ({
 });
 
 const sentRows = () => mutateAsync.mock.lastCall![0].request.rows;
+
+const clickOutside = async () => {
+  // Radix starts listening for outside clicks a tick after a sheet opens, and
+  // a modal acts on an outside press only once its click arrives.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  fireEvent.pointerDown(document.body);
+  fireEvent.click(document.body);
+};
 
 describe("CostCenterTab", () => {
   beforeEach(() => {
@@ -730,6 +739,16 @@ describe("CostCenterTab", () => {
       expect(screen.getByRole("radio", { name: "Alias" })).toBeInTheDocument();
     });
 
+    it("names the provider in words next to the type tag", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+
+      expect(
+        within(screen.getByRole("dialog")).getByText("Provider:"),
+      ).toHaveTextContent("Provider: openai");
+    });
+
     it("shows no type or provider tags while adding a new model", () => {
       renderTab(ADMIN);
 
@@ -780,6 +799,33 @@ describe("CostCenterTab", () => {
 
       expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
       expect(mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("closes on a click outside", async () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      await clickOutside();
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Save changes" }),
+        ).toBeNull(),
+      );
+    });
+
+    it("asks before a click outside throws away unsaved edits", async () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+      await clickOutside();
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Keep editing" }),
+      );
+
+      expect(priceInput("Input")).toHaveValue("1.9");
     });
 
     it("closes at once when nothing was edited", () => {
@@ -1332,6 +1378,25 @@ describe("CostCenterTab", () => {
           "gpt-4o on openai: Input price is over $100,000 per 1M tokens. Prices in the file are per token.",
         ),
       ).toBeVisible();
+    });
+
+    it("closes on a click outside, asking first when something is pasted", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      await clickOutside();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Keep editing" }),
+      );
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+      await clickOutside();
+
+      await waitFor(() =>
+        expect(screen.queryByText("Batch update prices")).toBeNull(),
+      );
     });
 
     it("asks before throwing away a pasted update", () => {

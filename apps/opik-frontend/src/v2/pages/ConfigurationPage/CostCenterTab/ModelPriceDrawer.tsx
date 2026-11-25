@@ -482,13 +482,15 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               tooltip={TYPE_DESCRIPTIONS[type]}
               size="default"
             />
-            <ColoredTag label={providerLabel} size="default" />
             {entry?.mode && (
               <ColoredTag
                 label={MODE_LABELS[entry.mode] ?? entry.mode}
                 size="default"
               />
             )}
+            <span className="comet-body-s ml-1 text-muted-slate">
+              Provider: <span className="text-foreground">{providerLabel}</span>
+            </span>
             {lastUpdatedAt && (
               <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
                 <div className="comet-body-s ml-auto flex items-center gap-1 text-foreground">
@@ -906,7 +908,6 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = (props) => {
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
         header={null}
-        blockOverlayClose
       >
         <ModelPriceForm
           key={target.entry?.key ?? "new"}

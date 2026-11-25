@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from "react";
 import copy from "clipboard-copy";
-import { Check, ChevronRight, Copy, FileUp, Sparkles, X } from "lucide-react";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/ui/sheet";
+import { Check, ChevronRight, Copy, FileUp, Sparkles } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTopBar } from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
@@ -153,6 +147,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const [isFormatOpen, setIsFormatOpen] = useState(false);
   const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
+  const [tab, setTab] = useState("upload");
 
   const requestClose = () => {
     if (text.trim()) {
@@ -244,30 +239,16 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
-        header={null}
-        blockOverlayClose
+        header={<SheetTopBar variant="form" title="Batch update prices" />}
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 px-6 pb-2 pt-6">
-          <div className="flex flex-col gap-1">
-            <SheetTitle className="comet-title-m text-left">
-              Batch update prices
-            </SheetTitle>
-            <SheetDescription className="comet-body-s text-muted-slate">
-              Update many models at once. Models not in the update keep their
-              current prices.
-            </SheetDescription>
-          </div>
-          <SheetClose asChild>
-            <Button variant="outline" size="icon-2xs" className="shrink-0">
-              <X />
-              <span className="sr-only">Close</span>
-            </Button>
-          </SheetClose>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
-          <Tabs defaultValue="json">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
+          <SheetDescription className="comet-body-s text-muted-slate">
+            Update many models at once. Models not in the update keep their
+            current prices.
+          </SheetDescription>
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList variant="segmented" className="w-fit">
-              <TabsTrigger value="json" variant="segmented">
+              <TabsTrigger value="upload" variant="segmented">
                 <FileUp className="mr-1.5 size-3.5" />
                 Upload or paste JSON or CSV
               </TabsTrigger>
@@ -276,7 +257,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 Use the Opik skill
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="json" className="mt-4 space-y-3">
+            <TabsContent value="upload" className="mt-4 space-y-3">
               <UploadField
                 onFileSelect={onFile}
                 accept=".json,application/json,.csv,text/csv"
@@ -297,34 +278,11 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 value={text}
                 onChange={(event) => changeText(event.target.value)}
               />
-              <div className="flex items-center justify-between gap-3">
-                <Disclosure
-                  label="File format"
-                  open={isFormatOpen}
-                  onToggle={() => setIsFormatOpen((value) => !value)}
-                />
-                {preview ? (
-                  <Button
-                    size="sm"
-                    onClick={save}
-                    disabled={isSaving || !changeCount}
-                  >
-                    {changeCount
-                      ? `Save ${changeCount} ${
-                          changeCount === 1 ? "change" : "changes"
-                        }`
-                      : "Nothing to save"}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={previewChanges}
-                    disabled={isSaving || !text.trim()}
-                  >
-                    Preview changes
-                  </Button>
-                )}
-              </div>
+              <Disclosure
+                label="File format"
+                open={isFormatOpen}
+                onToggle={() => setIsFormatOpen((value) => !value)}
+              />
               {isFormatOpen && (
                 <p className="comet-body-xs text-muted-slate">
                   An object keyed by model name, in LiteLLM&apos;s format.
@@ -443,6 +401,33 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
               </div>
             </TabsContent>
           </Tabs>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t px-6 py-3">
+          <Button size="sm" variant="outline" onClick={requestClose}>
+            Cancel
+          </Button>
+          {tab === "upload" &&
+            (preview ? (
+              <Button
+                size="sm"
+                onClick={save}
+                disabled={isSaving || !changeCount}
+              >
+                {changeCount
+                  ? `Save ${changeCount} ${
+                      changeCount === 1 ? "change" : "changes"
+                    }`
+                  : "Nothing to save"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={previewChanges}
+                disabled={isSaving || !text.trim()}
+              >
+                Preview changes
+              </Button>
+            ))}
         </div>
       </SheetContent>
       <ConfirmDialog
