@@ -101,9 +101,11 @@ public class FreeFormSqlQueryService {
         CH_BUSY("error", "ch_busy"),
         OTHER("error", "other");
 
+        private final String reason;
         private final Attributes attributes;
 
         Outcome(String result, String reason) {
+            this.reason = reason;
             this.attributes = Attributes.of(RESULT_KEY, result, REASON_KEY, reason);
         }
     }
@@ -267,10 +269,10 @@ public class FreeFormSqlQueryService {
         String projectScope = projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
 
         return freeFormSqlQueryDAO.explainAst(account, query)
-                .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
+                .handle((nodeLabels, error) -> validateAst(account, workspaceId, nodeLabels, error, startMillis))
                 .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
                 .thenCompose(queryTree -> {
-                    var reads = rejectScalarReads(account, queryTree, startMillis);
+                    var reads = rejectScalarReads(account, workspaceId, queryTree, startMillis);
                     return runQuery(account, workspaceId, projectScope, query, reads, startMillis);
                 });
     }
@@ -285,10 +287,12 @@ public class FreeFormSqlQueryService {
                     }
                     try {
                         if (containsForbiddenResolvedTable(account, queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_TABLE, account, workspaceId, startMillis,
+                                    ACCESS_DENIED_MESSAGE, null);
                         }
                         if (containsForbiddenOrUnreadableFunction(queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_FUNCTION, account, workspaceId, startMillis,
+                                    ACCESS_DENIED_MESSAGE, null);
                         }
                     } catch (WebApplicationException e) {
                         throw e;
@@ -303,12 +307,12 @@ public class FreeFormSqlQueryService {
      * A scalar subquery reading a table cannot be shown to have run under its row policy (see
      * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
      */
-    private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, List<String> queryTree,
-            long startMillis) {
+    private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, String workspaceId,
+            List<String> queryTree, long startMillis) {
         var subqueryReads = FreeFormSqlSubqueries.subqueryReads(queryTree, database);
         if (subqueryReads.hasScalar()) {
             count(CheckOutcome.SCALAR_READ, account);
-            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, account, workspaceId, startMillis,
                     SCALAR_SUBQUERY_MESSAGE.formatted(describe(subqueryReads)), null);
         }
         return subqueryReads;
@@ -330,21 +334,22 @@ public class FreeFormSqlQueryService {
      * through the standard execution-error mapping so it isn't mislabelled. A successful parse carrying a SETTINGS/SET
      * clause is rejected before execution.
      */
-    private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
+    private List<String> validateAst(FreeFormSqlAccount account, String workspaceId, List<String> nodeLabels,
+            Throwable error, long startMillis) {
         if (error != null) {
             throw isSyntaxError(error)
-                    ? reject(Outcome.PARSE_ERROR, startMillis, PARSE_ERROR_MESSAGE, error)
+                    ? reject(Outcome.PARSE_ERROR, account, workspaceId, startMillis, PARSE_ERROR_MESSAGE, error)
                     : mapExecutionError(error, startMillis);
         }
         if (containsSetNode(nodeLabels)) {
-            throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
+            throw reject(Outcome.SETTINGS_CLAUSE, account, workspaceId, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
-            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_TABLE, account, workspaceId, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenName(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
-            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_FUNCTION, account, workspaceId, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
@@ -613,8 +618,11 @@ public class FreeFormSqlQueryService {
         return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
     }
 
-    private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {
-        log.info("Free-form SQL query rejected: {}", message, cause);
+    /** The account and workspace are logged so a rejection can be traced to who sent it; the metric has neither. */
+    private WebApplicationException reject(Outcome outcome, FreeFormSqlAccount account, String workspaceId,
+            long startMillis, String message, Throwable cause) {
+        log.info("Free-form SQL query rejected '{}' for account '{}', workspace '{}': {}", outcome.reason, account,
+                workspaceId, message, cause);
         return fail(outcome, startMillis, Response.Status.BAD_REQUEST, message);
     }
 
