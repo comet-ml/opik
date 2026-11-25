@@ -607,12 +607,12 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   setModel(value);
                 }}
               />
+              {fieldProblems("model").map((problem, i) => (
+                <p key={i} className="comet-body-xs text-destructive">
+                  {problem.message}
+                </p>
+              ))}
             </div>
-            {fieldProblems("model").map((problem, i) => (
-              <p key={i} className="comet-body-xs col-span-2 text-destructive">
-                {problem.message}
-              </p>
-            ))}
           </div>
         )}
 
@@ -626,7 +626,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               setKind(value as ModelPriceRow["kind"]);
             }}
             variant="secondary"
-            className="w-fit"
+            className="!mt-3 -mb-2 w-fit"
           >
             <ToggleGroupItem value="fixed" size="xs">
               Own price
@@ -809,10 +809,10 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                     )}
                   </div>
                   <div className="comet-body-xs flex gap-2 text-light-slate">
-                    <span className="flex-1 break-words pl-3">
+                    <span className="flex-1 break-words">
                       <KeyName name={LITELLM_KEYS[line.field]} />
                     </span>
-                    <span className="flex-1 truncate pl-3">
+                    <span className="flex-1 truncate">
                       {describePerToken(
                         line.value,
                         keepsBuiltIn ? builtInValue : undefined,
@@ -821,7 +821,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                     <span className="w-8 shrink-0" />
                   </div>
                   {fieldProblems(line.field).map((problem, i) => (
-                    <p key={i} className="comet-body-xs pl-3 text-destructive">
+                    <p key={i} className="comet-body-xs text-destructive">
                       {problem.message}
                     </p>
                   ))}
@@ -829,7 +829,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               );
             })}
             {priceProblems.map((problem, i) => (
-              <p key={i} className="comet-body-xs pl-3 text-destructive">
+              <p key={i} className="comet-body-xs text-destructive">
                 {problem.message}
               </p>
             ))}
