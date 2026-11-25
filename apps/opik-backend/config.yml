@@ -3075,9 +3075,13 @@ topics:
     #  bounded however many projects went at once. From 1 to 10000
     deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
     #  Default: 24h
-    #  Description: How often the leader deletes the topics of deleted projects that the project delete left. At
+    #  Description: How often each pod deletes the topics of deleted projects that the project delete left. At
     #  least 1h, at most 7d
     sweepInterval: ${TOPICS_STORAGE_SWEEP_INTERVAL:-24h}
+    #  Default: 5m
+    #  Description: How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire
+    #  sweeps again. At least 10s, at most 30m
+    sweepTimeout: ${TOPICS_STORAGE_SWEEP_TIMEOUT:-5m}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it

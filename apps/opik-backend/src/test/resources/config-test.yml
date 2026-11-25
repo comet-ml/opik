@@ -1197,6 +1197,7 @@ topics:
   storage:
     deleteBatchSize: 2
     sweepInterval: 24h
+    sweepTimeout: 1m
 
 # Python evaluator configuration
 pythonEvaluator:

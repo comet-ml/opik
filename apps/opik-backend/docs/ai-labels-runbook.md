@@ -322,25 +322,20 @@ flowchart TD
     A["Every pod fires TopicsDiscoveryJob every planInterval"] --> B{"Takes topics:discovery:leader?"}
     B -->|no| B1["Another pod plans"]
     B -->|yes| P{"Takes topics:discovery:plan?"}
-    P -->|no| S
+    P -->|no| E["Done: a plan ran less than one interval ago"]
     P -->|yes| R["Reconcile the runs in flight"]
     R --> C["Find candidates: unfinished labelling passes and discovery runs"]
     C --> Q["Queue runs on topic_projects up to maxInFlight,<br/>publish each on the topics-runs stream"]
-    Q --> S{"Takes topics:discovery:sweep?"}
-    S -->|yes| D["Delete the topics of deleted projects"]
-    S -->|no| E["Done"]
-    D --> E
     Q -.-> X["Any pod reads the stream, claims the run<br/>(queued to running) and runs it"]
 ```
 
-- Every pod fires the job every `TOPICS_RUNS_PLAN_INTERVAL`, each at its own second. Three Redis locks make
+- Every pod fires the job every `TOPICS_RUNS_PLAN_INTERVAL`, each at its own second. Two Redis locks make
   that one plan per interval across the cluster:
   - `topics:discovery:leader` is held for the plan and released when it ends, so two plans never overlap. Its lease
     is `TOPICS_RUNS_PLAN_BUDGET` + `TOPICS_RUN_COUNT_TIMEOUT` + `TOPICS_RUNS_LEASE_SLACK`. A plan that runs longer is
     cancelled.
   - `topics:discovery:plan` is taken by the leader before it plans and never released. It expires one interval
     (less up to 1s for trigger jitter) after the plan started, so a pod that fires sooner skips.
-  - `topics:discovery:sweep` works the same way for `TOPICS_STORAGE_SWEEP_INTERVAL`.
 - A plan first reconciles the runs in flight (see "Stuck runs"). Then it fills the free slots: `TOPICS_RUNS_MAX_IN_FLIGHT`
   minus the runs `queued`, `running` or `cancelling` across the cluster. It takes one unfinished labelling pass, then
   one discovery run, in turn.
@@ -399,7 +394,8 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 |---|---|---|
 | `TOPICS_RUNS_PLAN_INTERVAL` | `5m` | How often the leader plans. Longer than `TOPICS_RUNS_PLAN_BUDGET`, from `10s` to `1h`. |
 | `TOPICS_RUNS_LEASE_SLACK` | `1m` | How much longer than the plan's budget and one count the leader lock lasts. At most `5m`. |
-| `TOPICS_STORAGE_SWEEP_INTERVAL` | `24h` | How often the leader deletes the topics of deleted projects. From `1h` to `7d`. |
+| `TOPICS_STORAGE_SWEEP_INTERVAL` | `24h` | How often each pod's `TopicsSweepJob` deletes the topics of deleted projects. From `1h` to `7d`. |
+| `TOPICS_STORAGE_SWEEP_TIMEOUT` | `5m` | How long one sweep, and its lock `topics:sweep`, may last. A cut sweep frees the lock, so the next fire sweeps again. From `10s` to `30m`. |
 | `TOPICS_DISCOVERY_BACKFILL_MAX_WAIT` | `72h` | How long a discovery run waits for the project's vectors backfill (see "Discovery runs and the vectors backfill"). |
 | `TOPICS_DISCOVERY_TIMED_OUT_SHARE` | `0.99` | Past the max wait, the share of the backfill's traces with a vector that lets the build start. |
 | `TOPICS_RUNS_MAX_IN_FLIGHT` | `2` | Runs `queued`, `running` or `cancelling` across the cluster. Runs by hand do not wait for a slot. |
@@ -579,14 +575,15 @@ The planner's rules apply: the workspace is opted in to topics at stage `build` 
 run in flight, its window holds at least `TOPICS_RUN_MIN_VECTORS` vectors, and its vectors backfill has drained (see
 "Discovery runs and the vectors backfill"). The retry wait and `TOPICS_RUNS_MAX_IN_FLIGHT` do not apply.
 `&night=yyyy-MM-dd` sets the window's end: today (UTC) by default, so the window ends at today's start. It is at most
-tomorrow, whose window holds today's traces so far, and at least 365 days ago. `&ignore_backfill=true` builds it anyway,
+tomorrow, whose window holds today's traces so far. It is no older than the vectors backfill reaches:
+`TOPICS_VECTORS_BACKFILL_WINDOW` when set, else `TOPICS_VECTORS_LONG_WINDOW`. `&ignore_backfill=true` builds it anyway,
 from the vectors it has so far; the call logs a WARN `ignores the vectors backfill gate`.
 
 | Answer | Meaning |
 |---|---|
 | `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
 | `409` | The workspace is not opted in at stage `build` or later (or topics are off), the project has a list or a run in flight or no trace in the window, the window has too few vectors, or the backfill has not drained. The body's message says which. |
-| `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
+| `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill reaches. |
 | `503` | The run could not be started, so nothing is queued. Try again. |
 
 To build a project that already has a list again (for example after a bad discovery run), delete its list first. Keep
@@ -682,6 +679,6 @@ both. Deleting a project:
   next heartbeat;
 - deletes its `topics`, with their prototype vectors, `TOPICS_STORAGE_DELETE_BATCH_SIZE` projects per transaction.
 
-When that fails, the job's sweep (every `TOPICS_STORAGE_SWEEP_INTERVAL`, in the same batches) deletes
+When that fails, `TopicsSweepJob` (every `TOPICS_STORAGE_SWEEP_INTERVAL` on each pod, in the same batches) deletes
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
