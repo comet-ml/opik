@@ -272,9 +272,13 @@ const CostCenterTab: React.FC = () => {
         actions={
           canEdit && (
             <div className="flex items-center gap-2">
+              {/* The outline's light border blends into the page, so this
+                  button is 2px taller to give its white face the same height
+                  as the filled Batch update button. */}
               <Button
-                variant="secondary"
+                variant="outline"
                 size="xs"
+                className="h-[30px]"
                 onClick={() => openDrawer({})}
               >
                 <Plus className="mr-1 size-4" />
@@ -320,9 +324,9 @@ const CostCenterTab: React.FC = () => {
               <SearchInput
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
-                className="w-[260px] shrink-0"
-                placeholder="Search models or providers"
-                dimension="sm"
+                className="w-[200px] shrink-0"
+                placeholder="Search"
+                dimension="xs"
               />
             }
           />
