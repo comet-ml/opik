@@ -29,6 +29,7 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
 | CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel`, or the entry point's pool |
 | Per-item blocking or CPU in a `Flux` | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
+| Back to the entry point's pool after a call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.cpuOn`, or no hop |
 | Light work (map one row, build a DTO) | nothing | wherever it lands |
 
 ## Rule 1: A Blocking Call Wraps Itself

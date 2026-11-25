@@ -26,6 +26,8 @@ import java.util.concurrent.Callable;
  *       A step that runs for seconds also needs a concurrency cap at its caller.</li>
  *   <li>{@link #blockingEach(Flux)}: per-item blocking or CPU side effects of a stream, such as writing response
  *       chunks. Moves the items, which a {@code subscribeOn} can't do.</li>
+ *   <li>{@link #resumeOriginal(Mono)}: back to the entry point's own pool after a client call, or no hop when it
+ *       has none.</li>
  * </ul>
  *
  * <p>Light work (mapping one row, building a small DTO) needs none of these. The rules are in
@@ -34,7 +36,7 @@ import java.util.concurrent.Callable;
 @UtilityClass
 public class Offload {
 
-    private static final String CPU_SCHEDULER = Offload.class.getName() + ".cpuScheduler";
+    private static final String ORIGINAL_SCHEDULER = Offload.class.getName() + ".originalScheduler";
 
     /**
      * Runs a blocking call on {@link Schedulers#boundedElastic()}. What follows runs there too until the next hop.
@@ -57,16 +59,37 @@ public class Offload {
      */
     public static <T> Mono<T> cpu(@NonNull Callable<T> step) {
         return Mono.deferContextual(context -> Mono.fromCallable(step)
-                .subscribeOn(context.getOrDefault(CPU_SCHEDULER, Schedulers.parallel())));
+                .subscribeOn(context.getOrDefault(ORIGINAL_SCHEDULER, Schedulers.parallel())));
     }
 
     /**
-     * Routes every {@link #cpu(Callable)} step upstream of the {@code contextWrite} to {@code scheduler}, for an
-     * entry point (a job, a subscriber) whose CPU work runs on its own bounded pool:
-     * {@code .contextWrite(context -> Offload.cpuOn(context, workers))}.
+     * Sets the pool of an entry point (a job, a subscriber) that runs its work on its own bounded pool:
+     * {@code .contextWrite(context -> Offload.cpuOn(context, workers))}. Every {@link #cpu(Callable)} step and every
+     * {@link #resumeOriginal(Mono)} upstream of the {@code contextWrite} then runs there.
      */
     public static Context cpuOn(@NonNull Context context, @NonNull Scheduler scheduler) {
-        return context.put(CPU_SCHEDULER, scheduler);
+        return context.put(ORIGINAL_SCHEDULER, scheduler);
+    }
+
+    /**
+     * Moves what follows {@code source} back to the entry point's pool set with {@link #cpuOn(Context, Scheduler)},
+     * e.g. after a ClickHouse or Redis call: {@code dao.find(...).transform(Offload::resumeOriginal)}. With no pool
+     * set it adds no hop. Never {@code parallel}: a {@code publishOn} moves every operator after it, blocking ones
+     * included.
+     */
+    public static <T> Mono<T> resumeOriginal(@NonNull Mono<T> source) {
+        return source.transformDeferredContextual((mono, context) -> context.<Scheduler>getOrEmpty(ORIGINAL_SCHEDULER)
+                .map(mono::publishOn)
+                .orElse(mono));
+    }
+
+    /**
+     * {@link #resumeOriginal(Mono)} for a stream: every item and every operator after it.
+     */
+    public static <T> Flux<T> resumeOriginal(@NonNull Flux<T> source) {
+        return source.transformDeferredContextual((flux, context) -> context.<Scheduler>getOrEmpty(ORIGINAL_SCHEDULER)
+                .map(flux::publishOn)
+                .orElse(flux));
     }
 
     /**
