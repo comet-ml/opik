@@ -26,7 +26,7 @@ import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPa
 import DecisionModelQuestionsField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsField";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
-import { RULE_HISTORY_SCOPE_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
+import { UNDO_SCOPE_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
@@ -152,7 +152,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     <Form {...form}>
       <div
         className="flex size-full flex-col"
-        {...{ [RULE_HISTORY_SCOPE_ATTRIBUTE]: "" }}
+        {...{ [UNDO_SCOPE_ATTRIBUTE]: "" }}
       >
         <div className="min-h-0 flex-1 px-5">
           <ResizablePanelGroup

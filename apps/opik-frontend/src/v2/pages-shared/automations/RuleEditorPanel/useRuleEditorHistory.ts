@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FieldPath, UseFormReturn } from "react-hook-form";
 import cloneDeep from "lodash/cloneDeep";
-import isBoolean from "lodash/isBoolean";
 import isEqual from "lodash/isEqual";
-import isNumber from "lodash/isNumber";
-import isObjectLike from "lodash/isObjectLike";
 import omit from "lodash/omit";
 
 import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
@@ -13,16 +10,24 @@ import {
   DERIVED_FIELDS,
   isDerivedField,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
-
-// Inputs inside the scope use the form history. Inputs inside an ignored element
-// keep their own text until blur or Enter, so they keep the browser undo.
-export const RULE_HISTORY_SCOPE_ATTRIBUTE = "data-rule-history";
-export const RULE_HISTORY_IGNORE_ATTRIBUTE = "data-rule-history-ignore";
-
-const TYPING_PAUSE_MS = 500;
-const WORD_END_REGEX = /[\s.,;:!?]$/;
+import {
+  commit,
+  createHistory,
+  redo,
+  replacePresent,
+  undo,
+  UndoHistory,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/undoHistory";
+import {
+  describeEdit,
+  Edit,
+  startsNewStep,
+  toText,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/undoStepGrouping";
+import useUndoRedoShortcuts from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 
 type FormField = FieldPath<EvaluationRuleFormType>;
+type FormKey = keyof EvaluationRuleFormType;
 
 type EditorSnapshot = {
   values: EvaluationRuleFormType;
@@ -30,83 +35,55 @@ type EditorSnapshot = {
   isPickingTemplate: boolean;
 };
 
-type TypingGroup = {
-  field: string;
-  isText: boolean;
-  at: number;
-  isDeleting: boolean;
-  endedWord: boolean;
-};
-
-// Derived fields are recalculated from the prompt, so they are not user changes.
 const getTrackedValues = ({ values }: EditorSnapshot) =>
   omit(values, DERIVED_FIELDS);
-
-// All values as one text, used to find what was typed or deleted.
-const collectText = (value: unknown): string[] =>
-  isObjectLike(value)
-    ? Object.values(value as object).flatMap(collectText)
-    : [String(value ?? "")];
-
-const getContentText = (snapshot: EditorSnapshot) =>
-  collectText(getTrackedValues(snapshot)).join("\n");
-
-// The text between the common start and the common end of the two texts.
-const getInsertedText = (previous: string, next: string) => {
-  let start = 0;
-  while (start < previous.length && previous[start] === next[start]) start++;
-  let end = 0;
-  while (
-    end < previous.length - start &&
-    previous[previous.length - 1 - end] === next[next.length - 1 - end]
-  ) {
-    end++;
-  }
-  return next.slice(start, next.length - end);
-};
 
 const isSameContent = (a: EditorSnapshot, b: EditorSnapshot) =>
   isEqual(getTrackedValues(a), getTrackedValues(b));
 
-const getHistoryCommand = (event: KeyboardEvent) => {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
-  const key = event.key.toLowerCase();
-  if (key === "z") return event.shiftKey ? "redo" : "undo";
-  if (key === "y" && !event.shiftKey) return "redo";
-  return null;
+const getContentText = (snapshot: EditorSnapshot) =>
+  toText(getTrackedValues(snapshot));
+
+const getChangedKeys = (
+  current: EvaluationRuleFormType,
+  target: EvaluationRuleFormType,
+) =>
+  (Object.keys(target) as FormKey[]).filter(
+    (key) => !isEqual(current[key], target[key]),
+  );
+
+const createSameTaskCheck = () => {
+  let isInTask = false;
+  return () => {
+    if (isInTask) return true;
+    isInTask = true;
+    queueMicrotask(() => {
+      isInTask = false;
+    });
+    return false;
+  };
 };
 
-// Focus on a button or on the page body still uses the form history.
-const isOutsideHistoryScope = (element: Element | null) => {
-  const isEditable =
-    element instanceof HTMLInputElement ||
-    element instanceof HTMLTextAreaElement ||
-    (element instanceof HTMLElement && element.isContentEditable);
-  return (
-    isEditable &&
-    (!element.closest(`[${RULE_HISTORY_SCOPE_ATTRIBUTE}]`) ||
-      Boolean(element.closest(`[${RULE_HISTORY_IGNORE_ATTRIBUTE}]`)))
-  );
+const useStateWithRef = <T>(initialValue: T) => {
+  const [value, setValue] = useState(initialValue);
+  const ref = useRef(initialValue);
+  const set = useCallback((next: T) => {
+    ref.current = next;
+    setValue(next);
+  }, []);
+  return [value, set, ref] as const;
 };
 
 const useRuleEditorHistory = (
   form: UseFormReturn<EvaluationRuleFormType>,
   autoNameRef: React.MutableRefObject<string>,
 ) => {
-  const [isPickingTemplate, setIsPickingTemplateState] = useState(false);
-  // State re-renders the tabs; the ref gives snapshots the new value in the same call.
-  const isPickingTemplateRef = useRef(false);
-  const pastRef = useRef<EditorSnapshot[]>([]);
-  const futureRef = useRef<EditorSnapshot[]>([]);
-  const currentRef = useRef<EditorSnapshot | null>(null);
-  const isSilentRef = useRef(false);
-  const typingGroupRef = useRef<TypingGroup | null>(null);
-  const isSameTaskRef = useRef(false);
-
-  const setIsPickingTemplate = useCallback((isPicking: boolean) => {
-    isPickingTemplateRef.current = isPicking;
-    setIsPickingTemplateState(isPicking);
-  }, []);
+  const [isPickingTemplate, setIsPickingTemplate, isPickingTemplateRef] =
+    useStateWithRef(false);
+  const historyRef = useRef<UndoHistory<EditorSnapshot> | null>(null);
+  const lastEditRef = useRef<Edit | null>(null);
+  const isPausedRef = useRef(false);
+  const isSameTaskRef = useRef(createSameTaskCheck());
 
   const takeSnapshot = useCallback(
     (): EditorSnapshot =>
@@ -115,163 +92,123 @@ const useRuleEditorHistory = (
         autoName: autoNameRef.current,
         isPickingTemplate: isPickingTemplateRef.current,
       }),
-    [form, autoNameRef],
+    [form, autoNameRef, isPickingTemplateRef],
   );
 
-  // Silent changes make no step. The previous flag is restored, so a silent call
-  // inside another one keeps the outer call silent.
-  const runSilently = useCallback((change: () => void) => {
-    const wasSilent = isSilentRef.current;
-    isSilentRef.current = true;
+  const getHistory = useCallback(
+    () => (historyRef.current ??= createHistory(takeSnapshot())),
+    [takeSnapshot],
+  );
+
+  const setHistory = useCallback(
+    (history: UndoHistory<EditorSnapshot>, lastEdit: Edit | null = null) => {
+      historyRef.current = history;
+      lastEditRef.current = lastEdit;
+    },
+    [],
+  );
+
+  const withHistoryPaused = useCallback((change: () => void) => {
+    const wasPaused = isPausedRef.current;
+    isPausedRef.current = true;
     try {
       change();
     } finally {
-      isSilentRef.current = wasSilent;
+      isPausedRef.current = wasPaused;
     }
   }, []);
 
-  // One step for the whole action, even when the values do not change (a tab switch).
   const recordAction = useCallback(
     (action: () => void) => {
-      const before = currentRef.current ?? takeSnapshot();
-      runSilently(action);
-      pastRef.current.push(before);
-      futureRef.current = [];
-      currentRef.current = takeSnapshot();
-      typingGroupRef.current = null;
+      const history = getHistory();
+      withHistoryPaused(action);
+      setHistory(commit(history, takeSnapshot()));
     },
-    [takeSnapshot, runSilently],
+    [getHistory, withHistoryPaused, setHistory, takeSnapshot],
   );
 
-  // Changes that are not user actions, for example the submit preparation.
   const withoutHistory = useCallback(
     (change: () => void) => {
-      runSilently(change);
-      currentRef.current = takeSnapshot();
+      withHistoryPaused(change);
+      historyRef.current = replacePresent(getHistory(), takeSnapshot());
     },
-    [takeSnapshot, runSilently],
+    [getHistory, withHistoryPaused, takeSnapshot],
   );
 
-  const clearHistory = useCallback(() => {
-    pastRef.current = [];
-    futureRef.current = [];
-    currentRef.current = takeSnapshot();
-    typingGroupRef.current = null;
-  }, [takeSnapshot]);
+  const clearHistory = useCallback(
+    () => setHistory(createHistory(takeSnapshot())),
+    [setHistory, takeSnapshot],
+  );
 
-  const restore = useCallback(
-    (snapshot: EditorSnapshot) => {
-      // Set only the changed fields, so unchanged inputs keep their state.
-      const current = form.getValues();
-      const changedFields = (
-        Object.keys(snapshot.values) as (keyof EvaluationRuleFormType)[]
-      ).filter((key) => !isEqual(current[key], snapshot.values[key]));
-      runSilently(() => {
-        autoNameRef.current = snapshot.autoName;
-        changedFields.forEach((key) =>
-          form.setValue(
-            key as FormField,
-            cloneDeep(snapshot.values[key]) as never,
-            { shouldDirty: true },
-          ),
+  const applySnapshot = useCallback(
+    ({ values, autoName, isPickingTemplate }: EditorSnapshot) => {
+      const changedKeys = getChangedKeys(form.getValues(), values);
+      withHistoryPaused(() => {
+        autoNameRef.current = autoName;
+        changedKeys.forEach((key) =>
+          form.setValue(key as FormField, cloneDeep(values[key]) as never, {
+            shouldDirty: true,
+          }),
         );
-        if (changedFields.length > 0) {
-          form.clearErrors(changedFields as FormField[]);
-        }
+        form.clearErrors(changedKeys as FormField[]);
       });
-      setIsPickingTemplate(snapshot.isPickingTemplate);
-      currentRef.current = takeSnapshot();
-      typingGroupRef.current = null;
+      setIsPickingTemplate(isPickingTemplate);
     },
-    [form, autoNameRef, takeSnapshot, runSilently, setIsPickingTemplate],
+    [form, autoNameRef, withHistoryPaused, setIsPickingTemplate],
   );
 
-  const step = useCallback(
-    (from: EditorSnapshot[], to: EditorSnapshot[]) => {
-      const target = from.pop();
-      if (!target) return;
-      to.push(currentRef.current ?? takeSnapshot());
-      restore(target);
+  const moveInHistory = useCallback(
+    (move: typeof undo) => {
+      const history = getHistory();
+      const moved = move(history);
+      if (moved === history) return;
+      applySnapshot(moved.present);
+      setHistory(replacePresent(moved, takeSnapshot()));
     },
-    [takeSnapshot, restore],
+    [getHistory, applySnapshot, setHistory, takeSnapshot],
   );
 
-  useEffect(() => {
-    currentRef.current = takeSnapshot();
-    const subscription = form.watch((_, { name }) => {
-      if (isSilentRef.current || !name || isDerivedField(name)) return;
-      const previous = currentRef.current;
+  const recordFieldChange = useCallback(
+    (name: FormField) => {
+      const history = getHistory();
       const next = takeSnapshot();
-      // A nested update (the rule name copied into the main score) sends a second
-      // event with no new content.
-      if (previous && isSameContent(previous, next)) return;
-
-      // Changes made in one event (e.g. a model and its config) run in one task;
-      // the flag resets in a microtask, so they become one undo step.
-      const isSameTask = isSameTaskRef.current;
-      isSameTaskRef.current = true;
-      queueMicrotask(() => {
-        isSameTaskRef.current = false;
-      });
-
-      // Text is grouped by word. Numbers are grouped by pause, so a slider drag is
-      // one step. Each switch click is one step.
-      const value = form.getValues(name);
-      const isText = !isNumber(value) && !isBoolean(value);
-      const previousText = previous ? getContentText(previous) : "";
-      const nextText = getContentText(next);
-      const isDeleting = nextText.length < previousText.length;
-      const now = Date.now();
-      const group = typingGroupRef.current;
-      // A field change splits text steps only when one side is not text, because
-      // typing in the name can send events for the name or for the main score.
-      const startsStep =
-        !isSameTask &&
-        (!group ||
-          (group.field !== name && !(isText && group.isText)) ||
-          isBoolean(value) ||
-          now - group.at > TYPING_PAUSE_MS ||
-          (isText && (group.isDeleting !== isDeleting || group.endedWord)));
-      if (previous && startsStep) {
-        pastRef.current.push(previous);
-        futureRef.current = [];
-      }
-      typingGroupRef.current = {
-        ...(isSameTask && group
-          ? { field: group.field, isText: group.isText }
-          : { field: name, isText }),
-        at: now,
-        isDeleting,
-        endedWord:
-          isText &&
-          !isDeleting &&
-          WORD_END_REGEX.test(getInsertedText(previousText, nextText)),
-      };
-      currentRef.current = next;
-    });
-    return () => subscription.unsubscribe();
-  }, [form, takeSnapshot]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const command = getHistoryCommand(event);
-      if (
-        !command ||
-        form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.python_code ||
-        isOutsideHistoryScope(document.activeElement)
-      ) {
+      if (isSameContent(history.present, next)) return;
+      if (isSameTaskRef.current()) {
+        historyRef.current = replacePresent(history, next);
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
-      if (command === "undo") step(pastRef.current, futureRef.current);
-      else step(futureRef.current, pastRef.current);
-    };
-    // Capture on window so Cmd+Z reaches the form history before editors such as
-    // the prompt editor run their own undo, wherever focus is in the panel.
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [form, step]);
+      const edit = describeEdit(
+        form.getValues(name),
+        getContentText(history.present),
+        getContentText(next),
+      );
+      setHistory(
+        startsNewStep(lastEditRef.current, edit)
+          ? commit(history, next)
+          : replacePresent(history, next),
+        edit,
+      );
+    },
+    [form, getHistory, setHistory, takeSnapshot],
+  );
+
+  useEffect(() => {
+    historyRef.current = createHistory(takeSnapshot());
+    const subscription = form.watch((_, { name }) => {
+      if (isPausedRef.current || !name || isDerivedField(name)) return;
+      recordFieldChange(name);
+    });
+    return () => subscription.unsubscribe();
+  }, [form, takeSnapshot, recordFieldChange]);
+
+  const undoStep = useCallback(() => moveInHistory(undo), [moveInHistory]);
+  const redoStep = useCallback(() => moveInHistory(redo), [moveInHistory]);
+
+  useUndoRedoShortcuts({
+    isEnabled: form.getValues("uiType") !== UI_EVALUATORS_RULE_TYPE.python_code,
+    onUndo: undoStep,
+    onRedo: redoStep,
+  });
 
   return {
     isPickingTemplate,

@@ -12,7 +12,7 @@ import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
 import useRuleFiltersConfig from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleFiltersConfig";
-import { RULE_HISTORY_IGNORE_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
+import { NATIVE_UNDO_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 import {
   createEmptyRuleFilter,
   withEmptyRuleFilter,
@@ -119,7 +119,7 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
       />
       <div
         className="border-t border-border px-2.5 py-2"
-        {...{ [RULE_HISTORY_IGNORE_ATTRIBUTE]: "" }}
+        {...{ [NATIVE_UNDO_ATTRIBUTE]: "" }}
       >
         <FormField
           control={form.control}
