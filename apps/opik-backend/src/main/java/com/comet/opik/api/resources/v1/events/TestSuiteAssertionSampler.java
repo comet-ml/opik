@@ -150,7 +150,9 @@ public class TestSuiteAssertionSampler {
                         return Mono.empty();
                     }
                     log.info("Enqueuing '{}' test suite assertion messages", messages.size());
-                    return onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE)
+                    return tracesBatch.organizationId().singleOptional()
+                            .flatMap(organizationId -> onlineScorePublisher.enqueueMessage(messages,
+                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, organizationId.orElse(null)))
                             .onErrorResume(error -> {
                                 log.error("Error enqueueing '{}' test suite assertion messages into redis",
                                         messages.size(), error);
