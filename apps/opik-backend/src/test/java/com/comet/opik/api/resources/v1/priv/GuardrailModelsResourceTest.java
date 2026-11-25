@@ -24,6 +24,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailPolicyDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Client;
@@ -69,8 +70,10 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.GuardrailTrainingRunStatus.CANCELLED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.COMPLETED;
+import static com.comet.opik.api.GuardrailTrainingRunStatus.FAILED;
 import static com.comet.opik.api.GuardrailTrainingRunStatus.QUEUED;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -311,12 +314,64 @@ class GuardrailModelsResourceTest {
         assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(new ErrorMessage(List.of(errors)));
     }
 
+    /** Writes a policy rule that uses the model, in the workspace. */
+    private void useInPolicy(Workspace workspace, UUID modelId) {
+        // The policies API does not take custom classifier rules yet, so the rule is written directly.
+        var policy = GuardrailPolicy.builder()
+                .id(randomUUID())
+                .name(randomUUID().toString())
+                .executionScope(GuardrailExecutionScope.ON_REQUEST)
+                .build();
+        template.inTransaction(WRITE, handle -> {
+            var policies = handle.attach(GuardrailPolicyDAO.class);
+            policies.save(policy, workspace.id(), USER);
+            policies.saveRules(List.of(randomUUID()), policy.id(), List.of(GuardrailType.CUSTOM_CLASSIFIER),
+                    List.of(JsonUtils.createObjectNode().put("model_id", modelId.toString())), USER);
+            return null;
+        });
+    }
+
+    /** One endpoint, called on a model and a run that may not exist. */
+    private record Call(String name, String path, boolean upload, Function<Invocation.Builder, Response> send) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    Stream<Call> reads() {
+        var id = "/" + randomUUID();
+        return Stream.of(
+                new Call("list", "", false, Invocation.Builder::get),
+                new Call("get", id, false, Invocation.Builder::get),
+                new Call("list runs", id + "/runs", false, Invocation.Builder::get),
+                new Call("get run", id + "/runs/" + randomUUID(), false, Invocation.Builder::get));
+    }
+
+    Stream<Call> writes() {
+        var id = "/" + randomUUID();
+        return Stream.of(
+                new Call("create", "", true,
+                        builder -> builder.post(multipart(newName(), randomUUID().toString(), VALID_DATASET))),
+                new Call("update", id, false, builder -> builder.method("PATCH",
+                        Entity.json(new GuardrailModelUpdate(randomUUID().toString())))),
+                new Call("delete", id, false, Invocation.Builder::delete),
+                new Call("retrain", id + "/runs", true,
+                        builder -> builder.post(multipart(null, null, VALID_DATASET))),
+                new Call("cancel run", id + "/runs/" + randomUUID() + "/cancel", false,
+                        builder -> builder.post(Entity.json(""))));
+    }
+
+    private Response send(Workspace workspace, Call call) {
+        return call.send().apply(call.upload() ? upload(workspace, call.path()) : request(workspace, call.path()));
+    }
+
     @Test
     @DisplayName("A model is created with its first run queued, and read with it")
     void createAndGet() {
         var workspace = newWorkspace();
         // Not ASCII: form fields arrive without a charset, as browsers send them.
-        var name = "Токсичность " + randomUUID();
+        var name = "Naïve résumé check " + randomUUID();
 
         var id = create(workspace, name);
 
@@ -530,19 +585,7 @@ class GuardrailModelsResourceTest {
         var workspace = newWorkspace();
         var id = create(workspace, newName());
         var model = get(workspace, id);
-        // The policies API does not take custom classifier rules yet, so the rule is written directly.
-        var policy = GuardrailPolicy.builder()
-                .id(randomUUID())
-                .name(randomUUID().toString())
-                .executionScope(GuardrailExecutionScope.ON_REQUEST)
-                .build();
-        template.inTransaction(WRITE, handle -> {
-            var policies = handle.attach(GuardrailPolicyDAO.class);
-            policies.save(policy, workspace.id(), USER);
-            policies.saveRules(List.of(randomUUID()), policy.id(), List.of(GuardrailType.CUSTOM_CLASSIFIER),
-                    List.of(JsonUtils.createObjectNode().put("model_id", id.toString())), USER);
-            return null;
-        });
+        useInPolicy(workspace, id);
 
         try (var response = request(workspace, "/" + id).delete()) {
             assertErrors(response, HttpStatus.SC_CONFLICT, "Guardrail model is used by a policy rule");
@@ -708,17 +751,179 @@ class GuardrailModelsResourceTest {
     }
 
     @Test
-    @DisplayName("A workspace whose organization does not have guardrails is refused")
-    void whenGuardrailsNotEnabledForOrganizationReturnsForbidden() {
+    @DisplayName("The page lists newest first by default, sorts by its dates, ignores an unknown sort field, and pages")
+    void findOrderAndPages() {
+        var workspace = newWorkspace();
+        var firstId = create(workspace, newName());
+        var secondId = create(workspace, newName());
+        var thirdId = create(workspace, newName());
+        try (var response = request(workspace, "/" + firstId).method("PATCH",
+                Entity.json(new GuardrailModelUpdate(randomUUID().toString())))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+        var first = get(workspace, firstId);
+        var second = get(workspace, secondId);
+        var third = get(workspace, thirdId);
+        Function<List<SortingField>, Function<WebTarget, WebTarget>> sortedBy = sorting -> target -> target
+                .queryParam("sorting", TestUtils.toURLEncodedQueryParam(sorting));
+
+        assertThat(find(workspace, target -> target).content()).containsExactly(third, second, first);
+        assertThat(find(workspace, target -> target.queryParam("page", 2).queryParam("size", 2)))
+                .isEqualTo(GuardrailModelPage.builder()
+                        .content(List.of(first))
+                        .page(2)
+                        .size(1)
+                        .total(3)
+                        .sortableBy(List.of("name", "created_at", "last_updated_at"))
+                        .build());
+        assertThat(find(workspace, sortedBy.apply(List.of(new SortingField("created_at", Direction.ASC))))
+                .content())
+                .containsExactly(first, second, third);
+        assertThat(find(workspace, sortedBy.apply(List.of(new SortingField("last_updated_at", Direction.DESC))))
+                .content())
+                .containsExactly(first, third, second);
+        assertThat(find(workspace, sortedBy.apply(List.of(new SortingField("unknown", Direction.ASC)))).content())
+                .containsExactly(third, second, first);
+        try (var response = request(workspace,
+                client.target(RESOURCE_PATH.formatted(baseURI)).queryParam("sorting", "not json")).get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+    }
+
+    @Test
+    @DisplayName("LIKE wildcards in the name filter match only themselves")
+    void findWhenNameHasWildcards() {
+        var workspace = newWorkspace();
+        var underscored = get(workspace, create(workspace, "with_underscore-" + randomUUID()));
+        create(workspace, "plain-" + randomUUID());
+
+        assertThat(find(workspace, target -> target.queryParam("name", "_")).content()).containsExactly(underscored);
+        assertThat(find(workspace, target -> target.queryParam("name", "%")).total()).isZero();
+    }
+
+    @Test
+    @DisplayName("A page or a size below 1 is a 400, for models and for runs")
+    void findWhenPageOrSizeBelowOneIsRejected() {
+        var workspace = newWorkspace();
+        var id = create(workspace, newName());
+
+        Stream.of("", "/" + id + "/runs").forEach(path -> Stream.of("page", "size").forEach(parameter -> {
+            var target = client.target(RESOURCE_PATH.formatted(baseURI) + path).queryParam(parameter, 0);
+            try (var response = request(workspace, target).get()) {
+                assertErrors(response, HttpStatus.SC_BAD_REQUEST,
+                        "query param %s must be greater than or equal to 1".formatted(parameter));
+            }
+        }));
+    }
+
+    @Test
+    @DisplayName("A create or a retrain without a file is a 422, and creates nothing")
+    void createOrRetrainWithoutFileIsRejected() {
+        var workspace = newWorkspace();
+        var model = new FormDataMultiPart().field("name", newName()).field("description", randomUUID().toString());
+
+        try (var response = upload(workspace, "").post(Entity.entity(model, model.getMediaType()))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body must not be null");
+        }
+        assertThat(find(workspace, target -> target).total()).isZero();
+
+        var id = create(workspace, newName());
+        cancelLatestRun(workspace, id);
+        var run = new FormDataMultiPart().field("note", randomUUID().toString());
+        try (var response = upload(workspace, "/" + id + "/runs").post(Entity.entity(run, run.getMediaType()))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body must not be null");
+        }
+        assertThat(getRuns(workspace, id, 1, 10).total()).isOne();
+    }
+
+    @Test
+    @DisplayName("A failed retrain leaves the completed run serving, is the model's latest status, and can be retrained")
+    void retrainWhenLatestRunFailed() {
+        var workspace = newWorkspace();
+        var id = create(workspace, newName());
+        var completed = move(workspace, get(workspace, id).latestRun(), COMPLETED);
+        var failed = move(workspace, getRun(workspace, id, retrain(workspace, id)), FAILED);
+
+        var model = get(workspace, id);
+        assertThat(model.servingRun()).isEqualTo(completed);
+        assertThat(model.latestRun()).isEqualTo(failed);
+        assertThat(find(workspace, target -> target.queryParam("latest_run_status", "failed")).content())
+                .containsExactly(model);
+        assertThat(find(workspace, target -> target.queryParam("usable_only", true)).content())
+                .containsExactly(model);
+
+        var runId = retrain(workspace, id);
+        assertThat(get(workspace, id).latestRun()).isEqualTo(getRun(workspace, id, runId));
+    }
+
+    @Test
+    @DisplayName("A delete leaves another workspace's model alone, and a rule in another workspace does not hold one")
+    void deleteWhenAnotherWorkspace() {
+        var workspace = newWorkspace();
+        var other = newWorkspace();
+        var otherModel = get(other, create(other, newName()));
+        var id = create(workspace, newName());
+        useInPolicy(other, id);
+
+        try (var response = request(workspace, "/" + otherModel.id()).delete()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+        assertThat(get(other, otherModel.id())).isEqualTo(otherModel);
+
+        try (var response = request(workspace, "/" + id).delete()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+        assertThat(getStatus(workspace, "/" + id)).isEqualTo(HttpStatus.SC_NOT_FOUND);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource({"reads", "writes"})
+    @DisplayName("A workspace whose organization does not have guardrails gets 403 on every endpoint")
+    void whenGuardrailsNotEnabledForOrganizationReturnsForbidden(Call call) {
         var workspace = newWorkspace(false);
 
-        try (var response = request(workspace, "").get()) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-        }
-        try (var response = postModel(workspace, randomUUID().toString(), randomUUID().toString(), VALID_DATASET)) {
+        try (var response = send(workspace, call)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                     .isEqualTo("Guardrails is available on the Enterprise plan");
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("writes")
+    @DisplayName("Every write needs the workspace settings permission")
+    void writeWithoutWorkspaceSettingsPermissionIsForbidden(Call call) {
+        var workspace = new Workspace(randomUUID().toString(), randomUUID().toString(), randomUUID().toString());
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), workspace.apiKey(), workspace.name(),
+                WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+        try (var response = send(workspace, call)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
+    @DisplayName("A browser session is checked with its own session cookie")
+    void sessionCallerIsCheckedWithItsSessionCookie() {
+        var sessionToken = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        // AuthTestUtils' session stub answers without a workspace name, which the platform does return.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, randomUUID().toString(),
+                        workspaceName, null))));
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":true}}"
+                        .formatted(workspaceName))));
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
         }
     }
 }
