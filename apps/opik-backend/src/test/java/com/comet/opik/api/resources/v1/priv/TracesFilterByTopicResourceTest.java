@@ -32,6 +32,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.stats.StatsMapper;
@@ -82,7 +83,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -191,10 +191,10 @@ class TracesFilterByTopicResourceTest {
 
     /** The project's traces by the case each one stands for, and the topics they are labelled with. */
     private record Seed(Caller caller, UUID projectId, Topic labelled, Topic arrived, UUID saved,
-            Map<String, UUID> traces) {
+            Map<String, Trace> traces) {
 
-        Set<UUID> traces(String... cases) {
-            return Arrays.stream(cases).map(traces::get).collect(Collectors.toSet());
+        List<Trace> traces(String... cases) {
+            return Arrays.stream(cases).map(traces::get).toList();
         }
     }
 
@@ -289,10 +289,23 @@ class TracesFilterByTopicResourceTest {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         topics.createTraces(caller, projectId, 2);
-        var topicId = UUID.randomUUID().toString();
+        var topicId = ID_GENERATOR.generateId().toString();
 
         for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
-            assertFilter(caller, projectId, operator, topicId, Set.of());
+            assertFilter(caller, projectId, operator, topicId, List.of());
+        }
+    }
+
+    @Test
+    @DisplayName("a project with no live topic in a workspace with Topics: = and != give no trace, with no error")
+    void projectWithoutTopics() {
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
+        topics.createTraces(caller, projectId, 2);
+
+        for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL)) {
+            assertFilter(caller, projectId, operator, OTHER, List.of());
         }
     }
 
@@ -302,7 +315,7 @@ class TracesFilterByTopicResourceTest {
         var seed = seed();
         opikConfig.getTopics().setEnabled(false);
 
-        assertFilter(seed, Operator.EQUAL, seed.labelled().id().toString(), Set.of());
+        assertFilter(seed, Operator.EQUAL, seed.labelled().id().toString(), List.of());
     }
 
     @Test
@@ -349,7 +362,7 @@ class TracesFilterByTopicResourceTest {
         var seed = seed();
         var notAnId = List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, "not-an-id"));
 
-        assertTraces(seed.caller(), seed.projectId(), notAnId, Set.of());
+        assertTraces(seed.caller(), seed.projectId(), notAnId, List.of());
         assertThat(kpiCount(seed, notAnId)).isZero();
         assertThat(metricCount(seed, notAnId)).isZero();
     }
@@ -493,9 +506,7 @@ class TracesFilterByTopicResourceTest {
                 row(caller, projectId, traces.get("arrival over a run"), arrived.id(), null),
                 row(caller, projectId, traces.get("relabelled by a later run"), arrived.id(), later)))
                 .block();
-        var ids = new HashMap<String, UUID>();
-        traces.forEach((name, trace) -> ids.put(name, trace.id()));
-        return new Seed(caller, projectId, labelled, arrived, saved, ids);
+        return new Seed(caller, projectId, labelled, arrived, saved, traces);
     }
 
     /**
@@ -547,17 +558,20 @@ class TracesFilterByTopicResourceTest {
                 .build();
     }
 
-    private void assertFilter(Seed seed, Operator operator, String value, Set<UUID> expected) {
+    private void assertFilter(Seed seed, Operator operator, String value, List<Trace> expected) {
         assertFilter(seed.caller(), seed.projectId(), operator, value, expected);
     }
 
     private void assertFilter(Caller caller, UUID projectId, Operator operator, String value,
-            Set<UUID> expected) {
+            List<Trace> expected) {
         assertTraces(caller, projectId, List.of(filter(TraceField.TOPIC_ID, operator, value)), expected);
     }
 
-    /** The list, its count, the stats' trace count and the stream give the same traces. */
-    private void assertTraces(Caller caller, UUID projectId, List<TraceFilter> filters, Set<UUID> expected) {
+    /**
+     * The list and the stream give exactly the expected traces, each as the API reads it by id, and the list's count
+     * and the stats' trace count give their number.
+     */
+    private void assertTraces(Caller caller, UUID projectId, List<TraceFilter> filters, List<Trace> expected) {
         var page = list(caller, projectId, filters);
         var stats = traceClient.getTraceStats(null, projectId, caller.apiKey(), caller.workspaceName(), filters,
                 Map.of());
@@ -568,15 +582,22 @@ class TracesFilterByTopicResourceTest {
                 .map(filter -> "%s %s %s".formatted(filter.field().getQueryParamField(),
                         filter.operator().getQueryParamOperator(), filter.value()))
                 .collect(Collectors.joining(", "));
-        assertThat(page.content()).as(description).extracting(Trace::id)
-                .containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(page.content()).as(description)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .ignoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                .isEqualTo(expected);
         assertThat(page.total()).as(description).isEqualTo(expected.size());
         assertThat(stats.stats().stream()
                 .filter(stat -> StatsMapper.TRACE_COUNT.equals(stat.getName()))
                 .map(stat -> ((Number) stat.getValue()).longValue())
                 .findFirst()
                 .orElse(0L)).as(description).isEqualTo(expected.size());
-        assertThat(streamed).as(description).extracting(Trace::id).containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(streamed).as(description)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .ignoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                .isEqualTo(expected);
     }
 
     private Trace.TracePage list(Caller caller, UUID projectId, List<TraceFilter> filters) {

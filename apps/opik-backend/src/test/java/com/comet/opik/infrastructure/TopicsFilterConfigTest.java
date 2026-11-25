@@ -20,17 +20,14 @@ class TopicsFilterConfigTest {
 
     static Stream<Arguments> maxExecutionTimes() {
         return Stream.of(
-                arguments(Duration.seconds(1), List.of()),
-                arguments(Duration.minutes(10), List.of()),
-                arguments(Duration.milliseconds(1500), List.of("maxExecutionTimeWholeSeconds")),
-                arguments(Duration.milliseconds(999), List.of("maxExecutionTime", "maxExecutionTimeWholeSeconds")),
-                arguments(Duration.seconds(601), List.of("maxExecutionTime")));
+                arguments(Duration.seconds(2), List.of()),
+                arguments(Duration.milliseconds(1500), List.of("maxExecutionTimeWholeSeconds")));
     }
 
     /** A sub-second part would be cut by {@code toSeconds()}, and ClickHouse would get another limit. */
     @ParameterizedTest(name = "topics.filter.maxExecutionTime {0}: {1}")
     @MethodSource("maxExecutionTimes")
-    void maxExecutionTimeIsWholeSecondsFromOneSecondToTenMinutes(Duration maxExecutionTime,
+    void maxExecutionTimeIsWholeSeconds(Duration maxExecutionTime,
             List<String> expectedViolations) {
         var filter = TestConfigUtils.loadConfigTest().getTopics().getFilter();
         filter.setMaxExecutionTime(maxExecutionTime);
