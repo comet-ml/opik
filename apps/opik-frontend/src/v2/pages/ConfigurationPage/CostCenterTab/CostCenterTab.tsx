@@ -27,6 +27,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Button } from "@/ui/button";
 import {
+  ANY_PROVIDER_LABEL,
   CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
@@ -112,6 +113,10 @@ const CostCenterTab: React.FC = () => {
     [builtIns, list],
   );
   const providerOptions = useMemo(() => providersOf(catalog), [catalog]);
+  const namedProviders = useMemo(
+    () => providerOptions.filter((name) => name !== ANY_PROVIDER_LABEL),
+    [providerOptions],
+  );
   const chipDefinitions = useMemo<ChipDefinition[]>(
     () => [
       {
@@ -484,6 +489,7 @@ const CostCenterTab: React.FC = () => {
           target={drawerTarget}
           list={list}
           builtIns={builtIns ?? []}
+          providers={namedProviders}
           canEdit={canEdit}
           isPinned={drawerEntry ? isPinned(drawerEntry) : false}
           onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}

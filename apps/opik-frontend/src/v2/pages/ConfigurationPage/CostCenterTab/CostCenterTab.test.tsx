@@ -739,14 +739,36 @@ describe("CostCenterTab", () => {
       expect(screen.getByRole("radio", { name: "Alias" })).toBeInTheDocument();
     });
 
-    it("names the provider in words next to the type tag", () => {
+    it("names the provider, with its logo when the app has one", () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o");
+      const known = within(screen.getByRole("dialog")).getByText("Provider:");
+      expect(known).toHaveTextContent(/^Provider:\s*openai$/);
+      expect(known.querySelector("svg")).not.toBeNull();
 
+      openRow("team-model");
+      const unknown = within(screen.getByRole("dialog")).getByText("Provider:");
+      expect(unknown).toHaveTextContent(/^Provider:\s*gateway$/);
+      expect(unknown.querySelector("svg")).toBeNull();
+    });
+
+    it("suggests known providers and keeps a typed custom one", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      const provider = screen.getByLabelText("Provider");
+      fireEvent.focus(provider);
+      fireEvent.change(provider, { target: { value: "open" } });
+      fireEvent.click(await screen.findByRole("option", { name: "openai" }));
+      expect(provider).toHaveValue("openai");
+
+      fireEvent.keyDown(provider, { key: "m" });
+      fireEvent.change(provider, { target: { value: "my-gateway" } });
       expect(
-        within(screen.getByRole("dialog")).getByText("Provider:"),
-      ).toHaveTextContent("Provider: openai");
+        await screen.findByText(/Saved as a custom provider/),
+      ).toBeInTheDocument();
+      expect(provider).toHaveValue("my-gateway");
     });
 
     it("shows no type or provider tags while adding a new model", () => {

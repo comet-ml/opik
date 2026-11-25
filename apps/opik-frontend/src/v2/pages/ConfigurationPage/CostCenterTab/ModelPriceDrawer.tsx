@@ -18,6 +18,7 @@ import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Alert, AlertDescription } from "@/ui/alert";
 import SelectBox from "@/shared/SelectBox/SelectBox";
+import Autocomplete from "@/shared/Autocomplete/Autocomplete";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
@@ -53,10 +54,10 @@ import {
   validateRow,
 } from "@/lib/model-prices";
 import {
-  MODE_LABELS,
   PRICE_UNIT_SUFFIX,
   TYPE_DESCRIPTIONS,
   TYPE_TAG_VARIANT,
+  providerIconOf,
 } from "./format";
 import useSaveModelPrices from "./useSaveModelPrices";
 
@@ -83,12 +84,15 @@ const KeyName: React.FC<{ name: string }> = ({ name }) => (
 
 const READ_ONLY_INPUT = "bg-muted hover:shadow-none";
 
+const PROVIDER_EMPTY_MESSAGE = "Not in the list. Saved as a custom provider.";
+
 type ModelPriceDrawerProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   target: DrawerTarget;
   list: ModelPriceList;
   builtIns: BuiltInPrice[];
+  providers: string[];
   canEdit: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -162,6 +166,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
   target,
   list,
   builtIns,
+  providers,
   canEdit,
   isPinned = false,
   onTogglePin,
@@ -427,6 +432,11 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
     ? "Per-token prices are shown per 1M tokens for readability. Empty = built-in price."
     : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
   const providerLabel = provider.trim() || "Any provider";
+  const ProviderIcon = providerIconOf(provider.trim());
+  const providersMatching = (typed: string) => {
+    const query = typed.trim().toLowerCase();
+    return providers.filter((name) => name.toLowerCase().includes(query));
+  };
 
   return (
     <>
@@ -475,30 +485,30 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
       </SheetDescription>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
         {!isNew && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <ColoredTag
-              label={CATALOG_TYPE_LABELS[type]}
-              variant={TYPE_TAG_VARIANT[type]}
-              tooltip={TYPE_DESCRIPTIONS[type]}
-              size="default"
-            />
-            {entry?.mode && (
+          <div className="flex flex-col gap-2">
+            <div className="comet-body-s flex flex-wrap items-center gap-3 text-foreground">
+              {lastUpdatedAt && (
+                <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                    {lastUpdatedAt}
+                  </div>
+                </TooltipWrapper>
+              )}
+              <div className="flex items-center gap-1 text-muted-slate">
+                Provider:
+                {ProviderIcon && <ProviderIcon className="size-3.5 shrink-0" />}
+                <span className="text-foreground">{providerLabel}</span>
+              </div>
+            </div>
+            <div className="flex">
               <ColoredTag
-                label={MODE_LABELS[entry.mode] ?? entry.mode}
+                label={CATALOG_TYPE_LABELS[type]}
+                variant={TYPE_TAG_VARIANT[type]}
+                tooltip={TYPE_DESCRIPTIONS[type]}
                 size="default"
               />
-            )}
-            <span className="comet-body-s ml-1 text-muted-slate">
-              Provider: <span className="text-foreground">{providerLabel}</span>
-            </span>
-            {lastUpdatedAt && (
-              <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
-                <div className="comet-body-s ml-auto flex items-center gap-1 text-foreground">
-                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
-                  {lastUpdatedAt}
-                </div>
-              </TooltipWrapper>
-            )}
+            </div>
           </div>
         )}
         {changedElsewhere && (
@@ -532,14 +542,16 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="model-price-provider">Provider</Label>
-              <Input
+              <Autocomplete
                 id="model-price-provider"
                 dimension="sm"
                 placeholder="Any provider"
                 value={provider}
-                onChange={(event) => {
+                items={providersMatching(provider)}
+                emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                onValueChange={(value) => {
                   resetFeedback();
-                  setProvider(event.target.value);
+                  setProvider(value);
                 }}
               />
             </div>
@@ -558,29 +570,27 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         )}
 
         {canEdit && isNew && (
-          <div className="flex items-center gap-1.5">
-            <ToggleGroup
-              type="single"
-              value={kind}
-              onValueChange={(value) => {
-                if (!value) return;
-                resetFeedback();
-                setKind(value as ModelPriceRow["kind"]);
-              }}
-              variant="secondary"
-              className="w-fit"
-            >
-              <ToggleGroupItem value="fixed" size="xs">
-                Own price
-              </ToggleGroupItem>
-              <ToggleGroupItem value="alias" size="xs">
-                Alias
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_a_model_alias]}
-            />
-          </div>
+          <ToggleGroup
+            type="single"
+            value={kind}
+            onValueChange={(value) => {
+              if (!value) return;
+              resetFeedback();
+              setKind(value as ModelPriceRow["kind"]);
+            }}
+            variant="secondary"
+            className="w-fit"
+          >
+            <ToggleGroupItem value="fixed" size="xs">
+              Own price
+            </ToggleGroupItem>
+            <ToggleGroupItem value="alias" size="xs" className="gap-1">
+              Alias
+              <ExplainerIcon
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_a_model_alias]}
+              />
+            </ToggleGroupItem>
+          </ToggleGroup>
         )}
 
         {kind === "alias" ? (
@@ -602,18 +612,29 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="model-price-alias-provider">On provider</Label>
-              <Input
-                id="model-price-alias-provider"
-                dimension="sm"
-                className={cn(readOnly && READ_ONLY_INPUT)}
-                placeholder="The span's own provider"
-                value={aliasProvider}
-                readOnly={readOnly}
-                onChange={(event) => {
-                  resetFeedback();
-                  setAliasProvider(event.target.value);
-                }}
-              />
+              {readOnly ? (
+                <Input
+                  id="model-price-alias-provider"
+                  dimension="sm"
+                  className={READ_ONLY_INPUT}
+                  placeholder="The span's own provider"
+                  value={aliasProvider}
+                  readOnly
+                />
+              ) : (
+                <Autocomplete
+                  id="model-price-alias-provider"
+                  dimension="sm"
+                  placeholder="The span's own provider"
+                  value={aliasProvider}
+                  items={providersMatching(aliasProvider)}
+                  emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                  onValueChange={(value) => {
+                    resetFeedback();
+                    setAliasProvider(value);
+                  }}
+                />
+              )}
             </div>
             {problems
               .filter((problem) => problem.field?.startsWith("alias_of"))

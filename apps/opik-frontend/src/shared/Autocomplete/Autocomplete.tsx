@@ -12,12 +12,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/ui/command";
-import { Input } from "@/ui/input";
+import { Input, InputProps } from "@/ui/input";
 import { Skeleton } from "@/ui/skeleton";
 import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import { Button } from "@/ui/button";
 
 type Props<T extends string> = {
+  id?: string;
   value: T;
   onValueChange: (value: T) => void;
   items: T[];
@@ -26,10 +27,12 @@ type Props<T extends string> = {
   emptyMessage?: string;
   placeholder?: string;
   delay?: number;
+  dimension?: InputProps["dimension"];
   className?: string;
 };
 
 const AutoComplete = <T extends string>({
+  id,
   value,
   onValueChange,
   items,
@@ -38,6 +41,7 @@ const AutoComplete = <T extends string>({
   emptyMessage = "No items found",
   placeholder = "Search...",
   delay = 300,
+  dimension,
   className,
 }: Props<T>) => {
   const [open, setOpen] = useState(false);
@@ -142,6 +146,11 @@ const AutoComplete = <T extends string>({
               onBlur={handleBlur}
             >
               <Input
+                id={id}
+                // cmdk names the input after its own empty label, which would
+                // hide the caller's <label htmlFor={id}> from screen readers.
+                {...(id && { "aria-labelledby": undefined })}
+                dimension={dimension}
                 className={cn(
                   { "border-destructive": hasError },
                   showClearButton && "pr-7",

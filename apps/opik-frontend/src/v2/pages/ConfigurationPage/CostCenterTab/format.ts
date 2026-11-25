@@ -1,5 +1,7 @@
 import { CatalogType } from "@/lib/model-prices";
 import { TagProps } from "@/ui/tag";
+import { PROVIDERS } from "@/constants/providers";
+import { PROVIDER_TYPE } from "@/types/providers";
 
 export const PRICE_UNIT_SUFFIX = "/1M tok";
 
@@ -20,6 +22,21 @@ export const formatPrice = (perMillion?: string) => {
   return `$${Number(value.toPrecision(2))}`;
 };
 
+// LiteLLM splits some providers into several names (vertex_ai-language-models,
+// bedrock_converse, ollama_chat); each family has one logo.
+const PROVIDER_FAMILIES: [string, PROVIDER_TYPE][] = [
+  ["vertex_ai", PROVIDER_TYPE.VERTEX_AI],
+  ["bedrock", PROVIDER_TYPE.BEDROCK],
+  ["ollama", PROVIDER_TYPE.OLLAMA],
+];
+
+export const providerIconOf = (provider: string) => {
+  const family = PROVIDER_FAMILIES.find(([prefix]) =>
+    provider.startsWith(prefix),
+  );
+  return PROVIDERS[(family ? family[1] : provider) as PROVIDER_TYPE]?.icon;
+};
+
 export const TYPE_TAG_VARIANT: Record<CatalogType, TagProps["variant"]> = {
   default: "gray",
   override: "yellow",
@@ -32,16 +49,4 @@ export const TYPE_DESCRIPTIONS: Record<CatalogType, string> = {
   override: "Custom price for an existing model",
   custom: "Custom model added by your organization",
   alias: "Uses another model's price",
-};
-
-export const MODE_LABELS: Record<string, string> = {
-  chat: "Chat",
-  completion: "Completion",
-  embedding: "Embedding",
-  responses: "Responses",
-  rerank: "Rerank",
-  audio_transcription: "Audio",
-  audio_speech: "Speech",
-  image_generation: "Image",
-  moderation: "Moderation",
 };
