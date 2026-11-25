@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import copy from "clipboard-copy";
-import { Check, ChevronRight, Copy, FileJson, Sparkles, X } from "lucide-react";
+import { Check, ChevronRight, Copy, FileUp, Sparkles, X } from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -23,7 +23,7 @@ import {
   builtInLookup,
   describeBatchProblem,
   describeReplaceResult,
-  parseLiteLlmUpload,
+  parsePriceUpload,
   problemsForRows,
   summarizeBatch,
   upsertMany,
@@ -177,7 +177,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   };
 
   const previewChanges = async () => {
-    const upload = parseLiteLlmUpload(text);
+    const upload = parsePriceUpload(text);
     if (upload.errors.length) {
       setParseErrors(upload.errors);
       return;
@@ -268,8 +268,8 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
           <Tabs defaultValue="json">
             <TabsList variant="segmented" className="w-fit">
               <TabsTrigger value="json" variant="segmented">
-                <FileJson className="mr-1.5 size-3.5" />
-                Upload or paste JSON
+                <FileUp className="mr-1.5 size-3.5" />
+                Upload or paste JSON or CSV
               </TabsTrigger>
               <TabsTrigger value="skill" variant="segmented">
                 <Sparkles className="mr-1.5 size-3.5" />
@@ -279,8 +279,8 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
             <TabsContent value="json" className="mt-4 space-y-3">
               <UploadField
                 onFileSelect={onFile}
-                accept=".json,application/json"
-                description="Drop a .json file or"
+                accept=".json,application/json,.csv,text/csv"
+                description="Drop a .json or .csv file or"
               />
               <p className="comet-body-xs text-muted-slate">
                 The file is read once in your browser and not stored.
@@ -337,6 +337,17 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   for any provider) and an optional <code>note</code>. A model
                   that already has an organization price is updated; others are
                   added.
+                  <br />
+                  <br />
+                  Or a CSV with a <code>model</code> column, like the one Export
+                  as CSV writes: <code>provider</code> (leave it empty for any
+                  provider), prices in dollars per 1M tokens in{" "}
+                  <code>input_price_per_1m</code>,{" "}
+                  <code>output_price_per_1m</code>,{" "}
+                  <code>cache_read_price_per_1m</code> and{" "}
+                  <code>cache_write_price_per_1m</code>, and{" "}
+                  <code>priced_like</code> for an alias, like{" "}
+                  <code>gpt-4o on openai</code>. Other columns are ignored.
                 </p>
               )}
               {parseErrors.length > 0 && (
