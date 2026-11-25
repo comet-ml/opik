@@ -106,7 +106,9 @@ public class TopicsReadTestUtils {
                 .toList();
     }
 
-    /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces without a stage, as a Helm change would. */
+    /**
+     * Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces without a stage, as a Helm change would.
+     */
     public void optIn(String workspaceId) {
         optIn(workspaceId, TopicsStage.ALL);
     }
