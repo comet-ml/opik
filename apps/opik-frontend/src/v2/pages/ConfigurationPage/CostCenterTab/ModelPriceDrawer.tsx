@@ -839,12 +839,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 Add price
               </Button>
             )}
-            <PriceFormula
-              prices={Object.fromEntries(
-                lines.map((line) => [line.field, line.value]),
-              )}
-              builtIn={builtIn}
-            />
           </div>
         )}
 
@@ -877,6 +871,15 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               </p>
             ))}
           </div>
+        )}
+
+        {kind !== "alias" && (
+          <PriceFormula
+            prices={Object.fromEntries(
+              lines.map((line) => [line.field, line.value]),
+            )}
+            builtIn={builtIn}
+          />
         )}
 
         {generalProblems.length > 0 && (
