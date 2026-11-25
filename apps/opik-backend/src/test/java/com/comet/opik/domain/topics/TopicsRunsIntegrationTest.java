@@ -504,6 +504,36 @@ class TopicsRunsIntegrationTest {
         assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
     }
 
+    @Test
+    @DisplayName("a stale queued nightly update on a day the schedule did not fire is dropped, not published again")
+    void staleNightlyUpdateWithNoCurrentNightIsDropped(@Jit TopicsRunReconciler reconciler) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.UPDATE).block();
+        var nightly = opikConfig.getTopics().getNightly();
+        var schedule = nightly.getSchedule();
+        // Only the weekday after tomorrow: neither today nor yesterday is a night.
+        nightly.setSchedule("0 0 2 ? * " + LocalDate.now(ZoneOffset.UTC).plusDays(2).getDayOfWeek().name()
+                .substring(0, 3));
+        try {
+            var later = Instant.now().plus(opikConfig.getTopics().getRuns().getRepublishAfter().toJavaDuration())
+                    .plusSeconds(60);
+            var inFlight = reconciler.reconcile(store.findInFlight().block(), List.of(workspaceId), tomorrow(), later)
+                    .block();
+
+            assertThat(inFlight).extracting(InFlightRun::runId).doesNotContain(runId);
+        } finally {
+            nightly.setSchedule(schedule);
+        }
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(runId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+            assertThat(project.cancelReason()).isEqualTo(TopicProject.CancelReason.DEADLINE);
+        });
+    }
+
     /** Queues and publishes the project's nightly update for tomorrow's window, as the nightly job will. */
     private UUID queueUpdate(TopicsRunPublisher publisher, String workspaceId, UUID projectId) {
         var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.UPDATE).block();

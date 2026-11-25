@@ -93,8 +93,7 @@ class TopicsRunReconciler {
     /**
      * Publishes a run queued before {@code topics.runs.republishAfter} again. A discovery run is counted again for
      * {@code night}, as the stream entry carries the window's count; a nightly update for the current night, which
-     * the row does not keep (a night by hand for another date goes again for the current one). A nightly update with no
-     * current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
+     * the row does not keep. A nightly update with no current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
      * window past the next scheduled night.
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {

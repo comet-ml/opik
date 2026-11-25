@@ -25,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,9 +44,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The planner's night pass with every store mocked: the night the schedule gives, each project's decision with its
- * reason (counted and written to {@code topic_projects}), the queue up to the free slots, the budget's cut-off and the
- * night's end, a failed read, and a night by hand.
+ * The night pass's faults that real containers cannot produce, with every store mocked: a failed count, a failed read,
+ * one workspace's failed check. Also the night the schedule gives. The decisions on real storage are in
+ * {@link TopicsNightlyIntegrationTest}.
  */
 @DisplayName("topics night pass")
 class TopicsNightPassTest {
@@ -58,12 +57,10 @@ class TopicsNightPassTest {
     private static final Instant START = Instant.parse("2026-11-02T02:00:00Z");
     private static final Instant NIGHT_START = NIGHT.atStartOfDay(ZoneOffset.UTC).toInstant();
     private static final Instant IN_BUDGET = START.plusSeconds(600);
-    private static final Instant AFTER_BUDGET = START.plusSeconds(3 * 3600);
 
     /** Each project's row; its window count in {@link #vectors}, or a failed count when absent. */
     private final Map<UUID, TopicProject> rows = new HashMap<>();
     private final Map<UUID, Long> vectors = new HashMap<>();
-    private final Set<UUID> deleted = new HashSet<>();
     private final List<TopicsRunPlanner.Planned> queued = new ArrayList<>();
     private Function<TopicsRunPlanner.Planned, Mono<UUID>> queue;
 
@@ -96,7 +93,7 @@ class TopicsNightPassTest {
                 .<Collection<UUID>>getArgument(1).stream().map(rows::get).toList());
         projectService = mock(ProjectService.class);
         when(projectService.findByIds(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation
-                .<Set<UUID>>getArgument(1).stream().filter(id -> !deleted.contains(id))
+                .<Set<UUID>>getArgument(1).stream()
                 .map(id -> Project.builder().id(id).name("project").build()).toList());
 
         candidates = mock(TopicsDiscoveryCandidates.class);
@@ -113,14 +110,8 @@ class TopicsNightPassTest {
         var workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(anyString()))
                 .thenAnswer(invocation -> "name of " + invocation.<String>getArgument(0));
-        // As Redis SET NX: the first take of a key wins.
-        var taken = new HashSet<String>();
-        var lockService = mock(LockService.class);
-        when(lockService.lockUsingToken(any(), any()))
-                .thenAnswer(invocation -> Mono.just(taken.add(invocation.<LockService.Lock>getArgument(0).key())));
-        when(projectDAO.countNight(anyCollection(), any())).thenReturn(new TopicProjectDAO.NightCounts(0, 2));
         pass = new TopicsNightPass(config, template, workspaceService, candidates,
-                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
+                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, mock(LockService.class));
     }
 
     /** A project with a list saved for the night before, and its window count. */
@@ -164,104 +155,16 @@ class TopicsNightPassTest {
     }
 
     @Test
-    @DisplayName("within the budget each project with a list is decided once, by reason: deleted, already saved, "
-            + "paused and small are skipped, a failed count is count_failed, the rest is queued with its count and night; "
-            + "a project looked at tonight or with a run in flight is left alone")
-    void decidesEachProject() {
-        var gone = listed(500L);
-        deleted.add(gone);
-        var noList = listed(500L);
-        rows.put(noList, row(noList).listRunId(null).build());
-        var saved = listed(500L);
-        rows.put(saved, row(saved).windowUntil(NIGHT_START).build());
-        var stopped = listed(500L);
-        rows.put(stopped, row(stopped).failedRuns(3).runStatus(TopicProject.RunStatus.FAILED)
-                .runStartedAt(NIGHT_START.minusSeconds(86_400)).build());
-        var small = listed(50L);
+    @DisplayName("a project whose own window count fails is decided count_failed and not queued; the next night "
+            + "counts it again")
+    void countFails() {
         var broken = listed(null);
-        var built = listed(500L);
-        var lookedAt = listed(500L);
-        rows.put(lookedAt, row(lookedAt).lastNight(NIGHT).build());
-        var running = listed(500L);
-        rows.put(running, row(running).runStatus(TopicProject.RunStatus.RUNNING).build());
-
-        assertThat(plan(IN_BUDGET, 5)).isEqualTo(1);
-
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(WORKSPACE_ID, built,
-                TopicProject.RunMode.UPDATE, NIGHT, 500));
-        for (var reason : List.of("deleted", "already_saved", "paused", "small")) {
-            assertThat(decisions("skip", reason)).as(reason).isEqualTo(1);
-        }
-        assertThat(decisions("skip", "no_list")).isZero();
-        assertThat(decisions("count_failed", null)).isEqualTo(1);
-        assertThat(decisions("update", null)).isEqualTo(1);
-        assertThat(decisions("not_reached", null)).isZero();
-        for (var projectId : List.of(gone, saved, stopped, small, broken, built)) {
-            verify(projectDAO).markLooked(WORKSPACE_ID, Set.of(projectId), NIGHT);
-        }
-        verify(projectDAO, never()).markLooked(eq(WORKSPACE_ID), eq(Set.of(noList)), any());
-        verify(projectDAO, never()).markLooked(eq(WORKSPACE_ID), eq(Set.of(lookedAt)), any());
-        verify(projectDAO, never()).markLooked(eq(WORKSPACE_ID), eq(Set.of(running)), any());
-        verify(projectDAO, never()).markNotReached(anyString(), any(), any());
-    }
-
-    @Test
-    @DisplayName("with no free slot the skips that need no count are still written, and nothing is counted or "
-            + "queued; with slots it queues up to them, stalest window first")
-    void queuesUpToTheFreeSlots() {
-        var gone = listed(500L);
-        deleted.add(gone);
-        var older = listed(500L);
-        rows.put(older, row(older).windowUntil(NIGHT_START.minusSeconds(3 * 86_400)).build());
-        var newer = listed(500L);
-        var never = listed(500L);
-        rows.put(never, row(never).windowUntil(null).build());
-
-        assertThat(plan(IN_BUDGET, 0)).isZero();
-
-        assertThat(decisions("skip", "deleted")).isEqualTo(1);
-        verify(candidates, never()).windowVectors(anyString(), anyCollection(), any());
-
-        rows.put(gone, row(gone).lastNight(NIGHT).build());
-        assertThat(plan(IN_BUDGET, 2)).isEqualTo(2);
-
-        assertThat(queued).containsExactly(
-                new TopicsRunPlanner.Planned(WORKSPACE_ID, never, TopicProject.RunMode.UPDATE, NIGHT, 500),
-                new TopicsRunPlanner.Planned(WORKSPACE_ID, older, TopicProject.RunMode.UPDATE, NIGHT, 500));
-        verify(projectDAO, never()).markLooked(WORKSPACE_ID, Set.of(newer), NIGHT);
-    }
-
-    @Test
-    @DisplayName("a project that got a run between the read and its queue is not decided: a later plan decides it")
-    void projectInFlightMeanwhile() {
-        var projectId = listed(500L);
-        queue = planned -> Mono.empty();
 
         assertThat(plan(IN_BUDGET, 2)).isZero();
 
-        verify(projectDAO, never()).markLooked(anyString(), any(), any());
-        assertThat(decisions("update", null)).isZero();
-        assertThat(rows).containsKey(projectId);
-    }
-
-    @Test
-    @DisplayName("after the budget no project is read or queued: the ones the night did not look at are written not "
-            + "reached in one write per workspace, and the night is counted finished once")
-    void endsAfterTheBudget() {
-        var left = List.of(new TopicProjectKey(WORKSPACE_ID, ID_GENERATOR.generateId()),
-                new TopicProjectKey(WORKSPACE_ID, ID_GENERATOR.generateId()));
-        when(projectDAO.findNotReached(List.of(WORKSPACE_ID), NIGHT)).thenReturn(left, List.of());
-        listed(500L);
-
-        assertThat(plan(AFTER_BUDGET, 2)).isZero();
-        assertThat(plan(AFTER_BUDGET, 2)).isZero();
-
-        verify(projectDAO).markNotReached(WORKSPACE_ID,
-                Set.of(left.get(0).projectId(), left.get(1).projectId()), NIGHT);
-        verify(projectDAO, never()).findNightDue(anyCollection(), any());
         assertThat(queued).isEmpty();
-        assertThat(decisions("not_reached", null)).isEqualTo(2);
-        assertThat(sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
+        assertThat(decisions("count_failed", null)).isEqualTo(1);
+        verify(projectDAO).markLooked(WORKSPACE_ID, Set.of(broken), NIGHT);
     }
 
     @Test

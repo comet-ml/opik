@@ -46,11 +46,13 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -118,15 +120,33 @@ class TopicsNightlyIntegrationTest {
                 .build());
     }
 
+    /** A run's own ids and times, and its prototypes: new on every run. */
+    private static final String[] RUN_FIELDS = {"runId", "listRunId", "otherVectors", "lastSuccessAt",
+            "runStartedAt", "runFinishedAt", "runQueuedAt", "deadlineAt", "heartbeatAt"};
+
     private OpikConfiguration opikConfig;
     private TransactionTemplate template;
     private TopicsRunPlanner planner;
     private TopicsTestData data;
+    private TopicRunStore store;
+    private TopicWorkspaceService workspaceService;
+    private TopicsDiscoveryCandidates candidates;
+    private WorkspaceNameService workspaceNames;
+    private ProjectService projectService;
+    private LockService lockService;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicWorkspaceService workspaceService,
+            @Jit TopicsDiscoveryCandidates candidates, @Jit WorkspaceNameService workspaceNames,
+            @Jit ProjectService projectService, @Jit LockService lockService) {
+        this.store = store;
+        this.workspaceService = workspaceService;
+        this.candidates = candidates;
+        this.workspaceNames = workspaceNames;
+        this.projectService = projectService;
+        this.lockService = lockService;
         this.opikConfig = opikConfig;
         this.template = template;
         this.planner = planner;
@@ -169,43 +189,103 @@ class TopicsNightlyIntegrationTest {
         listedYesterday(workspaceId, small);
         stubAnswer(emptyNaming());
 
-        var discoveryLists = Map.of(first, data.topicProject(first).listRunId(), second,
-                data.topicProject(second).listRunId());
+        var before = Map.of(first, data.topicProject(first), second, data.topicProject(second));
+        var smallBefore = data.topicProject(small);
 
         // At least the two updates: a pod can save one before this plan's labels pass reads, which then queues its
         // labelling pass too. The rows below show what the night decided.
         assertThat(planner.plan(Instant.now()).block()).isGreaterThanOrEqualTo(2);
 
         for (var projectId : List.of(first, second)) {
+            var expected = before.get(projectId).toBuilder().savedRuns(2).windowUntil(todayStart())
+                    .labelsComplete(true).runMode(TopicProject.RunMode.LABELS)
+                    .runStatus(TopicProject.RunStatus.SAVED).lastNight(today()).build();
             Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(data.topicProject(projectId))
-                            .satisfies(project -> {
-                                assertThat(project.listRunId()).isNotEqualTo(discoveryLists.get(projectId));
-                                assertThat(project.lastNight()).isEqualTo(today());
-                                assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
-                                assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
-                                assertThat(project.labelsComplete()).isTrue();
-                            }));
-            assertThat(data.topicProject(projectId).windowUntil()).isEqualTo(todayStart());
+                    .untilAsserted(() -> assertThat(data.topicProject(projectId)).usingRecursiveComparison()
+                            .ignoringFields(RUN_FIELDS).isEqualTo(expected));
+            assertThat(data.topicProject(projectId).listRunId()).isNotEqualTo(before.get(projectId).listRunId());
         }
-        assertThat(data.topicProject(small)).satisfies(project -> {
-            assertThat(project.lastNight()).isEqualTo(today());
-            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
-        });
+        assertThat(data.topicProject(small)).isEqualTo(smallBefore.toBuilder().lastNight(today()).build());
 
         assertThat(planner.plan(Instant.now()).block()).isZero();
-        for (var projectId : List.of(first, second)) {
-            assertThat(data.topicProject(projectId).savedRuns()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("within the budget each project with a list is decided once, by reason: a deleted project, a list "
+            + "that covers the night, a project paused by its failures and a small window are skipped; the rest is "
+            + "queued with its count; a project looked at tonight or with a run in flight is left alone")
+    void decidesEachProject() {
+        var workspaceId = enabledWorkspace();
+        var gone = ID_GENERATOR.generateId();
+        data.seedVectors(workspaceId, gone, 0, FIXTURE.size(), todayStart());
+        data.savedList(workspaceId, gone, yesterdayStart(), FIXTURE.size());
+        var saved = ID_GENERATOR.generateId();
+        data.seed(workspaceId, saved, 0, FIXTURE.size(), todayStart());
+        data.savedList(workspaceId, saved, todayStart(), FIXTURE.size());
+        var paused = seededList(workspaceId, FIXTURE.size());
+        failRuns(workspaceId, paused, opikConfig.getTopics().getNightly().getPauseFailures());
+        var small = seededList(workspaceId, SMALL);
+        var built = seededList(workspaceId, FIXTURE.size());
+        var lookedAt = seededList(workspaceId, FIXTURE.size());
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .markLooked(workspaceId, List.of(lookedAt), today()));
+        var running = seededList(workspaceId, FIXTURE.size());
+        template.inTransaction(WRITE, handle -> {
+            TopicsTestData.startRun(handle.attach(TopicProjectDAO.class), workspaceId, running,
+                    ID_GENERATOR.generateId(), TopicProject.RunMode.UPDATE, Instant.now());
+            return null;
+        });
+        var untouched = Map.of(lookedAt, data.topicProject(lookedAt), running, data.topicProject(running));
+        var reader = InMemoryMetricReader.create();
+        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+
+        assertThat(pass(reader).plan(Instant.now(), 10, capture(queued)).block()).isEqualTo(1);
+
+        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(workspaceId, built,
+                TopicProject.RunMode.UPDATE, today(), FIXTURE.size()));
+        for (var reason : List.of("deleted", "already_saved", "paused", "small")) {
+            assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "skip", "reason",
+                    reason)).as(reason).isEqualTo(1);
         }
+        assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "update")).isEqualTo(1);
+        for (var projectId : List.of(gone, saved, paused, small, built)) {
+            assertThat(data.topicProject(projectId).lastNight()).as(projectId.toString()).isEqualTo(today());
+        }
+        untouched.forEach((projectId, before) -> assertThat(data.topicProject(projectId)).isEqualTo(before));
+    }
+
+    @Test
+    @DisplayName("with no free slot the skips that need no count are still written and nothing is queued; with slots "
+            + "it queues up to them, stalest window first; a project that got a run before its queue is not decided")
+    void queuesUpToTheFreeSlots() {
+        var workspaceId = enabledWorkspace();
+        var gone = ID_GENERATOR.generateId();
+        data.seedVectors(workspaceId, gone, 0, FIXTURE.size(), todayStart());
+        data.savedList(workspaceId, gone, yesterdayStart(), FIXTURE.size());
+        var older = ID_GENERATOR.generateId();
+        data.seed(workspaceId, older, 0, FIXTURE.size(), todayStart());
+        data.savedList(workspaceId, older, yesterdayStart().minusSeconds(2 * 86_400), FIXTURE.size());
+        var newer = seededList(workspaceId, FIXTURE.size());
+        var reader = InMemoryMetricReader.create();
+        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+
+        assertThat(pass(reader).plan(Instant.now(), 0, capture(queued)).block()).isZero();
+        assertThat(data.topicProject(gone).lastNight()).isEqualTo(today());
+        assertThat(queued).isEmpty();
+
+        assertThat(pass(reader).plan(Instant.now(), 1, planned -> Mono.empty()).block()).isZero();
+        assertThat(data.topicProject(older).lastNight()).isNull();
+
+        assertThat(pass(reader).plan(Instant.now(), 1, capture(queued)).block()).isEqualTo(1);
+        assertThat(queued).extracting(TopicsRunPlanner.Planned::projectId).containsExactly(older);
+        assertThat(data.topicProject(newer).lastNight()).isNull();
     }
 
     @Test
     @DisplayName("after the budget no nightly update is queued: each project with a list the night did not look at "
             + "has its not-reached streak counted once, however many plans run; a project the night looked at keeps 0; "
             + "the night is counted finished once")
-    void budgetCutOff(@Jit TopicWorkspaceService workspaceService, @Jit TopicsDiscoveryCandidates candidates,
-            @Jit WorkspaceNameService workspaceNames, @Jit ProjectService projectService,
-            @Jit LockService lockService) {
+    void budgetCutOff() {
         var workspaceId = enabledWorkspace();
         var notReached = ID_GENERATOR.generateId();
         var looked = ID_GENERATOR.generateId();
@@ -215,21 +295,18 @@ class TopicsNightlyIntegrationTest {
         }
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLooked(workspaceId, List.of(looked), today()));
+        var notReachedBefore = data.topicProject(notReached);
+        var lookedBefore = data.topicProject(looked);
         opikConfig.getTopics().getNightly().setBudget(Duration.milliseconds(1));
-        // Its own pass, to read its metrics; the night's end key in Redis is the app's.
         var reader = InMemoryMetricReader.create();
-        var pass = new TopicsNightPass(opikConfig.getTopics(), template, workspaceService, candidates,
-                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
+        var pass = pass(reader);
 
         assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
         assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
 
-        assertThat(data.topicProject(notReached)).satisfies(project -> {
-            assertThat(project.notReachedNights()).isEqualTo(1);
-            assertThat(project.lastNight()).isNull();
-            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
-        });
-        assertThat(data.topicProject(looked).notReachedNights()).isZero();
+        assertThat(data.topicProject(notReached))
+                .isEqualTo(notReachedBefore.toBuilder().notReachedNights(1).build());
+        assertThat(data.topicProject(looked)).isEqualTo(lookedBefore);
         assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
     }
 
@@ -256,6 +333,42 @@ class TopicsNightlyIntegrationTest {
         assertThat(data.topicProject(skipped)).isEqualTo(before);
     }
 
+    /** A pass of its own, to read its metrics; its queue is the caller's, the night's end key in Redis the app's. */
+    private TopicsNightPass pass(InMemoryMetricReader reader) {
+        return new TopicsNightPass(opikConfig.getTopics(), template, workspaceService, candidates,
+                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
+    }
+
+    /** A queue that records what it is given and returns a new run id. */
+    private static Function<TopicsRunPlanner.Planned, Mono<UUID>> capture(List<TopicsRunPlanner.Planned> queued) {
+        return planned -> {
+            queued.add(planned);
+            return Mono.just(ID_GENERATOR.generateId());
+        };
+    }
+
+    /** A project with {@code traces} vectors in tonight's window and a list saved for the night before. */
+    private UUID seededList(String workspaceId, int traces) {
+        var projectId = ID_GENERATOR.generateId();
+        data.seed(workspaceId, projectId, 0, traces, todayStart());
+        listedYesterday(workspaceId, projectId);
+        return projectId;
+    }
+
+    /** {@code runs} update runs of the project that failed, the last one now. */
+    private void failRuns(String workspaceId, UUID projectId, int runs) {
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            for (int i = 0; i < runs; i++) {
+                var runId = ID_GENERATOR.generateId();
+                var at = Instant.now();
+                TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.UPDATE, at);
+                dao.markFailed(workspaceId, projectId, runId, at, TopicProject.RunError.LLM_ERROR);
+            }
+            return null;
+        });
+    }
+
     /** A project with a list from a real discovery run for yesterday, its labels complete. */
     private UUID builtYesterday(String workspaceId) {
         var projectId = ID_GENERATOR.generateId();
@@ -274,8 +387,7 @@ class TopicsNightlyIntegrationTest {
     /** A saved list with its window until yesterday's start, its labels complete: no run of its own is due. */
     private void listedYesterday(String workspaceId, UUID projectId) {
         data.savedList(workspaceId, projectId, yesterdayStart(), FIXTURE.size());
-        template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE topic_projects SET labels_complete = TRUE WHERE project_id = ?", projectId.toString()));
+        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
     }
 
     private void stubAnswer(JsonNode answer) {
