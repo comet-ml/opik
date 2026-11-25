@@ -230,7 +230,7 @@ describe("CostCenterTab", () => {
 
       expect(priceInput("Input")).toHaveAttribute("readonly");
       expect(screen.queryByRole("radio", { name: "Own price" })).toBeNull();
-      expect(screen.queryByText(/Cached tokens are billed/)).toBeNull();
+      expect(screen.queryByText(/billed at the input price/)).toBeNull();
     });
 
     it("stays read-only while the role is loading, without the view-only badge", () => {
@@ -767,6 +767,25 @@ describe("CostCenterTab", () => {
         await screen.findByRole("option", { name: "openai" }),
       ).toBeInTheDocument();
       expect(onProvider).toHaveFocus();
+    });
+
+    it("says which cache prices fall back to the input price", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      expect(
+        screen.getByText(
+          "Cache reads and writes are billed at the input price unless you add their own price.",
+        ),
+      ).toBeVisible();
+
+      fireEvent.click(screen.getByRole("button", { name: /Add price/ }));
+      fireEvent.change(priceInput("Cache read"), { target: { value: "0.1" } });
+      expect(
+        screen.getByText(
+          "Cache writes are billed at the input price unless you add a cache write price.",
+        ),
+      ).toBeVisible();
     });
 
     it("explains an empty provider instead of listing it", async () => {

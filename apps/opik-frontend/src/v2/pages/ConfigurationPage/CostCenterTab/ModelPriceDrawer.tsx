@@ -90,6 +90,16 @@ const MODEL_EMPTY_MESSAGE = "Not in the list. Saved as a custom model.";
 const SPANS_OWN_PROVIDER_LABEL = "The span's own provider";
 const MAX_MODEL_SUGGESTIONS = 50;
 
+const CACHE_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
+const CACHE_HINTS: Record<string, string> = {
+  "cache_read_price,cache_write_price":
+    "Cache reads and writes are billed at the input price unless you add their own price.",
+  cache_read_price:
+    "Cache reads are billed at the input price unless you add a cache read price.",
+  cache_write_price:
+    "Cache writes are billed at the input price unless you add a cache write price.",
+};
+
 const matching = (names: string[], typed: string) => {
   const query = typed.trim().toLowerCase();
   const matches = names.filter((name) => name.toLowerCase().includes(query));
@@ -441,10 +451,13 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
     (problem) =>
       problem.code !== "no_price" && !isShownByItsField(problem.field),
   );
-  const cachePriced = lines.some(
-    (line) =>
-      line.field === "cache_read_price" && canonicalPrice(line.value) !== "",
+  const unpricedCache = CACHE_FIELDS.filter(
+    (field) =>
+      !lines.some(
+        (line) => line.field === field && canonicalPrice(line.value) !== "",
+      ),
   );
+  const cacheHint = CACHE_HINTS[unpricedCache.join(",")];
 
   const title = entry ? entry.model : "New custom model";
   const lastUpdatedAt = entry?.lastUpdatedAt
@@ -463,7 +476,9 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
           pricedModels
             .filter(
               (target) =>
-                !aliasTargetProvider || target.provider === aliasTargetProvider,
+                !aliasTargetProvider ||
+                target.provider.toLowerCase() ===
+                  aliasTargetProvider.toLowerCase(),
             )
             .map((target) => target.model),
         ),
@@ -701,10 +716,9 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
             <div>
               <h4 className="comet-body-s-accented">Prices</h4>
               <p className="comet-body-xs text-muted-slate">{helpText}</p>
-              {canEdit && isCustomPrice && !cachePriced && (
+              {canEdit && isCustomPrice && cacheHint && (
                 <p className="comet-body-xs mt-1 text-light-slate">
-                  Cached tokens are billed at the input price unless you add a
-                  cache price.
+                  {cacheHint}
                 </p>
               )}
             </div>
@@ -742,13 +756,13 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                       />
                     )}
                     <div className="relative flex-1">
-                      <span className="comet-body-s absolute left-3 top-1/2 -translate-y-1/2 text-foreground">
+                      <span className="comet-body-s pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-slate">
                         $
                       </span>
                       <Input
                         dimension="sm"
                         className={cn(
-                          "pl-6 pr-16",
+                          "pl-7 pr-16",
                           readOnly && READ_ONLY_INPUT,
                         )}
                         aria-label={`${
@@ -761,7 +775,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                           updateLine(line.id, { value: event.target.value })
                         }
                       />
-                      <span className="comet-body-xs absolute right-3 top-1/2 -translate-y-1/2 text-light-slate">
+                      <span className="comet-body-xs pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-light-slate">
                         {PRICE_UNIT_SUFFIX}
                       </span>
                     </div>

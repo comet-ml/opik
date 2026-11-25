@@ -202,7 +202,11 @@ const AutoComplete = <T extends string>({
                   ))}
                 </CommandGroup>
               ) : null}
-              {!isLoading ? <CommandEmpty>{emptyMessage}</CommandEmpty> : null}
+              {!isLoading ? (
+                <CommandEmpty className="comet-body-xs px-3 py-4 text-center text-muted-slate">
+                  {emptyMessage}
+                </CommandEmpty>
+              ) : null}
             </CommandList>
           </PopoverContent>
         </Command>
