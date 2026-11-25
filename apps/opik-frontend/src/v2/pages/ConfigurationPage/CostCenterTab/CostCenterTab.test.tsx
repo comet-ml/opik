@@ -655,13 +655,11 @@ describe("CostCenterTab", () => {
   });
 
   describe("editing one model", () => {
-    it("closes on the first Escape although the pin button gets the first focus", async () => {
+    it("closes on the first Escape from the first focused control", async () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o");
-      expect(
-        screen.getByRole("button", { name: "Pin to the top" }),
-      ).toHaveFocus();
+      expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
       fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

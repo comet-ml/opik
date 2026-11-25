@@ -1,21 +1,16 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
+  Calendar,
   Info,
   Lock,
   Pin,
   PinOff,
   Plus,
   RotateCcw,
+  Trash,
   Trash2,
-  X,
 } from "lucide-react";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTopBar } from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
@@ -27,6 +22,7 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
 import {
   BuiltInPrice,
   CATALOG_TYPE_LABELS,
@@ -58,7 +54,6 @@ import {
   PRICE_UNIT_SUFFIX,
   TYPE_DESCRIPTIONS,
   TYPE_TAG_VARIANT,
-  formatDay,
 } from "./format";
 import useSaveModelPrices from "./useSaveModelPrices";
 
@@ -404,6 +399,9 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   );
 
   const title = entry ? entry.model : "New custom model";
+  const lastUpdatedAt = entry?.lastUpdatedAt
+    ? formatDate(entry.lastUpdatedAt)
+    : undefined;
   const helpText = keepsBuiltIn
     ? "Per-token prices are shown per 1M tokens for readability. Empty = built-in price."
     : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
@@ -417,51 +415,41 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
-        header={null}
+        header={
+          <SheetTopBar variant="form" title={title}>
+            {onTogglePin && (
+              <TooltipWrapper
+                hoverOnly
+                content={isPinned ? "Unpin" : "Pin to the top"}
+              >
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  className="group/pin"
+                  aria-label={isPinned ? "Unpin" : "Pin to the top"}
+                  aria-pressed={isPinned}
+                  onClick={onTogglePin}
+                >
+                  {isPinned ? (
+                    <>
+                      <Pin className="group-hover/pin:hidden" />
+                      <PinOff className="hidden group-hover/pin:block" />
+                    </>
+                  ) : (
+                    <Pin />
+                  )}
+                </Button>
+              </TooltipWrapper>
+            )}
+          </SheetTopBar>
+        }
         blockOverlayClose
       >
-        <div className="flex shrink-0 flex-col gap-2 px-6 pt-6">
-          <div className="flex items-start justify-between gap-3">
-            <SheetTitle className="comet-title-m break-all text-left font-mono">
-              {title}
-            </SheetTitle>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {onTogglePin && (
-                <TooltipWrapper
-                  hoverOnly
-                  content={isPinned ? "Unpin" : "Pin to the top"}
-                >
-                  <Button
-                    variant="outline"
-                    size="icon-2xs"
-                    className="group/pin"
-                    aria-label={isPinned ? "Unpin" : "Pin to the top"}
-                    aria-pressed={isPinned}
-                    onClick={onTogglePin}
-                  >
-                    {isPinned ? (
-                      <>
-                        <Pin className="group-hover/pin:hidden" />
-                        <PinOff className="hidden group-hover/pin:block" />
-                      </>
-                    ) : (
-                      <Pin />
-                    )}
-                  </Button>
-                </TooltipWrapper>
-              )}
-              <SheetClose asChild>
-                <Button variant="outline" size="icon-2xs">
-                  <X />
-                  <span className="sr-only">Close</span>
-                </Button>
-              </SheetClose>
-            </div>
-          </div>
-          <SheetDescription className="sr-only">
-            {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
-          </SheetDescription>
-          <div className="flex flex-wrap gap-1.5">
+        <SheetDescription className="sr-only">
+          {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
+        </SheetDescription>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
+          <div className="flex flex-wrap items-center gap-1.5">
             <TooltipWrapper content={TYPE_DESCRIPTIONS[type]}>
               <Tag variant={TYPE_TAG_VARIANT[type]}>
                 {CATALOG_TYPE_LABELS[type]}
@@ -471,14 +459,15 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             {entry?.mode && (
               <Tag variant="gray">{MODE_LABELS[entry.mode] ?? entry.mode}</Tag>
             )}
-            {entry?.lastUpdatedAt && (
-              <Tag variant="default">
-                Updated {formatDay(entry.lastUpdatedAt)}
-              </Tag>
+            {lastUpdatedAt && (
+              <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
+                <div className="comet-body-s ml-1.5 flex items-center gap-1 text-foreground">
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {lastUpdatedAt}
+                </div>
+              </TooltipWrapper>
             )}
           </div>
-        </div>
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-4 pt-2">
           {changedElsewhere && (
             <div
               role="status"
@@ -794,9 +783,6 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               </ul>
             </div>
           )}
-        </div>
-
-        <div className="space-y-3 border-t px-6 py-4">
           {canEdit && (
             <Alert variant="callout" size="sm">
               <Info />
@@ -806,9 +792,37 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               </AlertDescription>
             </Alert>
           )}
-          <div className="flex items-center gap-2">
-            {canEdit ? (
-              <>
+        </div>
+
+        <div className="flex items-center gap-2 border-t px-6 py-3">
+          {canEdit ? (
+            <>
+              {type === "override" && loaded.row && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isSaving}
+                  onClick={() => save(true)}
+                >
+                  <RotateCcw className="mr-1.5 size-3.5" />
+                  Restore all defaults
+                </Button>
+              )}
+              {isOrganizationOnly && loaded.row && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isSaving}
+                  onClick={() => setConfirming("remove")}
+                >
+                  <Trash className="mr-1.5 size-3.5" />
+                  Delete model
+                </Button>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={requestClose}>
+                  Cancel
+                </Button>
                 <Button
                   size="sm"
                   onClick={() => save(false)}
@@ -820,40 +834,13 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                       ? "Add model"
                       : "Save changes"}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={requestClose}>
-                  Cancel
-                </Button>
-                {type === "override" && loaded.row && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="ml-auto"
-                    disabled={isSaving}
-                    onClick={() => save(true)}
-                  >
-                    <RotateCcw className="mr-1.5 size-3.5" />
-                    Restore all defaults
-                  </Button>
-                )}
-                {isOrganizationOnly && loaded.row && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="ml-auto"
-                    disabled={isSaving}
-                    onClick={() => setConfirming("remove")}
-                  >
-                    <Trash2 className="mr-1.5 size-3.5" />
-                    Delete model
-                  </Button>
-                )}
-              </>
-            ) : (
-              <p className="comet-body-xs text-muted-slate">
-                Only organization admins can change prices.
-              </p>
-            )}
-          </div>
+              </div>
+            </>
+          ) : (
+            <p className="comet-body-xs text-muted-slate">
+              Only organization admins can change prices.
+            </p>
+          )}
         </div>
       </SheetContent>
       <ConfirmDialog

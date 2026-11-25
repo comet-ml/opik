@@ -1,4 +1,3 @@
-import dayjs from "dayjs";
 import { CatalogType } from "@/lib/model-prices";
 import { TagProps } from "@/ui/tag";
 
@@ -20,9 +19,6 @@ export const formatPrice = (perMillion?: string) => {
   }
   return `$${Number(value.toPrecision(2))}`;
 };
-
-export const formatDay = (iso?: string) =>
-  iso ? dayjs(iso).format("D MMM YYYY") : undefined;
 
 export const TYPE_TAG_VARIANT: Record<CatalogType, TagProps["variant"]> = {
   default: "gray",
