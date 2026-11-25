@@ -307,10 +307,15 @@ public class CustomModelPriceValidator {
         }
     }
 
+    // A target that names no provider is looked up under the span's own provider: the row's, or each span's for an
+    // any-provider row, which is then empty.
+    private String targetProviderOf(CustomModelPrice alias) {
+        return CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider()) ? alias.provider() : alias.aliasProvider();
+    }
+
     private Optional<Problem> aliasTargetProblem(ParsedRow row, AliasTargets targets, Set<String> invalidRowNames) {
         CustomModelPrice alias = row.price();
-        boolean underSpanProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider());
-        String targetProvider = underSpanProvider ? alias.provider() : alias.aliasProvider();
+        String targetProvider = targetProviderOf(alias);
         String targetName = ModelPriceTable.rowModelName(alias.aliasModelName());
         if (keyOf(alias).equals(RowKey.builder().modelName(targetName).provider(targetProvider).build())) {
             return Optional.of(problem(row.index(), ALIAS_OF, Code.ALIAS_TARGET_IS_ITSELF,
@@ -320,8 +325,7 @@ public class CustomModelPriceValidator {
         if (invalidRowNames.contains(targetName)) {
             return Optional.empty();
         }
-        // An any-provider alias whose target names no provider is looked up under each span's own provider.
-        boolean underEveryProvider = underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider());
+        boolean underEveryProvider = targetProvider.isEmpty();
         // The target is priced with alias rows skipped, so if a span named like the target would match another alias,
         // the two bill differently. Spans match any spelling (a date suffix stripped, ...), not only the exact name.
         // Matching this row itself is fine: both then end at the target's own price.
@@ -379,9 +383,7 @@ public class CustomModelPriceValidator {
 
     // Only a built-in price is billed per unit, as a fixed row sets token rates, so this request's rows don't matter.
     private boolean isTargetPricedPerUnit(CustomModelPrice alias) {
-        String targetProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider())
-                ? alias.provider()
-                : alias.aliasProvider();
+        String targetProvider = targetProviderOf(alias);
         if (targetProvider.isEmpty()) {
             return ModelPriceResolver.builtInMatchesUnderEveryProvider(alias.aliasModelName()).stream()
                     .anyMatch(match -> match.price().isPricedPerUnit());
