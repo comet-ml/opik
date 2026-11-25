@@ -730,6 +730,39 @@ example `<workspace_id>:arrival` (a deploy). Its saved list stays as it is.
 | `topics.nightly.decisions` by `decision`, `reason` | Projects the night decided on: `update`, `skip` (with `reason`), `not_reached`, `count_failed`. |
 | `topics.nightly.nights` by `outcome` | `finished` once per night, after its budget; `failed` for each plan whose read failed, for every workspace or for one. |
 
+### What a nightly update does
+
+A project keeps its list and updates it. A topic's prototypes never move: a topic keeps the group centres it was born
+with and the ones a night adds while they take traces. The run reads the window (or its sample, as a discovery run
+does) and the saved list, then:
+
+1. Assigns every trace it read to its nearest prototype at `TOPICS_ALGORITHM_ASSIGN_MIN_COSINE` (default 0.75), with
+   the `TOPICS_ALGORITHM_OTHER_GATE` (0.95) gate on known Other: a topic, known Other, or unassigned.
+2. Groups the Other traces by k-means when they number `TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE` (20) or more. A group
+   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (2%) of the window or more.
+3. Makes one `naming` call (task `topics/tasks/naming.yaml`) for the candidates at
+   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.80) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
+   new topic, or sends them to Other. Candidates given to a topic are checked by one `verify_naming` call
+   (`verify.yaml`); the rejected ones go to one `naming_new` call (`naming_new.yaml`), which offers a new topic or
+   Other only. A new topic is born only at the big share; on a full list (`TOPICS_ALGORITHM_MAX_TOPICS`, 10) it replaces
+   the topic with the lowest share, if that share is below its own. An answer that is not a JSON object leaves its
+   candidates in Other and the run goes on. A call that fails or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
+   `TOPICS_RUN_VERIFY_DEADLINE` fails the run, and the list stays as it was.
+4. Assigns every trace again. A topic with no trace retires that night; a topic under `TOPICS_ALGORITHM_RETIRE_SHARE`
+   (0.5%) for `TOPICS_ALGORITHM_RETIRE_NIGHTS` (3) saved nights in a row retires (`low_share`). A topic replaced on a
+   full list retires as `replaced`. A retired topic does not come back: its theme is born again with a new id.
+
+A retired topic's row is deleted. The save logs `Topics run '<run_id>' retired topic '<topic_id>'` with the project,
+the reason and the size, and counts it in `topics.retired`. The line holds ids only: names and definitions come from
+trace text and are never logged. When every topic retires, the save clears the list and writes no labels; the next
+plans give the project a discovery run.
+
+The run's `saved` or `failed` line holds its `stats`: `mode`, `saved_runs_before`, `topics_before`, `unassigned`,
+`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`, and the
+churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
+the same over the traces in a topic both before and after. Prompts and answers are logged only as length and SHA-256;
+each call's request id is `<run_id>:<call>` in opik-inference's logs.
+
 ### Running by hand
 
 An internal endpoint queues one project's nightly update now. Call it from inside the cluster.
