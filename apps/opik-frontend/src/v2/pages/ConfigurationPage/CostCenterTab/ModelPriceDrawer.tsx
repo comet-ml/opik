@@ -488,7 +488,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
           )}
           {lastUpdatedAt && (
             <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
-              <div className="comet-body-s ml-1.5 flex items-center gap-1 text-foreground">
+              <div className="comet-body-s ml-auto flex items-center gap-1 text-foreground">
                 <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
                 {lastUpdatedAt}
               </div>
