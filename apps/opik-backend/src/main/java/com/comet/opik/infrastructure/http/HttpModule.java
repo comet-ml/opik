@@ -9,11 +9,8 @@ import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.jackson.Jackson;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
-import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-
-import java.net.URI;
 
 public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
 
@@ -33,13 +30,8 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
             @Config("inference") InferenceConfig inference) {
         var builder = new DestinationGuardJerseyClientBuilder(environment());
         var client = buildClient(builder, config);
-        HttpClientPoolMetrics.publish(builder.connectionManager(), inferenceHost(inference));
+        HttpClientPoolMetrics.publish(builder.connectionManager(), inference.getUrl());
         return client;
-    }
-
-    /** The host the pool's opik-inference route goes to, or null when no feature is set to call it. */
-    private static String inferenceHost(InferenceConfig inference) {
-        return StringUtils.isBlank(inference.getUrl()) ? null : URI.create(inference.getUrl()).getHost();
     }
 
     /**

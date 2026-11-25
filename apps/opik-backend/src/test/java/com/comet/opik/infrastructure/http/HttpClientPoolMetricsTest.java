@@ -8,6 +8,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.LongPointData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -19,8 +20,11 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.ALL_ROUTES;
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.AVAILABLE;
+import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.CONNECTIONS;
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.INFERENCE_ROUTE;
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.LEASED;
+import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.MAX;
+import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.PENDING;
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.ROUTE;
 import static com.comet.opik.infrastructure.http.HttpClientPoolMetrics.STATE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -32,10 +36,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Shared HTTP client pool metrics")
 class HttpClientPoolMetricsTest {
 
-    private static final String MAX = "opik.http.client.pool.max";
-    private static final String CONNECTIONS = "opik.http.client.pool.connections";
-    private static final String PENDING = "opik.http.client.pool.pending";
-
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
     private final String path = "/" + UUID.randomUUID();
     // the builder has no Dropwizard environment, so the client's threads come from here, as in TestHttpClientUtils
@@ -44,6 +44,11 @@ class HttpClientPoolMetricsTest {
         thread.setDaemon(true);
         return thread;
     });
+
+    @BeforeAll
+    void setUpAll() {
+        wireMock.server().stubFor(get(urlPathEqualTo(path)).willReturn(aResponse().withStatus(200).withBody("ok")));
+    }
 
     @AfterAll
     void tearDownAll() {
@@ -54,14 +59,13 @@ class HttpClientPoolMetricsTest {
     @Test
     @DisplayName("reports the pool's totals and the route to opik-inference apart")
     void reportsTotalsAndTheInferenceRoute() {
-        wireMock.server().stubFor(get(urlPathEqualTo(path)).willReturn(aResponse().withStatus(200).withBody("ok")));
         var reader = InMemoryMetricReader.create();
         var config = TestConfigUtils.loadConfigTest().getJerseyClient();
         var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry());
         builder.using(executor);
 
         try (var client = HttpModule.buildClient(builder, config)) {
-            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), "localhost");
+            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), url("localhost"));
 
             // the pool has not seen the route yet: nothing in use, and the per-route limit as its max
             assertThat(gauge(reader, MAX, INFERENCE_ROUTE, null)).isEqualTo(config.getMaxConnectionsPerRoute());
@@ -77,6 +81,23 @@ class HttpClientPoolMetricsTest {
             assertThat(gauge(reader, CONNECTIONS, INFERENCE_ROUTE, AVAILABLE)).isEqualTo(1);
             assertThat(gauge(reader, CONNECTIONS, INFERENCE_ROUTE, LEASED)).isZero();
             assertThat(gauge(reader, PENDING, INFERENCE_ROUTE, null)).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("leaves another port on the opik-inference host out of its route")
+    void leavesAnotherPortOutOfTheInferenceRoute() {
+        var reader = InMemoryMetricReader.create();
+        var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry());
+        builder.using(executor);
+
+        try (var client = HttpModule.buildClient(builder, TestConfigUtils.loadConfigTest().getJerseyClient())) {
+            // opik-inference on the default port, and a call to the same host on WireMock's
+            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), "http://localhost");
+            assertThat(client.target(url("localhost")).request().get(String.class)).isEqualTo("ok");
+
+            assertThat(gauge(reader, CONNECTIONS, ALL_ROUTES, AVAILABLE)).isEqualTo(1);
+            assertThat(gauge(reader, CONNECTIONS, INFERENCE_ROUTE, AVAILABLE)).isZero();
         }
     }
 

@@ -7,9 +7,13 @@ import io.opentelemetry.api.metrics.Meter;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.client5.http.impl.DefaultSchemePortResolver;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.routing.RoutingSupport;
+import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.pool.PoolStats;
 
+import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -26,6 +30,9 @@ import java.util.Map;
 @UtilityClass
 public class HttpClientPoolMetrics {
 
+    static final String MAX = "opik.http.client.pool.max";
+    static final String CONNECTIONS = "opik.http.client.pool.connections";
+    static final String PENDING = "opik.http.client.pool.pending";
     static final String ALL_ROUTES = "all";
     static final String INFERENCE_ROUTE = "opik-inference";
     static final String LEASED = "leased";
@@ -34,51 +41,58 @@ public class HttpClientPoolMetrics {
     static final AttributeKey<String> STATE = AttributeKey.stringKey("state");
 
     /**
-     * @param inferenceHost the host of {@code inference.url}, or null when no feature is set to call opik-inference
+     * @param inferenceUrl {@code inference.url}, or blank when no feature is set to call opik-inference
      */
-    public static void publish(@NonNull PoolingHttpClientConnectionManager pool, String inferenceHost) {
-        publish(GlobalOpenTelemetry.getMeter("opik.http.client"), pool, inferenceHost);
+    public static void publish(@NonNull PoolingHttpClientConnectionManager pool, String inferenceUrl) {
+        publish(GlobalOpenTelemetry.getMeter("opik.http.client"), pool, inferenceUrl);
     }
 
-    static void publish(@NonNull Meter meter, @NonNull PoolingHttpClientConnectionManager pool, String inferenceHost) {
-        meter.gaugeBuilder("opik.http.client.pool.max").ofLongs()
+    static void publish(@NonNull Meter meter, @NonNull PoolingHttpClientConnectionManager pool, String inferenceUrl) {
+        var inferenceTarget = target(inferenceUrl);
+        meter.gaugeBuilder(MAX).ofLongs()
                 .setDescription("Connections the shared HTTP client's pool may hold: in all, and on the route to "
                         + "opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceHost).forEach(
+                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach(
                         (route, stats) -> measurement.record(stats.getMax(), Attributes.of(ROUTE, route))));
-        meter.gaugeBuilder("opik.http.client.pool.connections").ofLongs()
+        meter.gaugeBuilder(CONNECTIONS).ofLongs()
                 .setDescription("Pooled connections by state, leased (running a request) or available (idle): in all, "
                         + "and on the route to opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceHost).forEach((route, stats) -> {
+                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach((route, stats) -> {
                     measurement.record(stats.getLeased(), Attributes.of(ROUTE, route, STATE, LEASED));
                     measurement.record(stats.getAvailable(), Attributes.of(ROUTE, route, STATE, AVAILABLE));
                 }));
-        meter.gaugeBuilder("opik.http.client.pool.pending").ofLongs()
+        meter.gaugeBuilder(PENDING).ofLongs()
                 .setDescription("Requests waiting for a free connection in the shared HTTP client's pool: in all, and "
                         + "on the route to opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceHost).forEach(
+                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach(
                         (route, stats) -> measurement.record(stats.getPending(), Attributes.of(ROUTE, route))));
     }
 
     /**
-     * The pool's totals and, when a host is known, the opik-inference route's: nothing in use until the pool has seen
-     * it, with the per-route limit as its max.
+     * The target of the pool's route to a URL: its scheme, host and port, with the scheme's default port filled in as
+     * the client's route planner does, so it equals that route's target host. Null for a blank URL.
      */
-    static Map<String, PoolStats> stats(PoolingHttpClientConnectionManager pool, String inferenceHost) {
-        var stats = new LinkedHashMap<String, PoolStats>();
-        stats.put(ALL_ROUTES, pool.getTotalStats());
-        if (StringUtils.isNotBlank(inferenceHost)) {
-            stats.put(INFERENCE_ROUTE, pool.getRoutes().stream()
-                    .filter(route -> route.getTargetHost().getHostName().equalsIgnoreCase(inferenceHost))
-                    .map(pool::getStats)
-                    .reduce(new PoolStats(0, 0, 0, pool.getDefaultMaxPerRoute()), HttpClientPoolMetrics::sum));
-        }
-        return stats;
+    private static HttpHost target(String url) {
+        return StringUtils.isBlank(url)
+                ? null
+                : RoutingSupport.normalize(HttpHost.create(URI.create(url)), DefaultSchemePortResolver.INSTANCE);
     }
 
-    /** Routes to one host differ only in scheme or port, so they share the per-route limit. */
-    private static PoolStats sum(PoolStats first, PoolStats second) {
-        return new PoolStats(first.getLeased() + second.getLeased(), first.getPending() + second.getPending(),
-                first.getAvailable() + second.getAvailable(), Math.max(first.getMax(), second.getMax()));
+    /**
+     * The pool's totals and, when the opik-inference target is known, its route's: nothing in use until the pool has
+     * seen it, with the per-route limit as its max. The pool limits each route on its own, and the client plans one
+     * route per target, so the route is the one whose target matches in scheme, host and port.
+     */
+    static Map<String, PoolStats> stats(PoolingHttpClientConnectionManager pool, HttpHost inferenceTarget) {
+        var stats = new LinkedHashMap<String, PoolStats>();
+        stats.put(ALL_ROUTES, pool.getTotalStats());
+        if (inferenceTarget != null) {
+            stats.put(INFERENCE_ROUTE, pool.getRoutes().stream()
+                    .filter(route -> inferenceTarget.equals(route.getTargetHost()))
+                    .findFirst()
+                    .map(pool::getStats)
+                    .orElseGet(() -> new PoolStats(0, 0, 0, pool.getDefaultMaxPerRoute())));
+        }
+        return stats;
     }
 }
