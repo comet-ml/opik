@@ -1,5 +1,6 @@
 package com.comet.opik.domain.cost;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -29,7 +30,7 @@ public final class PriceLayers {
         ORGANIZATION
     }
 
-    @Getter
+    @Getter(AccessLevel.PACKAGE)
     private final @NonNull Origin origin;
     @Getter
     private final @Nullable String organizationId;

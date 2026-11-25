@@ -18,10 +18,6 @@ import java.util.function.Function;
 @UtilityClass
 class ModelPriceExplainer {
 
-    private static final String ORGANIZATION = "organization";
-    private static final String BUILT_IN = "built_in";
-    private static final String NONE = "none";
-
     CustomModelPriceResolution explain(@NonNull CustomModelPriceResolveRequest request, @NonNull PriceLayers layers) {
         Map<String, Integer> usage = Optional.ofNullable(request.usage()).orElse(Map.of());
         PricedCost priced = CostService.price(request.model(), request.provider(), usage, null, layers);
@@ -31,7 +27,7 @@ class ModelPriceExplainer {
                 .model(request.model())
                 .provider(request.provider())
                 .cost(priced.cost().stripTrailingZeros().toPlainString())
-                .costSource(priced.source().name().toLowerCase(Locale.ROOT))
+                .costSource(priced.source())
                 .listVersion(layers.getListVersion())
                 .match(match.map(ModelPriceExplainer::matchOf).orElse(null))
                 .lines(match.map(ModelPriceExplainer::linesOf).orElse(List.of()))
@@ -67,7 +63,9 @@ class ModelPriceExplainer {
     private CustomModelPriceResolution.Line line(String name, BigDecimal perToken, @Nullable CustomModelPrice row,
             Function<CustomModelPrice, BigDecimal> field) {
         boolean fromOrganization = row != null && field.apply(row) != null;
-        String source = fromOrganization ? ORGANIZATION : perToken.signum() > 0 ? BUILT_IN : NONE;
+        CostSource source = fromOrganization
+                ? CostSource.ORGANIZATION
+                : perToken.signum() > 0 ? CostSource.BUILT_IN : CostSource.NONE;
         return CustomModelPriceResolution.Line.builder()
                 .name(name)
                 .ratePerMillion(perToken.movePointRight(6).stripTrailingZeros().toPlainString())

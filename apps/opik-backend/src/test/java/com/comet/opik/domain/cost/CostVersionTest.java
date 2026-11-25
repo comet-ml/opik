@@ -1,5 +1,7 @@
 package com.comet.opik.domain.cost;
 
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -11,7 +13,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class CostVersionTest {
 
-    private static final PriceLayers ORGANIZATION = PriceLayers.of("org-1", 7, List.of());
+    private static final long LIST_VERSION = RandomUtils.secure().randomLong(1, 1_000);
+    private static final PriceLayers ORGANIZATION = PriceLayers.of(RandomStringUtils.secure().nextAlphanumeric(10),
+            LIST_VERSION, List.of());
     private static final Map<String, Integer> USAGE = Map.of("prompt_tokens", 1_000, "completion_tokens", 500);
 
     private static PricedCost priced(String cost, CostSource source) {
@@ -20,12 +24,14 @@ class CostVersionTest {
 
     @Test
     void organizationCostNamesTheListVersion() {
-        assertThat(CostVersion.of(priced("2.00", CostSource.ORGANIZATION), ORGANIZATION, USAGE)).isEqualTo("1.1;o7");
+        assertThat(CostVersion.of(priced("2.00", CostSource.ORGANIZATION), ORGANIZATION, USAGE))
+                .isEqualTo("1.1;o" + LIST_VERSION);
     }
 
     @Test
     void freeOrganizationCostStillNamesTheListVersion() {
-        assertThat(CostVersion.of(priced("0", CostSource.ORGANIZATION), ORGANIZATION, USAGE)).isEqualTo("1.1;o7");
+        assertThat(CostVersion.of(priced("0", CostSource.ORGANIZATION), ORGANIZATION, USAGE))
+                .isEqualTo("1.1;o" + LIST_VERSION);
     }
 
     @Test
