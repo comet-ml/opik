@@ -21,6 +21,11 @@ record TopicsNight(@NonNull LocalDate date, @NonNull Instant start) {
         return windowTo(date);
     }
 
+    /** The latest {@link #current} returns this night: the end of the next UTC day. */
+    Instant currentUntil() {
+        return windowTo(date.plusDays(2));
+    }
+
     /** The window end of the night on {@code date}: that UTC day's start. */
     static Instant windowTo(@NonNull LocalDate date) {
         return date.atStartOfDay(ZoneOffset.UTC).toInstant();

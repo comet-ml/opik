@@ -22,7 +22,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * The topic runs' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
  * carries {@code workspace_id} and {@code workspace_name}: the caller resolves the name once, at its boundary, so
  * recording never blocks. {@code topics.api.duration_seconds} has neither, where every caller's workspace would add
- * series; nor have {@code topics.nightly.budget_used_seconds} and {@code topics.nightly.nights}, a whole night's.
+ * series; nor has {@code topics.nightly.nights}, a whole night's.
  */
 @Singleton
 public class TopicsMetrics {
@@ -54,7 +54,6 @@ public class TopicsMetrics {
 
     private static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
     private static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
-    private static final String NIGHTLY_BUDGET_USED = "topics.nightly.budget_used_seconds";
 
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
@@ -69,7 +68,6 @@ public class TopicsMetrics {
     private final LongCounter born;
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
-    private final DoubleHistogram budgetUsed;
     private final LongCounter nightlyDecisions;
     private final LongCounter nights;
 
@@ -118,19 +116,17 @@ public class TopicsMetrics {
                 .setDescription("Of the window traces labelled on both the last and this saved night, the share "
                         + "whose label changed, Other included")
                 .build();
-        this.budgetUsed = meter.histogramBuilder(NIGHTLY_BUDGET_USED).setUnit("s")
-                .setDescription("Of a night's budget, the time from the night's start to its last queued run; the "
-                        + "whole budget when the night did not reach every project")
-                .build();
         this.nightlyDecisions = meter.counterBuilder(NIGHTLY_DECISIONS)
                 .setDescription("Projects the night decided on, by decision (update: queued, skip, "
                         + "not_reached, count_failed) and, for a skip, reason (small, deleted, paused, already_saved, "
                         + "no_list). A queued run whose claim finds its night saved or no list is counted again, as a "
-                        + "skip")
+                        + "skip. Every series of a workspace listed at startup starts at 0; one listed later starts "
+                        + "at its first decision")
                 .build();
         this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
-                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, or failed for "
-                        + "each plan whose read of the night's projects failed")
+                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, counted by "
+                        + "the one plan that ends the night, or failed for each plan whose read of the night's "
+                        + "projects failed")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -192,10 +188,6 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull Workspace workspace, double share) {
         otherShare.record(share, attributes(workspace).build());
-    }
-
-    void budgetUsed(@NonNull Duration duration) {
-        budgetUsed.record(duration.toNanos() / 1e9);
     }
 
     /** {@code reason} is null for a decision other than skip. */

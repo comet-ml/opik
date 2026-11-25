@@ -9,18 +9,22 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,6 +38,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -196,8 +201,11 @@ class TopicsNightlyIntegrationTest {
 
     @Test
     @DisplayName("after the budget no nightly update is queued: each project with a list the night did not look at "
-            + "has its not-reached streak counted once, however many plans run; a project the night looked at keeps 0")
-    void budgetCutOff() {
+            + "has its not-reached streak counted once, however many plans run; a project the night looked at keeps 0; "
+            + "the night is counted finished once")
+    void budgetCutOff(@Jit TopicWorkspaceService workspaceService, @Jit TopicsDiscoveryCandidates candidates,
+            @Jit WorkspaceNameService workspaceNames, @Jit ProjectService projectService,
+            @Jit LockService lockService) {
         var workspaceId = enabledWorkspace();
         var notReached = ID_GENERATOR.generateId();
         var looked = ID_GENERATOR.generateId();
@@ -208,9 +216,13 @@ class TopicsNightlyIntegrationTest {
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLooked(workspaceId, List.of(looked), today()));
         opikConfig.getTopics().getNightly().setBudget(Duration.milliseconds(1));
+        // Its own pass, to read its metrics; the night's end key in Redis is the app's.
+        var reader = InMemoryMetricReader.create();
+        var pass = new TopicsNightPass(opikConfig.getTopics(), template, workspaceService, candidates,
+                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
 
-        assertThat(planner.plan(Instant.now()).block()).isZero();
-        assertThat(planner.plan(Instant.now()).block()).isZero();
+        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
+        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
 
         assertThat(data.topicProject(notReached)).satisfies(project -> {
             assertThat(project.notReachedNights()).isEqualTo(1);
@@ -218,6 +230,7 @@ class TopicsNightlyIntegrationTest {
             assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
         });
         assertThat(data.topicProject(looked).notReachedNights()).isZero();
+        assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
     }
 
     @Test

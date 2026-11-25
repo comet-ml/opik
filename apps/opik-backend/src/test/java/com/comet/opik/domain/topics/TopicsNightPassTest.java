@@ -8,6 +8,7 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.lock.LockService;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,8 +111,14 @@ class TopicsNightPassTest {
         var workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(anyString()))
                 .thenAnswer(invocation -> "name of " + invocation.<String>getArgument(0));
+        // As Redis SET NX: the first take of a key wins.
+        var taken = new HashSet<String>();
+        var lockService = mock(LockService.class);
+        when(lockService.lockUsingToken(any(), any()))
+                .thenAnswer(invocation -> Mono.just(taken.add(invocation.<LockService.Lock>getArgument(0).key())));
+        when(projectDAO.countNight(anyCollection(), any())).thenReturn(new TopicProjectDAO.NightCounts(0, 2));
         pass = new TopicsNightPass(config, template, workspaceService, candidates,
-                TopicsMetricsReader.metrics(reader), workspaceNames, projectService);
+                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
     }
 
     /** A project with a list saved for the night before, and its window count. */
@@ -253,8 +260,6 @@ class TopicsNightPassTest {
         assertThat(queued).isEmpty();
         assertThat(decisions("not_reached", null)).isEqualTo(2);
         assertThat(sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
-        assertThat(sum(reader, "topics.nightly.budget_used_seconds")).isEqualTo(
-                config.getNightly().getBudget().toSeconds());
     }
 
     @Test

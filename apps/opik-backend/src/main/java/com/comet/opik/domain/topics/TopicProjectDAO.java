@@ -467,6 +467,20 @@ public interface TopicProjectDAO {
     int markNotReached(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
             @Bind("night") LocalDate night);
 
+    /** How the night on {@code night} ended for the projects of {@code workspaceIds}, for its end log. */
+    @SqlQuery("""
+            SELECT COALESCE(SUM(last_night = :night), 0) AS looked,
+                COALESCE(SUM(list_run_id IS NOT NULL AND (last_night IS NULL OR last_night < :night)), 0) AS not_reached
+            FROM topic_projects
+            WHERE workspace_id IN (<workspaceIds>)
+            """)
+    @RegisterConstructorMapper(NightCounts.class)
+    NightCounts countNight(@BindList("workspaceIds") Collection<String> workspaceIds, @Bind("night") LocalDate night);
+
+    /** The projects a night looked at, and the projects with a list it did not reach. */
+    record NightCounts(long looked, long notReached) {
+    }
+
     /**
      * {@code queued -> running} for a nightly update, only while the project still has a list that does not cover the
      * night: its {@code window_until} is before {@code windowTo}, the night's start. 0 otherwise, as {@link #claim}.
