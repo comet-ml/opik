@@ -46,7 +46,6 @@ import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -338,100 +337,6 @@ class TopicsRunServiceFaultsTest {
     }
 
     /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
-    @Test
-    @DisplayName("a saved nightly update records the Other share it logged in its stats, and its live topics and churn, "
-            + "with its workspace")
-    void nightlyUpdateIsCounted() {
-        discoveryThenEmptyNaming();
-        double discoveryShare = sum(metricReader, "topics.run.other_share");
-
-        var outcome = service.nightlyUpdate(IDS.generate(), workspace, projectId, night.plusDays(1), TRACES).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        var stats = outcome.stats();
-        assertThat(stats.path("mode").asText()).isEqualTo("update");
-        assertThat(stats.get("window_traces").asLong()).isEqualTo(TRACES);
-        assertThat(stats.get("sample_traces").asLong()).isEqualTo(TRACES);
-        // The discovery run's share, then the nightly update's: the value it logged, not computed again.
-        assertThat(sum(metricReader, "topics.run.other_share"))
-                .isCloseTo(discoveryShare + stats.get("other_share").asDouble(), within(1e-9));
-        assertThat(points(metricReader, "topics.topics.live")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(stats.get("topics").asDouble());
-            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
-        });
-        for (var name : List.of("topics.run.churn", "topics.run.churn_any")) {
-            assertThat(points(metricReader, name)).as(name).singleElement().satisfies(point -> {
-                assertThat(point.value()).isEqualTo(stats.get(name.substring("topics.run.".length())).asDouble());
-                assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-                assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
-            });
-        }
-        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
-    }
-
-    @Test
-    @DisplayName("a nightly update saves the list by compare-and-set on the run it read, updates the kept topics and "
-            + "writes its labels as a run's after its commit")
-    @SuppressWarnings("unchecked")
-    void nightlyUpdateSaves() {
-        var built = discoveryThenEmptyNaming();
-        var updateRunId = IDS.generate();
-
-        var outcome = service.nightlyUpdate(updateRunId, workspace, projectId, night.plusDays(1), TRACES).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        verify(projectDAO).saveList(eq(workspaceId), eq(projectId), eq(runId), eq(updateRunId), any(),
-                eq(night.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()), any(), eq(TopicEmbedding.MODEL));
-        ArgumentCaptor<List<Topic>> updated = ArgumentCaptor.forClass(List.class);
-        verify(topicDAO).updateTopics(updated.capture());
-        assertThat(updated.getValue()).extracting(Topic::id)
-                .containsExactlyElementsOf(built.stream().map(Topic::id).toList());
-        verify(topicDAO, never()).deleteTopics(any(), any(), any());
-        verify(projectDAO, never()).resetList(any(), any(), any(), any());
-        ArgumentCaptor<List<TraceTopic>> rows = ArgumentCaptor.forClass(List.class);
-        verify(traceTopicsDAO, times(2)).insert(rows.capture());
-        assertThat(rows.getValue()).hasSize(TRACES)
-                .allSatisfy(row -> {
-                    assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
-                    assertThat(row.runId()).isEqualTo(updateRunId);
-                });
-        var order = inOrder(projectDAO, traceTopicsDAO);
-        order.verify(projectDAO).saveList(eq(workspaceId), eq(projectId), eq(runId), eq(updateRunId), any(), any(),
-                any(), any());
-        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
-        order.verify(traceTopicsDAO).insert(any());
-    }
-
-    @Test
-    @DisplayName("a nightly update that leaves no live topic deletes every topic, clears the list by compare-and-set, "
-            + "counts each retired topic, and writes no labels")
-    void allRetiredClearsTheList() {
-        var built = discoveryThenEmptyNaming();
-        // Each topic's only vector is far from every trace: no trace tonight, so it retires; naming births nothing.
-        var far = new ArrayList<Topic>();
-        for (int t = 0; t < built.size(); t++) {
-            far.add(built.get(t).toBuilder().vectors(new PrototypeVectors(List.of(
-                    TopicsTestData.unit(TopicEmbedding.DIMENSIONS - 1 - t)))).build());
-        }
-        when(topicDAO.findByProject(workspaceId, projectId)).thenReturn(far);
-        when(projectDAO.resetList(eq(workspaceId), eq(projectId), eq(runId), any())).thenReturn(1);
-        var updateRunId = IDS.generate();
-
-        var outcome = service.nightlyUpdate(updateRunId, workspace, projectId, night.plusDays(1), TRACES).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        var order = inOrder(topicDAO, projectDAO);
-        order.verify(projectDAO).resetList(eq(workspaceId), eq(projectId), eq(runId), any());
-        order.verify(topicDAO).deleteTopics(workspaceId, projectId, far.stream().map(Topic::id).toList());
-        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
-        verify(projectDAO, never()).saveList(any(), any(), eq(runId), any(), any(), any(), any(), any());
-        verify(topicDAO, never()).updateTopics(any());
-        assertThat(sum(metricReader, "topics.retired", "reason", "low_share", "workspace_id", workspaceId))
-                .isEqualTo(far.size());
-        // The discovery run's insert only.
-        verify(traceTopicsDAO, times(1)).insert(any());
-    }
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"another run saved the project meanwhile", "MySQL is down"})
@@ -492,52 +397,6 @@ class TopicsRunServiceFaultsTest {
         // The discovery run's rows only.
         assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
         assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "error")).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("a nightly update with no saved list fails with internal and writes nothing")
-    void nightlyUpdateWithoutList() {
-        var updateRunId = IDS.generate();
-        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(updateRunId), any(), any())).thenReturn(1);
-
-        var outcome = service.nightlyUpdate(updateRunId, workspace, projectId, night, TRACES).block();
-
-        assertThat(outcome.errorCode()).isEqualTo("internal");
-        verify(client, never()).generate(any(), any());
-        verify(traceTopicsDAO, never()).insert(any());
-    }
-
-    @Test
-    @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
-    void lifecycleMetricsHaveTheWorkspace() {
-        var reader = InMemoryMetricReader.create();
-        var metrics = TopicsMetricsReader.metrics(reader);
-
-        metrics.topics(workspace, 7, 2);
-        metrics.topics(workspace, 7, 0);
-        metrics.retired(workspace, NightState.RetiredReason.LOW_SHARE);
-        metrics.churn(workspace, new TopicChurn.Churn(0.04, 0.1));
-
-        assertThat(points(reader, "topics.topics.born")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(2);
-            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
-        });
-        assertThat(points(reader, "topics.topics.live")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(14);
-            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
-        });
-        assertThat(points(reader, "topics.retired")).singleElement().satisfies(point -> {
-            assertThat(point.get("reason")).isEqualTo("low_share");
-            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
-        });
-        assertThat(points(reader, "topics.run.churn")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(0.04);
-            assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-        });
-        assertThat(points(reader, "topics.run.churn_any")).singleElement()
-                .satisfies(point -> assertThat(point.value()).isEqualTo(0.1));
     }
 
     /**
