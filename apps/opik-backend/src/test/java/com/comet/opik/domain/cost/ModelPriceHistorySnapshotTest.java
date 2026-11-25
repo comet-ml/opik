@@ -1,6 +1,8 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.modelprice.CustomModelPriceRow;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
@@ -10,23 +12,28 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.util.Locale;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelPriceHistorySnapshotTest {
 
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final String MODEL = RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase(Locale.ROOT);
     private static final String TARGET = RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase(Locale.ROOT);
     private static final String NOTE = RandomStringUtils.secure().nextAlphanumeric(20);
 
     private static ModelPriceRow.ModelPriceRowBuilder stored(String provider, CustomModelPrice.Kind kind) {
-        return ModelPriceRow.builder().id(UUID.randomUUID()).modelName(MODEL).provider(provider).kind(kind);
+        return ModelPriceRow.builder().id(ID_GENERATOR.generateId()).modelName(MODEL).provider(provider).kind(kind);
     }
 
-    private static CustomModelPriceRow.CustomModelPriceRowBuilder listed(String provider, String kind) {
+    private static CustomModelPriceRow.CustomModelPriceRowBuilder listed(String provider,
+            CustomModelPrice.Kind kind) {
         return CustomModelPriceRow.builder().model(MODEL).provider(provider).kind(kind);
+    }
+
+    private static CustomModelPriceRow.AliasOf aliasOf(String model, String provider) {
+        return CustomModelPriceRow.AliasOf.builder().model(model).provider(provider).build();
     }
 
     static Stream<Arguments> storedRows() {
@@ -39,7 +46,7 @@ class ModelPriceHistorySnapshotTest {
                                 .cacheWritePerMillion(new BigDecimal("100000"))
                                 .note(NOTE)
                                 .build()),
-                        listed("openai", "fixed")
+                        listed("openai", CustomModelPrice.Kind.FIXED)
                                 .inputPrice("0.0000000001")
                                 .outputPrice("8")
                                 .cacheReadPrice("1.25")
@@ -48,24 +55,24 @@ class ModelPriceHistorySnapshotTest {
                                 .build()),
                 Arguments.of(Named.of("prices left out stay absent",
                         stored("openai", CustomModelPrice.Kind.FIXED).outputPerMillion(new BigDecimal("0.6")).build()),
-                        listed("openai", "fixed").outputPrice("0.6").build()),
+                        listed("openai", CustomModelPrice.Kind.FIXED).outputPrice("0.6").build()),
                 Arguments.of(Named.of("any provider",
                         stored(CustomModelPrice.ANY_PROVIDER, CustomModelPrice.Kind.FIXED)
                                 .inputPerMillion(BigDecimal.ZERO)
                                 .build()),
-                        listed("", "fixed").inputPrice("0").build()),
+                        listed("", CustomModelPrice.Kind.FIXED).inputPrice("0").build()),
                 Arguments.of(Named.of("alias with its target's provider",
                         stored("bifrost", CustomModelPrice.Kind.ALIAS)
                                 .aliasModelName(TARGET)
                                 .aliasProvider("openai")
                                 .build()),
-                        listed("bifrost", "alias").aliasOf(new CustomModelPriceRow.AliasOf(TARGET, "openai")).build()),
+                        listed("bifrost", CustomModelPrice.Kind.ALIAS).aliasOf(aliasOf(TARGET, "openai")).build()),
                 Arguments.of(Named.of("alias on the span's own provider",
                         stored(CustomModelPrice.ANY_PROVIDER, CustomModelPrice.Kind.ALIAS)
                                 .aliasModelName(TARGET)
                                 .aliasProvider(CustomModelPrice.SPAN_PROVIDER)
                                 .build()),
-                        listed("", "alias").aliasOf(new CustomModelPriceRow.AliasOf(TARGET, "")).build()));
+                        listed("", CustomModelPrice.Kind.ALIAS).aliasOf(aliasOf(TARGET, "")).build()));
     }
 
     @ParameterizedTest
@@ -84,7 +91,7 @@ class ModelPriceHistorySnapshotTest {
                 """.formatted(MODEL);
 
         assertThat(ModelPriceStore.HistorySnapshot.rowOf(snapshot))
-                .isEqualTo(listed("openai", "fixed").inputPrice("0.6").outputPrice("8.5").build());
+                .isEqualTo(listed("openai", CustomModelPrice.Kind.FIXED).inputPrice("0.6").outputPrice("8.5").build());
     }
 
     @Test

@@ -94,7 +94,10 @@ public class ModelPricesResource {
         return whenEnabled(() -> {
             String workspaceId = requestContext.get().getWorkspaceId();
             String userName = requestContext.get().getUserName();
-            var request = new ModelPriceService.ReplaceRequest(replace.rows(), replace.expectedVersion());
+            var request = ModelPriceService.ReplaceRequest.builder()
+                    .rows(replace.rows())
+                    .expectedVersion(replace.expectedVersion())
+                    .build();
             log.info("Replacing model prices, workspace '{}', rows '{}', dry run '{}'", workspaceId,
                     replace.rows().size(), dryRun);
             try {

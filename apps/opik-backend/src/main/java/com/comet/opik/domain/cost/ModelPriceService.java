@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -32,26 +33,26 @@ public interface ModelPriceService {
 
     String CACHE_NAME = "model_prices";
 
+    @Builder(toBuilder = true)
     record ReplaceRequest(@NonNull List<JsonNode> rows, @Nullable Long expectedVersion) {
     }
 
     /** The organization's saved rows; an organization with none gets an empty list at version 0. */
-    Mono<ModelPriceList> findOrganizationList(@NonNull String organizationId);
+    Mono<ModelPriceList> findOrganizationList(String organizationId);
 
-    Mono<ModelPriceReplaceResult> replaceAll(@NonNull String organizationId, @NonNull ReplaceRequest request,
-            @NonNull String userName);
+    Mono<ModelPriceReplaceResult> replaceAll(String organizationId, ReplaceRequest request, String userName);
 
     /** What {@link #replaceAll} would change, without writing anything. */
-    Mono<ModelPriceReplaceResult> previewReplaceAll(@NonNull String organizationId, @NonNull ReplaceRequest request);
+    Mono<ModelPriceReplaceResult> previewReplaceAll(String organizationId, ReplaceRequest request);
 
-    Mono<CustomModelPriceList> findRows(@NonNull String organizationId);
+    Mono<CustomModelPriceList> findRows(String organizationId);
 
-    Mono<CustomModelPriceHistoryPage> findHistory(@NonNull String organizationId, int page, int size);
+    Mono<CustomModelPriceHistoryPage> findHistory(String organizationId, int page, int size);
 
     /** The price layers the current workspace's spans are priced with: its organization's rows, or built-in only. */
     Mono<PriceLayers> layersFor();
 
-    Mono<CustomModelPriceResolution> resolve(@NonNull CustomModelPriceResolveRequest request);
+    Mono<CustomModelPriceResolution> resolve(CustomModelPriceResolveRequest request);
 }
 
 @Singleton
@@ -95,7 +96,7 @@ class ModelPriceServiceImpl implements ModelPriceService {
             } else {
                 log.info("Model prices unchanged, organization '{}', version '{}'", organizationId, result.version());
             }
-            return result.withWarnings(validation.warnings());
+            return result.toBuilder().warnings(validation.warnings()).build();
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -106,7 +107,9 @@ class ModelPriceServiceImpl implements ModelPriceService {
             var validation = validate(request);
             return transactionTemplate.inTransaction(READ_ONLY, handle -> store.previewReplaceAll(handle,
                     organizationId, validation.rows(), request.expectedVersion()))
-                    .withWarnings(validation.warnings());
+                    .toBuilder()
+                    .warnings(validation.warnings())
+                    .build();
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
