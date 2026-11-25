@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 enum NightSkipReason implements HasValue {
-    /** Under {@code topics.build.minVectors}. */
+    /** Under {@code topics.run.minVectors}. */
     SMALL("small"),
     DELETED("deleted"),
     PAUSED("paused"),

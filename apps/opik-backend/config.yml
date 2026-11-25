@@ -2979,6 +2979,25 @@ topics:
     #  Description: The wait after a project's first, second, ... failed discovery run; the last applies to every later
     #  one. The first is also the wait after a failed labelling pass. 1 to 10 comma-separated entries
     retryDelays: ${TOPICS_DISCOVERY_RETRY_DELAYS:-1h,6h,1d}
+  #  The nightly update of each project that has a topic list, for the workspaces listed at stage nightly or later.
+  #  Each plan of topics.runs queues the night's updates as runs; to stop it for a workspace, list it at an earlier
+  #  stage
+  nightly:
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date it fires on and starts at its first fire that day;
+    #  from then each plan of topics.runs queues the night's nightly updates
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project is queued after this much of the night, from its start; the rest run the next night,
+    #  first. Nightly updates share topics.runs.maxInFlight with discovery runs. At most 20h
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
+    #  Default: 3
+    #  Description: A project whose last this many discovery runs or nightly updates failed in a row is paused for
+    #  pauseNights. From 1 to 100
+    pauseFailures: ${TOPICS_NIGHTLY_PAUSE_FAILURES:-3}
+    #  Default: 7
+    #  Description: How many nights a paused project waits, from the night its last failed run started. From 1 to 90
+    pauseNights: ${TOPICS_NIGHTLY_PAUSE_NIGHTS:-7}
   #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
   #  below. Any pod claims a run with a compare-and-set on its row and runs it
   runs:

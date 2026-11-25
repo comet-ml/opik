@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 enum NightDecision implements HasValue {
     /** Queued, with its window's count. */
-    NIGHTLY_UPDATE("nightly_update"),
+    UPDATE("update"),
     SKIP("skip"),
     /** The budget ended before the project. */
     NOT_REACHED("not_reached"),

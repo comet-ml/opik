@@ -73,7 +73,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     protected Mono<Void> processEvent(@NonNull TopicsRunMessage message) {
         var limit = runLimit(message.mode());
         var deadline = Instant.now().plus(limit);
-        return store.claim(message, deadline)
+        return claim(message, deadline)
                 .flatMap(claimed -> {
                     if (!claimed) {
                         log.info("Topics run '{}' not claimed, project '{}': another pod has it, or it ended",
@@ -104,6 +104,13 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                     return Mono.empty();
                 })
                 .then();
+    }
+
+    /** A nightly update's claim also re-checks that its night is still to do ({@link TopicRunStore#claimUpdate}). */
+    private Mono<Boolean> claim(TopicsRunMessage message, Instant deadline) {
+        return message.mode() == RunMode.UPDATE
+                ? store.claimUpdate(message, deadline).map(claim -> claim == NightClaim.CLAIMED)
+                : store.claim(message, deadline);
     }
 
     /**

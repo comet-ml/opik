@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-/** What a nightly update's claim found ({@link TopicRunStore#claimNightly}). */
+/** What a nightly update's claim found ({@link TopicRunStore#claimUpdate}). */
 enum NightClaim {
     CLAIMED,
     /** Another pod claimed it, or it ended. */

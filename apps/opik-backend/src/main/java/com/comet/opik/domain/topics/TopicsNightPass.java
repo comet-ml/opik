@@ -1,9 +1,12 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ConflictException;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -39,54 +42,50 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * The night pass of each plan ({@link TopicsRunPlanner#plan}): queues the nightly updates of the projects that have a
- * topic list, as runs of mode {@code nightly_update} that share {@code topics.runs.maxInFlight} with the first builds.
+ * topic list, in the workspaces listed at stage {@code nightly} or later, as runs of mode {@code update} that share
+ * {@code topics.runs.maxInFlight} with the discovery runs.
  *
  * <p>The night is the UTC date of the {@code topics.nightly.schedule} fire that starts it; it starts at its first fire
  * that day. From the night's start until {@code topics.nightly.budget} after it, each plan decides on the projects the
  * night has not looked at yet ({@code last_night} before the night) and that have no run in flight. A project is
- * skipped when it is deleted, has no list, its list already covers the night, or its last {@value #PAUSE_FAILURES}
- * attempts failed within {@value #PAUSE_NIGHTS} nights. Then, while slots are free, the rest are counted one by one in
- * {@link #queueOrder}: one under {@code topics.build.minVectors} is skipped, one whose count fails is left for the
+ * skipped when it is deleted, its list already covers the night, or its last {@code topics.nightly.pauseFailures}
+ * runs failed within {@code topics.nightly.pauseNights} nights. Then, while slots are free, the rest are counted one by
+ * one in {@link #queueOrder}: one under {@code topics.run.minVectors} is skipped, one whose count fails is left for the
  * next night, and the others are queued with their count. A project with a run in flight waits for a later plan. No
  * project is queued after the budget: the first plan after it records every project the night did not look at as not
  * reached.
  *
  * <p>Each decision is counted in {@code topics.nightly.decisions}, logged, and written to the project's row: one that
  * looked at it sets {@code last_night}, so later plans of the night leave it alone; a night that did not reach it adds
- * the night to {@code not_reached_nights}, once. The state gauges ({@link TopicsNightlyGauges}) read those fields. The
- * night's end is counted in {@code topics.nightly.nights} and logged by the leader that saw it; a leader that took
+ * the night to {@code not_reached_nights}, once. The night's end is counted in {@code topics.nightly.nights} and logged by the leader that saw it; a leader that took
  * over during the night logs only what it decided.
  */
 @Slf4j
 @Singleton
 class TopicsNightPass {
 
-    /**
-     * A project whose last {@value #PAUSE_FAILURES} attempts failed is skipped for {@value #PAUSE_NIGHTS} nights from
-     * the night of the last failure, so a project that keeps failing does not take the night's budget every night.
-     */
-    static final int PAUSE_FAILURES = 3;
-    static final int PAUSE_NIGHTS = 7;
-
     private final TopicsConfig config;
     private final TransactionTemplate template;
     private final TopicWorkspaceService workspaceService;
-    private final TopicsFirstBuildCandidates candidates;
+    private final TopicsDiscoveryCandidates candidates;
     private final TopicsMetrics metrics;
     private final WorkspaceNameService workspaceNames;
+    private final ProjectService projectService;
     /** What this leader saw of the last night it planned: for the night's end, its metrics and its log line. */
     private final AtomicReference<Tally> tally = new AtomicReference<>();
 
     @Inject
     TopicsNightPass(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TopicWorkspaceService workspaceService, @NonNull TopicsFirstBuildCandidates candidates,
-            @NonNull TopicsMetrics metrics, @NonNull WorkspaceNameService workspaceNames) {
+            @NonNull TopicWorkspaceService workspaceService, @NonNull TopicsDiscoveryCandidates candidates,
+            @NonNull TopicsMetrics metrics, @NonNull WorkspaceNameService workspaceNames,
+            @NonNull ProjectService projectService) {
         this.config = config;
         this.template = template;
         this.workspaceService = workspaceService;
         this.candidates = candidates;
         this.metrics = metrics;
         this.workspaceNames = workspaceNames;
+        this.projectService = projectService;
     }
 
     /** A project the night counts and may queue. */
@@ -94,31 +93,29 @@ class TopicsNightPass {
     record NightCandidate(@NonNull String workspaceId, @NonNull UUID projectId, Instant windowUntil) {
     }
 
-    /** What the pass reads of one workspace's projects in one transaction; it decides on them after it. */
-    private record Listed(List<TopicProject> rows, Set<UUID> existing, Set<UUID> paused) {
-    }
-
     /**
      * One plan's night pass at {@code now}: queues up to {@code free} nightly updates through {@code queue} and
-     * returns how many it queued. Nothing when the nightly job is off or no night is on. A read that fails is logged
-     * and counted as a failed night; the next plan goes on.
+     * returns how many it queued. Nothing when no night is on or no workspace is listed at stage {@code nightly} or
+     * later. A read that fails is logged and counted as a failed night; the next plan goes on.
      */
-    Mono<Integer> plan(@NonNull Collection<String> workspaceIds, @NonNull Instant now, int free,
-            @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+    Mono<Integer> plan(@NonNull Instant now, int free, @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var nightly = config.getNightly();
-        if (!nightly.isEnabled() || workspaceIds.isEmpty()) {
-            return Mono.just(0);
-        }
         var found = TopicsNight.current(nightly.getSchedule(), now);
         if (found.isEmpty()) {
             return Mono.just(0);
         }
         var night = found.get();
         var budgetEnd = night.start().plus(nightly.getBudget().toJavaDuration());
-        var current = tally(night);
-        var pass = now.isBefore(budgetEnd)
-                ? decide(night, workspaceIds, now, budgetEnd, free, queue, current)
-                : end(night, workspaceIds, current).thenReturn(0);
+        var pass = jdbi(() -> workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY))
+                .flatMap(workspaceIds -> {
+                    if (workspaceIds.isEmpty()) {
+                        return Mono.just(0);
+                    }
+                    var current = tally(night);
+                    return now.isBefore(budgetEnd)
+                            ? decide(night, workspaceIds, now, budgetEnd, free, queue, current)
+                            : end(night, workspaceIds, current).thenReturn(0);
+                });
         return pass.onErrorResume(error -> {
             log.error("Topics night '{}' pass failed; the next plan goes on with it", night.date(), error);
             metrics.night(NightOutcome.FAILED, 1);
@@ -130,28 +127,27 @@ class TopicsNightPass {
      * Queues the project's nightly update for {@code night} now and returns its run id. {@code topics.runs.maxInFlight}
      * and the night's budget do not apply, and the night fields are not written: it is one project's run, not a night.
      *
-     * @throws ConflictException when the nightly job is off, the workspace is not opted in, the project is gone or has
-     *                           no list, its list already covers the night, its window has too few vectors, or it has
+     * @throws ConflictException when the workspace is not opted in at stage {@code nightly} or later, the project is
+     *                           gone or has no list, its list already covers the night, its window has too few vectors, or it has
      *                           a run in flight
      */
     Mono<UUID> byHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var windowTo = TopicsNight.windowTo(night);
         return jdbi(() -> {
-            if (!config.getNightly().isEnabled()) {
-                throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
+            if (!workspaceService.reaches(workspaceId, TopicsStage.NIGHTLY)) {
+                throw new ConflictException(("Workspace '%s' is not opted in to topics nightly updates: it needs to be "
+                        + "in topics.enabledWorkspaces at stage nightly or later, and enabled in ai_label_workspaces")
+                        .formatted(workspaceId));
             }
-            if (!workspaceService.isEnabled(workspaceId)) {
-                throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs to be in "
-                        + "topics.enabledWorkspaces and enabled in ai_label_workspaces").formatted(workspaceId));
-            }
-            var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                    .findExistingProjectIds(workspaceId, Set.of(projectId)).isEmpty()
-                            ? List.<TopicProject>of()
-                            : handle.attach(TopicProjectDAO.class).findProjects(workspaceId, Set.of(projectId)));
+            // A deleted project keeps its rows until the sweep: run only a project that exists.
+            var rows = projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()
+                    ? List.<TopicProject>of()
+                    : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                            .findProjects(workspaceId, Set.of(projectId)));
             var row = rows.stream().filter(found -> found.listRunId() != null).findFirst()
                     .orElseThrow(() -> new ConflictException(
-                            "Project '%s' has no topic list: its first build makes one".formatted(projectId)));
+                            "Project '%s' has no topic list: a discovery run makes one".formatted(projectId)));
             if (covers(row, windowTo)) {
                 throw new ConflictException(("Project '%s' has a list saved with its window until '%s', at or after "
                         + "the night '%s'").formatted(projectId, row.windowUntil(), night));
@@ -160,20 +156,20 @@ class TopicsNightPass {
         })
                 .flatMap(__ -> candidates.windowVectors(workspaceId, projectId, night))
                 .flatMap(vectors -> {
-                    int min = config.getBuild().getMinVectors();
+                    int min = config.getRun().getMinVectors();
                     if (vectors < min) {
                         return Mono.error(new ConflictException(
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
                                         .formatted(projectId, vectors, night, min)));
                     }
                     return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(workspaceId)
-                            .projectId(projectId).mode(RunMode.NIGHTLY_UPDATE).night(night).windowTraces(vectors)
+                            .projectId(projectId).mode(RunMode.UPDATE).night(night).windowTraces(vectors)
                             .build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
                 })
                 .doOnNext(runId -> log.info("Topics run '{}' queued by hand, mode '{}', workspace '{}', project '{}', "
-                        + "night '{}'", runId, RunMode.NIGHTLY_UPDATE.getValue(), workspaceId, projectId, night));
+                        + "night '{}'", runId, RunMode.UPDATE.getValue(), workspaceId, projectId, night));
     }
 
     /** Within the budget: the cheap skips first, then the counts and queues while slots are free. */
@@ -200,34 +196,24 @@ class TopicsNightPass {
     }
 
     /**
-     * The projects of the workspaces with a topic, not looked at tonight and with no run in flight. Writes the skips
-     * that need no count, and returns the rest in {@link #queueOrder}.
+     * The projects of the workspaces with a saved list, not looked at tonight and with no run in flight. Writes the
+     * skips that need no count, and returns the rest in {@link #queueOrder}.
      */
     private List<NightCandidate> due(TopicsNight night, Collection<String> workspaceIds, Tally current) {
         current.begin(workspaceIds);
-        var listed = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findProjectsWithTopics(workspaceIds));
-        var pausedSince = night.date().minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var rows = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date()));
+        var nightly = config.getNightly();
+        var pausedSince = night.date().minusDays(nightly.getPauseNights()).atStartOfDay(ZoneOffset.UTC).toInstant();
         var skipped = new EnumMap<NightSkipReason, List<TopicProjectKey>>(NightSkipReason.class);
         var due = new ArrayList<NightCandidate>();
-        listed.stream().collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
-                Collectors.mapping(TopicProjectKey::projectId, Collectors.toSet())))
-                .forEach((workspaceId, ids) -> {
-                    var read = template.inTransaction(READ_ONLY, handle -> {
-                        var projectDAO = handle.attach(TopicProjectDAO.class);
-                        // A deleted project keeps its rows until the sweep: run only projects that exist.
-                        return new Listed(projectDAO.findProjects(workspaceId, ids),
-                                handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids),
-                                projectDAO.findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
-                    });
-                    // A project with no row is not in the rows: nothing to write the decision on. A saved list
-                    // always has one.
-                    for (var row : read.rows()) {
-                        if ((row.lastNight() != null && !row.lastNight().isBefore(night.date()))
-                                || (row.runStatus() != null && row.runStatus().inFlight())) {
-                            continue;
-                        }
-                        skipReason(row, read, night).ifPresentOrElse(
+        rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId))
+                .forEach((workspaceId, listed) -> {
+                    // A deleted project keeps its rows until the sweep: run only projects that exist.
+                    var existing = projectService.findByIds(workspaceId, listed.stream().map(TopicProject::projectId)
+                            .collect(Collectors.toSet())).stream().map(Project::id).collect(Collectors.toSet());
+                    for (var row : listed) {
+                        skipReason(row, existing, night, nightly.getPauseFailures(), pausedSince).ifPresentOrElse(
                                 reason -> skipped.computeIfAbsent(reason, key -> new ArrayList<>())
                                         .add(new TopicProjectKey(workspaceId, row.projectId())),
                                 () -> due.add(NightCandidate.builder().workspaceId(workspaceId)
@@ -240,17 +226,24 @@ class TopicsNightPass {
     }
 
     /** Why the night skips the project without counting its window; empty when it counts it. */
-    private static Optional<NightSkipReason> skipReason(TopicProject row, Listed read, TopicsNight night) {
-        if (!read.existing().contains(row.projectId())) {
+    private static Optional<NightSkipReason> skipReason(TopicProject row, Set<UUID> existing, TopicsNight night,
+            int pauseFailures, Instant pausedSince) {
+        if (!existing.contains(row.projectId())) {
             return Optional.of(NightSkipReason.DELETED);
-        }
-        if (row.listRunId() == null) {
-            return Optional.of(NightSkipReason.NO_LIST);
         }
         if (covers(row, night.windowTo())) {
             return Optional.of(NightSkipReason.ALREADY_SAVED);
         }
-        return read.paused().contains(row.projectId()) ? Optional.of(NightSkipReason.PAUSED) : Optional.empty();
+        return paused(row, pauseFailures, pausedSince) ? Optional.of(NightSkipReason.PAUSED) : Optional.empty();
+    }
+
+    /**
+     * Whether the project's last {@code failures} runs or more failed in a row, the latest started at or after
+     * {@code since}. A run whose pod died counts once the planner's reconciler records it {@code abandoned}, which each
+     * plan does before its night pass.
+     */
+    static boolean paused(@NonNull TopicProject row, int failures, @NonNull Instant since) {
+        return row.failedRuns() >= failures && row.runStartedAt() != null && !row.runStartedAt().isBefore(since);
     }
 
     /** Counts the project's window and queues it; true when it queued it. */
@@ -268,20 +261,20 @@ class TopicsNightPass {
                     });
                 })
                 .flatMap(vectors -> {
-                    if (vectors < config.getBuild().getMinVectors()) {
+                    if (vectors < config.getRun().getMinVectors()) {
                         return jdbi(() -> {
                             record(night, List.of(key), NightDecision.SKIP, NightSkipReason.SMALL, current);
                             return false;
                         });
                     }
                     return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(candidate.workspaceId())
-                            .projectId(candidate.projectId()).mode(RunMode.NIGHTLY_UPDATE).night(night.date())
+                            .projectId(candidate.projectId()).mode(RunMode.UPDATE).night(night.date())
                             .windowTraces(vectors).build())
                             .flatMap(runId -> jdbi(() -> {
                                 log.info("Topics night '{}' queued run '{}', workspace '{}', project '{}', vectors "
                                         + "'{}'", night.date(), runId, candidate.workspaceId(),
                                         candidate.projectId(), vectors);
-                                record(night, List.of(key), NightDecision.NIGHTLY_UPDATE, null, current);
+                                record(night, List.of(key), NightDecision.UPDATE, null, current);
                                 current.queued(Instant.now());
                                 return true;
                             }))
@@ -301,7 +294,7 @@ class TopicsNightPass {
      */
     private Mono<Void> end(TopicsNight night, Collection<String> workspaceIds, Tally current) {
         return jdbi(() -> {
-            var left = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectNightDAO.class)
+            var left = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                     .findNotReached(workspaceIds, night.date()));
             if (!left.isEmpty()) {
                 current.begin(workspaceIds);
@@ -349,7 +342,7 @@ class TopicsNightPass {
                     current.decided(decision, projectIds.size());
                     try {
                         template.inTransaction(WRITE, handle -> {
-                            var dao = handle.attach(TopicProjectNightDAO.class);
+                            var dao = handle.attach(TopicProjectDAO.class);
                             return decision == NightDecision.NOT_REACHED
                                     ? dao.markNotReached(workspaceId, projectIds, night.date())
                                     : dao.markLooked(workspaceId, projectIds, night.date());
@@ -449,7 +442,7 @@ class TopicsNightPass {
                         writeFailures);
             }
             log.info("Topics night '{}' ended, started '{}', queued '{}', skipped '{}', count failed '{}', not reached "
-                    + "'{}'", night.date(), start, decided.getOrDefault(NightDecision.NIGHTLY_UPDATE, 0L),
+                    + "'{}'", night.date(), start, decided.getOrDefault(NightDecision.UPDATE, 0L),
                     decided.getOrDefault(NightDecision.SKIP, 0L), decided.getOrDefault(NightDecision.COUNT_FAILED, 0L),
                     notReached);
         }

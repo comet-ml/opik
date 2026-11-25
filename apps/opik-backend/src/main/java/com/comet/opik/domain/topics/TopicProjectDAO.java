@@ -19,6 +19,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -27,8 +28,9 @@ import java.util.UUID;
 /**
  * Every statement on {@code topic_projects}, a project's current topics state, never its history. Each group of
  * columns has its own writer and is never set by another: the run fields (the current or last run, discovery run,
- * nightly update or labelling pass), the list fields (the saved list, written by a run's save), and the backfill fields
- * (the topic vectors tick). A run moves {@code queued -> running -> saved | failed}, or through {@code cancelling} to
+ * nightly update or labelling pass), the list fields (the saved list, written by a run's save), the backfill fields
+ * (the topic vectors tick), and the night fields {@code last_night} and {@code not_reached_nights} (the planner's night
+ * pass, {@link TopicsNightPass}). A run moves {@code queued -> running -> saved | failed}, or through {@code cancelling} to
  * {@code failed}; every run statement is a compare-and-set on the project, the run id and the status it expects, so
  * one writer wins and a run that lost its row writes nothing. {@code failed_runs} and {@code first_failed_at} count
  * the failed discovery runs and nightly updates since the last saved one: a labelling pass, a cancel that is not the
@@ -411,6 +413,87 @@ public interface TopicProjectDAO {
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int[] recordBackfills(@BindMethods List<TopicBackfillProgress> progress);
+
+    /**
+     * The night's candidates of {@code workspaceIds}: the projects with a saved list that the night on {@code night}
+     * has not looked at yet and that have no run in flight. The row the queue checks for an update is the source, so a
+     * project with topics but no list is not a candidate.
+     */
+    @SqlQuery("""
+            SELECT * FROM topic_projects
+            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL
+            AND (last_night IS NULL OR last_night < :night)
+            AND (run_status IS NULL OR run_status IN ('saved', 'failed'))
+            """)
+    List<TopicProject> findNightDue(@BindList("workspaceIds") Collection<String> workspaceIds,
+            @Bind("night") LocalDate night);
+
+    /** The night looked at the projects: updated or skipped them, for any reason. */
+    @SqlUpdate("""
+            UPDATE topic_projects SET last_night = :night, not_reached_nights = 0
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            """)
+    int markLooked(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
+            @Bind("night") LocalDate night);
+
+    /**
+     * The projects of {@code workspaceIds} with a list that the night did not look at and whose not-reached streak does
+     * not count the night yet: the ones {@link #markNotReached} writes. The streak expression is the same as there.
+     */
+    @SqlQuery("""
+            SELECT workspace_id, project_id FROM topic_projects
+            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL
+            AND (last_night IS NULL OR last_night < :night)
+            AND not_reached_nights < GREATEST(1, DATEDIFF(:night,
+                GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
+                    COALESCE(DATE(last_success_at), last_night, :night))))
+            """)
+    List<TopicProjectKey> findNotReached(@BindList("workspaceIds") Collection<String> workspaceIds,
+            @Bind("night") LocalDate night);
+
+    /**
+     * The night's budget ended before the projects: their not-reached streak counts it, once. The streak is the nights
+     * since the last one that looked at the project, or since its last save when none did, at least 1. It comes from
+     * the dates alone, so writing it again for the same night changes nothing. {@link #findNotReached} uses the same
+     * expression.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects SET not_reached_nights = GREATEST(1, DATEDIFF(:night,
+                GREATEST(COALESCE(last_night, DATE(last_success_at), :night),
+                    COALESCE(DATE(last_success_at), last_night, :night))))
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            AND (last_night IS NULL OR last_night < :night)
+            """)
+    int markNotReached(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
+            @Bind("night") LocalDate night);
+
+    /**
+     * {@code queued -> running} for a nightly update, only while the project still has a list that does not cover the
+     * night: its {@code window_until} is before {@code windowTo}, the night's start. 0 otherwise, as {@link #claim}.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET run_status = 'running', run_started_at = :now, deadline_at = :deadline, heartbeat_at = :now
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'queued' AND list_run_id IS NOT NULL
+            AND (window_until IS NULL OR window_until < :windowTo)
+            """)
+    int claimUpdate(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("now") Instant now, @Bind("deadline") Instant deadline,
+            @Bind("windowTo") Instant windowTo);
+
+    /**
+     * {@code queued -> failed} with {@code cancelled} for a nightly update whose project has no list any more, or whose
+     * list already covers the night (saved since it was queued). Not counted in {@code failed_runs}: it ran nothing.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET run_finished_at = :now, run_error_code = 'cancelled', run_status = 'failed'
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            AND run_status = 'queued' AND (list_run_id IS NULL OR window_until >= :windowTo)
+            """)
+    int skipUpdate(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId, @Bind("now") Instant now, @Bind("windowTo") Instant windowTo);
 
     /** The projects' whole rows: a deleted project has no topics state left. */
     @SqlUpdate("DELETE FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
