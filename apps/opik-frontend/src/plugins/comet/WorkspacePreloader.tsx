@@ -23,6 +23,24 @@ import { isAiSpendWorkspace, isHiddenSpendWorkspace } from "./lib/aiSpend";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
+import { RecentWorkspacesMap } from "./useRecentWorkspaces";
+
+const RECENT_WORKSPACES_KEY = "workspaces:recentlyVisited";
+
+function getMostRecentWorkspace(
+  workspaces: Workspace[],
+): Workspace | undefined {
+  let visits: RecentWorkspacesMap = {};
+  try {
+    const raw = localStorage.getItem(RECENT_WORKSPACES_KEY);
+    if (raw) visits = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return workspaces
+    .filter((ws) => visits[ws.workspaceName])
+    .sort((a, b) => visits[b.workspaceName] - visits[a.workspaceName])[0];
+}
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -200,6 +218,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
       (workspace) => !isAiSpendWorkspace(workspace),
     );
     const defaultWorkspace =
+      getMostRecentWorkspace(landingWorkspaces) ??
       landingWorkspaces.find((workspace) => workspace.default) ??
       landingWorkspaces[0];
 
