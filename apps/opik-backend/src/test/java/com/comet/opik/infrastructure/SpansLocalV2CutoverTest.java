@@ -178,6 +178,9 @@ class SpansLocalV2CutoverTest {
      */
     private static final String PAST_CEILING_ID = "ffffffff-ffff-7fff-8000-03b8d2a8d5e2";
 
+    /** The week {@code span_weeks} holds for {@link #PAST_CEILING_ID}: the Monday of the saturated 2299-12-31. */
+    private static final long PAST_CEILING_WEEK = 22991225L;
+
     /** Rows spread across three consecutive weekly partitions, so the backfill runs as three weekly batches. */
     private static final int SEED_WEEKS = 3;
     private static final int SURVIVORS_PER_WEEK = 30;
@@ -2484,6 +2487,98 @@ class SpansLocalV2CutoverTest {
                 .isFalse();
     }
 
+    // --- span_weeks registration (span_weeks_mv) ----------------------------------------------------------------
+
+    /**
+     * {@code span_weeks_mv} is bound to the name {@code spans}, not to the table behind it: in every topology the
+     * runbook can leave, rollbacks and the un-wrap included, it is on {@code spans} alone and registers the spans
+     * written through it, and nothing the cutover copies is left unindexed. The copies write around the name, so they
+     * register nothing; their spans were registered when first written through it, under the same ids. The spans
+     * written include a far-future and a past-ceiling id: their weeks come from the id, never from the legacy
+     * {@code id_at} that wraps the first, and the runbook's check must derive the same weeks or it reports them.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void spanWeeksViewFollowsTheSpansNameInEveryTopology(Runnable reachTopology) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+
+        seedSpans(mintIdsInWeek(0, 3), workspaceId, projectId);
+        backfillWeek(0);
+        reachTopology.run();
+        var written = Stream.of(ID_GENERATOR.generateId(weekInstant(1, 1)), ID_GENERATOR.generateId(FAR_FUTURE),
+                UUID.fromString(PAST_CEILING_ID))
+                .map(id -> SeededSpan.builder().id(id).traceId(traceId).createdAt(Instant.now()).build())
+                .toList();
+        written.forEach(span -> insertSuccessorSpan(span, workspaceId, projectId, "through-the-name", "spans"));
+        var writtenIds = written.stream().map(span -> span.id().toString()).collect(Collectors.toUnmodifiableSet());
+
+        assertThat(liveCount("spans", writtenIds, workspaceId))
+                .as("the spans written are live under `spans`, so the check below covers them")
+                .isEqualTo(written.size());
+        assertThat(tablesWithDependentView("span_weeks_mv"))
+                .as("the view is on `spans` alone, never left on a renamed table")
+                .containsExactly("spans");
+        assertThat(spanWeeks(workspaceId, projectId, traceId))
+                .as("each span written through `spans` is registered in the week of its id")
+                .containsExactlyInAnyOrder(yyyymmdd(ANCHOR_MONDAY.plusWeeks(1)), FAR_FUTURE_HONEST_WEEK,
+                        PAST_CEILING_WEEK);
+        assertThat(unindexedSpanWeeks(workspaceId, projectId))
+                .as("and no span live under `spans` is missing from the index")
+                .isZero();
+    }
+
+    /** The topologies the runbook can leave {@code spans} in: before the swap, after it, wrapped, and each way back. */
+    private Stream<Arguments> spanWeeksViewFollowsTheSpansNameInEveryTopology() {
+        Runnable original = () -> {
+        };
+        Runnable exchanged = this::exchangeTables;
+        Runnable wrapped = () -> {
+            exchangeTables();
+            wrapInDistributed();
+        };
+        Runnable rolledBackAfterExchange = () -> {
+            exchangeTables();
+            rollbackExchangeBack();
+        };
+        Runnable rolledBackAfterWrap = () -> {
+            wrapped.run();
+            rollbackPromoteOriginal();
+        };
+        Runnable unwrapped = () -> {
+            wrapped.run();
+            unwrap();
+        };
+        return Stream.of(
+                arguments(Named.of("original", original)),
+                arguments(Named.of("exchanged", exchanged)),
+                arguments(Named.of("wrapped", wrapped)),
+                arguments(Named.of("rolled back after the exchange", rolledBackAfterExchange)),
+                arguments(Named.of("rolled back after the wrap", rolledBackAfterWrap)),
+                arguments(Named.of("unwrapped", unwrapped)));
+    }
+
+    /**
+     * The negative control for the runbook's unindexed-spans check: a span written around the {@code spans} name, here
+     * straight into the shadow as a partition import would be, is missed by {@code span_weeks_mv}, and the check finds
+     * it once the swap makes it live.
+     */
+    @Test
+    void unindexedSpanWeeksCheckFindsASpanWrittenAroundTheSpansName() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        seedSpans(mintIdsInWeek(0, 3), workspaceId, projectId);
+        backfillWeek(0);
+        var aroundTheName = mintIdsInWeek(1, 1).getFirst();
+        insertSuccessorSpan(aroundTheName, workspaceId, projectId, "around-the-name", "spans_local_v2");
+        exchangeTables();
+
+        assertThat(spanWeeks(workspaceId, projectId, aroundTheName.traceId())).isEmpty();
+        assertThat(unindexedSpanWeeks(workspaceId, projectId)).isEqualTo(1L);
+    }
+
     // --- single-pass compare and coverage (000005 compare-weeks) -------------------------------------------------
 
     /**
@@ -3050,6 +3145,24 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * Rollback stage C (000004_rollback_stage_c_promote_original): one atomic multi-target RENAME rotates the wrapper
+     * out, the original back into {@code spans} and the shard to {@code spans_post_rollback_backup}; then the data-less
+     * ex-wrapper is dropped.
+     */
+    private void rollbackPromoteOriginal() {
+        execute("""
+                RENAME TABLE
+                    spans TO spans_dist_old,
+                    spans_pre_cutover_backup TO spans,
+                    spans_local TO spans_post_rollback_backup
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
+        });
+        execute("DROP TABLE IF EXISTS spans_dist_old ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+    }
+
+    /**
      * The reverse deletion replay (000004_rollback_reverse_replay): re-apply the deletes that fired on the successor
      * since {@code cutover_start} onto the restored original. Deliberately NO resurrection guard — rollback abandons
      * post-cutover writes while still honouring post-cutover deletes, and {@code spans} here is the RESTORED ORIGINAL,
@@ -3139,7 +3252,10 @@ class SpansLocalV2CutoverTest {
         });
     }
 
-    /** A row written directly into the SUCCESSOR schema — a post-cutover write, or one into the wrapped shard. */
+    /**
+     * A row written directly into the SUCCESSOR schema — a post-cutover write, or one into the wrapped shard. Through a
+     * {@code Distributed} {@code spans} it is delivered before the insert returns, so a read straight after sees it.
+     */
     private void insertSuccessorSpan(SeededSpan span, String workspaceId, UUID projectId, String name) {
         insertSuccessorSpan(span, workspaceId, projectId, name, "spans");
     }
@@ -3147,6 +3263,7 @@ class SpansLocalV2CutoverTest {
     private void insertSuccessorSpan(SeededSpan span, String workspaceId, UUID projectId, String name, String table) {
         execute("""
                 INSERT INTO %s (id, workspace_id, project_id, trace_id, name, created_at, last_updated_at)
+                SETTINGS distributed_foreground_insert = 1
                 VALUES (:id, :workspace_id, :project_id, :trace_id, :name, now64(6), now64(6))
                 """.formatted(table), statement -> statement
                 .bind("id", span.id().toString())
@@ -3773,6 +3890,63 @@ class SpansLocalV2CutoverTest {
                 .block();
     }
 
+    /** The tables in the database that feed {@code view}: those whose inserts it receives. */
+    private List<String> tablesWithDependentView(String view) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT name
+                FROM system.tables
+                WHERE database = :db
+                  AND has(dependencies_table, :view)
+                """)
+                .bind("db", DATABASE_NAME)
+                .bind("view", view)
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> row.get("name", String.class))))
+                .collectList().block();
+    }
+
+    /** The weeks {@code span_weeks} holds for one trace. */
+    private List<Long> spanWeeks(String workspaceId, UUID projectId, UUID traceId) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT DISTINCT id_week
+                FROM span_weeks
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id = :trace_id
+                  AND is_deleted = 0
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("trace_id", traceId.toString())
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> row.get("id_week", Long.class))))
+                .collectList().block();
+    }
+
+    /**
+     * The runbook's check before turning {@code spanWeeksReadEnabled} on: how many (trace, week) pairs of the
+     * project's spans live under {@code spans} the {@code span_weeks} index does not hold. The week comes from the id,
+     * as {@code span_weeks_mv} and the backfill derive it.
+     */
+    private long unindexedSpanWeeks(String workspaceId, UUID projectId) {
+        return scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT DISTINCT workspace_id, project_id, trace_id,
+                        toUInt32(toYYYYMMDD(toDate32(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'))
+                            - toIntervalDay(toDayOfWeek(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'), 1))))
+                            AS id_week
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                ) AS s
+                LEFT ANTI JOIN (
+                    SELECT workspace_id, project_id, trace_id, id_week
+                    FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND is_deleted = 0
+                ) AS w USING (workspace_id, project_id, trace_id, id_week)
+                """, statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString()));
+    }
+
     /**
      * Ids whose WINNING version has a {@code created_at} inside a compare window — the count that goes to zero, and
      * makes the drill-down print the row as absent, when a re-create moves the winner past the window's upper bound.
@@ -4298,7 +4472,7 @@ class SpansLocalV2CutoverTest {
                 FROM src
                 FULL OUTER JOIN dst USING (week)
                 ORDER BY week
-                SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 1
+                SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 0
                 """);
         var sql = renderCompare(compare, oldTable, newTable, coverage);
         return template.nonTransaction(connection -> {
@@ -4507,6 +4681,10 @@ class SpansLocalV2CutoverTest {
         var union = new ArrayList<>(a);
         union.addAll(b);
         return Set.copyOf(union);
+    }
+
+    private static long yyyymmdd(LocalDate monday) {
+        return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     /** A within-day offset so ids/created_at in the same week are distinct but stay inside their weekly partition. */

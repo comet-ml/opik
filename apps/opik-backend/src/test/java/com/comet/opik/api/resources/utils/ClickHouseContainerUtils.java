@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.google.common.collect.Sets;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -17,6 +18,10 @@ public class ClickHouseContainerUtils {
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
     private static final Network NETWORK = Network.newNetwork();
     private static final Set<GenericContainer<?>> CONTAINERS = Sets.newConcurrentHashSet();
+
+    /** From {@code config-test.yml}: a factory built in code is not validated, so it would otherwise carry 0. */
+    private static final int CLIENT_MAX_OPEN_CONNECTIONS = TestConfigUtils.loadConfigTest()
+            .getDatabaseAnalytics().getClientMaxOpenConnections();
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -51,7 +56,7 @@ public class ClickHouseContainerUtils {
     }
 
     public static GenericContainer<?> newZookeeperContainer(boolean reusable, Network network) {
-        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.4"))
+        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.7"))
                 .withExposedPorts(2181)
                 .withNetworkAliases("zookeeper")
                 .withNetwork(network)
@@ -125,6 +130,7 @@ public class ClickHouseContainerUtils {
         databaseAnalyticsFactory.setUsername(clickHouseContainer.getUsername());
         databaseAnalyticsFactory.setPassword(clickHouseContainer.getPassword());
         databaseAnalyticsFactory.setDatabaseName(databaseName);
+        databaseAnalyticsFactory.setClientMaxOpenConnections(CLIENT_MAX_OPEN_CONNECTIONS);
         return databaseAnalyticsFactory;
     }
 

@@ -30,7 +30,9 @@ class CustomLlmClientGeneratorTemperatureTest {
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
 
     private ChatRequestParameters judgeParametersFor(String modelName, Double temperature) {
-        var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(ProviderBaseUrlGuard.class),
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setJudgeMaxRetries(0);
+        var generator = new CustomLlmClientGenerator(clientConfig, mock(ProviderBaseUrlGuard.class),
                 mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")

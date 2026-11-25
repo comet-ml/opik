@@ -97,6 +97,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
@@ -116,6 +117,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
@@ -233,6 +235,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
@@ -340,6 +343,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
@@ -359,6 +363,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
+            experiment_id=ANY_BUT_NONE,
             dataset_item_data={
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},

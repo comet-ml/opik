@@ -1,27 +1,30 @@
 # Repository Guidelines
 
 ## Scope & Inheritance
+
 - This file contains generative UI engine specifics only.
 - Follow `../../AGENTS.md` for shared monorepo workflow, PR, and security policy.
 - Skill for this folder: `../../.agents/skills/genui/SKILL.md`.
 
 ## Project Structure & Module Organization
+
 `sdks/genui` is one npm workspace that builds the engine behind Opik views. A view is model-written HTML, CSS and script `{ type: "html", engine_version, html, inputs, libraries }`; the engine renders it in a sandboxed iframe and gives the authors their guidance. The backend does not depend on the engine.
 
 - `js/src/`: the `opik-genui` npm package, one entry point per file, no index file.
   - `contract.ts`: the HTML contract per `engine_version` (bootstrap, CSP, base stylesheet) in `CONTRACTS`; `ENGINE_VERSION` is the latest key.
   - `HtmlFrame.tsx`: the iframe host. It speaks the MCP Apps message shapes (initialize, initialized, tool-result for the data, host-context-changed for the theme, size-changed, teardown) and stops a view that navigates away.
   - `ViewHost.tsx`: the host wrapper. It refuses an unsupported type, `engine_version`, input kind or library, resolves the inputs and loads the declared libraries through the host adapter in parallel and mounts `HtmlFrame`. A new `fetchInput` or `fetchLibrary` identity means fetch again, so a host keeps them stable with `useCallback` and changes them only when it wants new data, such as a new date range; a host that creates them on every render refetches forever.
-  - `tokens.ts`: the `--ov-` token values for light and dark, sent to the view on initialize and on every theme change. They follow the Opik DS 2.0 Foundations Figma file (https://www.figma.com/design/wpk4dnvfUBxXsc8d4jvopv/Opik-DS-2.0--Foundations): each semantic colour maps to a primitive per mode, as in Figma, and `background/primary` becomes `--ov-background-primary`. Take new values and names from Figma; the font families are not part of it yet.
+  - `tokens.ts`: the `--ov-` token values for light and dark, sent to the view on initialize and on every theme change. They follow the Opik DS 2.0 Foundations Figma file (<https://www.figma.com/design/wpk4dnvfUBxXsc8d4jvopv/Opik-DS-2.0--Foundations>): each semantic colour maps to a primitive per mode, as in Figma, and `background/primary` becomes `--ov-background-primary`. Take new values and names from Figma; the font families are not part of it yet.
   - `view.ts`: the view and input types, the areas, the libraries, the size cap and the frame height cap.
   - `guidance.ts`: the authoring prompt per area.
   - `styles.css`: the host-side stylesheet for the frame, the loading and the error state, every rule under `.ov-view`.
 - `js/libraries/`: one entry per library a view may declare, built into `dist/libraries/<name>.js` as one script that sets its globals. The host fetches the file and the contract inlines it after the bootstrap, only for a view that declares it.
-- `js/scripts/`: `emit.ts` writes `python/src/opik_genui/data/` (`engine.json`, `prompt-<area>.txt`); `smoke.ts` is the test suite.
-- `python/`: the `opik-genui` Python package: `ENGINE_VERSION`, `AREAS`, `MAX_HTML_LENGTH`, `TOKENS` and `prompt(area)`, read from `python/src/opik_genui/data/` (git-ignored, written by `npm run build`).
+- `js/scripts/`: `emit.ts` writes `python/src/opik_genui/data/` (`engine.json`, `prompt-<area>.txt`); `licenses.ts` writes `dist/libraries/<name>.licenses.txt`, the licences of every package a library bundle contains; `smoke.ts` is the test suite.
+- `python/`: the `opik-genui` Python package: `__version__`, `ENGINE_VERSION`, `AREAS`, `MAX_HTML_LENGTH`, `TOKENS` and `prompt(area)`, read from `python/src/opik_genui/data/` (git-ignored, written by `npm run build`).
 - `dev-host/`: a page that renders a fixture view through `ViewHost`, and `dev-host/check.mjs`, the browser check.
 
 ## Build, Test, and Development Commands
+
 Run from `sdks/genui`.
 
 - `npm ci` installs every workspace.
@@ -33,22 +36,35 @@ Run from `sdks/genui`.
 - `cd python && uv run pytest` runs the Python tests after `npm run build`; `npm run build:python` builds the package and then the wheel.
 
 ## Coding Style & Naming Conventions
+
 - TypeScript, 2-space indentation, double quotes, no code comments.
 - Nothing in `js/src/` imports from `apps/` or from outside `js/src/`.
 - CSS classes carry the `ov-` prefix and every host rule sits under `.ov-view`; tokens carry the `--ov-` prefix. Host CSS uses the tokens too, never literal colours or sizes.
 
 ## Testing Guidelines
+
 - `js/scripts/smoke.ts`: one `[name, boolean]` check per behaviour, run without a browser.
 - `dev-host/check.mjs`: data delivery, theme switch, frame height, the forbidden paths (parent access, cookies, WebRTC in the view's window, eval, fetch, images from the network), self-navigation to another origin, script errors and their limit, a large view, an unknown `engine_version` and a chart from a declared library.
 - `python/tests/`: the Python package reads what `npm run build` emitted.
 
 ## The HTML contract
+
 - `engine_version` is the version of the HTML contract a view was written against. It is an integer, sent by the author and stored with every version.
 - A change a stored view could notice is a new contract: the bootstrap, the CSP, the base stylesheet, the message shapes, the `onViewData` and `onViewTheme` callbacks or the meaning of a token name. Add `CONTRACTS[n + 1]` next to the existing ones and leave the old ones as they are; `ENGINE_VERSION` follows. Stored views are never migrated.
 - Not a new contract: a new token, a new token value, a change to the guidance, a host-side change in `HtmlFrame.tsx`, `ViewHost.tsx` or `styles.css` that keeps the messages the same.
 - A new contract ships with Opik first; Ollie and opik-mcp move to it by upgrading their pin of the packages.
 
+## Release
+
+- Both packages are published by the Opik release: `release.yaml` calls `.github/workflows/genui_publish.yml`, which builds the tag once and publishes `opik-genui` to npm and then to PyPI with the Opik version. A failed publish fails the release, as for the SDKs.
+- The same workflow runs by hand ("Run workflow" on `main`): with `is_release` and the version of a release that already happened it re-publishes that version; without `is_release` it builds and checks the branch it is started from, proves the PyPI registration and uploads nothing.
+- `js/package.json` is the only version source. The build writes it into `engine.json`, the Python package reads it from there, and the wheel build fails on data built for another version. The release commits the new version to `main`; do not edit it.
+- Auth is trusted publishing (OIDC), and the two registries match a different file. npm matches the workflow that starts the run: `release-wrapper-release-n-deploy.yml` for a release and `genui_publish.yml` for a manual run, both registered. PyPI matches the workflow that contains the job, `genui_publish.yml`, in both cases. Renaming either file breaks that publish until the registration is changed. The release checks the PyPI registration before it tags; npm has no such check.
+- A version cannot be published twice. A replayed release or a rerun skips a package that is already on its registry.
+- What ships: `js/package.json` `files` and `exports` for npm, `python/pyproject.toml` for PyPI. A new entry point or library needs an `exports` entry; a library bundle ships with its licences file.
+
 ## Areas
+
 - An area is where a view is shown, such as `widget`, a dashboard grid cell. It is fixed when the view is created, and each area gets its own authoring prompt from `prompt(area)`.
 - The sandbox, data, style and size rules in `guidance.ts` are the same for every area, because the sandbox is the same. An area only sets the target sentence (where the view sits and how wide it is) and any rules that apply to that area alone.
 - To add an area:
@@ -59,6 +75,7 @@ Run from `sdks/genui`.
 - `npm run build` then writes `prompt-<area>.txt`, Python `prompt(area)` picks it up, and the smoke checks run on every area's prompt.
 
 ## Invariants (a red check here is a contract, not a flake)
+
 - `js/src/` imports nothing from Opik: `smoke: no imports from outside the package`.
 - A view runs in `sandbox="allow-scripts"` under `default-src 'none'` without `unsafe-eval`, images only from `data:` and `blob:`: `smoke: view CSP allows no network`, `smoke: view CSP allows no eval`, `smoke: frame is sandboxed to scripts only`, `check: forbidden paths stay closed`, `check: no request leaves the view`.
 - A view that navigates itself sends nothing out, because the host page limits `frame-src` (or `child-src`) to its own origins; the view's sandbox and CSP do not cover navigation. Every page that mounts `HtmlFrame` sets it, the dev host with `frame-src 'self'`: `check: self-navigation is stopped`, `check: self-navigation sends nothing out`.
@@ -68,14 +85,17 @@ Run from `sdks/genui`.
 - `MAX_HTML_LENGTH` in `js/src/view.ts` equals `ViewVersion.MAX_HTML_LENGTH` in the backend, which enforces it on save.
 
 ## Agent Contribution Workflow
+
 - This module is part of the Opik monorepo; follow the shared workflow in `../../AGENTS.md#agent-contribution-workflow`.
 - Run `npm run ci` before requesting review; `npm run check` for changes to the iframe host or the contract.
 
 ## Commit & Pull Request Guidelines
+
 - Follow shared commit/PR policy in `../../AGENTS.md`.
 - Use `[SDK]` as the component tag.
 
 ## Security & Configuration Tips
+
 - Follow shared security policy in `../../AGENTS.md`.
 - The engine never evaluates strings as code, never loads from the network and never renders data as HTML in the host page. Model-written code is contained by the sandbox, not validated.
 - Accepted gaps: CPU is not isolated, and WebRTC is disabled only in the view's own window, so a frame nested inside the view can still open a peer connection. The upgrade path for both is a separate sandbox origin.

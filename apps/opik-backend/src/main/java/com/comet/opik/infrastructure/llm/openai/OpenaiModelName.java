@@ -93,7 +93,11 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_O3_MINI("o3-mini", false),
     GPT_O3_PRO("o3-pro", true),
     GPT_O4_MINI("o4-mini", true),
-    GPT_O4_MINI_DEEP_RESEARCH("o4-mini-deep-research", true);
+    GPT_O4_MINI_DEEP_RESEARCH("o4-mini-deep-research", true),
+    GPT_6_ASTRA_HEALTHCARE("gpt-6-astra-healthcare", false),
+    GPT_6_1_SOL_HEALTHCARE("gpt-6.1-sol-healthcare", false),
+    GPT_6_2_ASTRA_HEALTHCARE("gpt-6.2-astra-healthcare", false),
+    GPT_6_2_SOL_HEALTHCARE("gpt-6.2-sol-healthcare", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";
 

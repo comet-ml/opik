@@ -7,6 +7,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
+import com.comet.opik.infrastructure.db.ClickHouseErrorCodes;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -34,11 +35,15 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -46,21 +51,22 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
- * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a
- * {@code Set*} node (top-level, subquery, CTE, UNION arm or {@code FORMAT ... SETTINGS}) the query is rejected before
- * execution, and an unparseable query is rejected too — execution never runs on a validation failure. The
- * workspace/project bounds are pushed as ClickHouse server settings consumed by the restrictive row policies, never
- * concatenated into the SQL.
+ * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}). The service rejects
+ * unparseable queries, {@code Set} nodes for SETTINGS/SET clauses at any depth, catalog references, table functions,
+ * forbidden function calls, and names ClickHouse resolves to a forbidden call when written bare ({@code user}), also as
+ * an alias or CTE name, before ClickHouse analyses the query. Every query that passes is then pre-flighted through
+ * {@code EXPLAIN QUERY TREE} under its caller scope, as a backstop: the resolved tree restricts table reads to the
+ * account's tables and rejects forbidden functions by their canonical name. The tree also rejects scalar subqueries
+ * that read tables in every mode. The workspace and
+ * project bounds are sent as ClickHouse server settings consumed by the restrictive row policies.
  *
- * <p>On top of the row policies, a post-run check verifies from the query's {@code system.query_log} entries and its
- * plan that every table it read was read under a row policy ({@link FreeFormSqlPolicyCheck}). A scalar subquery
- * reading a table cannot be shown either way. What both do depends on {@link FreeFormSqlPostRunCheckConfig.Mode}:
+ * <p>The post-run check verifies from the query's {@code system.query_log} entries and plan that every table it read
+ * was read under a row policy ({@link FreeFormSqlPolicyCheck}). Its behavior depends on the configured mode:
  * <ul>
- * <li>{@code off}: neither runs.</li>
- * <li>{@code audit}: a scalar read is reported and the query runs; the check runs after the response is returned and
- * only reports. Nothing either finds, and no failure of either, affects the request.</li>
- * <li>{@code enforce}: a scalar read is rejected before running, with a rewrite the caller can apply; results are
- * returned only once the check passes, and are withheld on a violation, a missing log entry or a failure.</li>
+ * <li>{@code off}: the post-run check is skipped.</li>
+ * <li>{@code audit}: the check reports its findings without withholding results.</li>
+ * <li>{@code enforce}: results are returned only once the check passes, and are withheld on a violation,
+ * a missing log entry or a failure.</li>
  * </ul>
  * Every outcome is counted in {@code opik.free_form_sql.post_run_check}, tagged by mode and outcome.
  */
@@ -85,6 +91,8 @@ public class FreeFormSqlQueryService {
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
         PARSE_ERROR("rejected", "parse_error"),
         PERMISSION_DENIED("error", "permission_denied"),
+        FORBIDDEN_TABLE("rejected", "forbidden_table"),
+        FORBIDDEN_FUNCTION("rejected", "forbidden_function"),
         SCALAR_SUBQUERY_NOT_ALLOWED("rejected", "scalar_subquery_not_allowed"),
         POLICY_UNVERIFIED("error", "policy_unverified"),
         POLICY_CHECK_FAILED("error", "policy_check_failed"),
@@ -107,6 +115,33 @@ public class FreeFormSqlQueryService {
      */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
+    private static final String TABLE_IDENTIFIER_AST_PREFIX = "TableIdentifier ";
+    private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
+    private static final Pattern AST_CHILDREN_SUFFIX = Pattern.compile(" \\(children \\d+\\)$");
+    private static final Pattern AST_ALIAS_SUFFIX = Pattern.compile(" \\(alias (.+)\\)$");
+    private static final String TABLE_EXPRESSION_AST_PREFIX = "TableExpression ";
+    /**
+     * ClickHouse's own metadata schemas, which the free-form account must never read: the row policies bound tenant
+     * data, but these schemas sit outside them and would disclose the server's tables, columns, settings and ACLs.
+     * Matched on the database qualifier of a {@code TableIdentifier} or {@code Identifier} node, lower-cased, since
+     * ClickHouse exposes both {@code information_schema} and {@code INFORMATION_SCHEMA} and resolves a qualified column
+     * such as {@code system.one.dummy} without a FROM clause. ClickHouse grants deny most of these too; direct
+     * table references are rejected in the app even if those grants change.
+     */
+    private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
+    /** Logical tables exposed to each account. Keep in sync with the read-only grants and row policies. */
+    private static final Map<FreeFormSqlAccount, Set<String>> ALLOWED_TABLES = Map.of(
+            FreeFormSqlAccount.STANDARD, Set.of("spans", "traces", "authored_feedback_scores"),
+            FreeFormSqlAccount.EXTENDED, Set.of("spans", "traces", "authored_feedback_scores", "feedback_scores",
+                    "trace_threads", "experiments", "experiment_items", "dataset_items", "dataset_item_versions"));
+
+    private static final String FUNCTION_AST_PREFIX = "Function ";
+    public static final String PARSE_ERROR_MESSAGE = "Query rejected: could not be parsed";
+    public static final String SETTINGS_CLAUSE_MESSAGE = "Query rejected: SETTINGS/SET clauses are not allowed";
+    public static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
+    public static final String RESULT_SHAPE_MESSAGE = "Query must return exactly one column named 'result'";
+    public static final String INVALID_JSON_RESULT_MESSAGE = "Query 'result' column must contain valid JSON produced via toJSONString(...)";
+    public static final String EXECUTION_FAILED_MESSAGE = "Query execution failed";
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
     static final String SCALAR_SUBQUERY_MESSAGE = """
             Query rejected: a scalar subquery (a subquery used as a value, e.g. SELECT (SELECT count() FROM spans)) \
@@ -120,19 +155,15 @@ public class FreeFormSqlQueryService {
             columns (input, output, metadata) from the query.""";
 
     /** ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500. */
-    private static final int CH_TOO_MANY_ROWS = 158;
-    private static final int CH_TIMEOUT_EXCEEDED = 159;
-    private static final int CH_MEMORY_LIMIT_EXCEEDED = 241;
-    private static final int CH_TOO_MANY_ROWS_OR_BYTES = 396;
-    private static final int CH_TOO_MANY_BYTES = 307;
     private static final int CH_ACCESS_DENIED = 497;
     private static final int CH_SYNTAX_ERROR = 62;
     /** The account's concurrent-query cap, e.g. a dashboard loading many widgets at once: worth a retry. */
     private static final int CH_TOO_MANY_SIMULTANEOUS_QUERIES = 202;
     static final String RETRY_AFTER_SECONDS = "1";
     private static final Set<Integer> CH_LIMIT_CODES = Set.of(
-            CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES,
-            CH_TOO_MANY_BYTES);
+            ClickHouseErrorCodes.TOO_MANY_ROWS, ClickHouseErrorCodes.TIMEOUT_EXCEEDED,
+            ClickHouseErrorCodes.MEMORY_LIMIT_EXCEEDED, ClickHouseErrorCodes.TOO_MANY_ROWS_OR_BYTES,
+            ClickHouseErrorCodes.TOO_MANY_BYTES);
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
     private final FreeFormSqlEntityNameEnricher entityNameEnricher;
@@ -193,7 +224,6 @@ public class FreeFormSqlQueryService {
         VIOLATION("violation"),
         LOG_MISSING("log_missing"),
         CHECK_FAILED("check_failed"),
-        QUERY_TREE_FAILED("query_tree_failed"),
         SCALAR_READ("scalar_read");
 
         private final String tag;
@@ -216,49 +246,34 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> subqueryReads(account, workspaceId, projectScope, query, startMillis))
-                .thenCompose(subqueryReads -> runQuery(account, workspaceId, projectScope, query, subqueryReads,
-                        startMillis));
+                .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
+                .thenCompose(queryTree -> {
+                    var reads = rejectScalarReads(account, queryTree, startMillis);
+                    return runQuery(account, workspaceId, projectScope, query, reads, startMillis);
+                });
     }
 
-    /** Where the query's subqueries read, for the check; unknown when it is off or could not tell in audit. */
-    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> subqueryReads(FreeFormSqlAccount account,
-            String workspaceId,
+    /** Resolve table reads and function calls before running the query. */
+    private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
             String projectScope, String query, long startMillis) {
-        if (mode != FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
-            // Off: nothing to check. Audit: the tree is explained after the response, with the rest of the check.
-            return CompletableFuture.completedFuture(FreeFormSqlSubqueries.SubqueryReads.UNKNOWN);
-        }
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
-                .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
-    }
-
-    /**
-     * Audit: the query's subquery reads, reporting a scalar one instead of rejecting it. When the tree cannot be
-     * explained, that is counted on its own and the check still runs on the log and the plan, with the subquery reads
-     * unknown: a read only an IN or EXISTS subquery shows is then reported rather than accepted.
-     */
-    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> auditSubqueryReads(FreeFormSqlAccount account,
-            String workspaceId, String projectScope, String query) {
-        // Only the DAO call recovers: a failure classifying a tree that was returned stays a failed check.
-        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
-                .exceptionally(error -> {
-                    log.warn("Free-form SQL query tree could not be explained for the audit, account '{}'", account,
-                            error);
-                    count(CheckOutcome.QUERY_TREE_FAILED, account);
-                    return null;
-                })
-                .thenApply(tree -> {
-                    if (tree == null) {
-                        return FreeFormSqlSubqueries.SubqueryReads.UNKNOWN;
+                .handle((queryTree, error) -> {
+                    if (error != null) {
+                        throw mapExecutionError(error, startMillis);
                     }
-                    var reads = FreeFormSqlSubqueries.subqueryReads(tree, database);
-                    if (reads.hasScalar()) {
-                        log.warn("Free-form SQL query reads {} in a scalar subquery (audit, not rejected), "
-                                + "account '{}'", describe(reads), account);
-                        count(CheckOutcome.SCALAR_READ, account);
+                    try {
+                        if (containsForbiddenResolvedTable(account, queryTree)) {
+                            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+                        }
+                        if (containsForbiddenOrUnreadableFunction(queryTree)) {
+                            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                        }
+                    } catch (WebApplicationException e) {
+                        throw e;
+                    } catch (RuntimeException e) {
+                        throw mapExecutionError(e, startMillis);
                     }
-                    return reads;
+                    return queryTree;
                 });
     }
 
@@ -267,13 +282,7 @@ public class FreeFormSqlQueryService {
      * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
      */
     private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, List<String> queryTree,
-            Throwable error,
             long startMillis) {
-        if (error != null) {
-            throw findCause(error, WebApplicationException.class) != null
-                    ? findCause(error, WebApplicationException.class)
-                    : mapExecutionError(error, startMillis);
-        }
         var subqueryReads = FreeFormSqlSubqueries.subqueryReads(queryTree, database);
         if (subqueryReads.hasScalar()) {
             count(CheckOutcome.SCALAR_READ, account);
@@ -302,18 +311,25 @@ public class FreeFormSqlQueryService {
     private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
         if (error != null) {
             throw isSyntaxError(error)
-                    ? reject(Outcome.PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
+                    ? reject(Outcome.PARSE_ERROR, startMillis, PARSE_ERROR_MESSAGE, error)
                     : mapExecutionError(error, startMillis);
         }
         if (containsSetNode(nodeLabels)) {
-            throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
-                    "Query rejected: SETTINGS/SET clauses are not allowed", null);
+            throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
+        }
+        if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
+            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+        }
+        if (containsForbiddenName(nodeLabels)) {
+            // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
+            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads, long startMillis) {
+            String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads,
+            long startMillis) {
         String queryId = UUID.randomUUID().toString();
         return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query, queryId)
                 .handle((result, error) -> {
@@ -325,8 +341,7 @@ public class FreeFormSqlQueryService {
                 .thenCompose(result -> switch (mode) {
                     case OFF -> CompletableFuture.completedFuture(result);
                     case AUDIT -> {
-                        // After the response, off its path: nothing the check finds or fails on reaches the caller.
-                        audit(account, workspaceId, projectScope, query, queryId);
+                        audit(account, workspaceId, projectScope, query, queryId, subqueryReads);
                         yield CompletableFuture.completedFuture(result);
                     }
                     case ENFORCE -> verifyPolicies(account, workspaceId, projectScope, query, queryId, subqueryReads,
@@ -358,10 +373,9 @@ public class FreeFormSqlQueryService {
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
     private void audit(FreeFormSqlAccount account, String workspaceId, String projectScope, String query,
-            String queryId) {
+            String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         try {
-            auditSubqueryReads(account, workspaceId, projectScope, query)
-                    .thenCompose(reads -> check(account, workspaceId, projectScope, query, queryId, reads))
+            check(account, workspaceId, projectScope, query, queryId, subqueryReads)
                     .whenComplete((outcome, error) -> {
                         if (error != null) {
                             log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,
@@ -433,8 +447,100 @@ public class FreeFormSqlQueryService {
 
     private static boolean containsSetNode(List<String> nodeLabels) {
         return nodeLabels.stream()
-                .map(label -> label.stripLeading().split("\\s", 2)[0])
+                .map(FreeFormSqlQueryService::firstToken)
                 .anyMatch(SETTINGS_AST_NODES::contains);
+    }
+
+    private static String firstToken(String label) {
+        return label.stripLeading().split("\\s", 2)[0];
+    }
+
+    private static String firstTokenAfterPrefix(String label, String prefix) {
+        return firstToken(label.substring(prefix.length()));
+    }
+
+    private static boolean containsCatalogReference(List<String> nodeLabels) {
+        return nodeLabels.stream()
+                .flatMap(label -> referencedName(label).stream())
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .anyMatch(name -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(name::startsWith));
+    }
+
+    /**
+     * A forbidden function called by any spelling, or a name ClickHouse calls when written bare, wherever it appears:
+     * an identifier, a table or CTE reference, or an alias.
+     */
+    private static boolean containsForbiddenName(List<String> nodeLabels) {
+        return nodeLabels.stream().anyMatch(label -> isForbidden(functionName(label), FreeFormSqlForbiddenFunctions.ALL)
+                || isForbidden(referencedName(label), FreeFormSqlForbiddenFunctions.BARE_NAMES)
+                || isForbidden(alias(label), FreeFormSqlForbiddenFunctions.BARE_NAMES));
+    }
+
+    private static boolean isForbidden(Optional<String> name, Set<String> forbidden) {
+        return name.map(value -> forbidden.contains(value.toLowerCase(Locale.ROOT))).orElse(false);
+    }
+
+    private static Optional<String> functionName(String label) {
+        String node = label.stripLeading();
+        return node.startsWith(FUNCTION_AST_PREFIX)
+                ? Optional.of(firstTokenAfterPrefix(node, FUNCTION_AST_PREFIX))
+                : Optional.empty();
+    }
+
+    /** The name an {@code Identifier} or {@code TableIdentifier} node refers to, without its alias. */
+    private static Optional<String> referencedName(String label) {
+        String node = withoutChildren(label);
+        return Stream.of(IDENTIFIER_AST_PREFIX, TABLE_IDENTIFIER_AST_PREFIX)
+                .filter(node::startsWith)
+                .findFirst()
+                .map(prefix -> AST_ALIAS_SUFFIX.matcher(node.substring(prefix.length())).replaceFirst(""));
+    }
+
+    private static Optional<String> alias(String label) {
+        var matcher = AST_ALIAS_SUFFIX.matcher(withoutChildren(label));
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    private static String withoutChildren(String label) {
+        return AST_CHILDREN_SUFFIX.matcher(label.stripLeading()).replaceFirst("");
+    }
+
+    /** A function directly under a table expression is a table function; reject it before resolving it. */
+    private static boolean containsTableFunctionNode(List<String> nodeLabels) {
+        for (int i = 0; i + 1 < nodeLabels.size(); i++) {
+            String parent = nodeLabels.get(i);
+            String child = nodeLabels.get(i + 1);
+            if (parent.stripLeading().startsWith(TABLE_EXPRESSION_AST_PREFIX)
+                    && child.stripLeading().startsWith(FUNCTION_AST_PREFIX)
+                    && child.length() - child.stripLeading().length() > parent.length()
+                            - parent.stripLeading().length()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The resolved tree includes implicit system.one for a FROM-less SELECT; explicit reads fail the AST check. */
+    private boolean containsForbiddenResolvedTable(FreeFormSqlAccount account, List<String> queryTree) {
+        return queryTree.stream()
+                .anyMatch(line -> FreeFormSqlSubqueries.isTableFunctionNode(line)
+                        || FreeFormSqlSubqueries.isTableNode(line) && FreeFormSqlSubqueries.tableName(line)
+                                .filter(table -> isAllowedTable(account, table)).isEmpty());
+    }
+
+    private boolean isAllowedTable(FreeFormSqlAccount account, String table) {
+        String prefix = database + ".";
+        return table.equals("system.one")
+                || table.startsWith(prefix) && ALLOWED_TABLES.get(account).contains(table.substring(prefix.length()));
+    }
+
+    /** A FUNCTION node whose name cannot be read counts as forbidden, so a tree format change fails closed. */
+    private static boolean containsForbiddenOrUnreadableFunction(List<String> queryTree) {
+        return queryTree.stream()
+                .filter(FreeFormSqlSubqueries::isFunctionNode)
+                .anyMatch(line -> FreeFormSqlSubqueries.resolvedFunctionName(line)
+                        .map(name -> FreeFormSqlForbiddenFunctions.ALL.contains(name.toLowerCase(Locale.ROOT)))
+                        .orElse(true));
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
@@ -445,21 +551,19 @@ public class FreeFormSqlQueryService {
 
     private WebApplicationException mapExecutionError(Throwable error, long startMillis) {
         if (findCause(error, NoSuchColumnException.class) != null) {
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
-                    "Query must return exactly one column named 'result'", error);
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, RESULT_SHAPE_MESSAGE, error);
         }
 
         if (findCause(error, UncheckedIOException.class) != null) {
             // A non-JSON 'result' value is a bad query shape (caller's fault, not infra), so a 400 rather than a 503.
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
-                    "Query 'result' column must contain valid JSON produced via toJSONString(...)", error);
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, INVALID_JSON_RESULT_MESSAGE, error);
         }
 
         ServerException serverException = findCause(error, ServerException.class);
         if (serverException == null) {
             // No response from ClickHouse (connection/transport failure): an infrastructure problem, not a bad query,
             // so surface it as 5xx for alerting instead of a misleading 400.
-            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, "Query execution failed",
+            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, EXECUTION_FAILED_MESSAGE,
                     error);
         }
 
@@ -467,17 +571,17 @@ public class FreeFormSqlQueryService {
         if (CH_LIMIT_CODES.contains(code)) {
             // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
             return error(Outcome.CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
-                    code == CH_TOO_MANY_BYTES ? BYTES_LIMIT_MESSAGE : LIMIT_MESSAGE, error);
+                    code == ClickHouseErrorCodes.TOO_MANY_BYTES ? BYTES_LIMIT_MESSAGE : LIMIT_MESSAGE, error);
         }
         if (code == CH_TOO_MANY_SIMULTANEOUS_QUERIES) {
             return busy(startMillis, error);
         }
         if (code == CH_ACCESS_DENIED) {
             return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
-                    "Query rejected: access denied", error);
+                    ACCESS_DENIED_MESSAGE, error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
-        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
+        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
     }
 
     private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {

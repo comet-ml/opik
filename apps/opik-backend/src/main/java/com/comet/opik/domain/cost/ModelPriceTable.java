@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +36,8 @@ public class ModelPriceTable {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
     private static final Set<String> pricedProviders;
+    private static final Map<String, Map<String, List<String>>> prefixedModelNames;
+    private static final Map<String, Set<String>> providersByModelName;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     /**
@@ -63,6 +66,13 @@ public class ModelPriceTable {
         pricedProviders = modelProviderPrices.keySet().stream()
                 .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
                 .collect(Collectors.toUnmodifiableSet());
+        prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
+        providersByModelName = modelProviderPrices.keySet().stream()
+                .collect(Collectors.collectingAndThen(Collectors.groupingBy(
+                        key -> key.substring(0, key.lastIndexOf(MODEL_PROVIDER_SEPARATOR)),
+                        Collectors.mapping(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1),
+                                Collectors.toUnmodifiableSet())),
+                        Collections::unmodifiableMap));
     }
 
     static ModelPrice get(String modelName, String provider) {
@@ -71,6 +81,41 @@ public class ModelPriceTable {
 
     static boolean isPricedProvider(@NonNull String provider) {
         return pricedProviders.contains(provider);
+    }
+
+    static Set<String> pricedProviders() {
+        return pricedProviders;
+    }
+
+    /** The providers with a built-in price filed under exactly this model name. */
+    static Set<String> providersOf(@NonNull String modelName) {
+        return providersByModelName.getOrDefault(modelName, Set.of());
+    }
+
+    /**
+     * The model names filed under {@code provider} with a vendor prefix whose name without it is {@code modelName},
+     * such as OpenRouter's {@code openai/gpt-4o-mini} for {@code gpt-4o-mini}, sorted.
+     */
+    static List<String> prefixedModelNames(@NonNull String modelName, @NonNull String provider) {
+        return prefixedModelNames.getOrDefault(provider, Map.of()).getOrDefault(modelName, List.of());
+    }
+
+    private static Map<String, Map<String, List<String>>> indexPrefixedModelNames(Set<String> keys) {
+        Map<String, Map<String, List<String>>> index = new HashMap<>();
+        for (String key : keys) {
+            int providerSeparator = key.lastIndexOf(MODEL_PROVIDER_SEPARATOR);
+            String modelName = key.substring(0, providerSeparator);
+            if (modelName.indexOf(MODEL_PROVIDER_SEPARATOR) <= 0) {
+                continue;
+            }
+            index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
+                    .computeIfAbsent(rowModelName(modelName), unused -> new ArrayList<>())
+                    .add(modelName);
+        }
+        index.replaceAll((provider, byName) -> byName.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
+                        entry -> entry.getValue().stream().sorted().toList())));
+        return Collections.unmodifiableMap(index);
     }
 
     private static Map<String, ModelPrice> parseModelPrices() {
@@ -87,7 +132,7 @@ public class ModelPriceTable {
                 // Per-image rows such as 1024-x-1024/gpt-image-1.5 share their model's key: a row that prices no token
                 // never replaces one that does.
                 parsedModelPrices.merge(runtimeKey, price,
-                        (kept, row) -> hasTokenPrices(kept) && !hasTokenPrices(row) ? kept : row);
+                        (kept, row) -> kept.hasTokenPrices() && !row.hasTokenPrices() ? kept : row);
             }
         });
 
@@ -347,6 +392,11 @@ public class ModelPriceTable {
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
+    // Rows are saved under this name and prefixedModelNames is keyed by it, so the two always agree.
+    static String rowModelName(@NonNull String modelName) {
+        return parseModelName(modelName).trim().toLowerCase(Locale.ROOT);
+    }
+
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
     }
@@ -370,11 +420,11 @@ public class ModelPriceTable {
             BigDecimal audioInputCharacterPrice) {
 
         if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
-            return SpanCostCalculator::videoGenerationCost;
+            return SpanCostCalculator.VIDEO_GENERATION_CALCULATOR;
         }
 
         if (mode.isAudioSpeech() && isPositive(audioInputCharacterPrice)) {
-            return SpanCostCalculator::audioSpeechCost;
+            return SpanCostCalculator.AUDIO_SPEECH_CALCULATOR;
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice) || isPositive(cacheCreationInputTokenPrice)
@@ -382,16 +432,11 @@ public class ModelPriceTable {
             return SpanCostCalculator::textGenerationCost;
         }
 
-        return SpanCostCalculator::defaultCost;
+        return SpanCostCalculator.DEFAULT_COST_CALCULATOR;
     }
 
     private static boolean isPositive(BigDecimal value) {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
-    }
-
-    private static boolean hasTokenPrices(ModelPrice price) {
-        return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
-                || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
     }
 
     @RequiredArgsConstructor

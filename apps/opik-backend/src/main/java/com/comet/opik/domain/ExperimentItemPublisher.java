@@ -2,7 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.redis.OrganizationIdStamper;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -61,7 +63,8 @@ public class ExperimentItemPublisher {
     }
 
     /** Publishes all messages to the Redis stream. Counters are already set by {@link #startTrackingRun}. */
-    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages,
+            @Nullable String organizationId) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
@@ -70,7 +73,8 @@ public class ExperimentItemPublisher {
 
         return Flux.fromIterable(messages)
                 .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
-                        ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
+                        ExperimentExecutionConfig.PAYLOAD_FIELD, OrganizationIdStamper.stamp(message, organizationId),
+                        config))
                         .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
                         .map(id -> Map.entry(message.experimentId(), id)))
                 .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)

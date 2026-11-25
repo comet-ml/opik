@@ -23,6 +23,7 @@ from .environment import OpikApiEnvironment
 from .environments.client import AsyncEnvironmentsClient, EnvironmentsClient
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
+from .guardrail_models.client import AsyncGuardrailModelsClient, GuardrailModelsClient
 from .guardrail_policies.client import AsyncGuardrailPoliciesClient, GuardrailPoliciesClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
 from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
@@ -47,7 +48,9 @@ from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesCli
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_analytics_queries.client import AsyncSystemAnalyticsQueriesClient, SystemAnalyticsQueriesClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
+from .topics.client import AsyncTopicsClient, TopicsClient
 from .traces.client import AsyncTracesClient, TracesClient
+from .views.client import AsyncViewsClient, ViewsClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
 from .workspace_permissions.client import AsyncWorkspacePermissionsClient, WorkspacePermissionsClient
 from .workspaces.client import AsyncWorkspacesClient, WorkspacesClient
@@ -132,6 +135,7 @@ class OpikApi:
         self.environments = EnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.guardrail_models = GuardrailModelsClient(client_wrapper=self._client_wrapper)
         self.guardrail_policies = GuardrailPoliciesClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.insights_views = InsightsViewsClient(client_wrapper=self._client_wrapper)
@@ -151,7 +155,9 @@ class OpikApi:
         self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
+        self.topics = TopicsClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
+        self.views = ViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = WorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
@@ -290,6 +296,7 @@ class AsyncOpikApi:
         self.environments = AsyncEnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.guardrail_models = AsyncGuardrailModelsClient(client_wrapper=self._client_wrapper)
         self.guardrail_policies = AsyncGuardrailPoliciesClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.insights_views = AsyncInsightsViewsClient(client_wrapper=self._client_wrapper)
@@ -309,7 +316,9 @@ class AsyncOpikApi:
         self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
+        self.topics = AsyncTopicsClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
+        self.views = AsyncViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = AsyncWorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)

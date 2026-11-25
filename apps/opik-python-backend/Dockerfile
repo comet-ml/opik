@@ -46,9 +46,11 @@ RUN set -eux; \
 #######################################################################
 FROM docker:29.10.0@sha256:4bbc7223f81db790097c6dea42fb93e05b8fead4f0431fbe6ccaba6e8473201c
 
-# tini (PID 1 reaper) + python3 are the runtime-only OS deps.
+# tini (PID 1 reaper) + python3 are the runtime-only OS deps. The buildx and compose CLI plugins are never
+# run here (the executor uses the Docker SDK; the entrypoint only needs docker info/load) and only carry CVEs.
 # hadolint ignore=DL3018
-RUN apk add --no-cache tini python3
+RUN apk add --no-cache tini python3 && \
+    rm -rf /usr/local/libexec/docker/cli-plugins /usr/local/bin/docker-compose
 
 WORKDIR /opt/opik-python-backend
 

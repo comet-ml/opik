@@ -8,62 +8,24 @@
 # install to run the Python hooks). Keep them fresh with `pre-commit autoupdate`.
 repos:
   # ---------------------------------------------------------------------------
-  # Python SDK  (sdks/python)
+  # Python projects  (sdks/python, sdks/opik_optimizer, apps/opik-guardrails-backend)
+  # One entry per repo. A hook whose config is the same across projects is a
+  # single hook gated by the union of their paths; it splits into per-project
+  # entries only where config differs (e.g. mypy's per-project config file).
+  # ruff picks up each project's own .ruff.toml, so one hook still applies
+  # per-project rules.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        name: 🐍 trim trailing whitespace — python sdk
-        files: ^sdks/python
+        name: 🐍 trim trailing whitespace — python
+        files: ^(sdks/python|sdks/opik_optimizer|apps/opik-guardrails-backend)
         exclude: "(sdks/python/src/opik/rest_api/)"
       - id: end-of-file-fixer
-        name: 🐍 fix end of files — python sdk
-        files: ^sdks/python
+        name: 🐍 fix end of files — python
+        files: ^(sdks/python|sdks/opik_optimizer|apps/opik-guardrails-backend)
         exclude: "(sdks/python/src/opik/rest_api/)"
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
-    hooks:
-      - id: ruff
-        name: 🐍 ruff — python sdk
-        args: [--fix, --show-fixes]
-        files: ^sdks/python
-        exclude: "(sdks/python/src/opik/rest_api/)"
-      - id: ruff-format
-        name: 🐍 ruff-format — python sdk
-        files: ^sdks/python
-        exclude: "(sdks/python/src/opik/rest_api/)"
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
-      - id: mypy
-        name: 🐍 mypy — python sdk
-        files: ^sdks/python
-        # `exclude` option will work only from here.
-        # The rest of mypy configuration can be moved to pyproject.toml
-        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
-        args:
-          [
-            --config-file,
-            sdks/python/pyproject.toml,
-            --disable-error-code,
-            misc,
-          ]
-
-  # ---------------------------------------------------------------------------
-  # Optimizer SDK  (sdks/opik_optimizer)
-  # ---------------------------------------------------------------------------
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: trailing-whitespace
-        name: 🤖 trim trailing whitespace — optimizer
-        files: ^sdks/opik_optimizer
-      - id: end-of-file-fixer
-        name: 🤖 fix end of files — optimizer
-        files: ^sdks/opik_optimizer
       - id: check-yaml
         name: 🤖 check yaml — optimizer
         files: ^sdks/opik_optimizer
@@ -87,6 +49,7 @@ repos:
         name: 🤖 check for case conflicts — optimizer
         files: ^sdks/opik_optimizer
 
+  # Before ruff, so ruff-format tidies whatever pyupgrade rewrites.
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2
     hooks:
@@ -99,38 +62,54 @@ repos:
     rev: v0.14.14
     hooks:
       - id: ruff
-        name: 🤖 ruff — optimizer
-        args: [ --fix, --show-fixes]
-        files: ^sdks/opik_optimizer
+        name: 🐍 ruff — python
+        args: [--fix, --show-fixes]
+        files: ^(sdks/python|sdks/opik_optimizer|apps/opik-guardrails-backend)
+        exclude: "(sdks/python/src/opik/rest_api/)"
       - id: ruff-format
-        name: 🤖 ruff-format — optimizer
-        files: ^sdks/opik_optimizer
+        name: 🐍 ruff-format — python
+        files: ^(sdks/python|sdks/opik_optimizer|apps/opik-guardrails-backend)
+        exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
     hooks:
+      - id: mypy
+        name: 🐍 mypy — python sdk
+        files: ^sdks/python
+        # `exclude` option will work only from here.
+        # The rest of mypy configuration can be moved to pyproject.toml
+        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
+        args:
+          [
+            --config-file,
+            sdks/python/pyproject.toml,
+            --disable-error-code,
+            misc,
+          ]
       - id: mypy
         name: 🤖 mypy — optimizer
         files: ^sdks/opik_optimizer
         exclude: '(sdks/opik_optimizer/scripts/benchmarks/|sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, types-PySocks, types-Pygments, types-pexpect, types-protobuf, types-setuptools, types-ujson, pytest, pyrate_limiter, modal]
+      - id: mypy
+        name: 🛡️ mypy — guardrails
+        files: ^apps/opik-guardrails-backend
+        # `exclude` option will work only from here.
+        # The rest of mypy configuration can be moved to pyproject.toml
+        exclude: '(^apps/opik-guardrails-backend/tests/)|(^apps/opik-guardrails-backend/scripts/)'
+        args: [--config-file, apps/opik-guardrails-backend/pyproject.toml]
 
+  # ---------------------------------------------------------------------------
+  # Optimizer SDK  (sdks/opik_optimizer) — optimizer-only tools
+  # ---------------------------------------------------------------------------
   - repo: https://github.com/kynan/nbstripout
     rev: 0.9.0
     hooks:
       - id: nbstripout
         name: 📓 nbstripout — optimizer notebooks
         files: ^sdks/opik_optimizer/.*\.ipynb$
-
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.47.0
-    hooks:
-      - id: markdownlint
-        name: 📝 markdownlint — optimizer
-        files: ^sdks/opik_optimizer/.*\.md$
-        exclude: '^sdks/opik_optimizer/scripts/arc_agi/prompts/.*\.md$'
-        args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
@@ -183,41 +162,6 @@ repos:
         name: 🧹 vulture — optimizer
         files: ^sdks/opik_optimizer
         args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']
-
-  # ---------------------------------------------------------------------------
-  # Guardrails backend  (apps/opik-guardrails-backend)
-  # ---------------------------------------------------------------------------
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: trailing-whitespace
-        name: 🛡️ trim trailing whitespace — guardrails
-        files: ^apps/opik-guardrails-backend
-      - id: end-of-file-fixer
-        name: 🛡️ fix end of files — guardrails
-        files: ^apps/opik-guardrails-backend
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
-    hooks:
-      - id: ruff
-        name: 🛡️ ruff — guardrails
-        args: [ --fix, --show-fixes]
-        files: ^apps/opik-guardrails-backend
-      - id: ruff-format
-        name: 🛡️ ruff-format — guardrails
-        files: ^apps/opik-guardrails-backend
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
-      - id: mypy
-        name: 🛡️ mypy — guardrails
-        files: ^apps/opik-guardrails-backend
-        # `exclude` option will work only from here.
-        # The rest of mypy configuration can be moved to pyproject.toml
-        exclude: '(^apps/opik-guardrails-backend/tests/)|(^apps/opik-guardrails-backend/scripts/)'
-        args: [--config-file, apps/opik-guardrails-backend/pyproject.toml]
 
   # ---------------------------------------------------------------------------
   # Helm chart docs
@@ -425,6 +369,28 @@ repos:
         # CI matrix builder in scripts/precommit-detect-hooks.py can route a
         # changed Dockerfile to this leg — it matches on paths, not content type.
         files: (^|/)Dockerfile(\..+)?$
+
+  # ---------------------------------------------------------------------------
+  # Whole repo — markdownlint on every .md file (.mdx docs are out of scope).
+  # The rule config lives in `args` rather than a .markdownlint.* file so this
+  # hook stays the single place to maintain. Report-only: fix locally with
+  # `npx markdownlint-cli@0.47.0 --fix <files>` and the same --disable list.
+  #
+  # MD013 (line length), MD033 (inline HTML) and MD060 (table column style) are
+  # off by choice. The rest of the --disable list are rules --fix can't resolve;
+  # they're disabled until existing files are fixed by hand (OPIK-9315).
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.47.0
+    hooks:
+      - id: markdownlint
+        name: 📝 markdownlint — markdown
+        files: \.md$
+        # The helm chart README is generated by the helm-docs hook from
+        # README.md.gotmpl; the arc_agi .md files are LLM prompts, where
+        # whitespace is part of the input.
+        exclude: ^(deployment/helm_chart/opik/README\.md|sdks/opik_optimizer/scripts/arc_agi/prompts/.*\.md)$
+        args: [--disable, MD013, MD033, MD060, MD001, MD024, MD025, MD028, MD029, MD036, MD040, MD041, MD045, MD046, --]
 
   # ---------------------------------------------------------------------------
   # GitHub Actions workflows / composite actions — zizmor (Trail of Bits). The

@@ -5,6 +5,7 @@ export type { CreateDatasetItemsFromJsonRequest } from "./CreateDatasetItemsFrom
 export type { CreateDatasetItemsFromSpansRequest } from "./CreateDatasetItemsFromSpansRequest.js";
 export type { CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest.js";
 export type { DatasetExpansionWrite } from "./DatasetExpansionWrite.js";
+export type { DatasetExperimentItemStreamRequest } from "./DatasetExperimentItemStreamRequest.js";
 export type { DatasetIdentifier } from "./DatasetIdentifier.js";
 export type { DatasetIdentifierPublic } from "./DatasetIdentifierPublic.js";
 export type { DatasetItemBatchUpdate } from "./DatasetItemBatchUpdate.js";

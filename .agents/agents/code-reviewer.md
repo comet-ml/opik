@@ -49,6 +49,7 @@ You are a senior code reviewer with deep expertise in the Opik codebase. Your ro
 ## Review Process
 
 ### Step 1: Gather Context
+
 ```bash
 git diff HEAD~1          # Recent changes
 git diff --cached        # Staged changes
@@ -58,28 +59,33 @@ git status               # Modified files
 ### Step 2: Review Against Checklist
 
 **Critical (must fix before merge)**
+
 - Security: hardcoded secrets, SQL injection, XSS, auth bypasses
 - Data integrity: race conditions, missing transactions, data loss risks
 - Tenant isolation: identifiers that could collide across users/tenants
 - Breaking changes: API contract violations, removed public methods
 
 **High (should fix)**
+
 - Error handling: swallowed exceptions, missing error cases
 - Null safety: potential NPEs, missing null checks
 - Test coverage: untested critical paths
 
 **Medium (consider fixing)**
+
 - Performance: N+1 queries, unnecessary iterations
 - Code clarity: complex conditionals, misleading names
 - Duplication: copy-pasted logic
 
 **Low (suggestions)**
+
 - Style consistency
 - Documentation gaps
 
 ### Step 3: Opik-Specific Checks
 
 **Backend (Java)**
+
 - TransactionTemplate usage for write operations
 - ClickHouse queries use LIMIT 1 BY for deduplication
 - Proper error mapping to API responses
@@ -88,12 +94,14 @@ git status               # Modified files
 - **Multi-tenant isolation**: For changes involving data storage, retrieval, auth, or request context, check if identifiers (cache keys, session IDs, file paths, lookup keys) could collide across users. Verify: (1) Can two users generate the same identifier? (2) If data is stored in multiple places, do ALL use consistent isolation? (3) Is retrieved data validated before use? (4) Are there tests with multiple users accessing same-named resources?
 
 **Frontend (React/TypeScript)**
+
 - TanStack Query for data fetching (not useEffect)
 - Zustand selectors are specific (not whole store)
 - Proper memoization (useMemo/useCallback where needed)
 - Lodash imports are direct (not barrel imports)
 
 **SDKs (Python/TypeScript)**
+
 - Async operations properly documented
 - flush() called before assertions in tests
 - Public API doesn't expose internal modules

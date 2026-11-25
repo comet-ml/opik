@@ -16,6 +16,7 @@ When adding a new filterable field to any Field enum, ask: "Is this an identifie
 ## Files That Must Be Updated
 
 ### 1. `FieldType.java`
+
 Add the new enum value with its serialized name.
 
 ```java
@@ -23,6 +24,7 @@ STRING_EXACT("string_exact"),
 ```
 
 ### 2. `FiltersFactory.java` — Validation Map
+
 Add an entry to `FIELD_TYPE_VALIDATION_MAP`. Without this, `validateFieldType()` throws NPE.
 
 ```java
@@ -30,6 +32,7 @@ Add an entry to `FIELD_TYPE_VALIDATION_MAP`. Without this, `validateFieldType()`
 ```
 
 ### 3. `FiltersFactory.java` — URL Decoding
+
 If the new type represents values already decoded during JSON deserialization (like strings and IDs), add it to the skip-decode condition in `toValidAndDecoded()`:
 
 ```java
@@ -42,6 +45,7 @@ if (filter.field().getType() != FieldType.STRING
 Without this, values containing `+` or `%` get corrupted by double-decoding.
 
 ### 4. `FilterQueryBuilder.java` — All Operator Maps
+
 Add entries for the new type in `ANALYTICS_DB_OPERATOR_MAP` for **every operator** the type should support:
 
 - `Operator.CONTAINS`
@@ -56,6 +60,7 @@ Add entries for the new type in `ANALYTICS_DB_OPERATOR_MAP` for **every operator
 Missing an operator entry causes `toAnalyticsDbOperator()` to return null, which results in a 400 error when that operator is used.
 
 ### 5. Field Enum Classes
+
 Update the specific field enum to use the new type:
 
 - `SpanField.java`
@@ -77,6 +82,7 @@ Update the specific field enum to use the new type:
 ## Testing
 
 When adding a new field type, test all filter operators from the UI:
+
 1. Navigate to the relevant page (Traces, Spans, Datasets, etc.)
 2. Open the filter panel
 3. Select the field, try each operator (=, contains, starts with, ends with, doesn't contain)

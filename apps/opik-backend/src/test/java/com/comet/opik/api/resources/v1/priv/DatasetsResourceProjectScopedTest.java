@@ -628,6 +628,57 @@ class DatasetsResourceProjectScopedTest {
         }
     }
 
+    @ParameterizedTest(name = "project exists: {0}")
+    @ValueSource(booleans = {true, false})
+    @DisplayName("Delete by name in a project without that dataset is not found and keeps the other project's dataset")
+    void deleteDatasetByNameInProjectWithoutItReturnsNotFound(boolean projectExists) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var dataset = createDatasetInProjects(1, apiKey, workspaceName).getFirst();
+        String otherProjectName = "project-" + UUID.randomUUID();
+        if (projectExists) {
+            projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+        }
+
+        try (var response = datasetResourceClient.callDeleteDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(dataset.name()).projectName(otherProjectName).build(), apiKey,
+                workspaceName)) {
+            assertErrorResponse(response, HttpStatus.SC_NOT_FOUND, new ErrorMessage(List.of("Dataset not found")));
+        }
+
+        assertDataset(datasetResourceClient.getDatasetById(dataset.id(), apiKey, workspaceName), dataset);
+    }
+
+    /**
+     * SDKs always send a project name, so datasets created before project scoping must stay deletable by name.
+     */
+    @ParameterizedTest(name = "project exists: {0}")
+    @ValueSource(booleans = {true, false})
+    @DisplayName("Delete by name and project deletes a dataset with no project of that name")
+    void deleteDatasetByNameAndProjectDeletesProjectlessDataset(boolean projectExists) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectlessDataset = createDatasetInScope(null, apiKey, workspaceName, workspaceId);
+        String projectName = "project-" + UUID.randomUUID();
+        if (projectExists) {
+            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+        }
+
+        datasetResourceClient.deleteDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(projectlessDataset.name()).projectName(projectName).build(),
+                apiKey, workspaceName);
+
+        try (var response = datasetResourceClient.callGetDatasetById(projectlessDataset.id(), apiKey,
+                workspaceName)) {
+            assertErrorResponse(response, HttpStatus.SC_NOT_FOUND, new ErrorMessage(List.of("Dataset not found")));
+        }
+    }
+
     /**
      * Creates one dataset per new project, all sharing one name, and returns them with their ids and project names.
      */
