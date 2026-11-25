@@ -7,7 +7,6 @@ import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -144,20 +143,6 @@ class TopicRunStore {
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
                 .flatMap(saved -> keepIfProjectExists(run));
-    }
-
-    /** The list a nightly update read: its state, the run that saved it, and the ids of its stored topics. */
-    @Builder(toBuilder = true)
-    record NightList(@NonNull NightState state, @NonNull UUID listRunId, @NonNull Set<UUID> topicIds) {
-    }
-
-    /**
-     * What a nightly update writes to MySQL. {@code keep} is false when no topic stayed live: then the list is cleared
-     * and every stored topic is in {@code retired}.
-     */
-    @Builder(toBuilder = true)
-    record NightSave(boolean keep, @NonNull List<Topic> inserted, @NonNull List<Topic> updated,
-            @NonNull List<UUID> retired, PrototypeVectors otherVectors) {
     }
 
     /**

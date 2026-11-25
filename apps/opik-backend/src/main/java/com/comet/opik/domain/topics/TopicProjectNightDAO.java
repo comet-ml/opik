@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TopicProjectNightDAO.WorkspaceCount.class)
-public interface TopicProjectNightDAO {
+interface TopicProjectNightDAO {
 
     /** The night looked at the projects: updated or skipped them, for any reason. */
     @SqlUpdate("""

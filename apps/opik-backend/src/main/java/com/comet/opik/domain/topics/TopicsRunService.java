@@ -39,7 +39,7 @@ import java.util.function.Function;
  * update the list and saves the changed list the same way: one transaction that checks no other run saved the project
  * since this one read it, then the {@code trace_topics} insert. A retired topic's row is deleted, with a log line and
  * {@code topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
- * the discovery job builds the project again.
+ * a later discovery run makes a new one.
  */
 @Slf4j
 @Singleton
@@ -85,7 +85,7 @@ public class TopicsRunService {
      * the algorithm's steps ({@link #update}), the save ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics}
      * insert. Never errors: a failure is recorded on the run and returned, and the previous list stays. The same time
      * limit and cancel as {@link #discover}. A save that leaves no live topic deletes them all and clears the project's
-     * list, so the discovery job builds it again; it inserts no {@code trace_topics}. As for a discovery run, the
+     * list, so a later discovery run makes a new one; it inserts no {@code trace_topics}. As for a discovery run, the
      * labelling pass is the caller's.
      */
     Mono<TopicRunOutcome> nightlyUpdate(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
@@ -145,7 +145,7 @@ public class TopicsRunService {
     }
 
     /** What a nightly update saves, with the counts its metrics carry after the commit and the run's stats. */
-    private record Night(TopicRunStore.NightList list, TopicRunStore.NightSave save, List<NightTopic> retired,
+    private record Night(NightList list, NightSave save, List<NightTopic> retired,
             List<TraceTopic> traceTopics, int born, int live, double otherShare, TopicChurn.Churn churn,
             ObjectNode stats) {
 
@@ -184,7 +184,7 @@ public class TopicsRunService {
     }
 
     /** The night's rows and the counts its log line and metrics carry. */
-    private Night nightRows(TopicRun run, RunWindow window, TopicRunStore.NightList list, int topicsBefore,
+    private Night nightRows(TopicRun run, RunWindow window, NightList list, int topicsBefore,
             TopicUpdate result) {
         var state = list.state();
         NightInvariants.check(state, TopicEmbedding.DIMENSIONS);
@@ -249,7 +249,7 @@ public class TopicsRunService {
         var otherVectors = !keep || state.getOtherPrototypes().isEmpty()
                 ? null
                 : new PrototypeVectors(state.getOtherPrototypes());
-        var save = TopicRunStore.NightSave.builder()
+        var save = NightSave.builder()
                 .keep(keep)
                 .inserted(inserted)
                 .updated(updated)
@@ -277,7 +277,7 @@ public class TopicsRunService {
                 .stats(night.stats()).build();
         if (!night.save().keep()) {
             log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
-                    + "cleared, so the discovery job builds it again", run.runId(), run.projectId());
+                    + "cleared, so a later discovery run makes a new one", run.runId(), run.projectId());
             return Mono.just(outcome);
         }
         return store.insertTraceTopics(run.workspace(), night.traceTopics())

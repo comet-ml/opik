@@ -63,7 +63,7 @@ public interface TopicDAO {
             WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
             """)
     List<UUID> findProjectsWithTopics(@Bind("workspaceId") String workspaceId,
-            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     /** The projects of {@code workspaceIds} with at least one topic: the nightly update's candidates. */
     @SqlQuery("SELECT DISTINCT workspace_id, project_id FROM topics WHERE workspace_id IN (<workspaceIds>)")

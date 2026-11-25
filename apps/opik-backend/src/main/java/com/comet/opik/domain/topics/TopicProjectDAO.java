@@ -128,7 +128,7 @@ public interface TopicProjectDAO {
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
 
     /**
-     * A nightly save that left no live topic: the project has no list again, so the discovery job builds it. A
+     * A nightly save that left no live topic: the project has no list again, and a later discovery run makes a new one. A
      * compare-and-set on {@code list_run_id} as {@link #saveList}; the save still counts in {@code saved_runs}.
      */
     @SqlUpdate("""
