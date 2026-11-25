@@ -13,7 +13,7 @@ import java.util.function.Function;
  *
  * @param <T> the result
  */
-public sealed interface NightStep<T> {
+sealed interface NightStep<T> {
 
     /**
      * The update asks for one LLM call. {@code next} takes the answer's {@code output} when it is a JSON object, or null

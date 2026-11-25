@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.experimental.UtilityClass;
@@ -10,7 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The batched verify call of the naming step: every group the naming gave to a live topic goes into one LLM call,
+ * The batched verify call of the naming step ({@link TopicTasks#verify()}, whose {@code max_tokens} is the base the
+ * call adds {@code nightlyVerifyTokensPerPair} per pair to): every group the naming gave to a live topic goes into one LLM call,
  * groups largest first. An answer entry counts when its {@code pair} is an integer in range and its {@code same} is a
  * boolean. A pair without such an answer, or answered both ways, is not verified. A failed call fails the run.
  */
@@ -22,15 +24,15 @@ class Verifier {
      * A failed call (timeout or error) fails the run before the step goes on: read as "no pair verified", it would turn
      * sound assigns into new topics.
      */
-    static NightStep<Map<Integer, Boolean>> ask(String tag, List<TopicPrompts.VerifyPair> prompts,
+    static NightStep<Map<Integer, Boolean>> ask(String tag, List<TopicPrompts.VerifyPair> prompts, AiLabelTask task,
             AlgorithmConfig config) {
         var request = LlmRequest.builder()
                 .call(LlmCall.VERIFY)
                 .tag(tag)
-                .prompt(TopicPrompts.verify(prompts))
-                .schema(TopicPrompts.VERIFY_SCHEMA)
-                .maxTokens(
-                        config.getNightlyVerifyBaseTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size())
+                .prompt(TopicPrompts.verify(task, prompts, config.getVerifyTopicExamples(),
+                        config.getVerifyGroupExamples()))
+                .schema(task.schema())
+                .maxTokens(task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size())
                 .build();
         return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
     }

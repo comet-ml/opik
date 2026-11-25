@@ -52,11 +52,11 @@ class ForcedBirth {
      * replacements).
      *
      * @param ordered     the candidates largest first (ties by group id)
-     * @param shownTopics the live topics as a prompt shows them now, read again for each naming call
+     * @param liveTopics the live topics as they stand now, read again for each naming call
      */
     static NightStep<Named> apply(@NonNull NightState state, @NonNull List<NightGroup> ordered,
-            @NonNull Supplier<List<TopicPrompts.PromptTopic>> shownTopics, int maxTopics,
-            @NonNull AlgorithmConfig config) {
+            @NonNull Supplier<List<LiveTopic>> liveTopics, int maxTopics, @NonNull AlgorithmConfig config,
+            @NonNull TopicTasks tasks) {
         var named = new Decisions(Named.EMPTY);
         var groupShares = new HashMap<Integer, Double>();
         ordered.forEach(group -> groupShares.put(group.group(), group.share()));
@@ -71,7 +71,7 @@ class ForcedBirth {
         if (forced.isEmpty()) {
             return NightStep.done(named.named());
         }
-        return new Naming(state, shownTopics, maxTopics, config, groupShares).name(named.named(), forced, true);
+        return new Naming(state, liveTopics, maxTopics, config, tasks, groupShares).name(named.named(), forced, true);
     }
 
     /**
@@ -122,33 +122,33 @@ class ForcedBirth {
     private static final class Naming {
 
         private final NightState state;
-        private final Supplier<List<TopicPrompts.PromptTopic>> shownTopics;
+        private final Supplier<List<LiveTopic>> liveTopics;
         private final int maxTopics;
         private final AlgorithmConfig config;
+        private final TopicTasks tasks;
         private final Map<Integer, Double> groupShares;
 
         /** One naming call over {@code forced}; {@code allowAssign} is the first call's, the second offers new and other only. */
         NightStep<Named> name(Named before, List<NightGroup> forced, boolean allowAssign) {
-            var shown = shownTopics.get();
-            var byPromptId = new HashMap<Integer, Integer>();
-            var byTopic = new HashMap<Integer, TopicPrompts.PromptTopic>();
-            shown.forEach(topic -> {
-                byPromptId.put(topic.id(), topic.topic());
-                byTopic.put(topic.topic(), topic);
-            });
+            var live = liveTopics.get();
+            var byTopic = new HashMap<Integer, LiveTopic>();
+            live.forEach(topic -> byTopic.put(topic.topic(), topic));
             var byGroup = new LinkedHashMap<Integer, NightGroup>();
             forced.forEach(group -> byGroup.put(group.group(), group));
+            var task = allowAssign ? tasks.naming() : tasks.namingNew();
+            var prompt = TopicPrompts.naming(task, live, forced, config.getRecentDays(),
+                    config.getNightlyTopicExamples());
             var request = LlmRequest.builder()
                     .call(LlmCall.NAMING)
                     .tag(allowAssign ? NAMING_TAG : NAMING_NEW_TAG)
-                    .prompt(TopicPrompts.namingGroup(shown, forced, allowAssign, config.getRecentDays()))
-                    .schema(allowAssign ? TopicPrompts.NAMING_GROUP_SCHEMA : TopicPrompts.NAMING_GROUP_NEW_SCHEMA)
-                    .maxTokens(config.getNightlyNamingMaxTokens())
+                    .prompt(prompt.text())
+                    .schema(task.schema())
+                    .maxTokens(task.effectiveMaxTokens())
                     .build();
             return NightStep.ask(request, answer -> {
                 var done = new HashSet<Integer>();
                 var assigned = allowAssign
-                        ? assign(before, answer, byPromptId, byTopic, byGroup, done)
+                        ? assign(before, answer, prompt.topicOfId(), byTopic, byGroup, done)
                         : NightStep.done(new Assigned(before, List.of()));
                 return assigned.then(after -> named(after, answer, allowAssign, byTopic, byGroup, done));
             });
@@ -156,8 +156,7 @@ class ForcedBirth {
 
         /** The naming answer's new topics, then the second call over the rejected groups, then the groups left out. */
         private NightStep<Named> named(Assigned assigned, JsonNode answer, boolean allowAssign,
-                Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, NightGroup> byGroup,
-                Set<Integer> assignedGroups) {
+                Map<Integer, LiveTopic> byTopic, Map<Integer, NightGroup> byGroup, Set<Integer> assignedGroups) {
             var decided = new Decisions(assigned.named());
             var done = new HashSet<>(assignedGroups);
             var live = new HashMap<String, Integer>();
@@ -213,7 +212,7 @@ class ForcedBirth {
         }
 
         /** A new topic from the answer: born, replacing the weakest on a full list, or its groups known Other. */
-        private void born(Decisions decided, NewGroup group, Map<Integer, TopicPrompts.PromptTopic> byTopic,
+        private void born(Decisions decided, NewGroup group, Map<Integer, LiveTopic> byTopic,
                 Map<Integer, NightGroup> byGroup) {
             // A plain loop in list order, as Python's sum: DoubleStream.sum compensates and can differ in the last bit.
             double share = 0;
@@ -255,14 +254,14 @@ class ForcedBirth {
          * The answer's assigns to a live topic, one per group, through one batched verify; a group not verified is
          * rejected. No assign, no verify call. Adds the groups it read to {@code done} before it asks.
          */
-        private NightStep<Assigned> assign(Named before, JsonNode answer, Map<Integer, Integer> byPromptId,
-                Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, NightGroup> byGroup, Set<Integer> done) {
+        private NightStep<Assigned> assign(Named before, JsonNode answer, Map<Integer, Integer> topicOfId,
+                Map<Integer, LiveTopic> byTopic, Map<Integer, NightGroup> byGroup, Set<Integer> done) {
             var pairs = new ArrayList<int[]>();
             var prompts = new ArrayList<TopicPrompts.VerifyPair>();
             for (var entry : NightJson.objects(answer == null ? null : answer.get("assign"))) {
                 var group = NightJson.integer(entry.get("cluster"));
                 var promptId = NightJson.integer(entry.get("topic"));
-                var topic = promptId == null ? null : byPromptId.get(promptId);
+                var topic = promptId == null ? null : topicOfId.get(promptId);
                 if (group != null && byGroup.containsKey(group) && !done.contains(group) && topic != null
                         && state.topic(topic).isLive()) {
                     pairs.add(new int[]{group, topic});
@@ -274,7 +273,7 @@ class ForcedBirth {
             if (pairs.isEmpty()) {
                 return NightStep.done(new Assigned(before, List.of()));
             }
-            return Verifier.ask(VERIFY_TAG, prompts, config).map(answers -> {
+            return Verifier.ask(VERIFY_TAG, prompts, tasks.verify(), config).map(answers -> {
                 var decided = new Decisions(before);
                 var rejected = new ArrayList<NightGroup>();
                 for (int n = 0; n < pairs.size(); n++) {
@@ -297,13 +296,13 @@ class ForcedBirth {
     }
 
     /**
-     * A live topic's share of the window for a replacement: its share as the prompt showed it, plus the shares of the
+     * A live topic's share of the window for a replacement: its share as it stood at the naming call, plus the shares of the
      * groups given to it tonight.
      */
-    private static double share(Map<Integer, TopicPrompts.PromptTopic> topics, int topic,
-            Map<Integer, Double> groupShares, List<Outcome> outcomes) {
-        var shown = topics.get(topic);
-        double share = shown == null ? 0 : shown.share();
+    private static double share(Map<Integer, LiveTopic> topics, int topic, Map<Integer, Double> groupShares,
+            List<Outcome> outcomes) {
+        var live = topics.get(topic);
+        double share = live == null ? 0 : live.share();
         for (var outcome : outcomes) {
             if ((outcome.result() == Result.ASSIGNED || outcome.result() == Result.SAME_NAME)
                     && outcome.topic() == topic) {

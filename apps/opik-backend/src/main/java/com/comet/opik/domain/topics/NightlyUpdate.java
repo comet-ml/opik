@@ -45,11 +45,10 @@ class NightlyUpdate {
 
     /** Step a's owner of the traces held by known-Other prototype {@code m}: {@code HELD - m}. */
     private static final int HELD = -10;
-    static final int PROMPT_EXAMPLES = 4;
 
     /** The night as steps: a to b at once, c's calls as asks, d to g once the naming is done. */
     static NightStep<Result> run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
-            @NonNull AlgorithmConfig config) {
+            @NonNull AlgorithmConfig config, @NonNull TopicTasks tasks) {
         int n = window.size();
         var memory = new ArrayList<>(state.getOtherPrototypes());
         // a. one assignment: topic index, HELD - m for known-Other prototype m, or OTHER
@@ -74,8 +73,9 @@ class NightlyUpdate {
         // c. the naming call
         NightStep<ForcedBirth.Named> naming = candidates.isEmpty()
                 ? NightStep.done(ForcedBirth.Named.EMPTY)
-                : ForcedBirth.apply(state, candidates, () -> promptTopics(state, window, before, recent), maxTopics,
-                        config);
+                : ForcedBirth.apply(state, candidates,
+                        () -> liveTopics(state, window, before, recent, config.getNightlyTopicExamples()), maxTopics,
+                        config, tasks);
         return naming.map(named -> decided(state, window, config, owners, before, grouped, grouping, candidates,
                 big, named, memory));
     }
@@ -278,20 +278,19 @@ class NightlyUpdate {
     }
 
     /**
-     * The live topics as the naming and verify prompts show them, from the step a labels: prompt id = position in the
-     * live list, share of the window, share of the recent days and {@value #PROMPT_EXAMPLES} member texts, picked as a
+     * The live topics as they stand now, in live order, from the step a labels: share of the window, share of the recent
+     * days and {@code examples} member texts, picked as a
      * group's ({@link GroupSummaries#pick}): texts that repeat first, most frequent first (ties by code point order),
      * then the most typical ones, nearest to any of the topic's prototypes (ties by trace order).
      */
-    static List<TopicPrompts.PromptTopic> promptTopics(NightState state, NightWindow window, int[] before,
-            boolean[] recent) {
+    static List<LiveTopic> liveTopics(NightState state, NightWindow window, int[] before, boolean[] recent,
+            int examples) {
         int n = window.size();
         int recentTotal = 0;
         for (boolean r : recent) {
             recentTotal += r ? 1 : 0;
         }
-        var out = new ArrayList<TopicPrompts.PromptTopic>();
-        int id = 0;
+        var out = new ArrayList<LiveTopic>();
         for (int t : state.live()) {
             var topic = state.topic(t);
             int recentCount = 0;
@@ -303,22 +302,21 @@ class NightlyUpdate {
                 }
             }
             int count = members.size();
-            out.add(TopicPrompts.PromptTopic.builder()
-                    .id(++id)
+            out.add(LiveTopic.builder()
                     .topic(t)
                     .name(topic.getName())
                     .definition(topic.getDefinition())
                     .share((double) count / n)
                     .recentShare((double) recentCount / Math.max(1, recentTotal))
                     .examples(examples(window, members.stream().mapToInt(Integer::intValue).toArray(),
-                            topic.getPrototypes()))
+                            topic.getPrototypes(), examples))
                     .build());
         }
         return out;
     }
 
-    /** A topic's {@value #PROMPT_EXAMPLES} prompt texts among its member traces, picked as a group's. */
-    private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes) {
+    /** A topic's {@code examples} prompt texts among its member traces, picked as a group's. */
+    private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes, int examples) {
         if (members.length == 0) {
             return List.of();
         }
@@ -332,7 +330,7 @@ class NightlyUpdate {
             }
         }
         return GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0, merged.size(),
-                merged.weights(), sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES);
+                merged.weights(), sims, examples, examples);
     }
 
     /**

@@ -10,5 +10,5 @@ import lombok.NonNull;
  * computes the churn from the two. {@code stats} are the algorithm's stats of the night; {@link TopicsRunService#update} adds its calls'.
  */
 @Builder(toBuilder = true)
-public record TopicUpdate(@NonNull int[] before, @NonNull int[] labels, @NonNull ObjectNode stats) {
+record TopicUpdate(@NonNull int[] before, @NonNull int[] labels, @NonNull ObjectNode stats) {
 }

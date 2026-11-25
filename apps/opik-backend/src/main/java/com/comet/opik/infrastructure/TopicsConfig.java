@@ -126,13 +126,16 @@ public class TopicsConfig {
         @DecimalMin("0.0") @DecimalMax("1.0") private double nightlySameMemory;
 
         @JsonProperty
-        @Min(1) @Max(100_000) private int nightlyNamingMaxTokens;
-
-        @JsonProperty
-        @Min(1) @Max(100_000) private int nightlyVerifyBaseTokens;
-
-        @JsonProperty
         @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyGroupExamples;
 
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {

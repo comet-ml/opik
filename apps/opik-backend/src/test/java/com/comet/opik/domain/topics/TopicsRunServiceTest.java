@@ -647,6 +647,10 @@ class TopicsRunServiceTest {
             deadline(requests.get(2), naming, elapsed);
             // The verify answer verified no pair; the second naming names both after a live topic: known Other.
             assertThat(update.stats().get("forced").get("other_name").asInt()).isEqualTo(2);
+            var tasks = new TopicTasks();
+            assertThat(update.stats().get("naming_task_version").asInt()).isEqualTo(tasks.naming().version());
+            assertThat(update.stats().get("naming_new_task_version").asInt()).isEqualTo(tasks.namingNew().version());
+            assertThat(update.stats().get("verify_task_version").asInt()).isEqualTo(tasks.verify().version());
             assertThat(update.stats().get("llm_calls").asInt()).isEqualTo(3);
             assertThat(update.stats().get("llm_input_tokens").asInt()).isEqualTo(3_000);
             assertThat(state.getTopics()).hasSize(2);

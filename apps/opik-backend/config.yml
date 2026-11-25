@@ -2829,16 +2829,19 @@ topics:
     #  Default: 0.95
     #  Description: Nightly: a known-Other prototype within this cosine of one already kept is not kept again
     nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
-    #  Default: 2500
-    #  Description: Nightly: the most tokens a naming call may answer with
-    nightlyNamingMaxTokens: ${TOPICS_ALGORITHM_NIGHTLY_NAMING_MAX_TOKENS:-2500}
-    #  Default: 60
-    #  Description: Nightly: the verify call may answer with nightlyVerifyBaseTokens + nightlyVerifyTokensPerPair per
-    #  pair it checks
-    nightlyVerifyBaseTokens: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_BASE_TOKENS:-60}
     #  Default: 25
-    #  Description: Nightly: the verify call's tokens per pair it checks, on top of nightlyVerifyBaseTokens
+    #  Description: Nightly: the verify call's tokens per pair it checks, on top of the max_tokens of
+    #  topics/tasks/verify.yaml
     nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
+    #  Default: 4
+    #  Description: Nightly: member texts a live topic shows in the naming prompt
+    nightlyTopicExamples: ${TOPICS_ALGORITHM_NIGHTLY_TOPIC_EXAMPLES:-4}
+    #  Default: 3
+    #  Description: Nightly: how many of a live topic's nightlyTopicExamples texts the verify prompt shows per pair
+    verifyTopicExamples: ${TOPICS_ALGORITHM_VERIFY_TOPIC_EXAMPLES:-3}
+    #  Default: 5
+    #  Description: Nightly: how many of a group's nightlyExamples texts the verify prompt shows per pair
+    verifyGroupExamples: ${TOPICS_ALGORITHM_VERIFY_GROUP_EXAMPLES:-5}
   #  A topic run's settings: a discovery run, a nightly update and their labelling pass
   run:
     #  Default: 15m

@@ -130,8 +130,11 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
      */
     @Override
     public NightStep<TopicUpdate> update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics) {
-        return NightlyUpdate.run(state, window, maxTopics, config).map(result -> {
+        return NightlyUpdate.run(state, window, maxTopics, config, tasks).map(result -> {
             var stats = JsonUtils.createObjectNode();
+            stats.put("naming_task_version", tasks.naming().version());
+            stats.put("naming_new_task_version", tasks.namingNew().version());
+            stats.put("verify_task_version", tasks.verify().version());
             stats.put("unassigned", result.unassigned());
             stats.put("candidates", result.candidates().size());
             stats.put("big", result.big().size());
