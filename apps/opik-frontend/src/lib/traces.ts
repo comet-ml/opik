@@ -451,6 +451,8 @@ const prettifyOpenClawMessageLogic = (
   return undefined;
 };
 
+const OTEL_PROMPT_KEY = "gen_ai.prompt";
+
 const prettifyCustomMessagingLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -458,8 +460,9 @@ const prettifyCustomMessagingLogic = (
   if (!isObject(message)) return undefined;
 
   if (config.type === "input") {
-    if ("prompt" in message && isArray(message.prompt)) {
-      const userMessages = message.prompt.filter(
+    const prompt = get(message, "prompt") ?? get(message, [OTEL_PROMPT_KEY]);
+    if (isArray(prompt)) {
+      const userMessages = prompt.filter(
         (m) =>
           isObject(m) &&
           "role" in m &&
