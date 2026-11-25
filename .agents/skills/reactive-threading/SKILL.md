@@ -38,7 +38,7 @@ virtual thread, whatever thread posted the event.
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
 | CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel` |
 | Per-item blocking in a `Flux`, plus the light work around it | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
-| Back to the entry point's pool after the last client call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.originalOn`: a subscriber's workers, a `request-vt` virtual thread for a resource that sets the request context, or no hop |
+| Back to the entry point's pool after the last client call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.originalOn`: a subscriber's workers, a `request-vt` virtual thread wherever `AsyncUtils.setRequestContext(context, requestContext)` is written into the context, or no hop |
 | Light work (map one row, build a DTO, post an event) | nothing | wherever it lands |
 
 Use `resumeOriginal` once, after the last client call and before your own logic. Not between client calls, and not
@@ -64,11 +64,11 @@ When unsure, open the callee. A name never proves a method is non-blocking.
 1. **A blocking call wraps itself.** Every blocking call runs inside its own `Offload.blocking(...)`, with the hop
    directly on the source. Never rely on the upstream thread: a blocking `fromCallable` that lands on
    `boundedElastic` today only because the step before emits there moves with the next refactor. Wrap only the call,
-   never a whole chain. Only a resource method body outside the chain and an event-bus listener may block directly; a
-   service never knows which thread calls it.
+   never a whole chain. Only the edges may block directly: a resource method body outside the chain, a job's entry point,
+   and an event-bus listener. A service never knows which thread calls it.
 2. **Nothing blocks on an event loop, the driver pools or `parallel`.** Never block on `redisson-netty`,
-   `ClickHouseWorker`, `chc-operation` or `parallel`. `block()` belongs only at the edge: a resource method or a job's
-   entry point. Reactor throws for `block()` on `parallel`; the other pools fail silently by queueing.
+   `ClickHouseWorker`, `chc-operation` or `parallel`. `block()` belongs only at the edges: a resource method, a job's entry
+   point, or an event-bus listener. Reactor throws for `block()` on `parallel`; the other pools fail silently by queueing.
 3. **CPU that scales with the input gets its own step.** Light work may run where it lands. Work that grows with the
    batch, page or payload (serializing a batch, building CSV, clustering, vector math, sorting a window, parsing large
    JSON) is an `Offload.cpu(...)`, also right after a blocking call: every MySQL, S3 and sync HTTP call waits for a
@@ -81,7 +81,8 @@ When unsure, open the callee. A name never proves a method is non-blocking.
 5. **Timers and retries land on `parallel`.** A retry re-subscribes the source on `parallel`, so a source that blocks
    at subscription blocks there on every retry. Make the retried source an `Offload.blocking(...)`, inside the retry.
 6. **Services don't create schedulers.** Pools sized for a purpose (subscriber consumer and workers, inference pools)
-   live in infrastructure, are bounded and named. Only an entry point picks a pool, through `Offload.originalOn`. Never `publishOn` mid-chain to move one step: it moves every step after it.
+   live in infrastructure, are bounded and named. Only the code that writes the context picks a pool, through `Offload.originalOn`: a subscriber, or
+   `AsyncUtils.setRequestContext` for request paths. Never `publishOn` mid-chain to move one step: it moves every step after it.
 
 ## How to Apply
 
@@ -262,7 +263,7 @@ this for every `Offload` method.
 
 1. A blocking call inside an operator lambda (`map`, `flatMap`, `filter`, `handle`, `doOnNext`, `doOnSuccess`,
    `then(...)`), or inside `Mono.fromCallable` / `fromRunnable` / `fromSupplier` / `Mono.create` with no
-   `Offload.blocking` or `subscribeOn` directly on it.
+   `Offload.blocking` directly on it.
 2. A per-item blocking call or chunk write on a `Flux` from a DAO or Redis with no `Offload.blockingEach` before it.
 3. `.block()`, `.toFuture().join()` or `CompletableFuture.get()` / `join()` inside a reactive chain.
 

@@ -24,7 +24,7 @@ import java.util.concurrent.Callable;
  *   <li>{@link #cpu(Callable)}: CPU that grows with the input (a batch, a page, a window). Runs on
  *       {@link Schedulers#parallel()}.
  *       A step that runs for seconds also needs a concurrency cap at its caller.</li>
- *   <li>{@link #blockingEach(Flux)}: per-item blocking or CPU side effects of a stream, such as writing response
+ *   <li>{@link #blockingEach(Flux)}: per-item blocking side effects of a stream, such as writing response
  *       chunks. Moves the items, which a {@code subscribeOn} can't do.</li>
  *   <li>{@link #resumeOriginal(Mono)}: back to the entry point's own pool after a client call, or no hop when it
  *       has none.</li>
@@ -92,7 +92,7 @@ public class Offload {
 
     /**
      * Moves every item of {@code items}, and every operator after this call, to {@link Schedulers#boundedElastic()}.
-     * Put it directly before the operator that blocks or burns CPU per item.
+     * Put it directly before the operator that blocks per item.
      */
     public static <T> Flux<T> blockingEach(@NonNull Flux<T> items) {
         return items.publishOn(Schedulers.boundedElastic());
