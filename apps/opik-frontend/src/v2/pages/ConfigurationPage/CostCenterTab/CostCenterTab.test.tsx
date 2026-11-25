@@ -281,7 +281,6 @@ describe("CostCenterTab", () => {
       expect(
         within(rowOf("acme-llama-70b")).getAllByText("$0.600"),
       ).toHaveLength(2);
-      expect(within(rowOf("gpt-4o")).getByText("+1 field")).toBeVisible();
       expect(within(rowOf("gpt-4o-mini")).getByText("Default")).toBeVisible();
       expect(within(rowOf("acme-llama-70b")).getByText("Custom")).toBeVisible();
       expect(
@@ -290,6 +289,41 @@ describe("CostCenterTab", () => {
       expect(rowOf("team-model")).toHaveTextContent(
         "Priced like claude-sonnet-4-5",
       );
+    });
+
+    it("shows the columns saved in this browser", () => {
+      window.localStorage.setItem(
+        "cost-center:selected-columns",
+        JSON.stringify(["provider", "cache_read_price"]),
+      );
+      renderTab(ADMIN);
+
+      expect(
+        screen.getByRole("columnheader", { name: /Cache read/ }),
+      ).toBeVisible();
+      expect(within(rowOf("gpt-4o")).getByText("$1.25")).toBeVisible();
+      expect(screen.queryByRole("columnheader", { name: /Input/ })).toBeNull();
+    });
+
+    it("adds a cache column from the Columns menu", async () => {
+      renderTab(ADMIN);
+
+      expect(
+        screen.queryByRole("columnheader", { name: /Cache read/ }),
+      ).toBeNull();
+
+      fireEvent.pointerDown(
+        screen.getByTestId("columns-button"),
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: /^Cache read/ }),
+      );
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      expect(
+        await screen.findByRole("columnheader", { name: /Cache read/ }),
+      ).toBeVisible();
     });
 
     it("sorts by model in both directions", () => {

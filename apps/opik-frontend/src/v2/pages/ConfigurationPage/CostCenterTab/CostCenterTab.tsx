@@ -18,6 +18,7 @@ import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
 import { COLUMN_TYPE } from "@/types/shared";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
+import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import { Button } from "@/ui/button";
 import {
   CATALOG_TYPES,
@@ -31,7 +32,11 @@ import {
   sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
-import PricesTable from "./PricesTable";
+import PricesTable, {
+  DEFAULT_COLUMNS_ORDER,
+  DEFAULT_SELECTED_COLUMNS,
+  PRICE_COLUMNS,
+} from "./PricesTable";
 import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import useBuiltInPrices from "./useBuiltInPrices";
@@ -40,6 +45,8 @@ const HISTORY_PAGE = { page: 1, size: 100 };
 const PAGE_SIZES = [25, 50, 100];
 
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
+const SELECTED_COLUMNS_KEY = "cost-center:selected-columns";
+const COLUMNS_ORDER_KEY = "cost-center:columns-order";
 const IS_LABEL = { "=": "is" } as const;
 
 const CostCenterTab: React.FC = () => {
@@ -167,6 +174,14 @@ const CostCenterTab: React.FC = () => {
     { defaultValue: [] },
   );
   const pinnedSet = useMemo(() => new Set(pinned), [pinned]);
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY,
+    { defaultValue: DEFAULT_SELECTED_COLUMNS },
+  );
+  const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
+    COLUMNS_ORDER_KEY,
+    { defaultValue: DEFAULT_COLUMNS_ORDER },
+  );
   const isPinned = useCallback(
     (entry: CatalogEntry) => pinnedSet.has(entry.key),
     [pinnedSet],
@@ -261,28 +276,43 @@ const CostCenterTab: React.FC = () => {
             }
           />
         </div>
-        {canEdit && (
-          <div className="ml-auto flex shrink-0 gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => openDrawer({})}>
-              <Plus className="mr-1.5 hidden size-3.5 xl:block" />
-              Add model
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                rememberFocus();
-                setIsBatchOpen(true);
-              }}
-            >
-              <Layers className="mr-1.5 hidden size-3.5 xl:block" />
-              Batch update
-            </Button>
-          </div>
-        )}
+        <div className="ml-auto flex shrink-0 gap-1.5">
+          <ColumnsButton
+            columns={PRICE_COLUMNS}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+          />
+          {canEdit && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openDrawer({})}
+              >
+                <Plus className="mr-1.5 hidden size-3.5 xl:block" />
+                Add model
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  rememberFocus();
+                  setIsBatchOpen(true);
+                }}
+              >
+                <Layers className="mr-1.5 hidden size-3.5 xl:block" />
+                Batch update
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <PricesTable
         entries={pageEntries}
+        selectedColumns={selectedColumns}
+        columnsOrder={columnsOrder}
         sortDirection={sortDirection}
         onSortDirectionChange={resetPage(setSortDirection)}
         pinnedKeys={pinned}

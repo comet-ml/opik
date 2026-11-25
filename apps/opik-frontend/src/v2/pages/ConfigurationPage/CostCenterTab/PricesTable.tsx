@@ -15,7 +15,6 @@ import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { generatePinColumDef } from "@/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { COLUMN_PIN_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -24,10 +23,10 @@ import {
   CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
+  PRICE_FIELDS,
   PRICE_LABELS,
   PriceField,
   describeAliasTarget,
-  extraFields,
 } from "@/lib/model-prices";
 import { PRICE_UNIT_SUFFIX, TYPE_TAG_VARIANT, formatPrice } from "./format";
 
@@ -62,51 +61,22 @@ const PriceCell = (context: CellContext<CatalogEntry, unknown>) => {
   );
 };
 
-const ExtraPricesCell = (context: CellContext<CatalogEntry, unknown>) => {
-  const entry = context.row.original;
-  const fields = extraFields(entry);
-
-  return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-    >
-      {fields.length ? (
-        <TooltipWrapper
-          content={fields
-            .map(
-              (field) =>
-                `${PRICE_LABELS[field]}: ${formatPrice(
-                  entry.prices[field],
-                )} ${PRICE_UNIT_SUFFIX}`,
-            )
-            .join("\n")}
-        >
-          <span className="truncate">
-            +{fields.length} {fields.length === 1 ? "field" : "fields"}
-          </span>
-        </TooltipWrapper>
-      ) : (
-        NO_VALUE
-      )}
-    </CellWrapper>
-  );
+const MODEL_COLUMN: ColumnData<CatalogEntry> = {
+  id: "model",
+  label: "Model",
+  type: COLUMN_TYPE.string,
+  cell: TextCell as never,
+  size: 240,
 };
 
-const COLUMNS: ColumnData<CatalogEntry>[] = [
-  {
-    id: "model",
-    label: "Model",
-    type: COLUMN_TYPE.string,
-    cell: TextCell as never,
-    size: 320,
-  },
+export const PRICE_COLUMNS: ColumnData<CatalogEntry>[] = [
   {
     id: "provider",
     label: "Provider",
     type: COLUMN_TYPE.string,
     accessorFn: (entry) => entry.provider || ANY_PROVIDER_LABEL,
     cell: TextCell as never,
+    size: 140,
   },
   {
     id: "type",
@@ -115,40 +85,34 @@ const COLUMNS: ColumnData<CatalogEntry>[] = [
     accessorFn: (entry) => CATALOG_TYPE_LABELS[entry.type],
     cell: TagCell as never,
     customMeta: { variantMap: TYPE_VARIANT_BY_LABEL },
+    size: 100,
   },
-  {
-    id: "input_price",
-    label: `Input ${PRICE_UNIT_SUFFIX}`,
+  ...PRICE_FIELDS.map((field) => ({
+    id: field,
+    label: `${PRICE_LABELS[field]} ${PRICE_UNIT_SUFFIX}`,
     type: COLUMN_TYPE.cost,
     cell: PriceCell as never,
-  },
-  {
-    id: "output_price",
-    label: `Output ${PRICE_UNIT_SUFFIX}`,
-    type: COLUMN_TYPE.cost,
-    cell: PriceCell as never,
-  },
-  {
-    id: "extra_prices",
-    label: "More",
-    type: COLUMN_TYPE.string,
-    cell: ExtraPricesCell as never,
-  },
+    size: 140,
+  })),
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (entry) => entry.lastUpdatedAt,
     cell: TimeCell as never,
+    size: 130,
   },
 ];
 
-const COLUMN_DEFS: ColumnDef<CatalogEntry>[] = [
-  generatePinColumDef<CatalogEntry>(),
-  ...convertColumnDataToColumn<CatalogEntry, CatalogEntry>(COLUMNS, {
-    sortableColumns: ["model"],
-  }),
+export const DEFAULT_SELECTED_COLUMNS = [
+  "provider",
+  "type",
+  "input_price",
+  "output_price",
+  "last_updated_at",
 ];
+
+export const DEFAULT_COLUMNS_ORDER = PRICE_COLUMNS.map((column) => column.id);
 
 const COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_PIN_ID, "model"],
@@ -157,6 +121,8 @@ const COLUMN_PINNING: ColumnPinningState = {
 
 type PricesTableProps = {
   entries: CatalogEntry[];
+  selectedColumns: string[];
+  columnsOrder: string[];
   sortDirection: "asc" | "desc";
   onSortDirectionChange: (direction: "asc" | "desc") => void;
   pinnedKeys: string[];
@@ -168,6 +134,8 @@ type PricesTableProps = {
 
 const PricesTable: React.FC<PricesTableProps> = ({
   entries,
+  selectedColumns,
+  columnsOrder,
   sortDirection,
   onSortDirectionChange,
   pinnedKeys,
@@ -176,6 +144,20 @@ const PricesTable: React.FC<PricesTableProps> = ({
   onOpen,
   onClearFilters,
 }) => {
+  const columns = useMemo<ColumnDef<CatalogEntry>[]>(
+    () => [
+      generatePinColumDef<CatalogEntry>(),
+      ...convertColumnDataToColumn<CatalogEntry, CatalogEntry>([MODEL_COLUMN], {
+        sortableColumns: ["model"],
+      }),
+      ...convertColumnDataToColumn<CatalogEntry, CatalogEntry>(PRICE_COLUMNS, {
+        selectedColumns,
+        columnsOrder,
+      }),
+    ],
+    [selectedColumns, columnsOrder],
+  );
+
   const sorting = useMemo<ColumnSort[]>(
     () => [{ id: "model", desc: sortDirection === "desc" }],
     [sortDirection],
@@ -194,7 +176,7 @@ const PricesTable: React.FC<PricesTableProps> = ({
 
   return (
     <DataTable
-      columns={COLUMN_DEFS}
+      columns={columns}
       data={entries}
       getRowId={(entry) => entry.key}
       onRowClick={onOpen}
