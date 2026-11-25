@@ -16,13 +16,13 @@ import java.util.concurrent.TimeUnit;
 public class FreeFormSqlPostRunCheckConfig {
 
     public enum Mode {
-        /** Neither the post-run check nor the scalar subquery rejection runs. */
+        /** Skip the post-run check. */
         @JsonProperty("off")
         OFF,
-        /** Both run and report (logs and metrics) but never affect the request; the post-run check runs after it. */
+        /** Report post-run check outcomes without withholding results. */
         @JsonProperty("audit")
         AUDIT,
-        /** Scalar subqueries reading a table are rejected, and results are withheld unless the check passes. */
+        /** Withhold results unless the post-run check passes. */
         @JsonProperty("enforce")
         ENFORCE
     }

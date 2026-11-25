@@ -339,10 +339,9 @@ customCharts:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: "${FREE_FORM_SQL_POST_RUN_CHECK_MODE:-audit}"
   #  Default: 10s
