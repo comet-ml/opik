@@ -98,10 +98,11 @@ import lombok.Builder;
  * the spans insert itself, so a new span is indexed by the time its insert returns on the replica that took it (other
  * replicas fetch the index row and the span separately, so a bounded read there can briefly miss it); older spans are
  * indexed by the backfill, so turn this on once the backfill has planned its chunks in
- * {@code span_weeks_backfill_chunks} and done them all, as unindexed spans would be skipped. In the spans cutover, turn it on only after the {@code EXCHANGE}, and
- * off again with a rollback that restores the legacy table: {@code spanColumnsNonNullable} is on in both windows while
- * {@code spans} is still the legacy table. Partition imports bypass the view and need the backfill re-planned; turn
- * this off before one, and on again once the new plan is done.</p>
+ * {@code span_weeks_backfill_chunks} and done them all, as unindexed spans would be skipped. In the spans cutover, turn
+ * it on only after the {@code EXCHANGE}, and off again with a rollback that restores the legacy table:
+ * {@code spanColumnsNonNullable} is on in both windows while {@code spans} is still the legacy table. Partition imports
+ * bypass the view and need the backfill re-planned; turn this off before one, and on again once the new plan is
+ * done.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
