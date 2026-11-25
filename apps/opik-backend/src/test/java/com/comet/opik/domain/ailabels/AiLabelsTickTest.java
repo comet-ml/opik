@@ -1097,6 +1097,38 @@ class AiLabelsTickTest {
         }
 
         @Test
+        @DisplayName("the deleted-trace check stops partway: the jobs it checked are loaded, the others stay "
+                + "submitted and the next tick loads them")
+        void deletedTraceCheckStopsPartway() {
+            var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
+            var traceIds = workspaceIds.stream()
+                    .collect(Collectors.toMap(Function.identity(), id -> trace(id, UUID.randomUUID(), 0)));
+
+            tick();
+            workspaceIds.forEach(AiLabelsTickTest.this::completeJobs);
+            // The first of the two workspaces is checked, the check of the second fails.
+            var checks = new AtomicInteger();
+            var stopping = spy(labelsDAO);
+            doAnswer(invocation -> !workspaceIds.contains(invocation.<String>getArgument(0))
+                    || checks.getAndIncrement() == 0
+                            ? invocation.callRealMethod()
+                            : Mono.error(new IllegalStateException("check failed")))
+                    .when(stopping).findLiveTraceIds(anyString(), any(UUID.class), anyCollection(), anyLong());
+            tick(tickService(template, statusDAO, stopping));
+
+            assertThat(workspaceIds.stream().map(id -> jobs(id).stream().map(JobRow::status).distinct().toList()))
+                    .containsExactlyInAnyOrder(List.of("loaded"), List.of("submitted"));
+
+            tick();
+
+            workspaceIds.forEach(id -> {
+                assertThat(jobs(id)).extracting(JobRow::status).containsOnly("loaded");
+                assertThat(statuses(id, List.of(traceIds.get(id)))).hasSize(TASKS.size())
+                        .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            });
+        }
+
+        @Test
         @DisplayName("a load that fails partway writes nothing of that job; the next tick loads it whole")
         void failedLoadWritesNothing() {
             var tasksConfig = new AiLabelsConfig();
