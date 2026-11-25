@@ -55,24 +55,15 @@ import {
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
-  DEFAULT_DECISION_MODEL_DATA,
-  DEFAULT_LLM_AS_JUDGE_DATA,
+  createInitialRulePrompt,
   FILTER_COLUMNS_BY_SCOPE,
+  getDefaultJudgeData,
+  isDerivedField,
   DEFAULT_PYTHON_CODE_DATA,
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
-const DERIVED_FIELDS = [
-  "llmJudgeDetails.variables",
-  "llmJudgeDetails.parsingVariablesError",
-  "pythonCodeDetails.arguments",
-  "pythonCodeDetails.parsingArgumentsError",
-];
-
-const isDerivedField = (name: string) =>
-  DERIVED_FIELDS.some(
-    (field) => name === field || name.startsWith(`${field}.`),
-  );
+import useRuleEditorHistory from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleEditorHistory";
 
 const ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|$)/;
 
@@ -157,11 +148,6 @@ const withDefaultModel = <
           { model, provider },
         ),
       };
-
-const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
-  uiType === UI_EVALUATORS_RULE_TYPE.decision_model
-    ? DEFAULT_DECISION_MODEL_DATA
-    : DEFAULT_LLM_AS_JUDGE_DATA;
 
 const getDefaultValues = (
   ruleType: UI_EVALUATORS_RULE_TYPE,
@@ -291,6 +277,13 @@ const useRuleEditorForm = ({
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
   const autoNameRef = useRef("");
+  const {
+    isPickingTemplate,
+    setIsPickingTemplate,
+    recordAction,
+    clearHistory,
+    withoutHistory,
+  } = useRuleEditorHistory(form, autoNameRef);
 
   const isDefaultName = useCallback(() => {
     const name = form.getValues("ruleName").trim();
@@ -307,119 +300,196 @@ const useRuleEditorForm = ({
 
   const changeScope = useCallback(
     (scope: EVALUATORS_RULE_SCOPE) => {
-      const uiType = form.getValues("uiType");
-      const llmJudgeDetails = form.getValues("llmJudgeDetails");
-      scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
-        triggerScope: form.getValues("triggerScope"),
-        filters: form.getValues("filters"),
-        llmJudgeDetails,
-        pythonCodeDetails: form.getValues("pythonCodeDetails"),
-        autoName: autoNameRef.current,
-      });
-      const draft = scopeDraftsRef.current[scope];
+      recordAction(() => {
+        const uiType = form.getValues("uiType");
+        const llmJudgeDetails = form.getValues("llmJudgeDetails");
+        scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
+          triggerScope: form.getValues("triggerScope"),
+          filters: form.getValues("filters"),
+          llmJudgeDetails,
+          pythonCodeDetails: form.getValues("pythonCodeDetails"),
+          autoName: autoNameRef.current,
+        });
+        const draft = scopeDraftsRef.current[scope];
 
-      if (isDefaultName()) setAutoName(draft?.autoName ?? "");
+        if (isDefaultName()) setAutoName(draft?.autoName ?? "");
 
-      form.setValue("scope", scope);
-      form.setValue("type", getBackendRuleType(scope, uiType));
-      form.setValue(
-        "triggerScope",
-        draft?.triggerScope ?? EVAL_TRIGGER_SCOPE.production,
-      );
-      form.setValue("filters", draft?.filters ?? withEmptyRuleFilter([]));
-      form.setValue("llmJudgeDetails", {
-        ...(draft?.llmJudgeDetails ??
-          cloneDeep(getDefaultJudgeData(uiType)[scope])),
-        model: llmJudgeDetails.model,
-        config: llmJudgeDetails.config,
+        form.setValue("scope", scope);
+        form.setValue("type", getBackendRuleType(scope, uiType));
+        form.setValue(
+          "triggerScope",
+          draft?.triggerScope ?? EVAL_TRIGGER_SCOPE.production,
+        );
+        form.setValue("filters", draft?.filters ?? withEmptyRuleFilter([]));
+        form.setValue("llmJudgeDetails", {
+          ...(draft?.llmJudgeDetails ??
+            cloneDeep(getDefaultJudgeData(uiType)[scope])),
+          model: llmJudgeDetails.model,
+          config: llmJudgeDetails.config,
+        });
+        form.setValue(
+          "pythonCodeDetails",
+          draft?.pythonCodeDetails ??
+            cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+        );
       });
-      form.setValue(
-        "pythonCodeDetails",
-        draft?.pythonCodeDetails ?? cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
-      );
     },
-    [form, isDefaultName, setAutoName],
+    [form, isDefaultName, setAutoName, recordAction],
+  );
+
+  const openTemplates = useCallback(
+    () => recordAction(() => setIsPickingTemplate(true)),
+    [recordAction, setIsPickingTemplate],
+  );
+
+  const showContent = useCallback(
+    () => withoutHistory(() => setIsPickingTemplate(false)),
+    [withoutHistory, setIsPickingTemplate],
+  );
+
+  const openContent = useCallback(
+    () => recordAction(() => setIsPickingTemplate(false)),
+    [recordAction, setIsPickingTemplate],
   );
 
   const applyTemplate = useCallback(
-    (template: LLMPromptTemplate, label: string) => {
-      const current = form.getValues("llmJudgeDetails");
-      const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
-      const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
-      form.setValue(
-        "llmJudgeDetails",
-        {
-          ...current,
-          template: template.value,
-          messages: cloneDeep(template.messages),
-          variables: cloneDeep(template.variables),
-          schema: templateMainScore
-            ? [{ ...templateMainScore, name: mainScoreName }, ...templateScores]
-            : [],
-        },
-        { shouldDirty: true },
-      );
-      form.clearErrors("llmJudgeDetails");
-      if (!isEdit && isDefaultName()) setAutoName(label);
-    },
-    [form, isEdit, isDefaultName, setAutoName],
+    (template: LLMPromptTemplate, label: string) =>
+      recordAction(() => {
+        const current = form.getValues("llmJudgeDetails");
+        const [templateMainScore, ...templateScores] = cloneDeep(
+          template.schema,
+        );
+        const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
+        form.setValue(
+          "llmJudgeDetails",
+          {
+            ...current,
+            template: template.value,
+            messages: cloneDeep(template.messages),
+            variables: cloneDeep(template.variables),
+            schema: templateMainScore
+              ? [
+                  { ...templateMainScore, name: mainScoreName },
+                  ...templateScores,
+                ]
+              : [],
+          },
+          { shouldDirty: true },
+        );
+        form.clearErrors("llmJudgeDetails");
+        if (!isEdit && isDefaultName()) setAutoName(label);
+        setIsPickingTemplate(false);
+      }),
+    [
+      form,
+      isEdit,
+      isDefaultName,
+      setAutoName,
+      recordAction,
+      setIsPickingTemplate,
+    ],
   );
 
-  const prepareForSubmit = useCallback(() => {
-    const values = form.getValues();
+  const startBlank = useCallback(
+    () =>
+      recordAction(() => {
+        const uiType = form.getValues("uiType");
+        const current = form.getValues("llmJudgeDetails");
+        const blank = cloneDeep(
+          getDefaultJudgeData(uiType)[form.getValues("scope")],
+        );
+        const [blankMainScore, ...blankScores] = blank.schema;
+        const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
+        form.setValue(
+          "llmJudgeDetails",
+          {
+            ...blank,
+            schema: blankMainScore
+              ? [{ ...blankMainScore, name: mainScoreName }, ...blankScores]
+              : [],
+            messages: createInitialRulePrompt(uiType),
+            model: current.model,
+            config: current.config,
+            maxCostUsd: current.maxCostUsd,
+          },
+          { shouldDirty: true },
+        );
+        form.clearErrors("llmJudgeDetails");
+        if (!isEdit && isDefaultName()) setAutoName("");
+        setIsPickingTemplate(false);
+      }),
+    [
+      form,
+      isEdit,
+      isDefaultName,
+      setAutoName,
+      recordAction,
+      setIsPickingTemplate,
+    ],
+  );
 
-    if (values.uiType === UI_EVALUATORS_RULE_TYPE.python_code) {
-      if (values.scope === EVALUATORS_RULE_SCOPE.thread) return;
-      const details = form.getValues("pythonCodeDetails");
-      const { metric } = details;
-      const {
-        arguments: codeArguments,
-        unknownArguments,
-        parsingError,
-      } = getCodeArguments(
-        metric,
-        values.scope,
-        getSavedCodeArguments(details),
-      );
-      form.setValue("pythonCodeDetails.arguments", {
-        ...codeArguments,
-        ...Object.fromEntries(unknownArguments.map((name) => [name, ""])),
-      });
-      form.setValue("pythonCodeDetails.parsingArgumentsError", parsingError);
-      return;
-    }
+  const prepareForSubmit = useCallback(
+    () =>
+      withoutHistory(() => {
+        const values = form.getValues();
 
-    const llmJudgeDetails = form.getValues("llmJudgeDetails");
+        if (values.uiType === UI_EVALUATORS_RULE_TYPE.python_code) {
+          if (values.scope === EVALUATORS_RULE_SCOPE.thread) return;
+          const details = form.getValues("pythonCodeDetails");
+          const { metric } = details;
+          const {
+            arguments: codeArguments,
+            unknownArguments,
+            parsingError,
+          } = getCodeArguments(
+            metric,
+            values.scope,
+            getSavedCodeArguments(details),
+          );
+          form.setValue("pythonCodeDetails.arguments", {
+            ...codeArguments,
+            ...Object.fromEntries(unknownArguments.map((name) => [name, ""])),
+          });
+          form.setValue(
+            "pythonCodeDetails.parsingArgumentsError",
+            parsingError,
+          );
+          return;
+        }
 
-    const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
-    if (mainScore) {
-      const nextMainScore = {
-        ...mainScore,
-        name: mainScore.name.trim() || values.ruleName.trim(),
-        description:
-          rule || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
-            ? mainScore.description
-            : "",
-      };
-      if (!isEqual(nextMainScore, mainScore)) {
-        form.setValue("llmJudgeDetails.schema", [
-          nextMainScore,
-          ...additionalScores,
-        ]);
-      }
-    }
+        const llmJudgeDetails = form.getValues("llmJudgeDetails");
 
-    const { variables, parsingVariablesError } = getPromptVariables(
-      llmJudgeDetails.messages,
-      llmJudgeDetails.variables,
-      values.scope,
-    );
-    form.setValue("llmJudgeDetails.variables", variables);
-    form.setValue(
-      "llmJudgeDetails.parsingVariablesError",
-      parsingVariablesError,
-    );
-  }, [form, rule]);
+        const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
+        if (mainScore) {
+          const nextMainScore = {
+            ...mainScore,
+            name: mainScore.name.trim() || values.ruleName.trim(),
+            description:
+              rule || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+                ? mainScore.description
+                : "",
+          };
+          if (!isEqual(nextMainScore, mainScore)) {
+            form.setValue("llmJudgeDetails.schema", [
+              nextMainScore,
+              ...additionalScores,
+            ]);
+          }
+        }
+
+        const { variables, parsingVariablesError } = getPromptVariables(
+          llmJudgeDetails.messages,
+          llmJudgeDetails.variables,
+          values.scope,
+        );
+        form.setValue("llmJudgeDetails.variables", variables);
+        form.setValue(
+          "llmJudgeDetails.parsingVariablesError",
+          parsingVariablesError,
+        );
+      }),
+    [form, rule, withoutHistory],
+  );
 
   useEffect(() => {
     const subscription = form.watch((_, { name }) => {
@@ -498,6 +568,12 @@ const useRuleEditorForm = ({
     form,
     changeScope,
     applyTemplate,
+    startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
+    showContent,
+    clearHistory,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
