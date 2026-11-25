@@ -38,7 +38,7 @@ class TopicWindowReader {
         int limit = config.getRun().getMaxVectors();
         var readTimeout = readTimeout(config.getRun());
         int capacity = (int) Math.max(1, Math.min(windowTraces, limit));
-        return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
+        return windowDAO.readWindow(run.projectId(), run.from(), run.to(), limit,
                 readTimeout.toSeconds())
                 .collect(() -> new TopicWindowBuilder(capacity), TopicWindowBuilder::add)
                 .map(builder -> builder.build(windowTraces, config.getAlgorithm().getProvisionalBelow()))

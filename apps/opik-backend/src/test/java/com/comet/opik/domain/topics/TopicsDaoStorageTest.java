@@ -179,7 +179,8 @@ class TopicsDaoStorageTest {
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60)
                 .collectList().block())
                 .containsExactly(count(projectId, BUILT));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 120).collectList().block())
+        assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 120)
+                .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .hasSize(BUILT);
 
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxRowsToRead());
@@ -212,7 +213,8 @@ class TopicsDaoStorageTest {
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
                 .containsExactly(count(projectId, BUILT - deleted.size()));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
+        assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
+                .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(deleted.size(), BUILT));
     }
@@ -232,7 +234,8 @@ class TopicsDaoStorageTest {
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
                 .containsExactly(count(projectId, BUILT - tombstoned.size()));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
+        assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
+                .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(tombstoned.size(), BUILT));
     }
@@ -250,10 +253,11 @@ class TopicsDaoStorageTest {
 
             assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
                     .block()).containsExactly(count(projectId, BUILT));
-            assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
+            assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
+                    .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                     .extracting(TopicWindowDAO.WindowRow::traceId).containsAll(tied).hasSize(BUILT);
-            assertThat(windowDAO.readUnlabelled(workspaceId, projectId, newId(), from(), to(), "", BUILT,
-                    60).collectList().block())
+            assertThat(windowDAO.readUnlabelled(projectId, newId(), from(), to(), "", BUILT,
+                    60).contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                     .extracting(TopicWindowDAO.WindowVector::traceId).containsAll(tied).hasSize(BUILT);
         });
     }
@@ -339,7 +343,8 @@ class TopicsDaoStorageTest {
         var projectId = newId();
         spreadData.seed(workspaceId, projectId, 0, SPREAD);
 
-        var sample = windowDAO.readWindow(workspaceId, projectId, from(), to(), SAMPLE, 120).collectList().block();
+        var sample = windowDAO.readWindow(projectId, from(), to(), SAMPLE, 120)
+                .contextWrite(TopicsTestData.context(workspaceId)).collectList().block();
 
         assertThat(sample).hasSize(SAMPLE);
         // About 5 traces a day; the newest 150 would cover the last 7.5 days only.
@@ -388,7 +393,8 @@ class TopicsDaoStorageTest {
         data.seed(workspaceId, projectId, 0, BUILT);
         int dimensions = TopicEmbedding.DIMENSIONS;
 
-        var rows = windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block();
+        var rows = windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
+                .contextWrite(TopicsTestData.context(workspaceId)).collectList().block();
 
         assertThat(rows).hasSize(BUILT).allSatisfy(row -> {
             int i = TRACES.traceIds().indexOf(row.traceId());
@@ -944,14 +950,15 @@ class TopicsDaoStorageTest {
     }
 
     private List<UUID> unlabelledIds(String workspaceId, UUID projectId, UUID runId, String after, int limit) {
-        return windowDAO.readUnlabelled(workspaceId, projectId, runId, from(), to(), after, limit, 60)
+        return windowDAO.readUnlabelled(projectId, runId, from(), to(), after, limit, 60)
+                .contextWrite(TopicsTestData.context(workspaceId))
                 .map(TopicWindowDAO.WindowVector::traceId)
                 .collectList()
                 .block();
     }
 
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {
-        return windowDAO.readWindow(workspaceId, projectId, from, to, limit, 120)
+        return windowDAO.readWindow(projectId, from, to, limit, 120).contextWrite(TopicsTestData.context(workspaceId))
                 .map(TopicWindowDAO.WindowRow::traceId)
                 .collectList()
                 .block();

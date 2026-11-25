@@ -56,16 +56,17 @@ public class TopicsRunService {
     }
 
     /**
-     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
-     * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
-     * one cancelled by its subscriber is failed with {@code timeout} too.
+     * Makes the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context. The save leaves the
+     * labels incomplete. Never errors: a failure is recorded on the run and returned. A run that outlasts {@code
+     * topics.run.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber is
+     * failed with {@code timeout} too.
      */
-    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
-            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces) {
-        var run = TopicRun.of(runId, workspace.id(), workspace.name(), projectId, night,
-                config.getRun().getWindowDays());
-        return Mono.usingWhen(Mono.just(run), started -> run(started, windowTraces),
+    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
+            long windowTraces) {
+        var runs = TopicsMetrics.Workspace.fromContext().map(workspace -> TopicRun.of(runId, workspace.id(),
+                workspace.name(), projectId, night, config.getRun().getWindowDays()));
+        return Mono.usingWhen(runs, started -> run(started, windowTraces),
                 started -> Mono.empty(), (started, error) -> Mono.empty(), outcomes::cancelled);
     }
 

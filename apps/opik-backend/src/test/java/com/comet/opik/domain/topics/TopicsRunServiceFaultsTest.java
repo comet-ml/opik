@@ -100,7 +100,7 @@ class TopicsRunServiceFaultsTest {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         windowDAO = mock(TopicWindowDAO.class);
-        when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
+        when(windowDAO.readWindow(eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
         when(projectDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(projectDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
@@ -123,7 +123,7 @@ class TopicsRunServiceFaultsTest {
     void clusteringLeavesTheReadThread() {
         var driver = Schedulers.newSingle("topics-test-driver");
         try {
-            when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
+            when(windowDAO.readWindow(eq(projectId), any(), any(), anyInt(), anyLong()))
                     .thenReturn(Flux.fromIterable(window()).subscribeOn(driver));
             var thread = new AtomicReference<String>();
             doAnswer(invocation -> {
@@ -132,7 +132,8 @@ class TopicsRunServiceFaultsTest {
             }).when(algorithm).cluster(any(), anyInt());
             answer(FIXTURE.answer);
 
-            var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+            var outcome = service.discover(runId, projectId, night, TRACES)
+                    .contextWrite(TopicsTestData.context(workspace)).block();
 
             assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
             assertThat(thread.get()).startsWith("parallel-");
@@ -172,7 +173,8 @@ class TopicsRunServiceFaultsTest {
                 .doOnSubscribe(__ -> calls.incrementAndGet())
                 .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.discover(runId, workspace, projectId, night, TRACES).subscribe();
+        var subscription = service.discover(runId, projectId, night, TRACES)
+                .contextWrite(TopicsTestData.context(workspace)).subscribe();
         Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
 
@@ -192,7 +194,8 @@ class TopicsRunServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -211,7 +214,8 @@ class TopicsRunServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -232,7 +236,8 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -254,7 +259,8 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -276,7 +282,8 @@ class TopicsRunServiceFaultsTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
+            var run = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                    .toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -306,7 +313,8 @@ class TopicsRunServiceFaultsTest {
         var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
+            var run = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                    .toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
