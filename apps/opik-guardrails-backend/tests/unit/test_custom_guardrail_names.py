@@ -108,6 +108,29 @@ def test_training_refuses_a_name_outside_the_adapters_directory(client, name):
     assert list(adapters_dir.iterdir()) == []
 
 
+def test_training_refuses_a_name_that_is_a_symlink_outside_the_adapters_directory(
+    client, tmp_path_factory
+):
+    test_client, launched, adapters_dir = client
+    outside = tmp_path_factory.mktemp("outside")
+    (adapters_dir / "escape").symlink_to(outside, target_is_directory=True)
+
+    train = test_client.post(
+        "/api/v1/guardrails/custom/train",
+        json={
+            "name": "escape",
+            "description": "contains toxic language",
+            "examples": _examples(),
+        },
+    )
+    status = test_client.get("/api/v1/guardrails/custom/train/escape")
+
+    assert train.status_code == 400
+    assert status.status_code == 400
+    assert launched == []
+    assert list(outside.iterdir()) == []
+
+
 @pytest.mark.parametrize("name", INVALID_NAMES)
 def test_custom_classifier_refuses_a_model_name_outside_the_adapters_directory(name):
     with pytest.raises(pydantic.ValidationError):
