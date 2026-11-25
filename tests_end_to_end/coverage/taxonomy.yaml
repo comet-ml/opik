@@ -1595,6 +1595,42 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    # NOT cloud_only. The page's gate (useGuardrailsEnabled) falls back to the
+    # backend toggle alone when no plugin supplies getGuardrailsEnabled, so a
+    # self-hosted deployment with GUARDRAILS_VALIDATIONS_ENABLED on reaches every
+    # capability below; the comet plugin only adds an org-level check on top.
+    # That toggle DEFAULTS TO FALSE (feature-toggles-provider.tsx), so the nav
+    # entry and the route are both absent on a stock deployment: a spec here has
+    # to turn it on rather than assume it, which is why no key below is a plain
+    # "the page loads".
+    # Distinct from traces.set-guardrail and traces.guardrail-results, which are
+    # the per-trace result surfaces, gated by the SEPARATE and default-true
+    # GUARDRAILS_ENABLED, rather than workspace policy management.
+    specs: []
+    capabilities:
+      list-policies:          { covered: false, note: "GuardrailsPage DataTable. The Rules column folds a policy's rules into type tags in GUARDRAIL_RULE_TYPES_ORDER, so two policies with the same rules read the same way whatever order they are stored in" }
+      create-policy:          { covered: false, note: "GuardrailPolicyPanel mode=create" }
+      edit-policy:            { covered: false, note: "GuardrailPolicyPanel mode=edit, opened by a row click or the row menu. A policy has no route of its own, so the `policyId` query param is what makes one linkable, and a link to a deleted one drops the param instead of leaving a panel that never opens. Also carries the rename warning, since applications reference a policy by name" }
+      duplicate-policy:       { covered: false, note: "GuardrailPolicyPanel mode=duplicate. buildCopyName walks '(copy)', '(copy 2)' past the names already on the page, so duplicating twice does not walk the user into a 409" }
+      delete-policy:          { covered: false, note: "the row menu's Delete and the bulk GuardrailPoliciesActionsPanel over selected rows, both through useGuardrailPolicyBatchDeleteMutation behind a ConfirmDialog. One key because the bulk path is the same mutation, as traces.delete-traces already folds its bulk case" }
+      pii-rule:               { covered: false, note: "PII toggle plus the entity picker over POLICY_PII_ENTITIES -- 11 classes, not the whole PiiSupportedEntities enum the trace-side results render" }
+      topic-rule:             { covered: false, note: "Topic toggle plus the allowed and restricted lists. A policy holds at most one rule per type, which is what makes the form a toggle per type rather than a rule list" }
+      prompt-injection-rule:  { covered: false, note: "bare toggle, config is Record<string, never>. Its own key rather than a variant of the other two: a separate check with its own model and its own docs page" }
+      execution-scope:        { covered: false, note: "on_request vs global, as a radio. Decides whether an application has to name the policy or it applies to every other policy check in the workspace" }
+      policy-form-validation: { covered: false, note: "the cross-rule refusals no per-rule key can own: no rule switched on, a topic in both lists, the 254-topic and 256-character caps, and a name clash arriving as a 409 and surfaced inline on the name field rather than as a toast" }
+      search-policies:        { covered: false, note: "SearchInput driving the server-side `search` param. Also the distinction the page draws between an empty workspace and a search or a page past the end that matched nothing" }
+      policy-code-snippet:    { covered: false, note: "GuardrailPolicyCodeSection's 'Use in your code', whose Python names the policy as an escaped string literal (policySnippet.ts). Its own copy says it needs an unreleased Python SDK, so this is the snippet and its copy button, NOT a claim that the code runs" }
+      enablement-gate:        { covered: false, note: "GuardrailsPageGuard: the 'not enabled for this workspace' refusal and, separately, the could-not-be-checked retry -- a failed lookup is deliberately not an answer, so the page is not simply present or absent" }
+
+    visual:
+      guardrails-list:  { covered: false, state: default }
+      guardrails-empty: { covered: false, state: empty }
+      guardrail-editor: { covered: false, state: default }
+
   configuration:
     label: Configuration
     nav_group: Workspace
