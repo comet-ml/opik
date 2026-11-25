@@ -1114,6 +1114,10 @@ topics:
     maxVectors: 100000
     llmDeadline: 120s
     readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
     read:
@@ -1121,7 +1125,7 @@ topics:
       maxMemoryUsage: 1073741824
       maxThreads: 2
       priority: 100
-      maxBlockSize: 8192
+      maxBlockSize: 1024
       countSlice: 1d
   algorithm:
     minGroups: 30
