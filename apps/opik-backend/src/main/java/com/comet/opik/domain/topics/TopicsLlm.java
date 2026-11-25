@@ -127,9 +127,9 @@ class TopicsLlm {
 
     private Duration deadline(LlmCall call) {
         return switch (call) {
-            case AUTHOR -> config.getBuild().getLlmDeadline().toJavaDuration();
-            case NAMING -> config.getBuild().getNamingDeadline().toJavaDuration();
-            case VERIFY -> config.getBuild().getVerifyDeadline().toJavaDuration();
+            case AUTHOR -> config.getRun().getLlmDeadline().toJavaDuration();
+            case NAMING -> config.getRun().getNamingDeadline().toJavaDuration();
+            case VERIFY -> config.getRun().getVerifyDeadline().toJavaDuration();
         };
     }
 

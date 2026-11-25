@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsConfig.ReadGuards;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
@@ -19,11 +20,14 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -33,7 +37,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
  * arrival row stamped at the same time. Writes are plain batched inserts; {@code last_updated_at} is stamped by
  * ClickHouse. A reader takes each trace's latest row first and then drops it when that row is a tombstone
  * ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. The
- * first build writes the table, and reads it once per run for the run's trace counts; the read API and topic on
+ * discovery run writes the table, and reads it once per run for the run's trace counts; the read API and topic on
  * arrival read it too.
  *
  * <p>The deletes are {@link TraceKeyedTableDeletes}', as {@link TopicVectorsDAO}'s (same keys, same partitioning), so a
@@ -59,16 +63,19 @@ public class TraceTopicsDAO {
      * filters apply before dedup), so a topic's count is what the list shows for it. Routing reads the latest row
      * instead ({@code TraceDAO.getLoggingSourceIds}). Every topic row counts, run rows and arrival rows.
      *
-     * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join, so the query streams by
-     * trace id instead of holding a state per trace. Its memory still grows with the traces it covers, so
-     * {@link #countByTopic} runs it once per {@code topics.build.read.countSlice} of the window.
+     * <p>Both sides dedupe in sort-key order ({@code LIMIT 1 BY}) and meet in a merge join on that whole key, so the
+     * join reuses the order instead of sorting either side again, and the query streams by trace id instead of holding
+     * a state per trace. Both sides hold one workspace and project, so only the trace id tells rows apart; the other
+     * two keys are in the join for the order. Its memory still grows with the traces it covers, so
+     * {@link #countByTopic} runs it once per {@code topics.run.read.countSlice} of the window, and
+     * {@link #countByTopicAndDay} once per UTC day.
      */
     private static final String COUNT_BY_TOPIC = """
             SELECT t.topic_id AS topic_id, count() AS traces
             FROM (
-                SELECT trace_id, topic_id
+                SELECT workspace_id, project_id, trace_id, topic_id
                 FROM (
-                    SELECT trace_id, topic_id, is_deleted
+                    SELECT workspace_id, project_id, trace_id, topic_id, is_deleted
                     FROM trace_topics
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -80,7 +87,7 @@ public class TraceTopicsDAO {
                 WHERE is_deleted = 0
             ) AS t
             INNER JOIN (
-                SELECT id
+                SELECT workspace_id, project_id, id
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -90,7 +97,7 @@ public class TraceTopicsDAO {
                 AND visibility_mode = :logs_visibility_mode
                 ORDER BY workspace_id, project_id, id
                 LIMIT 1 BY workspace_id, project_id, id
-            ) AS tr ON t.trace_id = tr.id
+            ) AS tr ON t.workspace_id = tr.workspace_id AND t.project_id = tr.project_id AND t.trace_id = tr.id
             GROUP BY topic_id
             SETTINGS join_algorithm = 'full_sorting_merge', max_threads = <max_threads>,
                 max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
@@ -124,32 +131,73 @@ public class TraceTopicsDAO {
     }
 
     /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
+     * created in {@code [from, to)}: {@link #COUNT_BY_TOPIC} once per UTC day, one after another, under the
+     * {@code topics.read} guards. The days share {@code topics.read.budget}: each query may run for what is left of it
+     * (at least a second), and a day that would start after the budget ran out fails with
+     * {@link TopicsReadErrors.BudgetExceededException} instead of running on.
+     */
+    public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to) {
+        var read = config.getRead();
+        return Flux.defer(() -> {
+            long deadline = System.nanoTime() + read.getBudget().toNanoseconds();
+            return slices(from, to, TraceTopicsDAO::nextUtcDay)
+                    .concatMap(dayFrom -> {
+                        var day = LocalDate.ofInstant(dayFrom, ZoneOffset.UTC);
+                        long left = deadline - System.nanoTime();
+                        if (left <= 0) {
+                            return Flux.error(new TopicsReadErrors.BudgetExceededException(
+                                    "topics.read.budget ran out before day %s".formatted(day)));
+                        }
+                        long seconds = Math.max(1, Math.ceilDiv(left, 1_000_000_000L));
+                        return countSlice(workspaceId, projectId, dayFrom, ObjectUtils.min(nextUtcDay(dayFrom), to),
+                                read, seconds)
+                                .map(count -> TopicDayCount.builder()
+                                        .topicId(count.topicId())
+                                        .day(day)
+                                        .traces(count.traces())
+                                        .build());
+                    });
+        });
+    }
+
+    /**
      * Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}: one query
-     * per {@code topics.build.read.countSlice}, one after another, summed: a trace falls in exactly one slice by its
+     * per {@code topics.run.read.countSlice}, one after another, summed: a trace falls in exactly one slice by its
      * creation time. {@code maxExecutionSeconds} bounds each query.
      */
     public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
-        var slice = config.getBuild().getRead().getCountSlice().toJavaDuration();
-        return Flux.<Instant, Instant>generate(() -> from, (sliceFrom, sink) -> {
-            if (!sliceFrom.isBefore(to)) {
-                sink.complete();
-                return sliceFrom;
-            }
-            sink.next(sliceFrom);
-            return sliceFrom.plus(slice);
-        })
+        var read = config.getRun().getRead();
+        var slice = read.getCountSlice().toJavaDuration();
+        return slices(from, to, sliceFrom -> sliceFrom.plus(slice))
                 .concatMap(sliceFrom -> countSlice(workspaceId, projectId, sliceFrom,
-                        ObjectUtils.min(sliceFrom.plus(slice), to), maxExecutionSeconds))
+                        ObjectUtils.min(sliceFrom.plus(slice), to), read, maxExecutionSeconds))
                 .collect(LinkedHashMap<UUID, Long>::new,
                         (traces, count) -> traces.merge(count.topicId(), count.traces(), Long::sum))
                 .flatMapIterable(Map::entrySet)
                 .map(entry -> TopicCount.builder().topicId(entry.getKey()).traces(entry.getValue()).build());
     }
 
+    /** The starts of the slices of {@code [from, to)}, each slice ending where {@code next} puts the next one. */
+    private static Flux<Instant> slices(Instant from, Instant to, UnaryOperator<Instant> next) {
+        return Flux.generate(() -> from, (sliceFrom, sink) -> {
+            if (!sliceFrom.isBefore(to)) {
+                sink.complete();
+                return sliceFrom;
+            }
+            sink.next(sliceFrom);
+            return next.apply(sliceFrom);
+        });
+    }
+
+    private static Instant nextUtcDay(Instant instant) {
+        return LocalDate.ofInstant(instant, ZoneOffset.UTC).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
     private Flux<TopicCount> countSlice(String workspaceId, UUID projectId, Instant from, Instant to,
-            long maxExecutionSeconds) {
-        var read = config.getBuild().getRead();
+            ReadGuards read, long maxExecutionSeconds) {
         var template = getSTWithLogComment(COUNT_BY_TOPIC, "topics:count_by_topic", workspaceId, null,
                 "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
                 .add("max_rows_to_read", read.getMaxRowsToRead())
@@ -184,6 +232,10 @@ public class TraceTopicsDAO {
     /** The trace-delete cascade; workspace from the reactive context. */
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
+    }
+
+    @Builder(toBuilder = true)
+    record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
 
     @Builder(toBuilder = true)

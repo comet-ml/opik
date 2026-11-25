@@ -12,26 +12,30 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.quartz.CronExpression;
+import lombok.Setter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Topics settings; config.yml describes each key and its default. Deliberately not a service toggle. Needs ai-labels
  * on and uses its opik-inference deployment and credential: see {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
+@Slf4j
 @Data
 public class TopicsConfig {
 
@@ -39,16 +43,19 @@ public class TopicsConfig {
     private AlgorithmConfig algorithm;
 
     @Valid @NotNull @JsonProperty
-    private BuildConfig build;
+    private RunConfig run;
 
     @Valid @NotNull @JsonProperty
-    private FirstBuildConfig firstBuild;
+    private ReadConfig read;
+
+    @Valid @NotNull @JsonProperty
+    private StorageConfig storage;
+
+    @Valid @NotNull @JsonProperty
+    private DiscoveryConfig discovery;
 
     @Valid @NotNull @JsonProperty
     private RunsConfig runs;
-
-    @Valid @NotNull @JsonProperty
-    private NightlyConfig nightly;
 
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
@@ -94,7 +101,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100) private int maxTopics;
 
-        /** A first build over fewer traces is marked provisional in its stats. */
+        /** A discovery run over fewer traces is marked provisional in its stats. */
         @JsonProperty
         @Min(0) @Max(100_000) private int provisionalBelow;
 
@@ -125,6 +132,27 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(1_000) private int retireNights;
 
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyMinTightness;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyBigShare;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlySameMemory;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyGroupExamples;
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
             return nightlyMinGroups <= nightlyMaxGroups;
@@ -151,7 +179,8 @@ public class TopicsConfig {
 
     /**
      * A String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to a
-     * collection. Null and blank both mean none. No getter: read it via {@link #enabledWorkspaceIds()}.
+     * collection. Null and blank both mean none. Entries are {@code id} or {@code id:stage}; see {@link TopicsStage}.
+     * No getter: read it via {@link #enabledWorkspaceStages()} or {@link #enabledWorkspaceIds()}.
      */
     @JsonProperty
     @Getter(AccessLevel.NONE)
@@ -160,12 +189,24 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    /** The last parse of {@link #enabledWorkspaces}, with the string it was parsed from. */
+    @Builder(toBuilder = true)
+    private record ParsedWorkspaces(String raw, Map<String, TopicsStage> stages) {
+    }
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private volatile ParsedWorkspaces parsedWorkspaces;
+
+    /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
-    public static class BuildConfig {
+    public static class RunConfig {
 
         @Valid @NotNull @JsonProperty
-        private BuildReadConfig read;
+        private RunReadConfig read;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
@@ -173,7 +214,7 @@ public class TopicsConfig {
         @MaxDuration(value = 2, unit = TimeUnit.HOURS)
         private Duration projectTimeout;
 
-        /** A project is built when its window holds at least this many traces with a vector. */
+        /** A project gets a discovery run when its window holds at least this many traces with a vector. */
         @JsonProperty
         @Min(2) @Max(100_000) private int minVectors;
 
@@ -239,37 +280,43 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration insertBackoff;
 
+        /** Added to a run's longest insert (every attempt, every backoff) in its deadline, for the steps around it. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+        private Duration insertSlack;
+
         @JsonIgnore
-        @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
+        @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+        @AssertTrue(message = "topics.run.namingDeadline must be shorter than topics.run.projectTimeout") public boolean isNamingDeadlineValid() {
             return namingDeadline == null || projectTimeout == null
                     || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+        @AssertTrue(message = "topics.run.verifyDeadline must be shorter than topics.run.projectTimeout") public boolean isVerifyDeadlineValid() {
             return verifyDeadline == null || projectTimeout == null
                     || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
-        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */
         @JsonIgnore
-        @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
+        @AssertTrue(message = "topics.run.maxVectors must be at least topics.run.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
     }
 
     /**
-     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
-     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     * The ClickHouse guards of the run's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the run reads a whole window, the window read about three times.
      */
     @Data
-    public static class BuildReadConfig {
+    public static class RunReadConfig implements ReadGuards {
 
         @JsonProperty
         @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
@@ -284,7 +331,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(0) @Max(1000) private int priority;
 
-        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        /** Rows per block of the run's reads: the count's per-trace arrays and the reads' vectors grow with it. */
         @JsonProperty
         @Min(1024) @Max(1_048_576) private int maxBlockSize;
 
@@ -295,24 +342,143 @@ public class TopicsConfig {
         private Duration countSlice;
     }
 
-    /**
-     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
-     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
-     * would keep an empty list for the life of the process.
-     */
-    public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
+    /** The ClickHouse guards a topics read binds: the run's and the read API's are two sets of them. */
+    public interface ReadGuards {
+
+        long getMaxRowsToRead();
+
+        long getMaxMemoryUsage();
+
+        int getMaxThreads();
+
+        int getPriority();
+
+        int getMaxBlockSize();
     }
 
-    /** Which projects without a list the planner queues a first build for. */
+    /**
+     * The read API's ClickHouse guards, apart from the run's: a page request, not a background job. Its reads (the
+     * per topic and day counts, the collecting count) share one time budget.
+     */
     @Data
-    public static class FirstBuildConfig {
+    public static class ReadConfig implements ReadGuards {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse priority of the collecting count; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the collecting count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** A request's ClickHouse reads end within this; a read that does not is a guard trip. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration budget;
+    }
+
+    /** The topics state's MySQL writes. */
+    @Data
+    public static class StorageConfig {
 
         /**
-         * A project's first build waits for its vectors backfill to drain. Past this long since the backfill started,
+         * Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays bounded
+         * however many projects went at once.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int deleteBatchSize;
+
+        /** How often each pod deletes the topics of deleted projects that the project delete left. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration sweepInterval;
+
+        /**
+         * How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire sweeps again.
+         * At most 30m, under the shortest {@code sweepInterval}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration sweepTimeout;
+    }
+
+    /**
+     * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
+     * {@link TopicsStage#ALL}. An id repeated with the same stage is listed once. Throws on an unknown stage or an id
+     * listed with two stages, which {@link #isEnabledWorkspacesValid()} rejects at startup. Not named as a bean getter,
+     * since Lombok and Jackson call getters. The parse is kept against the string it came from, so a value bound or set
+     * later is parsed again rather than served stale.
+     */
+    public Map<String, TopicsStage> enabledWorkspaceStages() {
+        var raw = enabledWorkspaces;
+        var parsed = parsedWorkspaces;
+        if (parsed == null || !Objects.equals(parsed.raw(), raw)) {
+            parsed = ParsedWorkspaces.builder().raw(raw).stages(parse(raw)).build();
+            parsedWorkspaces = parsed;
+        }
+        return parsed.stages();
+    }
+
+    private static Map<String, TopicsStage> parse(String enabledWorkspaces) {
+        var stages = new HashMap<String, TopicsStage>();
+        for (var entry : Objects.toString(enabledWorkspaces, "").split(",")) {
+            var parts = entry.split(":", -1);
+            var workspaceId = parts[0].strip();
+            if (parts.length == 1 && workspaceId.isEmpty()) {
+                continue;
+            }
+            if (workspaceId.isEmpty() || parts.length > 2) {
+                throw new IllegalArgumentException("topics.enabledWorkspaces: malformed entry '%s'".formatted(entry));
+            }
+            var stage = parts.length == 1
+                    ? TopicsStage.ALL
+                    : TopicsStage.fromConfigName(parts[1].strip()).orElseThrow(() -> new IllegalArgumentException(
+                            "topics.enabledWorkspaces: unknown stage in '%s'".formatted(entry)));
+            var listed = stages.putIfAbsent(workspaceId, stage);
+            if (listed != null && listed != stage) {
+                throw new IllegalArgumentException(
+                        "topics.enabledWorkspaces: workspace '%s' is listed with stages '%s' and '%s'"
+                                .formatted(workspaceId, listed.configName(), stage.configName()));
+            }
+        }
+        return Map.copyOf(stages);
+    }
+
+    /** The listed workspace ids, whatever their stage. */
+    public Set<String> enabledWorkspaceIds() {
+        return enabledWorkspaceStages().keySet();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.enabledWorkspaces must list each workspace id as id or id:stage, with one stage per id and stage one of vectors, build, arrival, nightly, ui") public boolean isEnabledWorkspacesValid() {
+        try {
+            enabledWorkspaceStages();
+            return true;
+        } catch (IllegalArgumentException exception) {
+            // The constraint message is fixed text: this names the entry.
+            log.error("Topics config is not valid: {}", exception.getMessage());
+            return false;
+        }
+    }
+
+    /** Which projects without a list the planner queues a discovery run for. */
+    @Data
+    public static class DiscoveryConfig {
+
+        /**
+         * A project's discovery run waits for its vectors backfill to drain. Past this long since the backfill started,
          * it is built anyway once {@code timedOutShare} of the backfill's traces have a vector; with fewer it keeps
          * waiting.
          */
@@ -324,9 +490,29 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.5") @DecimalMax("1.0") private double timedOutShare;
 
-        /** The wait after a project's first, second, ... failed first build; the last applies to every later one. */
+        /**
+         * The wait after a project's first, second, ... failed discovery run; the last applies to every later one.
+         * Comma-separated, so an env var can set it (a list cannot bind from one). No getter: read it via
+         * {@link #retryDelays()}.
+         */
         @NotNull @JsonProperty
-        @Size(min = 1, max = 10) private List<@NotNull Duration> retryDelays;
+        @Getter(AccessLevel.NONE)
+        private String retryDelays;
+
+        /** {@code retryDelays}, parsed: 1 to 10 durations. */
+        public List<java.time.Duration> retryDelays() {
+            return Arrays.stream(retryDelays.split(",")).map(String::strip).filter(delay -> !delay.isEmpty())
+                    .map(delay -> Duration.parse(delay).toJavaDuration()).toList();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.discovery.retryDelays must be 1 to 10 comma-separated durations") public boolean isRetryDelaysValid() {
+            try {
+                return retryDelays == null || (retryDelays().size() >= 1 && retryDelays().size() <= 10);
+            } catch (IllegalArgumentException exception) {
+                return false;
+            }
+        }
     }
 
     /**
@@ -345,12 +531,16 @@ public class TopicsConfig {
         @NotNull @JsonProperty
         private String consumerGroupName;
 
-        /** Runs one pod runs at a time: each holds a window in memory. */
+        /**
+         * Runs one pod runs at a time: each holds its window in memory, so this is a per-pod memory budget. Set it to
+         * {@code maxInFlight} so one pod can fill every slot.
+         */
         @JsonProperty
         @Min(1) @Max(8) private int consumerBatchSize;
 
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
         private Duration poolingInterval;
 
         @NotNull @JsonProperty
@@ -359,7 +549,7 @@ public class TopicsConfig {
         private Duration longPollingDuration;
 
         @JsonProperty
-        @Min(2) private int claimIntervalRatio;
+        @Min(2) @Max(100) private int claimIntervalRatio;
 
         /**
          * A delivered message no pod acked for this long goes to another pod: a stopped pod's runs, put back to
@@ -368,6 +558,7 @@ public class TopicsConfig {
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
         private Duration pendingMessageDuration;
 
         @JsonProperty
@@ -389,7 +580,10 @@ public class TopicsConfig {
         @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
         private Duration heartbeatInterval;
 
-        /** A run whose heartbeat is older than this lost its pod, and is recorded {@code abandoned}. */
+        /**
+         * A run whose heartbeat is older than this lost its pod, and is recorded {@code abandoned}. At least three
+         * heartbeat intervals, so a slow or failed beat or two does not abandon a healthy run.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 1, unit = TimeUnit.HOURS)
@@ -407,6 +601,24 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration planBudget;
 
+        /** How often the leader plans: the discovery job fires on every pod this often, and one of them plans. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration planInterval;
+
+        /** How much longer than the plan the leader lock lasts, for the queue writes and publishes after the counts. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
+        /** How long a stopping pod waits for each of its runs to be put back to {@code queued}. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration requeueWait;
+
         @Override
         @JsonIgnore
         public Codec getCodec() {
@@ -414,33 +626,15 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.runs.abandonGrace must be above topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
-            return abandonGrace == null || heartbeatInterval == null
-                    || abandonGrace.toMilliseconds() > heartbeatInterval.toMilliseconds();
+        @AssertTrue(message = "topics.runs.planBudget must be shorter than topics.runs.planInterval") public boolean isPlanBudgetValid() {
+            return planBudget == null || planInterval == null
+                    || planBudget.toMilliseconds() < planInterval.toMilliseconds();
         }
-    }
-
-    /** The nightly job: updates the topic list of each project that has one. */
-    @Data
-    public static class NightlyConfig {
-
-        /** Runs only when {@code topics.enabled} is on too. */
-        @JsonProperty
-        private boolean enabled;
-
-        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
-        @NotBlank @JsonProperty
-        private String schedule;
-
-        /** No project is queued after this much of the night, from its start; the rest run the next night. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
-        private Duration budget;
 
         @JsonIgnore
-        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
-            return schedule == null || CronExpression.isValidExpression(schedule);
+        @AssertTrue(message = "topics.runs.abandonGrace must be at least 3 times topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
+            return abandonGrace == null || heartbeatInterval == null
+                    || abandonGrace.toMilliseconds() >= 3 * heartbeatInterval.toMilliseconds();
         }
     }
 
@@ -463,6 +657,16 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
+
+        /**
+         * How far before its watermark a workspace's read starts: covers a done status that becomes visible after a
+         * later status was read, such as one written to a lagging replica or before its output row. A status later than
+         * this is left to the daily pass. At most {@code window}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration watermarkOverlap;
 
         /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
@@ -502,6 +706,12 @@ public class TopicsConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration embedTimeout;
 
+        /** How much longer than the rest the leader lock lasts, for the insert after the last embed call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
         @Valid @NotNull @JsonProperty
         private FindConfig find;
 
@@ -512,14 +722,22 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
+        @AssertTrue(message = "topics.vectors.watermarkOverlap must not be longer than topics.vectors.window") public boolean isWatermarkOverlapValid() {
+            return watermarkOverlap == null || window == null
+                    || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
+        }
+
+        @JsonIgnore
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
 
+        // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
+        // shorter budget would read nothing.
         @JsonIgnore
-        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+        @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
-                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+                    || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
         }
 
         @JsonIgnore
@@ -549,7 +767,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick; adds to the leader lock's lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;

@@ -9,11 +9,11 @@ import java.util.function.Function;
 /**
  * One step of a nightly update, as a pure step machine: either {@link Ask} (the update needs one LLM answer to go on) or
  * {@link Done} (its result). The caller makes each call and feeds the answer to {@link Ask#next}; the algorithm does no
- * I/O itself. {@link TopicsRebuildService} drives it reactively, a test with scripted answers.
+ * I/O itself. {@link TopicsRunService} drives it reactively, a test with scripted answers.
  *
  * @param <T> the result
  */
-public sealed interface NightStep<T> {
+sealed interface NightStep<T> {
 
     /**
      * The update asks for one LLM call. {@code next} takes the answer's {@code output} when it is a JSON object, or null

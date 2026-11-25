@@ -17,8 +17,8 @@ class ValidationResult(pydantic.BaseModel):
     type: ValidationType
     validation_config: Dict[str, Any]
     validation_details: Dict[str, Any]
-    # Set by the Opik backend when the check could not run; the entry then passes (the
-    # backend fails open on an outage of its inference service).
+    # Set by a local rule (LLM judge) when its check could not run. The Opik backend
+    # never sets it: when its checks cannot run it answers 503 instead of a verdict.
     error: Optional[str] = None
 
 

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.jdbi.v3.core.Handle;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.io.IOException;
@@ -119,6 +121,12 @@ final class TopicsTestData {
                 INSERT INTO projects (id, name, workspace_id, last_updated_trace_at) VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE last_updated_trace_at = GREATEST(IFNULL(last_updated_trace_at, ?), ?)
                 """, projectId.toString(), "topics-" + projectId, workspaceId, lastTrace, lastTrace, lastTrace));
+        seedVectors(workspaceId, projectId, from, count, night);
+    }
+
+    /** As {@link #seed(String, UUID, int, int, Instant)}, the vectors only: the project row is left as it is. */
+    void seedVectors(String workspaceId, UUID projectId, int from, int count, Instant night) {
+        var shift = Duration.between(traces.night(), night);
         int dimensions = TopicEmbedding.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
@@ -147,7 +155,7 @@ final class TopicsTestData {
     }
 
     /**
-     * What a saved first build leaves in MySQL for a project: its row with the run saved two hours after
+     * What a saved discovery run leaves in MySQL for a project: its row with the run saved two hours after
      * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
@@ -157,7 +165,7 @@ final class TopicsTestData {
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     savedAt.minus(Duration.ofMinutes(1)));
             projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
@@ -190,6 +198,16 @@ final class TopicsTestData {
     }
 
     /** An Opik id: UUID v7. */
+    /** The Reactor context a run's subscriber gives its work, for code that reads the workspace from it. */
+    static Context context(TopicsMetrics.Workspace workspace) {
+        return Context.of(RequestContext.WORKSPACE_ID, workspace.id(), RequestContext.WORKSPACE_NAME, workspace.name(),
+                RequestContext.USER_NAME, "test");
+    }
+
+    static Context context(String workspaceId) {
+        return context(new TopicsMetrics.Workspace(workspaceId, workspaceId));
+    }
+
     static UUID newId() {
         return Generators.timeBasedEpochGenerator().generate();
     }

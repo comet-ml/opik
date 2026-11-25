@@ -14,12 +14,11 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
-import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
@@ -34,6 +33,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -47,9 +47,12 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.TASK;
@@ -196,6 +199,38 @@ class TopicVectorsStorageTest {
     }
 
     @Test
+    @DisplayName("a trace with a status row is left out by the window read, and the trace-delete cascade deletes its "
+            + "status row with its vectors")
+    void statusRowAndCascade() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var unembeddable = ID_GENERATOR.generateId();
+        var embedded = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, unembeddable, 3))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, unembeddable, 3))).block();
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, embedded, 3))).block();
+        var lower = Instant.now().minus(1, ChronoUnit.HOURS);
+        var found = findUnvectored(workspaceId, lower);
+        assertCandidates(found, candidate(workspaceId, projectId, unembeddable, 3));
+
+        vectorsDAO.insertStatuses(List.of(new TopicVectorStatus(found.getFirst(), SkipReason.INVALID_VECTOR))).block();
+
+        assertThat(findUnvectored(workspaceId, lower)).isEmpty();
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable)))
+                .containsExactly(Map.entry(unembeddable, "invalid_vector"));
+
+        vectorsDAO.deleteByTraceIds(Set.of(unembeddable, embedded), projectId)
+                .contextWrite(context -> context.put(RequestContext.USER_NAME, "user")
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(tables.statuses(workspaceId, List.of(unembeddable))).isEmpty();
+        assertThat(tables.vectors(workspaceId, List.of(embedded))).isEmpty();
+        // Its done status is ai-labels', not deleted here: with the status row gone, the read finds it again.
+        assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, unembeddable, 3));
+    }
+
+    @Test
     @DisplayName("the trace_created_at bound drops older traces from both sides alike, so the anti-join stays exact")
     void createdAtBound() {
         var workspaceId = ID_GENERATOR.generateId().toString();
@@ -231,6 +266,30 @@ class TopicVectorsStorageTest {
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, inside, 1).toBuilder()
                 .traceCreatedAt(insideCreatedAt).build())).block();
         assertThat(findUnvectored(workspaceId, lower, createdAfter)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a window with no new done status reads at most the workspace's status rows: the summary and "
+            + "vector sides get no id_at bound of 1970 from an empty done")
+    void emptyWindowReadsNoSummaryOrVectorRows() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId(Instant.now().minus(2, ChronoUnit.DAYS));
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 1))).block();
+        // Summaries and vectors of other traces: only a 1970 bound reads them.
+        var others = IntStream.range(0, 50)
+                .mapToObj(i -> ID_GENERATOR.generateId(Instant.now().minus(2, ChronoUnit.DAYS)))
+                .toList();
+        labelsDAO.insert(others.stream().map(id -> outputLabel(workspaceId, projectId, id, 1)).toList()).block();
+        vectorsDAO.insert(others.stream().map(id -> vector(workspaceId, projectId, id, 1)).toList()).block();
+
+        assertThat(findUnvectored(workspaceId, Instant.now())).isEmpty();
+
+        var reads = findUnvectoredReads(workspaceId);
+        assertThat(reads.queries()).isEqualTo(1);
+        // done is read at most three times, one status row each time; with a 1970 bound the vector side adds its
+        // 50 rows (the summary side stays pruned by its IN on done).
+        assertThat(reads.rows()).isLessThanOrEqualTo(3);
     }
 
     @Test
@@ -461,25 +520,25 @@ class TopicVectorsStorageTest {
                 vector(workspaceId, first, firstTraces.get(1), 1))).block();
         var lower = Instant.now().minus(2, ChronoUnit.HOURS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(first, second), 10).block();
+        var window = new TopicVectorsDAO.Slice(lower.minus(8, ChronoUnit.DAYS), null);
+        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, window, 10).collectList().block();
+        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK,
+                new TopicVectorsDAO.Slice(lower, null), List.of(first, second), 10).block();
 
         assertThat(tracesByProject(found)).isEqualTo(Map.of(first, 3L, second, 1L));
         assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                 Instant.now().plusSeconds(1)));
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
         assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
-        // A window that starts after the traces were created counts none of them, but still finds the projects.
-        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before,
-                lower.minus(8, ChronoUnit.DAYS), 10).collectList().block()))
-                .isEqualTo(Map.of(first, 0L, second, 0L));
+        // A status window that starts after the traces were created still counts them: the window read returns them.
+        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, window, 10)
+                .collectList().block()))
+                .isEqualTo(Map.of(first, 3L, second, 1L));
     }
 
     @Test
-    @DisplayName("the discovery and the vector count read slice by slice of trace creation time and add up: traces "
-            + "created days apart are each counted once, and only the asked projects are counted")
+    @DisplayName("the discovery's slices of trace creation time cover the window and add up: traces created days "
+            + "apart are each counted once, and only the asked projects are counted")
     void discoveryInSlices() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
@@ -501,15 +560,24 @@ class TopicVectorsStorageTest {
         vectorsDAO.insert(vectors).block();
         var lower = now.minus(25, ChronoUnit.DAYS);
 
-        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
-                List.of(projectId), 10).block();
+        var slices = vectorsDAO.slices(lower.minus(8, ChronoUnit.DAYS));
+        var found = Flux.fromIterable(slices)
+                .concatMap(slice -> vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, slice, 10))
+                .collect(Collectors.toMap(BackfillProject::projectId, Function.identity(),
+                        BackfillProject::merge))
+                .block();
+        var tracesWithVectors = Flux.fromIterable(vectorsDAO.slices(lower))
+                .concatMap(slice -> vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slice,
+                        List.of(projectId), 10))
+                .flatMapIterable(Map::entrySet)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum))
+                .block();
 
-        assertThat(tracesByProject(found)).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
+        assertThat(slices).hasSizeGreaterThan(3);
+        assertThat(tracesByProject(List.copyOf(found.values()))).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
         assertThat(tracesWithVectors).isEqualTo(Map.of(projectId, 3L));
-        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower, List.of(), 10).block())
-                .isEmpty();
+        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, slices.getFirst(), List.of(), 10)
+                .block()).isEmpty();
     }
 
     @Test
@@ -556,12 +624,13 @@ class TopicVectorsStorageTest {
         var third = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
         List.of(first, second, third).forEach(projectId -> tables.project(workspaceId, projectId));
-        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
         backfillService.start(List.of(row.projectId(first).backfillStartedAt(t0.plusSeconds(60)).build()));
         var t1 = t0.plusSeconds(100);
-        backfillService.record(List.of(Progress.builder().workspaceId(workspaceId).projectId(first).drainedAt(t1)
-                .written(5).build()));
+        backfillService
+                .record(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(first).drainedAt(t1)
+                        .written(5).build()));
 
         var started = backfillService.findByKeys(workspaceId, List.of(first, second, third));
         // Never discovered, so its total is 0 and nothing written counts yet.
@@ -573,11 +642,11 @@ class TopicVectorsStorageTest {
 
         var t2 = t0.plusSeconds(200);
         var t3 = t0.plusSeconds(300);
-        var found = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t3).backfillLastDoneAt(t2);
+        var found = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t3).backfillLastDoneAt(t2);
         backfillService.discovered(workspaceId, List.of(
                 found.projectId(first).backfillTracesTotal(10).backfillTracesDone(4).build(),
                 found.projectId(third).backfillTracesTotal(7).backfillTracesDone(0).build()), t3, t0.minusSeconds(1));
-        var progress = Progress.builder().workspaceId(workspaceId).projectId(third).written(5).build();
+        var progress = TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(third).written(5).build();
         backfillService.record(List.of(progress, progress));
 
         assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
@@ -595,7 +664,7 @@ class TopicVectorsStorageTest {
         var t4 = t3.plus(3, ChronoUnit.DAYS);
         backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
 
-        var reset = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
+        var reset = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
         assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
                 first, reset.projectId(first).backfillLastDoneAt(t2).build(),
                 second, reset.projectId(second).backfillLastDoneAt(t0).build(),
@@ -610,14 +679,14 @@ class TopicVectorsStorageTest {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
         tables.project(workspaceId, projectId);
-        // A first build created the row: only its own columns are set.
+        // A discovery run created the row: only its own columns are set.
         template.inTransaction(WRITE, handle -> handle.createUpdate("""
                 INSERT INTO topic_projects (workspace_id, project_id, saved_runs) VALUES (:workspaceId, :projectId, 2)
                 """).bind("workspaceId", workspaceId).bind("projectId", projectId.toString()).execute());
         assertThat(backfillService.findByKeys(workspaceId, List.of(projectId))).isEmpty();
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
 
-        var backfill = Backfill.builder().workspaceId(workspaceId).projectId(projectId).backfillStartedAt(t0)
+        var backfill = TopicBackfill.builder().workspaceId(workspaceId).projectId(projectId).backfillStartedAt(t0)
                 .backfillLastDoneAt(t0).backfillTracesTotal(3).build();
         backfillService.start(List.of(backfill));
 
@@ -630,23 +699,45 @@ class TopicVectorsStorageTest {
     }
 
     @Test
-    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again")
+    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again, "
+            + "in more than one batch")
     void discoveryRemovesRowsOfDeletedProjects() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var kept = ID_GENERATOR.generateId();
-        var deleted = ID_GENERATOR.generateId();
+        // More than topics.storage.deleteBatchSize (2 in the tests), so the delete takes two transactions.
+        var deleted = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
         tables.project(workspaceId, kept);
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
-        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
+        var row = TopicBackfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         // Left behind by a failed delete on ProjectsDeleted.
-        backfillService.start(List.of(row.projectId(kept).build(), row.projectId(deleted).build()));
+        backfillService.start(Stream.concat(Stream.of(kept), deleted.stream())
+                .map(projectId -> row.projectId(projectId).build())
+                .toList());
 
-        // The deleted project's statuses are still there, so the discovery finds it again.
+        // The first deleted project's statuses are still there, so the discovery finds it again.
         int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).backfillTracesTotal(3)
-                .build(), row.projectId(deleted).backfillTracesTotal(3).build()), t0.plusSeconds(60), t0);
+                .build(), row.projectId(deleted.getFirst()).backfillTracesTotal(3).build()), t0.plusSeconds(60), t0);
 
-        assertThat(removed).isOne();
-        assertThat(backfillService.findByKeys(workspaceId, List.of(kept, deleted))).containsOnlyKeys(kept);
+        assertThat(removed).isEqualTo(deleted.size());
+        assertThat(backfillService.findByKeys(workspaceId, Stream.concat(Stream.of(kept), deleted.stream()).toList()))
+                .containsOnlyKeys(kept);
+    }
+
+    @Test
+    @DisplayName("recording a tick's progress counts the rows it updated: 0 for a project whose row is gone")
+    void recordBackfillsCountsTheRowsUpdated() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var kept = ID_GENERATOR.generateId();
+        var gone = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        backfillService.start(List.of(TopicBackfill.builder().workspaceId(workspaceId).projectId(kept)
+                .backfillStartedAt(t0).backfillLastDoneAt(t0).backfillTracesTotal(5).build()));
+        var progress = TopicBackfillProgress.builder().workspaceId(workspaceId).written(1);
+
+        int[] updated = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .recordBackfills(List.of(progress.projectId(kept).build(), progress.projectId(gone).build())));
+
+        assertThat(updated).containsExactly(1, 0);
     }
 
     private Instant vectorsCheckedAt(String workspaceId) {
@@ -756,6 +847,25 @@ class TopicVectorsStorageTest {
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id AND task_version = :task_version
                 LIMIT 1
                 """, Map.of("workspace_id", workspaceId, "trace_id", traceId.toString(), "task_version", taskVersion));
+    }
+
+    private record QueryReads(long queries, long rows) {
+    }
+
+    private QueryReads findUnvectoredReads(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS queries, sum(read_rows) AS read_rows
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("log_comment", "topics:find_unvectored:" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> new QueryReads(
+                        row.get("queries", Long.class), row.get("read_rows", Long.class))))))
+                .block();
     }
 
     private Map<String, String> idAtAndPartition(String table, String workspaceId) {
