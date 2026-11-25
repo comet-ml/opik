@@ -749,3 +749,32 @@ apply, and `last_night` is not written.
 | `409` | Below stage `nightly` or topics off, no list, the list covers the night, too few vectors, or a run in flight. The message says which. |
 | `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill window. |
 | `503` | Not started, nothing queued. Try again. |
+
+### Reading the night by hand
+
+These read `topic_projects` on the app-state MySQL. Add `AND workspace_id IN (...)` to read by the primary key. A
+workspace with no matching row is absent: read it as 0.
+
+```sql
+-- Paused: a list whose last TOPICS_NIGHTLY_PAUSE_FAILURES runs failed within TOPICS_NIGHTLY_PAUSE_NIGHTS nights
+-- (defaults 3 and 7)
+SELECT workspace_id, COUNT(*) AS paused_projects
+FROM topic_projects
+WHERE list_run_id IS NOT NULL AND failed_runs >= 3 AND run_started_at >= UTC_DATE() - INTERVAL 7 DAY
+GROUP BY workspace_id;
+
+-- Starved: not reached by the budget on 2 nights or more in a row
+SELECT workspace_id, COUNT(*) AS starved_projects
+FROM topic_projects
+WHERE not_reached_nights >= 2
+GROUP BY workspace_id;
+
+-- The latest night that looked at a project, and its age; NULL before the first night
+SELECT MAX(last_night) AS last_night,
+       TIMESTAMPDIFF(SECOND, MAX(last_night), UTC_TIMESTAMP()) AS last_night_age_seconds
+FROM topic_projects;
+```
+
+For a paused project, read `run_error_code` and search the logs for its `run_id`. For starved projects, raise
+`TOPICS_NIGHTLY_BUDGET` or `TOPICS_RUNS_MAX_IN_FLIGHT`. When the last night is more than a day old, check that a leader
+plans (see "Stuck runs"): no plan, no night.
