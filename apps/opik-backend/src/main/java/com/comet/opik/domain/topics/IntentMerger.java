@@ -14,6 +14,12 @@ import java.util.HashMap;
 @UtilityClass
 public class IntentMerger {
 
+    /** The slots of a text's entry in {@link #group}: its count, its first trace, its index among the sorted texts. */
+    private static final int COUNT = 0;
+    private static final int FIRST = 1;
+    private static final int INDEX = 2;
+    private static final int ENTRY_SIZE = 3;
+
     /**
      * @param texts   per trace, in time order (earliest first), stripped and non-empty
      * @param vectors per trace, {@code texts.length * dimensions} values
@@ -47,29 +53,30 @@ public class IntentMerger {
         for (int i = 0; i < texts.length; i++) {
             Preconditions.checkArgument(texts[i] != null, "texts must not hold null, index '%s'", i);
         }
-        // Hash grouping, then one sort of the unique texts: faster than a sorted map of every trace. Per text, its
-        // count, its first trace and its index among the sorted texts, so no index is boxed.
+        // Hash grouping, then one sort of the unique texts: faster than a sorted map of every trace. Per text, an
+        // int array holds its count, its first trace and its index among the sorted texts, so no index is boxed.
         var byText = new HashMap<String, int[]>();
         for (int i = 0; i < texts.length; i++) {
-            var seen = byText.get(texts[i]);
-            if (seen == null) {
-                byText.put(texts[i], new int[]{1, i, 0});
-            } else {
-                seen[0]++;
+            var entry = byText.get(texts[i]);
+            if (entry == null) {
+                entry = new int[ENTRY_SIZE];
+                entry[FIRST] = i;
+                byText.put(texts[i], entry);
             }
+            entry[COUNT]++;
         }
         var unique = byText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
         var weights = new int[unique.length];
         var firstIndex = new int[unique.length];
         for (int u = 0; u < unique.length; u++) {
             var entry = byText.get(unique[u]);
-            weights[u] = entry[0];
-            firstIndex[u] = entry[1];
-            entry[2] = u;
+            weights[u] = entry[COUNT];
+            firstIndex[u] = entry[FIRST];
+            entry[INDEX] = u;
         }
         var textOfTrace = new int[texts.length];
         for (int i = 0; i < texts.length; i++) {
-            textOfTrace[i] = byText.get(texts[i])[2];
+            textOfTrace[i] = byText.get(texts[i])[INDEX];
         }
         return IntentGroups.builder()
                 .texts(unique)
