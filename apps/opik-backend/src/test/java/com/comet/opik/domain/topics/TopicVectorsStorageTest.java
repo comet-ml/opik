@@ -33,6 +33,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -265,6 +266,22 @@ class TopicVectorsStorageTest {
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, inside, 1).toBuilder()
                 .traceCreatedAt(insideCreatedAt).build())).block();
         assertThat(findUnvectored(workspaceId, lower, createdAfter)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a window with no new done status reads no rows: the summary, vector and status sides get no "
+            + "id_at bound of 1970 from an empty done")
+    void emptyWindowReadsNoRows() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId(Instant.now().minus(2, ChronoUnit.DAYS));
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 1))).block();
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 1))).block();
+
+        assertThat(findUnvectored(workspaceId, Instant.now())).isEmpty();
+
+        assertThat(findUnvectoredReadRows(workspaceId)).isZero();
     }
 
     @Test
@@ -822,6 +839,21 @@ class TopicVectorsStorageTest {
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id AND task_version = :task_version
                 LIMIT 1
                 """, Map.of("workspace_id", workspaceId, "trace_id", traceId.toString(), "task_version", taskVersion));
+    }
+
+    private long findUnvectoredReadRows(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT sum(read_rows) AS read_rows
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND log_comment LIKE :log_comment
+                        """)
+                        .bind("log_comment", "topics:find_unvectored:" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("read_rows", Long.class)))))
+                .block();
     }
 
     private Map<String, String> idAtAndPartition(String table, String workspaceId) {
