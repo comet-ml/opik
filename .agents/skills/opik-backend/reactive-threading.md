@@ -29,7 +29,7 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
 | CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel`, or the entry point's pool |
 | Per-item blocking or CPU in a `Flux` | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
-| Back to the entry point's pool after a call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.cpuOn`, or no hop |
+| Back to the entry point's pool after a call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.originalOn`, or no hop |
 | Light work (map one row, build a DTO) | nothing | wherever it lands |
 
 Use `resumeOriginal` once, after the last client call and before your own logic. Not between client calls, and not
@@ -92,13 +92,14 @@ return reader.readWindow(workspaceId, projectId)
 
 - `parallel` is for short CPU work. Long CPU work (seconds) must also be bounded by a concurrency cap, because
   `parallel` has one thread per core and also runs every timer.
-- An entry point whose CPU work needs its own pool (a job or subscriber with a bounded workers scheduler) routes it
-  there once, and every `Offload.cpu` step upstream follows. Callers that set nothing, such as an API, use `parallel`:
+- An entry point whose CPU work runs for seconds may route it to its own core-sized pool once, and every
+  `Offload.cpu` step upstream follows. Callers that set nothing use `parallel`. Never route CPU to a subscriber's
+  workers: that pool is sized for waiting (batch size × 2 threads), not for cores.
 
 ```java
-// ✅ GOOD - the subscriber picks the pool once; the services stay scheduler-free
+// ✅ GOOD - the subscriber picks the pools once; the services stay scheduler-free
 return topicsRunService.discover(run)
-        .contextWrite(context -> Offload.cpuOn(context, workersScheduler));
+        .contextWrite(context -> Offload.originalOn(Offload.cpuOn(context, clusteringScheduler), workersScheduler));
 ```
 - Never use `boundedElastic` for long CPU work to make it fit. Never `publishOn` mid-chain to move one step: it moves
   every step after it.

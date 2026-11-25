@@ -35,14 +35,18 @@ class OffloadTest {
 
             var resumedThread = reply.transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName())
-                    .contextWrite(context -> Offload.cpuOn(context, workers))
+                    .contextWrite(context -> Offload.originalOn(context, workers))
                     .block();
             var resumedItemThreads = Flux.just(1, 2).publishOn(client)
                     .transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName().replaceAll("-\\d+$", ""))
                     .distinct()
                     .collectList()
-                    .contextWrite(context -> Offload.cpuOn(context, workers))
+                    .contextWrite(context -> Offload.originalOn(context, workers))
+                    .block();
+            var cpuThread = Mono.just(1)
+                    .flatMap(__ -> Offload.cpu(() -> Thread.currentThread().getName()))
+                    .contextWrite(context -> Offload.originalOn(context, workers))
                     .block();
             var unsetThread = reply.transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName())
@@ -51,6 +55,7 @@ class OffloadTest {
             assertThat(resumedThread).startsWith("offload-test-workers-");
             assertThat(resumedItemThreads).containsExactly("offload-test-workers");
             assertThat(unsetThread).startsWith("offload-test-client-");
+            assertThat(cpuThread).startsWith("parallel-");
         } finally {
             workers.dispose();
             client.dispose();
