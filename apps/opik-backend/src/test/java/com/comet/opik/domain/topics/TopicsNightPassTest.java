@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,10 +100,10 @@ class TopicsNightPassTest {
                 .map(id -> Project.builder().id(id).name("project").build()).toList());
 
         candidates = mock(TopicsDiscoveryCandidates.class);
-        when(candidates.windowVectors(anyString(), any(), any())).thenAnswer(invocation -> {
-            var count = vectors.get(invocation.<UUID>getArgument(1));
-            return count == null ? Mono.error(new IllegalStateException("ClickHouse guard tripped")) : Mono.just(count);
-        });
+        // As the count: a project with no count in vectors failed its own count and is left out.
+        when(candidates.windowVectors(anyString(), anyCollection(), any())).thenAnswer(invocation -> Mono.just(
+                invocation.<Collection<UUID>>getArgument(1).stream().filter(vectors::containsKey)
+                        .collect(Collectors.toMap(id -> id, vectors::get))));
         workspaceService = mock(TopicWorkspaceService.class);
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of(WORKSPACE_ID));
         queue = planned -> {
@@ -219,7 +220,7 @@ class TopicsNightPassTest {
         assertThat(plan(IN_BUDGET, 0)).isZero();
 
         assertThat(decisions("skip", "deleted")).isEqualTo(1);
-        verify(candidates, never()).windowVectors(anyString(), any(), any());
+        verify(candidates, never()).windowVectors(anyString(), anyCollection(), any());
 
         rows.put(gone, row(gone).lastNight(NIGHT).build());
         assertThat(plan(IN_BUDGET, 2)).isEqualTo(2);
