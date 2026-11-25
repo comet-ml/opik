@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.AnalyticsQueryResponse;
+import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -22,6 +24,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -239,6 +242,19 @@ class AnalyticsQueriesResourceTest {
     @DisplayName("scoped: a project from another workspace returns no rows")
     void executeScopedQuery__whenProjectFromAnotherWorkspace__thenReturnsNoRows() {
         assertNoRows(analyticsQueriesClient.executeScoped(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
+    }
+
+    @Test
+    @DisplayName("scoped: a query over the size cap fails request validation with 422")
+    void executeScopedQuery__whenQueryTooLong__thenUnprocessable() {
+        var query = RESULT_QUERY + " ".repeat(DashboardSavedQuery.MAX_SQL_LENGTH);
+
+        try (Response response = analyticsQueriesClient.callExecuteScoped(null, query, API_KEY_A, WORKSPACE_NAME_A)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            assertThat(response.readEntity(ErrorMessage.class).errors())
+                    .containsExactly(
+                            "query size must be between 0 and %d".formatted(DashboardSavedQuery.MAX_SQL_LENGTH));
+        }
     }
 
     @Test

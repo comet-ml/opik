@@ -889,9 +889,8 @@ rateLimit:
       errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
     dashboardWidgetQueries:
       # Default: 300
-      # Description: how many free-form SQL queries are allowed per workspace in the specified time bucket, shared by
-      #   the saved widget queries (dashboards and insights views) and the public analytics-queries endpoint. Every
-      #   viewer runs every Ollie chart on each load and date-range change.
+      # Description: how many saved widget queries (dashboards and insights views) are allowed per workspace in the
+      #   specified time bucket. Every viewer runs every Ollie chart on each load and date-range change.
       limit: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_PER_WORKSPACE_LIMIT:-300}
       # Default: 60
       # Description: Time bucket size in seconds
@@ -901,7 +900,22 @@ rateLimit:
       # Description: User facing bucket name
       userFacingBucketName: dashboard_widget_queries
       # Description: Rate limit error message
-      errorMessage: "You have exceeded the rate limit for free-form SQL queries in this workspace. Please try again later."
+      errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
+    analyticsQueries:
+      # Default: 60
+      # Description: how many queries the public analytics-queries endpoint (API keys and the Opik MCP server) allows
+      #   per workspace in the specified time bucket. Separate from dashboardWidgetQueries, so programmatic callers
+      #   cannot use up the budget of dashboard and insights view viewers.
+      limit: ${RATE_LIMIT_ANALYTICS_QUERIES_PER_WORKSPACE_LIMIT:-60}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_ANALYTICS_QUERIES_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Analytics-Queries
+      # Description: User facing bucket name
+      userFacingBucketName: analytics_queries
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for analytics queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket

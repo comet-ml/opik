@@ -38,8 +38,8 @@ import java.util.concurrent.CompletionException;
 
 /**
  * Public entry point for Custom Charts free-form SQL, called by the Opik MCP server and by API keys directly. Runs on
- * the EXTENDED account with the same checks as the internal scoped endpoint, and shares one per-workspace budget with
- * the dashboard and Insights Views widget queries.
+ * the EXTENDED account with the same checks as the internal scoped endpoint. Its per-workspace budget is its own, so
+ * programmatic callers cannot starve the dashboard and Insights Views widget queries.
  */
 @Path("/v1/private/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -76,7 +76,7 @@ public class AnalyticsQueriesPublicResource {
             @ApiResponse(responseCode = "429", description = "Too many queries; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Custom Charts or its public endpoints are not enabled")})
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
-    @RateLimited(value = "dashboardWidgetQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RateLimited(value = "analyticsQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response runQuery(
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
