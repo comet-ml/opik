@@ -89,11 +89,16 @@ const setupForm = ({
       }),
     {
       wrapper: ({ children }) =>
-        React.createElement(
-          PermissionsTestProvider,
-          { permissions },
-          React.createElement(QueryClientProvider, { client: queryClient }, children),
-        ),
+        // createElement can't type the required `children` prop of the provider
+        // eslint-disable-next-line react/no-children-prop
+        React.createElement(PermissionsTestProvider, {
+          permissions,
+          children: React.createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            children,
+          ),
+        }),
     },
   );
 
