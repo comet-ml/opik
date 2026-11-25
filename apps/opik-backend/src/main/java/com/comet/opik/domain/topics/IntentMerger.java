@@ -4,10 +4,7 @@ import com.google.common.base.Preconditions;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.HashMap;
 
 /**
  * Merges identical intents into weighted points: one point per exact text (no further normalization), weighted by its
@@ -50,21 +47,34 @@ public class IntentMerger {
         for (int i = 0; i < texts.length; i++) {
             Preconditions.checkArgument(texts[i] != null, "texts must not hold null, index '%s'", i);
         }
-        // Hash grouping, then one sort of the unique texts: faster than a sorted map of every trace.
-        var tracesOfText = IntStream.range(0, texts.length).boxed()
-                .collect(Collectors.groupingBy(i -> texts[i]));
-        var unique = tracesOfText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
-        var traces = Arrays.stream(unique).map(tracesOfText::get).toList();
-        var textOfTrace = new int[texts.length];
-        for (int u = 0; u < unique.length; u++) {
-            for (int i : traces.get(u)) {
-                textOfTrace[i] = u;
+        // Hash grouping, then one sort of the unique texts: faster than a sorted map of every trace. Per text, its
+        // count, its first trace and its index among the sorted texts, so no index is boxed.
+        var byText = new HashMap<String, int[]>();
+        for (int i = 0; i < texts.length; i++) {
+            var seen = byText.get(texts[i]);
+            if (seen == null) {
+                byText.put(texts[i], new int[]{1, i, 0});
+            } else {
+                seen[0]++;
             }
+        }
+        var unique = byText.keySet().stream().sorted(TopicText.CODE_POINT_ORDER).toArray(String[]::new);
+        var weights = new int[unique.length];
+        var firstIndex = new int[unique.length];
+        for (int u = 0; u < unique.length; u++) {
+            var entry = byText.get(unique[u]);
+            weights[u] = entry[0];
+            firstIndex[u] = entry[1];
+            entry[2] = u;
+        }
+        var textOfTrace = new int[texts.length];
+        for (int i = 0; i < texts.length; i++) {
+            textOfTrace[i] = byText.get(texts[i])[2];
         }
         return IntentGroups.builder()
                 .texts(unique)
-                .weights(traces.stream().mapToInt(List::size).toArray())
-                .firstIndex(traces.stream().mapToInt(List::getFirst).toArray())
+                .weights(weights)
+                .firstIndex(firstIndex)
                 .textOfTrace(textOfTrace)
                 .build();
     }
