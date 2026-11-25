@@ -34,12 +34,15 @@ import {
   NOT_DEFAULT_TYPE,
   buildCatalog,
   filterCatalog,
+  replaceOne,
   builtInLookup,
   groupHistory,
   providersOf,
   sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
+import useSaveModelPrices from "./useSaveModelPrices";
+import { useToast } from "@/ui/use-toast";
 import HistorySheet from "./HistorySheet";
 import PricesTable, {
   DEFAULT_COLUMNS_ORDER,
@@ -93,12 +96,12 @@ const CostCenterTab: React.FC = () => {
     returnFocusTo.current = null;
   }, [isAnyDrawerOpen]);
 
-  const rememberFocus = () => {
+  const rememberFocus = useCallback(() => {
     returnFocusTo.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-  };
+  }, []);
 
   const catalog = useMemo(
     () => buildCatalog(builtIns ?? [], list?.rows ?? []),
@@ -260,11 +263,42 @@ const CostCenterTab: React.FC = () => {
   );
 
   const drawerEntry = drawerTarget?.entry;
-  const openDrawer = (target: DrawerTarget) => {
-    rememberFocus();
-    drawerKey.current += 1;
-    setDrawerTarget(target);
-  };
+  const openDrawer = useCallback(
+    (target: DrawerTarget) => {
+      rememberFocus();
+      drawerKey.current += 1;
+      setDrawerTarget(target);
+    },
+    [rememberFocus],
+  );
+  const openEntry = useCallback(
+    (entry: CatalogEntry) => openDrawer({ entry }),
+    [openDrawer],
+  );
+
+  const { send } = useSaveModelPrices();
+  const { toast } = useToast();
+  // Same path as the drawer's remove: the dry run catches a removal the
+  // backend rejects, like an alias that still points at this model.
+  const removeEntry = useCallback(
+    async (entry: CatalogEntry) => {
+      if (!list || !entry.row) return;
+      const { request } = replaceOne(list, entry.row, undefined);
+      const preview = await send(request, true);
+      if (preview.kind === "invalid") {
+        toast({
+          title: "Prices not saved",
+          description: preview.errors.map((error) => error.message).join(" "),
+          variant: "destructive",
+        });
+        return;
+      }
+      if (preview.kind === "previewed") {
+        await send(request, false);
+      }
+    },
+    [list, send, toast],
+  );
 
   const resetPage =
     <T,>(setter: (value: T) => void) =>
@@ -390,11 +424,13 @@ const CostCenterTab: React.FC = () => {
         pinnedKeys={pinned}
         onPinnedKeysChange={setPinned}
         activeKey={drawerEntry?.key}
-        onOpen={(entry) => openDrawer({ entry })}
+        onOpen={openEntry}
         onClearFilters={() => {
           chips.clearAll();
           resetPage(setSearch)("");
         }}
+        canEdit={canEdit}
+        onRemove={removeEntry}
       />
       {visible.length > 0 && (
         <div className="pt-4">

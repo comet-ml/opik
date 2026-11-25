@@ -19,7 +19,11 @@ import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { generatePinColumDef } from "@/shared/DataTable/utils";
+import {
+  generateActionsColumDef,
+  generatePinColumDef,
+} from "@/shared/DataTable/utils";
+import PriceRowActionsCell, { PriceRowActions } from "./PriceRowActionsCell";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { COLUMN_PIN_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import {
@@ -165,6 +169,8 @@ type PricesTableProps = {
   activeKey?: string;
   onOpen: (entry: CatalogEntry) => void;
   onClearFilters: () => void;
+  canEdit: boolean;
+  onRemove: (entry: CatalogEntry) => void;
 };
 
 const PricesTable: React.FC<PricesTableProps> = ({
@@ -180,6 +186,8 @@ const PricesTable: React.FC<PricesTableProps> = ({
   activeKey,
   onOpen,
   onClearFilters,
+  canEdit,
+  onRemove,
 }) => {
   const columns = useMemo<ColumnDef<CatalogEntry>[]>(
     () => [
@@ -193,8 +201,19 @@ const PricesTable: React.FC<PricesTableProps> = ({
         selectedColumns,
         columnsOrder,
       }),
+      ...(canEdit
+        ? [
+            generateActionsColumDef<CatalogEntry>({
+              cell: PriceRowActionsCell as never,
+              customMeta: {
+                onEdit: onOpen,
+                onRemove,
+              } satisfies PriceRowActions,
+            }),
+          ]
+        : []),
     ],
-    [selectedColumns, columnsOrder],
+    [selectedColumns, columnsOrder, canEdit, onOpen, onRemove],
   );
 
   const rowPinning = useMemo<RowPinningState>(

@@ -604,6 +604,73 @@ describe("CostCenterTab", () => {
     });
   });
 
+  describe("row actions", () => {
+    const openRowMenu = (model: string) =>
+      fireEvent.pointerDown(
+        within(rowOf(model)).getByRole("button", { name: "Actions menu" }),
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+    const sentModels = () =>
+      sentRows().map((row: { model: string }) => row.model);
+
+    it("removes a custom model after confirming", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      openRowMenu("acme-llama-70b");
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Remove model" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Remove model" }),
+      );
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(mutateAsync.mock.calls[0][0].dryRun).toBe(true);
+      expect(sentModels()).toEqual(["gpt-4o", "team-model"]);
+      expect(screen.queryByLabelText("Model name")).toBeNull();
+    });
+
+    it("restores the defaults of an override from its row menu", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      openRowMenu("gpt-4o");
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Restore all defaults" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Restore all defaults" }),
+      );
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(sentModels()).toEqual(["acme-llama-70b", "team-model"]);
+    });
+
+    it("offers no row menu for built-in prices or to read-only users", () => {
+      const { unmount } = renderTab(ADMIN);
+
+      expect(
+        within(rowOf("gpt-4o-mini")).queryByRole("button", {
+          name: "Actions menu",
+        }),
+      ).toBeNull();
+
+      unmount();
+      renderTab({ canEdit: false, isPending: false, organizationName: "Acme" });
+
+      expect(
+        within(rowOf("acme-llama-70b")).queryByRole("button", {
+          name: "Actions menu",
+        }),
+      ).toBeNull();
+    });
+  });
+
   describe("editing one model", () => {
     it("closes on the first Escape although the pin button gets the first focus", async () => {
       renderTab(ADMIN);
