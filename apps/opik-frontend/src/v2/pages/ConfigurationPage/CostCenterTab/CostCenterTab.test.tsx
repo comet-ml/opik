@@ -716,6 +716,20 @@ describe("CostCenterTab", () => {
   });
 
   describe("editing one model", () => {
+    it("offers own price or alias only when adding a model", () => {
+      const { unmount } = renderTab(ADMIN);
+
+      openRow("acme-llama-70b");
+      expect(screen.queryByRole("radio", { name: "Alias" })).toBeNull();
+
+      unmount();
+      renderTab(ADMIN);
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+
+      expect(screen.getByRole("radio", { name: "Own price" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "Alias" })).toBeInTheDocument();
+    });
+
     it("shows no type or provider tags while adding a new model", () => {
       renderTab(ADMIN);
 

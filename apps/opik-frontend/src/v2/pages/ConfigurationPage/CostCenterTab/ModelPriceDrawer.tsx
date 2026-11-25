@@ -21,6 +21,8 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
+import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
@@ -553,25 +555,30 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
           </div>
         )}
 
-        {canEdit && (isNew || isOrganizationOnly) && (
-          <ToggleGroup
-            type="single"
-            value={kind}
-            onValueChange={(value) => {
-              if (!value) return;
-              resetFeedback();
-              setKind(value as ModelPriceRow["kind"]);
-            }}
-            variant="secondary"
-            className="w-fit"
-          >
-            <ToggleGroupItem value="fixed" size="xs">
-              Own price
-            </ToggleGroupItem>
-            <ToggleGroupItem value="alias" size="xs">
-              Same as another model
-            </ToggleGroupItem>
-          </ToggleGroup>
+        {canEdit && isNew && (
+          <div className="flex items-center gap-1.5">
+            <ToggleGroup
+              type="single"
+              value={kind}
+              onValueChange={(value) => {
+                if (!value) return;
+                resetFeedback();
+                setKind(value as ModelPriceRow["kind"]);
+              }}
+              variant="secondary"
+              className="w-fit"
+            >
+              <ToggleGroupItem value="fixed" size="xs">
+                Own price
+              </ToggleGroupItem>
+              <ToggleGroupItem value="alias" size="xs">
+                Alias
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_a_model_alias]}
+            />
+          </div>
         )}
 
         {kind === "alias" ? (
