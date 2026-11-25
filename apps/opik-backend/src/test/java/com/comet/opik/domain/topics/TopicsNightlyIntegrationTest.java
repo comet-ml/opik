@@ -9,6 +9,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -19,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.util.Duration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,7 +39,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -44,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -64,9 +67,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicsNightlyIntegrationTest {
 
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final int SMALL = 50;
-    private static final Duration WAIT = Duration.ofSeconds(90);
+    private static final long WAIT_SECONDS = 90;
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -147,7 +152,7 @@ class TopicsNightlyIntegrationTest {
         var topics = opikConfig.getTopics();
         topics.setEnabledWorkspaces("");
         topics.getRuns().setMaxInFlight(10);
-        topics.getNightly().setBudget(io.dropwizard.util.Duration.days(1));
+        topics.getNightly().setBudget(Duration.days(1));
         stubAnswer(FIXTURE.firstBuildAnswer);
     }
 
@@ -158,7 +163,7 @@ class TopicsNightlyIntegrationTest {
         var workspaceId = enabledWorkspace();
         var first = builtYesterday(workspaceId);
         var second = builtYesterday(workspaceId);
-        var small = UUID.randomUUID();
+        var small = ID_GENERATOR.generateId();
         data.seed(workspaceId, small, 0, SMALL, todayStart());
         listedYesterday(workspaceId, small);
         stubAnswer(emptyNaming());
@@ -175,13 +180,14 @@ class TopicsNightlyIntegrationTest {
         assertThat(planner.plan(Instant.now()).block()).isZero();
 
         for (var projectId : List.of(first, second)) {
-            Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId))
-                    .satisfies(project -> {
-                        assertThat(project.listRunId()).isEqualTo(nightlyRuns.get(projectId));
-                        assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
-                        assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
-                        assertThat(project.labelsComplete()).isTrue();
-                    }));
+            Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(data.topicProject(projectId))
+                            .satisfies(project -> {
+                                assertThat(project.listRunId()).isEqualTo(nightlyRuns.get(projectId));
+                                assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
+                                assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+                                assertThat(project.labelsComplete()).isTrue();
+                            }));
             assertThat(data.topicProject(projectId).windowUntil()).isEqualTo(todayStart());
         }
         assertThat(data.topicProject(small)).satisfies(project -> {
@@ -200,15 +206,15 @@ class TopicsNightlyIntegrationTest {
             + "has its not-reached streak counted once, however many plans run; a project the night looked at keeps 0")
     void budgetCutOff() {
         var workspaceId = enabledWorkspace();
-        var notReached = UUID.randomUUID();
-        var looked = UUID.randomUUID();
+        var notReached = ID_GENERATOR.generateId();
+        var looked = ID_GENERATOR.generateId();
         for (var projectId : List.of(notReached, looked)) {
             data.seed(workspaceId, projectId, 0, FIXTURE.size(), todayStart());
             listedYesterday(workspaceId, projectId);
         }
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectNightDAO.class)
                 .markLooked(workspaceId, List.of(looked), today()));
-        opikConfig.getTopics().getNightly().setBudget(io.dropwizard.util.Duration.milliseconds(1));
+        opikConfig.getTopics().getNightly().setBudget(Duration.milliseconds(1));
 
         assertThat(planner.plan(Instant.now()).block()).isZero();
         assertThat(planner.plan(Instant.now()).block()).isZero();
@@ -227,7 +233,7 @@ class TopicsNightlyIntegrationTest {
     void nightByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = builtYesterday(workspaceId);
-        var listless = UUID.randomUUID();
+        var listless = ID_GENERATOR.generateId();
         data.seed(workspaceId, listless, 0, FIXTURE.size(), todayStart());
         stubAnswer(emptyNaming());
 
@@ -237,10 +243,12 @@ class TopicsNightlyIntegrationTest {
         assertThatThrownBy(() -> planner.nightByHand(workspaceId, listless, today()).block())
                 .isInstanceOf(ConflictException.class);
 
-        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
-                .isEqualTo(runId));
-        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
-                .isNotEqualTo(TopicProject.RunStatus.RUNNING).isNotEqualTo(TopicProject.RunStatus.QUEUED));
+        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
+                        .isEqualTo(runId));
+        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                        .isNotEqualTo(TopicProject.RunStatus.RUNNING).isNotEqualTo(TopicProject.RunStatus.QUEUED));
         assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
                 .isInstanceOf(ConflictException.class);
         assertThat(data.topicProject(projectId).lastNight()).isNull();
@@ -248,15 +256,16 @@ class TopicsNightlyIntegrationTest {
 
     /** A project with a list from a real first build for yesterday, its labels complete. */
     private UUID builtYesterday(String workspaceId) {
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), yesterdayStart());
         var runId = planner.runByHand(workspaceId, projectId, today().minusDays(1), true).block();
-        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId))
-                .satisfies(project -> {
-                    assertThat(project.listRunId()).isEqualTo(runId);
-                    assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
-                    assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
-                }));
+        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(data.topicProject(projectId))
+                        .satisfies(project -> {
+                            assertThat(project.listRunId()).isEqualTo(runId);
+                            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
+                            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+                        }));
         return projectId;
     }
 
@@ -298,7 +307,7 @@ class TopicsNightlyIntegrationTest {
      * so a first build by hand does not wait.
      */
     private String enabledWorkspace() {
-        var workspaceId = UUID.randomUUID().toString();
+        var workspaceId = ID_GENERATOR.generateId().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;
@@ -311,7 +320,7 @@ class TopicsNightlyIntegrationTest {
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
                     .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
