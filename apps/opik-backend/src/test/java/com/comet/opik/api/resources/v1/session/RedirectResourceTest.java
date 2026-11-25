@@ -41,8 +41,11 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -201,7 +204,7 @@ class RedirectResourceTest {
                 workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             assertThat(redirectURL)
-                    .isEqualTo(DATASET_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
+                    .isEqualTo(DATASET_REDIRECT_URL.formatted(frontendBasePath(), workspaceName,
                             datasetId));
         }
     }
@@ -228,7 +231,7 @@ class RedirectResourceTest {
                 UUID.randomUUID().toString(), workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
-            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
+            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(frontendBasePath(),
                     workspaceName, datasetId, experimentIdEncoded));
         }
     }
@@ -247,7 +250,7 @@ class RedirectResourceTest {
         if (expectedStatus == 303) {
             var optimizationIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(optimizationId), StandardCharsets.UTF_8);
             assertThat(redirectURL)
-                    .isEqualTo(OPTIMIZATION_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
+                    .isEqualTo(OPTIMIZATION_REDIRECT_URL.formatted(frontendBasePath(),
                             workspaceName, datasetId, optimizationIdEncoded));
         }
     }
@@ -270,7 +273,9 @@ class RedirectResourceTest {
         var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(), null,
                 redirectResourceClient.encodedBackendPath(frontendBaseUrl), 303);
 
-        assertThat(redirectURL).isEqualTo(DATASET_REDIRECT_URL.formatted(frontendBaseUrl, workspaceName, datasetId));
+        assertThat(redirectURL)
+                .isEqualTo(DATASET_REDIRECT_URL.formatted(URI.create(frontendBaseUrl).getRawPath(), workspaceName,
+                        datasetId));
     }
 
     @Test
@@ -278,11 +283,117 @@ class RedirectResourceTest {
         redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, "path", 404);
     }
 
+    enum Endpoint {
+        PROJECTS,
+        DATASETS,
+        EXPERIMENTS,
+        OPTIMIZATIONS
+    }
+
+    /** The Location of one redirect, and the part of it after the workspace segment that the request should get. */
+    private record Redirect(String location, String expectedSuffix) {
+    }
+
+    private Redirect redirect(Endpoint endpoint, String workspaceName, String path, int expectedStatus) {
+        var sessionToken = UUID.randomUUID().toString();
+        if (endpoint == Endpoint.PROJECTS) {
+            var trace = factory.manufacturePojo(Trace.class);
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            trace = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY);
+            var location = redirectResourceClient.projectsRedirect(trace.id(), sessionToken, workspaceName, path,
+                    expectedStatus);
+            return new Redirect(location, "/projects/%s/traces?tab=logs&logsType=traces&trace=%s"
+                    .formatted(trace.projectId(), trace.id()));
+        }
+
+        var datasetId = datasetResourceClient.createDataset(buildDataset(), API_KEY, WORKSPACE_NAME);
+        var entityId = UUID.randomUUID();
+        var entityIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(entityId), StandardCharsets.UTF_8);
+        return switch (endpoint) {
+            case DATASETS -> new Redirect(
+                    redirectResourceClient.datasetsRedirect(datasetId, sessionToken, workspaceName, path,
+                            expectedStatus),
+                    "/datasets/%s/items".formatted(datasetId));
+            case EXPERIMENTS -> new Redirect(
+                    redirectResourceClient.experimentsRedirect(datasetId, entityId, sessionToken, workspaceName,
+                            path, expectedStatus),
+                    "/experiments/%s/compare?experiments=%s".formatted(datasetId, entityIdEncoded));
+            case OPTIMIZATIONS -> new Redirect(
+                    redirectResourceClient.optimizationsRedirect(datasetId, entityId, sessionToken, workspaceName,
+                            path, expectedStatus),
+                    "/optimizations/%s/compare?optimizations=%s".formatted(datasetId, entityIdEncoded));
+            case PROJECTS -> throw new IllegalStateException();
+        };
+    }
+
+    private static String encodedOpikUrl(String opikUrl) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(opikUrl.getBytes(StandardCharsets.UTF_8));
+    }
+
+    Stream<Arguments> opikUrls() {
+        return Arrays.stream(Endpoint.values()).flatMap(endpoint -> Stream.of(
+                arguments(endpoint, "http://localhost:5173/api", ""),
+                arguments(endpoint, "http://localhost:5173/api/", ""),
+                arguments(endpoint, "https://www.example.com/opik/api", "/opik"),
+                arguments(endpoint, "https://other.example.com/api", ""),
+                arguments(endpoint, "//other.example.com/opik/api", "/opik"),
+                arguments(endpoint, "https://api.example.com/api", ""),
+                arguments(endpoint, "https://www.example.com/a/b/api/", "/a/b")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("opikUrls")
+    @DisplayName("Redirect goes to the frontend base path on the host the link was opened on")
+    void redirectKeepsOnlyTheFrontendBasePath(Endpoint endpoint, String opikUrl, String expectedBasePath) {
+        var redirect = redirect(endpoint, WORKSPACE_NAME, encodedOpikUrl(opikUrl), 303);
+
+        assertThat(redirect.location())
+                .isEqualTo(expectedBasePath + "/" + WORKSPACE_NAME + redirect.expectedSuffix());
+    }
+
+    Stream<Arguments> unexpectedOpikUrls() {
+        return Arrays.stream(Endpoint.values()).flatMap(endpoint -> Stream.of(
+                arguments(endpoint, "https://www.example.com"),
+                arguments(endpoint, "https://www.example.com/apis"),
+                arguments(endpoint, "https://www.example.com//other.example.com/api"),
+                arguments(endpoint, "https://www.example.com/../api"),
+                arguments(endpoint, "https://www.example.com/a\\b/api"),
+                arguments(endpoint, "https://www.example.com/a@b/api")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("unexpectedOpikUrls")
+    @DisplayName("Redirect rejects an Opik URL without a plain frontend base path")
+    void redirectRejectsUnexpectedOpikUrl(Endpoint endpoint, String opikUrl) {
+        redirect(endpoint, WORKSPACE_NAME, encodedOpikUrl(opikUrl), 400);
+    }
+
+    Stream<Arguments> workspaceNames() {
+        return Arrays.stream(Endpoint.values()).flatMap(endpoint -> Stream.of(
+                arguments(endpoint, "a/b", "a%2Fb"),
+                arguments(endpoint, "//other.example.com", "%2F%2Fother.example.com"),
+                arguments(endpoint, "a b", "a%20b"),
+                arguments(endpoint, "", WORKSPACE_NAME)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("workspaceNames")
+    @DisplayName("Redirect keeps the workspace name inside one path segment")
+    void redirectEncodesWorkspaceName(Endpoint endpoint, String workspaceName, String expectedSegment) {
+        var redirect = redirect(endpoint, workspaceName, getBaseUrlEncoded(), 303);
+
+        assertThat(redirect.location()).isEqualTo("/" + expectedSegment + redirect.expectedSuffix());
+    }
+
     Stream<Arguments> parameters() {
         return Stream.of(
                 arguments(WORKSPACE_NAME, WORKSPACE_NAME, 303),
                 arguments(WORKSPACE_NAME, null, 303),
                 arguments(NON_EXISTING_WORKSPACE_NAME, null, 404));
+    }
+
+    private String frontendBasePath() {
+        return URI.create(wireMock.runtimeInfo().getHttpBaseUrl()).getRawPath();
     }
 
     private String getBaseUrlEncoded() {

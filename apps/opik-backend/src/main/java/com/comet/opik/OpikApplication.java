@@ -5,6 +5,7 @@ import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.api.resources.oauth.McpOAuthBundle;
 import com.comet.opik.api.resources.oauth.OAuthExceptionMapper;
 import com.comet.opik.api.resources.v1.events.tools.ToolsModule;
+import com.comet.opik.api.resources.v1.session.RelativeLocationFilter;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FilterUtils;
@@ -59,6 +60,7 @@ import io.dropwizard.core.server.DefaultServerFactory;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 import io.dropwizard.forms.MultiPartBundle;
+import jakarta.servlet.DispatcherType;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ServerProperties;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
@@ -68,6 +70,7 @@ import ru.vyarus.guicey.jdbi3.JdbiBundle;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.List;
 
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME;
@@ -170,6 +173,10 @@ public class OpikApplication extends Application<OpikConfiguration> {
         JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
+
+        environment.servlets()
+                .addFilter(RelativeLocationFilter.class.getSimpleName(), new RelativeLocationFilter())
+                .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, RelativeLocationFilter.URL_PATTERN);
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(OAuthExceptionMapper.class);
