@@ -312,13 +312,14 @@ const CostCenterTab: React.FC = () => {
             onClearAll={chips.clearAll}
             openChipId={chips.openChipId}
             onOpenChipIdChange={chips.setOpenChipId}
+            size="md"
             prefix={
               <SearchInput
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
-                className="w-[200px] shrink-0"
-                placeholder="Search"
-                dimension="xs"
+                className="w-[320px] shrink-0"
+                placeholder="Search models or providers"
+                dimension="sm"
               />
             }
           />

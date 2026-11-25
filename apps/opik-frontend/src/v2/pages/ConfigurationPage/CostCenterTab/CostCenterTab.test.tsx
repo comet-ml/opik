@@ -391,9 +391,12 @@ describe("CostCenterTab", () => {
     ])("finds rows by %s", async (_, needle, expected) => {
       renderTab(ADMIN);
 
-      fireEvent.change(screen.getByPlaceholderText("Search"), {
-        target: { value: needle },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        {
+          target: { value: needle },
+        },
+      );
 
       await waitFor(() => expect(shownModels()).toEqual(expected));
     });
@@ -401,9 +404,12 @@ describe("CostCenterTab", () => {
     it("says when nothing matches", async () => {
       renderTab(ADMIN);
 
-      fireEvent.change(screen.getByPlaceholderText("Search"), {
-        target: { value: "zzz" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        {
+          target: { value: "zzz" },
+        },
+      );
 
       expect(await screen.findByText("No matching results")).toBeVisible();
     });
@@ -423,6 +429,17 @@ describe("CostCenterTab", () => {
       expect(shownModels()).toEqual(["acme-llama-70b", "team-model"]);
       expect(screen.getByRole("button", { name: /^Type/ })).toHaveTextContent(
         "Custom",
+      );
+    });
+
+    it("makes the filter chips as tall as the search box", () => {
+      renderTab(ADMIN);
+
+      expect(screen.getByRole("button", { name: /^Provider/ })).toHaveClass(
+        "h-8",
+      );
+      expect(screen.getByTestId("filter-chip-manager-trigger")).toHaveClass(
+        "h-8",
       );
     });
 
@@ -458,9 +475,12 @@ describe("CostCenterTab", () => {
     it("puts exact matches first when searching", async () => {
       renderTab(ADMIN);
 
-      fireEvent.change(screen.getByPlaceholderText("Search"), {
-        target: { value: "gpt-4o" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        {
+          target: { value: "gpt-4o" },
+        },
+      );
 
       await waitFor(() =>
         expect(shownModels()).toEqual(["gpt-4o", "gpt-4o-mini"]),
@@ -505,9 +525,12 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       fireEvent.click(pinButton("gpt-4o"));
-      fireEvent.change(screen.getByPlaceholderText("Search"), {
-        target: { value: "sonnet" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        {
+          target: { value: "sonnet" },
+        },
+      );
 
       await waitFor(() =>
         expect(shownModels()).toEqual(["claude-sonnet-4-5", "team-model"]),
