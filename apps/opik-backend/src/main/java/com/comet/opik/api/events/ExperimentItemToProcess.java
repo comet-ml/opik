@@ -3,6 +3,7 @@ package com.comet.opik.api.events;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.OpikPromptEntry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -25,7 +26,8 @@ public record ExperimentItemToProcess(
         @NonNull List<UUID> allExperimentIds,
         List<OpikPromptEntry> opikPrompts,
         Boolean testSuite,
-        List<UUID> selectedRuleIds) implements RedisSubscriberMessage {
+        List<UUID> selectedRuleIds,
+        @Nullable String organizationId) implements OrganizationScopedMessage {
 
     /**
      * Null on messages published before regular datasets could run server-side, when every run was a test
@@ -33,5 +35,10 @@ public record ExperimentItemToProcess(
      */
     public boolean isTestSuite() {
         return testSuite == null || testSuite;
+    }
+
+    @Override
+    public OrganizationScopedMessage withOrganizationId(String organizationId) {
+        return toBuilder().organizationId(organizationId).build();
     }
 }

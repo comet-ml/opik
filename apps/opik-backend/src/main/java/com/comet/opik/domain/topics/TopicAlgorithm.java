@@ -4,7 +4,6 @@ import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
@@ -35,11 +34,11 @@ public interface TopicAlgorithm {
     Clustering cluster(TopicWindow window, int maxTopics);
 
     /**
-     * The rule that labels vectors by a project's saved list. Empty when the list has no topic: then it labels nothing.
+     * The rule that labels vectors by a project's saved list. A list with no topic labels every vector Other.
      *
      * @param topics the project's live topics in saved order, {@code (born, id)}: with each topic's vectors in their
      *               own order, this is the order that breaks a tie between two prototypes
      * @param otherVectors the known-Other prototypes of the saved list, or null when it has none
      */
-    Optional<TopicLabeller> labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
+    TopicLabeller labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
 }

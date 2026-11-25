@@ -7,7 +7,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -35,7 +34,7 @@ class TopicWindowReader {
      * The window, or its sample. {@code windowTraces} is the caller's count of the window: the stats keep it, and it
      * sizes the arrays the rows are copied into as they arrive, so the window is held once.
      */
-    Mono<RunWindow> read(@NonNull TopicRun run, long windowTraces, @NonNull Scheduler compute) {
+    Mono<RunWindow> read(@NonNull TopicRun run, long windowTraces) {
         int limit = config.getRun().getMaxVectors();
         var readTimeout = readTimeout(config.getRun());
         int capacity = (int) Math.max(1, Math.min(windowTraces, limit));
@@ -43,7 +42,7 @@ class TopicWindowReader {
                 readTimeout.toSeconds())
                 .collect(() -> new TopicWindowBuilder(capacity), TopicWindowBuilder::add)
                 .map(builder -> builder.build(windowTraces, config.getAlgorithm().getProvisionalBelow()))
-                .timeout(readTimeout, compute)
+                .timeout(readTimeout)
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.WINDOW_READ, "the window read failed", error));
     }

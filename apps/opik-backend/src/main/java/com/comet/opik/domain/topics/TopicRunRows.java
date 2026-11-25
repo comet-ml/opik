@@ -57,24 +57,44 @@ record TopicRunRows(@NonNull List<Topic> topics, PrototypeVectors otherVectors, 
                     .build());
         }
         var otherVectors = built.otherPrototypes().isEmpty() ? null : new PrototypeVectors(built.otherPrototypes());
-        var traceTopics = new ArrayList<TraceTopic>(traces.size());
-        for (int i = 0; i < traces.size(); i++) {
-            traceTopics.add(TraceTopic.builder()
-                    .workspaceId(run.workspaceId())
-                    .projectId(run.projectId())
-                    .traceId(traces.get(i).traceId())
-                    .traceCreatedAt(traces.get(i).traceCreatedAt())
-                    .topicId(labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
-                    .source(TraceTopic.Source.RUN)
-                    .runId(run.runId())
-                    .build());
+        var topicIds = new UUID[labels.length];
+        for (int i = 0; i < labels.length; i++) {
+            topicIds[i] = labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id();
         }
+        var traceTopics = traceTopics(run.workspaceId(), run.projectId(), run.runId(), traces, topicIds);
         double otherShare = (double) other / labels.length;
         var stats = built.stats().deepCopy();
         stats.put("topics", topics.size());
         stats.put("other_share", otherShare);
         stats.put("prototypes", topics.stream().mapToInt(topic -> topic.vectors().size()).sum()
                 + built.otherPrototypes().size());
-        return new TopicRunRows(List.copyOf(topics), otherVectors, List.copyOf(traceTopics), otherShare, stats);
+        return new TopicRunRows(List.copyOf(topics), otherVectors, traceTopics, otherShare, stats);
+    }
+
+    /**
+     * The run's {@code trace_topics} rows, as its own insert and the labelling pass write them: trace i gets
+     * {@code topicIds[i]}, and a null id gets no row.
+     */
+    static List<TraceTopic> traceTopics(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @NonNull List<WindowTrace> traces, @NonNull UUID[] topicIds) {
+        if (topicIds.length != traces.size()) {
+            throw new IllegalArgumentException("'%s' topic ids for '%s' traces".formatted(topicIds.length,
+                    traces.size()));
+        }
+        var rows = new ArrayList<TraceTopic>(traces.size());
+        for (int i = 0; i < traces.size(); i++) {
+            if (topicIds[i] != null) {
+                rows.add(TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(traces.get(i).traceId())
+                        .traceCreatedAt(traces.get(i).traceCreatedAt())
+                        .topicId(topicIds[i])
+                        .source(TraceTopic.Source.RUN)
+                        .runId(runId)
+                        .build());
+            }
+        }
+        return List.copyOf(rows);
     }
 }

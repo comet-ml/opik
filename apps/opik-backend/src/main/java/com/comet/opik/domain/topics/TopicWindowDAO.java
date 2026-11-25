@@ -17,7 +17,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -64,6 +68,43 @@ public class TopicWindowDAO {
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, priority = <priority>, optimize_aggregation_in_order = 1,
                 max_block_size = <max_block_size>, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * One project's live traces in the window, counted as in {@link #COUNT_BY_PROJECT} and by the same in-order scan,
+     * plus the slice bounds of the labelling pass: every {@code :slice_traces}-th creation time of those traces, in
+     * order. Slices cut at these bounds hold {@code :slice_traces} traces each, however the traffic is spread in time.
+     *
+     * <p>The bounds come from numbering the live traces in creation order, not from an array of all their times: the
+     * sort spills to disk past {@code max_bytes_before_external_sort}, an eighth of the memory guard, and the frame of
+     * one row lets the numbering drop each block once it is read. So the memory follows the guard, not the window: at
+     * 30 million traces 84 MiB, where sorting an array of every time took 1.5 GiB. The ratio setting is off, as it
+     * would override the byte limit.
+     */
+    private static final String COUNT_AND_BOUNDS = """
+            SELECT max(n) AS traces,
+                arrayMap(t -> toUnixTimestamp64Micro(t), arraySort(groupArrayIf(created, n % :slice_traces = 0))) AS bounds
+            FROM (
+                SELECT created, row_number() OVER (ORDER BY created ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS n
+                FROM (
+                    SELECT trace_id, min(trace_created_at) AS created,
+                        arrayExists(x -> x % 2 = 1, (maxMap([task_version],
+                            [toUInt64(toUnixTimestamp64Micro(last_updated_at)) * 2 + (is_deleted = 0)])).2) AS live
+                    FROM topic_vectors
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND task = :task
+                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
+                    GROUP BY trace_id
+                )
+                WHERE live
+            )
+            SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>,
+                max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>, priority = <priority>,
+                optimize_aggregation_in_order = 1, max_block_size = <max_block_size>,
+                max_bytes_before_external_sort = <external_sort_bytes>, max_bytes_ratio_before_external_sort = 0,
+                min_external_sort_block_bytes = <external_sort_block_bytes>, log_comment = '<log_comment>'
             """;
 
     /**
@@ -124,7 +165,8 @@ public class TopicWindowDAO {
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, log_comment = '<log_comment>'
+                max_memory_usage = <max_memory_usage>, max_block_size = <max_block_size>, optimize_read_in_order = 0,
+                log_comment = '<log_comment>'
             """;
 
     /**
@@ -160,6 +202,7 @@ public class TopicWindowDAO {
                     AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
                     AND source = 'run'
                     AND run_id = :run_id
+                    AND is_deleted = 0
                 )
                 GROUP BY trace_id
                 ORDER BY trace_id
@@ -178,7 +221,8 @@ public class TopicWindowDAO {
             ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, priority = <priority>, log_comment = '<log_comment>'
+                max_memory_usage = <max_memory_usage>, priority = <priority>, max_block_size = <max_block_size>,
+                optimize_read_in_order = 0, log_comment = '<log_comment>'
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -212,6 +256,40 @@ public class TopicWindowDAO {
                         .projectId(UUID.fromString(row.get("project_id", String.class)))
                         .traces(((Number) row.get("traces", Object.class)).longValue())
                         .build()));
+    }
+
+    /** The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}. */
+    public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
+        Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
+        var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
+        var guards = config.getRun().getRead();
+        withGuards(template, guards, maxExecutionSeconds);
+        long externalSortBytes = guards.getMaxMemoryUsage() / 8;
+        template.add("external_sort_bytes", externalSortBytes)
+                .add("external_sort_block_bytes", externalSortBytes / 4);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
+                        .bind("project_id", projectId.toString())
+                        .bind("window_from", from.toString())
+                        .bind("window_to", to.toString())
+                        .bind("slice_traces", sliceTraces)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var array = row.get("bounds", Object.class);
+                    var bounds = new ArrayList<Instant>(Array.getLength(array));
+                    for (int i = 0; i < Array.getLength(array); i++) {
+                        bounds.add(Instant.EPOCH.plus(((Number) Array.get(array, i)).longValue(), ChronoUnit.MICROS));
+                    }
+                    return WindowBounds.builder()
+                            .traces(((Number) row.get("traces", Object.class)).longValue())
+                            .bounds(bounds)
+                            .build();
+                }))
+                .single();
     }
 
     /**
@@ -287,13 +365,21 @@ public class TopicWindowDAO {
      * shorter. The read casts it to Float32, as the driver returns a BFloat16 array's raw bits.
      */
     private static float[] toVector(Row row) {
-        // As TopicVectorsDAO: the driver's Java array type for Array(Float32) isn't part of its contract.
+        // The driver returns Array(Float32) as a float[]; that type isn't part of its contract, so reflection stays as
+        // the fallback, as in TopicVectorsDAO.
         var array = row.get("vector", Object.class);
-        var vector = new float[Array.getLength(array)];
+        float[] vector;
+        if (array instanceof float[] floats) {
+            vector = Arrays.copyOf(floats, floats.length);
+        } else {
+            vector = new float[Array.getLength(array)];
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] = ((Number) Array.get(array, i)).floatValue();
+            }
+        }
         double norm = 0;
-        for (int i = 0; i < vector.length; i++) {
-            vector[i] = ((Number) Array.get(array, i)).floatValue();
-            norm += (double) vector[i] * vector[i];
+        for (float value : vector) {
+            norm += (double) value * value;
         }
         if (norm > 0) {
             float scale = (float) (1 / Math.sqrt(norm));
@@ -306,6 +392,11 @@ public class TopicWindowDAO {
 
     @Builder(toBuilder = true)
     record ProjectCount(@NonNull UUID projectId, long traces) {
+    }
+
+    /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
+    @Builder(toBuilder = true)
+    record WindowBounds(long traces, @NonNull List<Instant> bounds) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */
