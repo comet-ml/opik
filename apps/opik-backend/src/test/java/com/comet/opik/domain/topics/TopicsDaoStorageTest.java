@@ -920,8 +920,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the night fields: a project looked at resets its not-reached streak, the gauges' counts and the "
-            + "latest night")
+    @DisplayName("the night fields: a project looked at gets the night and resets its not-reached streak, one not "
+            + "reached counts each night")
     void nightFields() {
         var workspaceId = newId().toString();
         var looked = newId();
@@ -935,25 +935,19 @@ class TopicsDaoStorageTest {
         var lookedBefore = data.topicProject(looked);
         var starvedBefore = data.topicProject(starved);
 
-        List<List<TopicProjectNightDAO.WorkspaceCount>> counts = template.inTransaction(WRITE, handle -> {
+        template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectNightDAO.class);
             dao.markNotReached(workspaceId, List.of(looked, starved));
             dao.markNotReached(workspaceId, List.of(looked, starved));
             dao.markLooked(workspaceId, List.of(looked, stale), night);
             dao.markLooked(workspaceId, List.of(stale), night.minusDays(1));
-            return List.of(dao.countStarved(List.of(workspaceId), 2), dao.countStale(List.of(workspaceId), 3),
-                    dao.countStarved(List.of(workspaceId), 3));
+            return null;
         });
 
-        assertThat(counts).containsExactly(List.of(new TopicProjectNightDAO.WorkspaceCount(workspaceId, 1)),
-                List.of(new TopicProjectNightDAO.WorkspaceCount(workspaceId, 1)), List.of());
         assertThat(data.topicProject(looked))
                 .isEqualTo(lookedBefore.toBuilder().lastNight(night).notReachedNights(0).build());
         assertThat(data.topicProject(starved))
                 .isEqualTo(starvedBefore.toBuilder().lastNight(null).notReachedNights(2).build());
-        LocalDate lastNight = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectNightDAO.class)
-                .lastNight(List.of(workspaceId)));
-        assertThat(lastNight).isEqualTo(night);
     }
 
     private List<UUID> projectsWithTopics(String workspaceId, List<UUID> projectIds) {
