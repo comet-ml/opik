@@ -80,6 +80,8 @@ public class FreeFormSqlQueryService {
     private static final AttributeKey<String> MODE_KEY = stringKey("mode");
     private static final AttributeKey<String> OUTCOME_KEY = stringKey("outcome");
     private static final AttributeKey<String> ACCOUNT_KEY = stringKey("account");
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = stringKey("workspace_id");
+    private static final AttributeKey<String> TABLE_KEY = stringKey("table");
 
     /**
      * The terminal outcome of a query, carrying its {@code (result, reason)} metric tags. The duration histogram is
@@ -99,9 +101,11 @@ public class FreeFormSqlQueryService {
         CH_BUSY("error", "ch_busy"),
         OTHER("error", "other");
 
+        private final String reason;
         private final Attributes attributes;
 
         Outcome(String result, String reason) {
+            this.reason = reason;
             this.attributes = Attributes.of(RESULT_KEY, result, REASON_KEY, reason);
         }
     }
@@ -222,7 +226,7 @@ public class FreeFormSqlQueryService {
 
     /** What the post-run check or the scalar subquery gate found, as its {@code outcome} metric tag. */
     @RequiredArgsConstructor
-    private enum CheckOutcome {
+    enum CheckOutcome {
         VERIFIED("verified"),
         VIOLATION("violation"),
         LOG_MISSING("log_missing"),
@@ -233,8 +237,25 @@ public class FreeFormSqlQueryService {
     }
 
     private void count(CheckOutcome outcome, FreeFormSqlAccount account) {
-        checks.add(1, Attributes.of(MODE_KEY, mode.name().toLowerCase(), OUTCOME_KEY, outcome.tag, ACCOUNT_KEY,
-                account.name().toLowerCase()));
+        checks.add(1, checkAttributes(mode, outcome, account, null, null));
+    }
+
+    /**
+     * A violation or missing log also carries its workspace, reason and table, so an alert can name them. Only those
+     * outcomes do: they are rare, so the added series stay few, while every verified query keeps three attributes.
+     */
+    static Attributes checkAttributes(FreeFormSqlPostRunCheckConfig.Mode mode, CheckOutcome outcome,
+            FreeFormSqlAccount account, @Nullable FreeFormSqlPolicyViolation violation, @Nullable String workspaceId) {
+        var attributes = Attributes.builder()
+                .put(MODE_KEY, mode.name().toLowerCase())
+                .put(OUTCOME_KEY, outcome.tag)
+                .put(ACCOUNT_KEY, account.name().toLowerCase());
+        if (violation != null) {
+            attributes.put(WORKSPACE_ID_KEY, String.valueOf(workspaceId))
+                    .put(REASON_KEY, violation.reason())
+                    .put(TABLE_KEY, violation.table());
+        }
+        return attributes.build();
     }
 
     /**
@@ -248,10 +269,10 @@ public class FreeFormSqlQueryService {
         String projectScope = projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
 
         return freeFormSqlQueryDAO.explainAst(account, query)
-                .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
+                .handle((nodeLabels, error) -> validateAst(account, workspaceId, nodeLabels, error, startMillis))
                 .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
                 .thenCompose(queryTree -> {
-                    var reads = rejectScalarReads(account, queryTree, startMillis);
+                    var reads = rejectScalarReads(account, workspaceId, queryTree, startMillis);
                     return runQuery(account, workspaceId, projectScope, query, reads, startMillis);
                 });
     }
@@ -266,10 +287,12 @@ public class FreeFormSqlQueryService {
                     }
                     try {
                         if (containsForbiddenResolvedTable(account, queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_TABLE, account, workspaceId, startMillis,
+                                    ACCESS_DENIED_MESSAGE, null);
                         }
                         if (containsForbiddenOrUnreadableFunction(queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_FUNCTION, account, workspaceId, startMillis,
+                                    ACCESS_DENIED_MESSAGE, null);
                         }
                     } catch (WebApplicationException e) {
                         throw e;
@@ -284,12 +307,12 @@ public class FreeFormSqlQueryService {
      * A scalar subquery reading a table cannot be shown to have run under its row policy (see
      * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
      */
-    private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, List<String> queryTree,
-            long startMillis) {
+    private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, String workspaceId,
+            List<String> queryTree, long startMillis) {
         var subqueryReads = FreeFormSqlSubqueries.subqueryReads(queryTree, database);
         if (subqueryReads.hasScalar()) {
             count(CheckOutcome.SCALAR_READ, account);
-            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, account, workspaceId, startMillis,
                     SCALAR_SUBQUERY_MESSAGE.formatted(describe(subqueryReads)), null);
         }
         return subqueryReads;
@@ -311,21 +334,22 @@ public class FreeFormSqlQueryService {
      * through the standard execution-error mapping so it isn't mislabelled. A successful parse carrying a SETTINGS/SET
      * clause is rejected before execution.
      */
-    private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
+    private List<String> validateAst(FreeFormSqlAccount account, String workspaceId, List<String> nodeLabels,
+            Throwable error, long startMillis) {
         if (error != null) {
             throw isSyntaxError(error)
-                    ? reject(Outcome.PARSE_ERROR, startMillis, PARSE_ERROR_MESSAGE, error)
+                    ? reject(Outcome.PARSE_ERROR, account, workspaceId, startMillis, PARSE_ERROR_MESSAGE, error)
                     : mapExecutionError(error, startMillis);
         }
         if (containsSetNode(nodeLabels)) {
-            throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
+            throw reject(Outcome.SETTINGS_CLAUSE, account, workspaceId, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
-            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_TABLE, account, workspaceId, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenName(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
-            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_FUNCTION, account, workspaceId, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
@@ -356,7 +380,10 @@ public class FreeFormSqlQueryService {
                 });
     }
 
-    /** What the post-run check found; a check that could not run completes exceptionally instead. */
+    /**
+     * What the post-run check found, counted here; a check that could not run completes exceptionally instead, and
+     * the caller counts that.
+     */
     private CompletableFuture<CheckOutcome> check(FreeFormSqlAccount account, String workspaceId, String projectScope,
             String query, String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         String user = users.get(account);
@@ -364,14 +391,21 @@ public class FreeFormSqlQueryService {
                 .thenCompose(plan -> queryLogReader.entries(queryId, user)
                         .thenApply(entries -> FreeFormSqlPolicyCheck.violation(database, user, entries, plan,
                                 subqueryReads)))
-                .thenApply(violation -> violation.map(found -> {
-                    // Not the query's fault: a row policy did not apply where it should. Loud on purpose. The query
-                    // text is left out: it is the caller's, and the id finds it in query_log.
-                    log.error("Free-form SQL post-run policy check found '{}' for account '{}', query '{}': {} ({})",
-                            found.missingLog() ? "log_missing" : "violation", account, queryId, found.table(),
-                            found.reason());
-                    return found.missingLog() ? CheckOutcome.LOG_MISSING : CheckOutcome.VIOLATION;
-                }).orElse(CheckOutcome.VERIFIED));
+                .thenApply(violation -> {
+                    var found = violation.orElse(null);
+                    var outcome = found == null
+                            ? CheckOutcome.VERIFIED
+                            : found.missingLog() ? CheckOutcome.LOG_MISSING : CheckOutcome.VIOLATION;
+                    if (found != null) {
+                        // Not the query's fault: a row policy did not apply where it should. Loud on purpose. The
+                        // query text is left out: it is the caller's, and the id finds it in query_log.
+                        log.error("Free-form SQL post-run policy check found '{}' for account '{}', query '{}': "
+                                + "{} ({}), workspace '{}'", outcome.tag, account, queryId, found.table(),
+                                found.reason(), workspaceId);
+                    }
+                    checks.add(1, checkAttributes(mode, outcome, account, found, workspaceId));
+                    return outcome;
+                });
     }
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
@@ -384,8 +418,6 @@ public class FreeFormSqlQueryService {
                             log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,
                                     error);
                             count(CheckOutcome.CHECK_FAILED, account);
-                        } else {
-                            count(outcome, account);
                         }
                     });
         } catch (RuntimeException e) {
@@ -408,7 +440,6 @@ public class FreeFormSqlQueryService {
                 throw fail(Outcome.POLICY_CHECK_FAILED, startMillis, Response.Status.SERVICE_UNAVAILABLE,
                         "Query result withheld: its scope could not be verified");
             }
-            count(outcome, account);
             if (outcome != CheckOutcome.VERIFIED) {
                 throw fail(Outcome.POLICY_UNVERIFIED, startMillis, Response.Status.INTERNAL_SERVER_ERROR,
                         "Query result withheld: its scope could not be verified; this has been reported");
@@ -587,8 +618,11 @@ public class FreeFormSqlQueryService {
         return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
     }
 
-    private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {
-        log.info("Free-form SQL query rejected: {}", message, cause);
+    /** The account and workspace are logged so a rejection can be traced to who sent it; the metric has neither. */
+    private WebApplicationException reject(Outcome outcome, FreeFormSqlAccount account, String workspaceId,
+            long startMillis, String message, Throwable cause) {
+        log.info("Free-form SQL query rejected '{}' for account '{}', workspace '{}': {}", outcome.reason, account,
+                workspaceId, message, cause);
         return fail(outcome, startMillis, Response.Status.BAD_REQUEST, message);
     }
 
