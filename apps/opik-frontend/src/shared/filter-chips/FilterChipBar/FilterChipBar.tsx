@@ -11,11 +11,6 @@ import NumericChip from "@/shared/filter-chips/chips/NumericChip/NumericChip";
 import TimeChip from "@/shared/filter-chips/chips/TimeChip/TimeChip";
 import QueryBuilderChip from "@/shared/filter-chips/chips/QueryBuilderChip/QueryBuilderChip";
 import {
-  FILTER_CHIP_HEIGHT_CLASS,
-  FilterChipSize,
-  FilterChipSizeProvider,
-} from "@/shared/filter-chips/FilterChipSizeContext";
-import {
   BooleanChipValue,
   ChipDefinition,
   ChipValue,
@@ -40,7 +35,6 @@ export interface FilterChipBarProps {
   openChipId: string | null;
   onOpenChipIdChange: (id: string | null) => void;
   prefix?: React.ReactNode;
-  size?: FilterChipSize;
 }
 
 const FilterChipBar: React.FC<FilterChipBarProps> = ({
@@ -57,7 +51,6 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
   openChipId,
   onOpenChipIdChange,
   prefix,
-  size = "sm",
 }) => {
   const appliedCount = useMemo(() => {
     let count = 0;
@@ -76,113 +69,110 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
   );
 
   return (
-    <FilterChipSizeProvider value={size}>
-      <div className="flex flex-wrap items-center gap-2">
-        {prefix}
-        {chipsPinned.map((def) => {
-          const isOpen = def.id === openChipId;
-          const handleOpenChange = buildOnOpenChange(def.id);
-          switch (def.kind) {
-            case "single-select":
-              return (
-                <SingleSelectChip
-                  key={def.id}
-                  definition={def}
-                  value={values[def.id] as SingleSelectChipValue}
-                  onApply={(value) => onApplyValue(def.id, value)}
-                  onClear={(source) => onClearValue(def.id, source)}
-                  open={isOpen}
-                  onOpenChange={handleOpenChange}
-                />
-              );
-            case "boolean":
-              return (
-                <BooleanChip
-                  key={def.id}
-                  definition={def}
-                  value={values[def.id] as BooleanChipValue}
-                  onApply={(value) => onApplyValue(def.id, value)}
-                  onClear={(source) => onClearValue(def.id, source)}
-                />
-              );
-            case "numeric":
-              return (
-                <NumericChip
-                  key={def.id}
-                  definition={def}
-                  value={values[def.id] as NumericChipValue}
-                  onApply={(value) => onApplyValue(def.id, value)}
-                  onClear={(source) => onClearValue(def.id, source)}
-                  open={isOpen}
-                  onOpenChange={handleOpenChange}
-                />
-              );
-            case "time":
-              return (
-                <TimeChip
-                  key={def.id}
-                  definition={def}
-                  value={values[def.id] as TimeChipValue}
-                  onApply={(value) => onApplyValue(def.id, value)}
-                  onClear={(source) => onClearValue(def.id, source)}
-                  open={isOpen}
-                  onOpenChange={handleOpenChange}
-                />
-              );
-            case "query-builder":
-              return (
-                <QueryBuilderChip
-                  key={def.id}
-                  definition={def}
-                  value={values[def.id] as QueryBuilderChipValue}
-                  onApply={(value) => onApplyValue(def.id, value)}
-                  onClear={(source) => onClearValue(def.id, source)}
-                  open={isOpen}
-                  onOpenChange={handleOpenChange}
-                />
-              );
-          }
-        })}
+    <div className="flex flex-wrap items-center gap-2">
+      {prefix}
+      {chipsPinned.map((def) => {
+        const isOpen = def.id === openChipId;
+        const handleOpenChange = buildOnOpenChange(def.id);
+        switch (def.kind) {
+          case "single-select":
+            return (
+              <SingleSelectChip
+                key={def.id}
+                definition={def}
+                value={values[def.id] as SingleSelectChipValue}
+                onApply={(value) => onApplyValue(def.id, value)}
+                onClear={(source) => onClearValue(def.id, source)}
+                open={isOpen}
+                onOpenChange={handleOpenChange}
+              />
+            );
+          case "boolean":
+            return (
+              <BooleanChip
+                key={def.id}
+                definition={def}
+                value={values[def.id] as BooleanChipValue}
+                onApply={(value) => onApplyValue(def.id, value)}
+                onClear={(source) => onClearValue(def.id, source)}
+              />
+            );
+          case "numeric":
+            return (
+              <NumericChip
+                key={def.id}
+                definition={def}
+                value={values[def.id] as NumericChipValue}
+                onApply={(value) => onApplyValue(def.id, value)}
+                onClear={(source) => onClearValue(def.id, source)}
+                open={isOpen}
+                onOpenChange={handleOpenChange}
+              />
+            );
+          case "time":
+            return (
+              <TimeChip
+                key={def.id}
+                definition={def}
+                value={values[def.id] as TimeChipValue}
+                onApply={(value) => onApplyValue(def.id, value)}
+                onClear={(source) => onClearValue(def.id, source)}
+                open={isOpen}
+                onOpenChange={handleOpenChange}
+              />
+            );
+          case "query-builder":
+            return (
+              <QueryBuilderChip
+                key={def.id}
+                definition={def}
+                value={values[def.id] as QueryBuilderChipValue}
+                onApply={(value) => onApplyValue(def.id, value)}
+                onClear={(source) => onClearValue(def.id, source)}
+                open={isOpen}
+                onOpenChange={handleOpenChange}
+              />
+            );
+        }
+      })}
 
-        <FilterManagerPopover
-          open={managerOpen}
-          onOpenChange={onManagerOpenChange}
-          chipsPinned={chipsPinned}
-          chipsUnpinned={chipsUnpinned}
-          values={values}
-          onApplyValue={onApplyValue}
-          onPinChip={onPinChip}
-          onUnpinChip={onUnpinChip}
-          onRequestOpenChip={onOpenChipIdChange}
-          trigger={
-            <ChipShell
-              isOpen={managerOpen}
-              className="pr-2"
-              data-testid="filter-chip-manager-trigger"
-            >
-              <ListFilter className="size-3 shrink-0" />
-              <span>All filters</span>
-            </ChipShell>
-          }
-        />
-
-        {appliedCount > 0 && (
-          <button
-            type="button"
-            onClick={onClearAll}
-            data-testid="filter-chips-clear-all"
-            className={cn(
-              "comet-body-xs flex shrink-0 items-center whitespace-nowrap rounded-[20px] px-2 py-0.5 text-foreground outline-none transition-colors",
-              FILTER_CHIP_HEIGHT_CLASS[size],
-              "hover:bg-primary-foreground",
-              "focus-visible:ring-2 focus-visible:ring-primary-active/40",
-            )}
+      <FilterManagerPopover
+        open={managerOpen}
+        onOpenChange={onManagerOpenChange}
+        chipsPinned={chipsPinned}
+        chipsUnpinned={chipsUnpinned}
+        values={values}
+        onApplyValue={onApplyValue}
+        onPinChip={onPinChip}
+        onUnpinChip={onUnpinChip}
+        onRequestOpenChip={onOpenChipIdChange}
+        trigger={
+          <ChipShell
+            isOpen={managerOpen}
+            className="pr-2"
+            data-testid="filter-chip-manager-trigger"
           >
-            Clear all ({appliedCount})
-          </button>
-        )}
-      </div>
-    </FilterChipSizeProvider>
+            <ListFilter className="size-3 shrink-0" />
+            <span>All filters</span>
+          </ChipShell>
+        }
+      />
+
+      {appliedCount > 0 && (
+        <button
+          type="button"
+          onClick={onClearAll}
+          data-testid="filter-chips-clear-all"
+          className={cn(
+            "comet-body-xs flex h-6 shrink-0 items-center whitespace-nowrap rounded-[20px] px-2 py-0.5 text-foreground outline-none transition-colors",
+            "hover:bg-primary-foreground",
+            "focus-visible:ring-2 focus-visible:ring-primary-active/40",
+          )}
+        >
+          Clear all ({appliedCount})
+        </button>
+      )}
+    </div>
   );
 };
 

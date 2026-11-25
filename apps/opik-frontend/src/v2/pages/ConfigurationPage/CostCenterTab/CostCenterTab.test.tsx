@@ -432,17 +432,6 @@ describe("CostCenterTab", () => {
       );
     });
 
-    it("makes the filter chips as tall as the search box", () => {
-      renderTab(ADMIN);
-
-      expect(screen.getByRole("button", { name: /^Provider/ })).toHaveClass(
-        "h-8",
-      );
-      expect(screen.getByTestId("filter-chip-manager-trigger")).toHaveClass(
-        "h-8",
-      );
-    });
-
     it("picks a type from the Type chip list", async () => {
       renderTab(ADMIN);
 

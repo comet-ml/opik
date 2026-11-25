@@ -2,7 +2,6 @@ import React, { forwardRef } from "react";
 import { CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { useFilterChipHeightClass } from "@/shared/filter-chips/FilterChipSizeContext";
 
 export interface ChipShellProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   applied?: boolean;
@@ -15,7 +14,6 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
     { applied, isOpen, onClear, disabled, className, children, ...rest },
     ref,
   ) => {
-    const heightClass = useFilterChipHeightClass();
     const hasClear = Boolean(onClear && !disabled);
     const showClearAffordance = Boolean(applied && !isOpen);
 
@@ -25,8 +23,7 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
         type="button"
         disabled={disabled}
         className={cn(
-          "flex max-w-[280px] shrink-0 items-center gap-1 rounded-[20px] border border-solid pl-2 pr-1.5 py-0.5 outline-none transition-colors",
-          heightClass,
+          "flex h-6 max-w-[280px] shrink-0 items-center gap-1 rounded-[20px] border border-solid pl-2 pr-1.5 py-0.5 outline-none transition-colors",
           "comet-body-xs-accented",
           isOpen
             ? "border-secondary bg-primary-100 text-primary-active"
@@ -61,8 +58,7 @@ const ChipShell = forwardRef<HTMLElement, ChipShellProps>(
             }}
             aria-label="Clear filter"
             className={cn(
-              "hidden items-center justify-center rounded-r-[20px] border border-l-0 border-secondary bg-primary-100/50 pl-1 pr-1.5 text-primary-active outline-none transition-colors",
-              heightClass,
+              "hidden h-6 items-center justify-center rounded-r-[20px] border border-l-0 border-secondary bg-primary-100/50 pl-1 pr-1.5 text-primary-active outline-none transition-colors",
               showClearAffordance && "group-hover:inline-flex",
               "hover:bg-primary-100 hover:text-primary-hover",
               "focus-visible:ring-2 focus-visible:ring-primary-active/40",
