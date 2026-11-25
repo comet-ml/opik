@@ -4,6 +4,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
@@ -117,9 +118,13 @@ public class RedirectResourceClient {
                 .encodeToString((frontendBaseUrl + "/api").getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Where {@link #projectsRedirect} sends the browser for a trace. */
+    /**
+     * Where {@link #projectsRedirect} sends the browser for a trace: a path on the host the link was opened on, so
+     * only the path of {@code frontendBaseUrl} is kept.
+     */
     public String expectedProjectRedirectUrl(String frontendBaseUrl, String workspaceName, UUID projectId,
             UUID traceId) {
-        return PROJECT_REDIRECT_URL.formatted(frontendBaseUrl, workspaceName, projectId, traceId);
+        return PROJECT_REDIRECT_URL.formatted(URI.create(frontendBaseUrl).getRawPath(), workspaceName, projectId,
+                traceId);
     }
 }
