@@ -381,6 +381,24 @@ def test_json_schema_match__custom_format_and_format_in_data__are_ignored() -> N
     assert metric.score(output='{"id": "anything", "format": "x"}').value == 1.0
 
 
+@pytest.mark.parametrize("name", ["default", "enum", "const", "examples"])
+def test_json_schema_match__property_named_like_data_keyword__format_still_checked(
+    monkeypatch, name
+) -> None:
+    monkeypatch.setattr(
+        json_schema_match,
+        "_format_checker_for",
+        lambda validator_class: json_schema_match.jsonschema.FormatChecker(formats=[]),
+    )
+    schema = {
+        "type": "object",
+        "properties": {name: {"type": "string", "format": "date-time"}},
+    }
+
+    with pytest.raises(MetricComputationError, match="cannot be checked: date-time"):
+        _metric(schema=schema, check_formats=True)
+
+
 def test_json_schema_match__draft_selected_from_dollar_schema() -> None:
     # Draft 4 uses a boolean exclusiveMaximum; Draft 2020-12 rejects that form.
     schema = {

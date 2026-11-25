@@ -161,6 +161,18 @@ _STANDARD_FORMATS_BY_DRAFT: Dict[str, FrozenSet[str]] = {
 # Keywords whose values are data, not subschemas, so a "format" inside them is
 # not a format assertion.
 _DATA_KEYWORDS = frozenset({"const", "enum", "default", "examples"})
+# Keywords whose values map names to subschemas, so a key such as "default"
+# inside them is a property name, not a data keyword.
+_SCHEMA_MAP_KEYWORDS = frozenset(
+    {
+        "properties",
+        "patternProperties",
+        "definitions",
+        "$defs",
+        "dependentSchemas",
+        "dependencies",
+    }
+)
 
 
 def _format_checker_for(validator_class: Any) -> Any:
@@ -186,9 +198,13 @@ def _formats_used(schema: Any) -> FrozenSet[str]:
         if isinstance(node, dict):
             if isinstance(node.get("format"), str):
                 found.add(node["format"])
-            stack.extend(
-                value for key, value in node.items() if key not in _DATA_KEYWORDS
-            )
+            for key, value in node.items():
+                if key in _DATA_KEYWORDS:
+                    continue
+                if key in _SCHEMA_MAP_KEYWORDS and isinstance(value, dict):
+                    stack.extend(value.values())
+                else:
+                    stack.append(value)
         elif isinstance(node, list):
             stack.extend(node)
     return frozenset(found)
