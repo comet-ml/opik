@@ -6,6 +6,9 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { JsonParam } from "use-query-params";
+import { ColumnSort, OnChangeFn } from "@tanstack/react-table";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import partition from "lodash/partition";
 import { History as HistoryIcon, Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
@@ -52,6 +55,8 @@ const PINNED_STORAGE_KEY = "cost-center:pinned-models";
 const SELECTED_COLUMNS_KEY = "cost-center:selected-columns";
 const COLUMNS_ORDER_KEY = "cost-center:columns-order";
 const COLUMNS_WIDTH_KEY = "cost-center:columns-width";
+const COLUMNS_SORT_KEY = "cost-center:columns-sort";
+const DEFAULT_SORTING: ColumnSort[] = [{ id: "model", desc: false }];
 const IS_LABEL = { "=": "is" } as const;
 
 const CostCenterTab: React.FC = () => {
@@ -67,7 +72,6 @@ const CostCenterTab: React.FC = () => {
   );
 
   const [search, setSearch] = useState("");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(PAGE_SIZES[0]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -204,6 +208,20 @@ const CostCenterTab: React.FC = () => {
     [setPinned],
   );
 
+  const [sorting, setSorting] = useQueryParamAndLocalStorageState<ColumnSort[]>(
+    {
+      localStorageKey: COLUMNS_SORT_KEY,
+      queryKey: "prices_sorting",
+      defaultValue: DEFAULT_SORTING,
+      queryParamConfig: JsonParam,
+    },
+  );
+  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
+  const changeSorting: OnChangeFn<ColumnSort[]> = (updater) => {
+    setSorting(updater);
+    setPage(1);
+  };
+
   // DataTable lifts pinned rows only within the page it is given, so they are
   // moved to the front before paging to land on the first page.
   const visible = useMemo(() => {
@@ -255,7 +273,7 @@ const CostCenterTab: React.FC = () => {
           canEdit && (
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="xs"
                 onClick={() => openDrawer({})}
               >
@@ -345,8 +363,8 @@ const CostCenterTab: React.FC = () => {
         columnsOrder={columnsOrder}
         columnsWidth={columnsWidth}
         onColumnsWidthChange={setColumnsWidth}
-        sortDirection={sortDirection}
-        onSortDirectionChange={resetPage(setSortDirection)}
+        sorting={sorting}
+        onSortingChange={changeSorting}
         pinnedKeys={pinned}
         onPinnedKeysChange={setPinned}
         activeKey={drawerEntry?.key}

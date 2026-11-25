@@ -32,6 +32,7 @@ import {
 import { PRICE_UNIT_SUFFIX, TYPE_TAG_VARIANT, formatPrice } from "./format";
 
 const NO_VALUE = "-";
+const PIN_COLUMN_SIZE = 32;
 
 const TYPE_VARIANT_BY_LABEL = Object.fromEntries(
   CATALOG_TYPES.map((type) => [
@@ -126,8 +127,8 @@ type PricesTableProps = {
   columnsOrder: string[];
   columnsWidth: ColumnSizingState;
   onColumnsWidthChange: OnChangeFn<ColumnSizingState>;
-  sortDirection: "asc" | "desc";
-  onSortDirectionChange: (direction: "asc" | "desc") => void;
+  sorting: ColumnSort[];
+  onSortingChange: OnChangeFn<ColumnSort[]>;
   pinnedKeys: string[];
   onPinnedKeysChange: (keys: string[]) => void;
   activeKey?: string;
@@ -141,8 +142,8 @@ const PricesTable: React.FC<PricesTableProps> = ({
   columnsOrder,
   columnsWidth,
   onColumnsWidthChange,
-  sortDirection,
-  onSortDirectionChange,
+  sorting,
+  onSortingChange,
   pinnedKeys,
   onPinnedKeysChange,
   activeKey,
@@ -151,7 +152,9 @@ const PricesTable: React.FC<PricesTableProps> = ({
 }) => {
   const columns = useMemo<ColumnDef<CatalogEntry>[]>(
     () => [
-      generatePinColumDef<CatalogEntry>(),
+      // DataTable stretches every column to fill the row, so the shared 40 px
+      // pin column starts smaller here to end up near 40 px once stretched.
+      { ...generatePinColumDef<CatalogEntry>(), size: PIN_COLUMN_SIZE },
       ...convertColumnDataToColumn<CatalogEntry, CatalogEntry>([MODEL_COLUMN], {
         sortableColumns: ["model"],
       }),
@@ -162,15 +165,6 @@ const PricesTable: React.FC<PricesTableProps> = ({
     ],
     [selectedColumns, columnsOrder],
   );
-
-  const sorting = useMemo<ColumnSort[]>(
-    () => [{ id: "model", desc: sortDirection === "desc" }],
-    [sortDirection],
-  );
-  const setSorting: OnChangeFn<ColumnSort[]> = (updater) =>
-    onSortDirectionChange(
-      functionalUpdate(updater, sorting)[0]?.desc ? "desc" : "asc",
-    );
 
   const rowPinning = useMemo<RowPinningState>(
     () => ({ top: pinnedKeys, bottom: [] }),
@@ -186,7 +180,7 @@ const PricesTable: React.FC<PricesTableProps> = ({
       getRowId={(entry) => entry.key}
       onRowClick={onOpen}
       activeRowId={activeKey}
-      sortConfig={{ enabled: true, sorting, setSorting }}
+      sortConfig={{ enabled: true, sorting, setSorting: onSortingChange }}
       resizeConfig={{
         enabled: true,
         columnSizing: columnsWidth,

@@ -342,6 +342,19 @@ describe("CostCenterTab", () => {
       expect(shownModels()[0]).toBe("team-model");
     });
 
+    it("remembers the sort in this browser", () => {
+      const { unmount } = renderTab(ADMIN);
+
+      sortByModel();
+      expect(shownModels()[0]).toBe("team-model");
+
+      unmount();
+      window.history.replaceState({}, "", "/");
+      renderTab(ADMIN);
+
+      expect(shownModels()[0]).toBe("team-model");
+    });
+
     it("goes back to the first page when the sort changes", () => {
       BUILT_INS.push(
         ...Array.from({ length: 30 }, (_, i) => ({
