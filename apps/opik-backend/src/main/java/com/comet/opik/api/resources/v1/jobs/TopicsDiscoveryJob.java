@@ -1,7 +1,5 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.topics.TopicRunStore;
-import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -18,7 +16,6 @@ import org.quartz.UnableToInterruptJobException;
 import reactor.core.Disposable;
 import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -28,15 +25,13 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
  * The scheduled caller of the Topics planner: the leader plans the runs ({@link TopicsRunPlanner#plan(Instant)}) every
- * {@code topics.runs.planInterval} and, every {@code topics.storage.sweepInterval}, deletes the topics of deleted
- * projects that the project delete left. Every pod fires it every plan interval, each at its own second (Quartz starts
- * the trigger at boot). The same locks as {@link TopicVectorsJob} make that one plan per interval across the cluster:
+ * {@code topics.runs.planInterval}. Every pod fires it every plan interval, each at its own second (Quartz starts the
+ * trigger at boot). The same locks as {@link TopicVectorsJob} make that one plan per interval across the cluster:
  * <ul>
  * <li>the leader lock, held for the plan and released when it ends, so two plans never overlap; its lease
  * ({@link #leaderLease()}) only matters when the pod dies mid-plan, because a plan that runs longer is cancelled;</li>
  * <li>the plan lock, taken by the leader before it plans and never released: it expires one interval (less a small
- * margin for trigger jitter) after the plan started, so a pod that fires sooner skips. The sweep lock does the same
- * for the sweep interval.</li>
+ * margin for trigger jitter) after the plan started, so a pod that fires sooner skips.</li>
  * </ul>
  * The runs themselves run on any pod, from the stream. A pod shutdown interrupts the job (the lifecycle listener does
  * it before it stops the scheduler): it cancels the plan in flight, which frees the leader lock at once, and the job
@@ -50,13 +45,10 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
 
     static final Lock LEADER_LOCK = new Lock("topics:discovery:leader");
     static final Lock PLAN_LOCK = new Lock("topics:discovery:plan");
-    static final Lock SWEEP_LOCK = new Lock("topics:discovery:sweep");
     private static final Duration MAX_JITTER = Duration.ofSeconds(1);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicsRunPlanner planner;
-    private final @NonNull TopicWorkspaceService workspaceService;
-    private final @NonNull TopicRunStore store;
     private final @NonNull LockService lockService;
     // Every plan in flight, not only the last one: an interrupt must cancel the one the next fire did not start.
     private final Disposable.Composite inFlight = Disposables.composite();
@@ -75,7 +67,7 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
         var start = Instant.now();
         plan.update(lockService.bestEffortLock(
                 LEADER_LOCK,
-                planIfDue(start).then(sweepIfDue()),
+                planIfDue(start),
                 Mono.fromRunnable(() -> log.debug("Topics plan skipped, another instance holds the lock, lock '{}'",
                         LEADER_LOCK.key())),
                 leaderLease(),
@@ -96,8 +88,7 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
 
     /**
      * Plans unless a plan started, on any pod, less than one interval ago. A failure is logged here, so it never
-     * reaches the lock service, which would take a Redis error for a lock held by another pod, and the sweep still
-     * runs.
+     * reaches the lock service, which would take a Redis error for a lock held by another pod.
      */
     Mono<Void> planIfDue(Instant start) {
         return Mono.defer(
@@ -111,30 +102,6 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
                     log.error("Topics plan failed", error);
                     return Mono.empty();
                 });
-    }
-
-    /** Deletes the topics of deleted projects unless a sweep started, on any pod, less than one interval ago. */
-    Mono<Void> sweepIfDue() {
-        return Mono
-                .defer(() -> lockService.lockUsingToken(SWEEP_LOCK,
-                        slot(config.getStorage().getSweepInterval().toJavaDuration())))
-                .flatMap(due -> due ? sweep() : Mono.<Void>empty())
-                .onErrorResume(error -> {
-                    log.error("Topics delete of deleted projects' topics failed", error);
-                    return Mono.empty();
-                });
-    }
-
-    private Mono<Void> sweep() {
-        return Mono.fromCallable(workspaceService::enabledWorkspaceIds)
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(store::deleteTopicsOfMissingProjects)
-                .doOnNext(topics -> {
-                    if (topics > 0) {
-                        log.info("Deleted the topics of deleted projects, topics '{}'", topics);
-                    }
-                })
-                .then();
     }
 
     /**

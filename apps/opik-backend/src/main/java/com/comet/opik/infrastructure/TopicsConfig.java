@@ -398,11 +398,20 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(10_000) private int deleteBatchSize;
 
-        /** How often the leader deletes the topics of deleted projects that the project delete left. */
+        /** How often each pod deletes the topics of deleted projects that the project delete left. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration sweepInterval;
+
+        /**
+         * How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire sweeps again.
+         * At most 30m, under the shortest {@code sweepInterval}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration sweepTimeout;
     }
 
     /**

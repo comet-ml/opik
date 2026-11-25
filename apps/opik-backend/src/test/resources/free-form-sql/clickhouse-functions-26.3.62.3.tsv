@@ -1,0 +1,1792 @@
+# ClickHouse 26.3.62.3: every function and alias, with the free-form SQL review decision.
+# decision: allow or deny for a function; empty for an alias of a listed function, which takes its decision.
+name	alias_to	category	decision
+BIT_AND	groupBitAnd		
+BIT_OR	groupBitOr		
+BIT_XOR	groupBitXor		
+BLAKE3		Hash	allow
+CAST		Type Conversion	allow
+CHARACTER_LENGTH	lengthUTF8		
+CHAR_LENGTH	lengthUTF8		
+COVAR_POP	covarPop		
+COVAR_SAMP	covarSamp		
+CRC32		String	allow
+CRC32IEEE		String	allow
+CRC64		String	allow
+DATABASE	currentDatabase		
+DATE		Type Conversion	allow
+DATE_DIFF	dateDiff		
+DATE_FORMAT	formatDateTime		
+DATE_TRUNC	dateTrunc		
+DAY	toDayOfMonth		
+DAYOFMONTH	toDayOfMonth		
+DAYOFWEEK	toDayOfWeek		
+DAYOFYEAR	toDayOfYear		
+FORMAT_BYTES	formatReadableSize		
+FQDN		Other	deny
+FROM_BASE64	base64Decode		
+FROM_DAYS	fromDaysSinceYearZero		
+FROM_UNIXTIME	fromUnixTimestamp		
+HMAC		Encryption	allow
+HOUR	toHour		
+INET6_ATON	IPv6StringToNum		
+INET6_NTOA	IPv6NumToString		
+INET_ATON	IPv4StringToNum		
+INET_NTOA	IPv4NumToString		
+IPv4CIDRToRange		IP Address	allow
+IPv4NumToString		IP Address	allow
+IPv4NumToStringClassC		IP Address	allow
+IPv4StringToNum		IP Address	allow
+IPv4StringToNumOrDefault		IP Address	allow
+IPv4StringToNumOrNull		IP Address	allow
+IPv4ToIPv6		IP Address	allow
+IPv6CIDRToRange		IP Address	allow
+IPv6NumToString		IP Address	allow
+IPv6StringToNum		IP Address	allow
+IPv6StringToNumOrDefault		IP Address	allow
+IPv6StringToNumOrNull		IP Address	allow
+JSONAllPaths		JSON	allow
+JSONAllPathsWithTypes		JSON	allow
+JSONArrayLength		JSON	allow
+JSONDynamicPaths		JSON	allow
+JSONDynamicPathsWithTypes		JSON	allow
+JSONExtract		JSON	allow
+JSONExtractArrayRaw		JSON	allow
+JSONExtractArrayRawCaseInsensitive		JSON	allow
+JSONExtractBool		JSON	allow
+JSONExtractBoolCaseInsensitive		JSON	allow
+JSONExtractCaseInsensitive		JSON	allow
+JSONExtractFloat		JSON	allow
+JSONExtractFloatCaseInsensitive		JSON	allow
+JSONExtractInt		JSON	allow
+JSONExtractIntCaseInsensitive		JSON	allow
+JSONExtractKeys		JSON	allow
+JSONExtractKeysAndValues		JSON	allow
+JSONExtractKeysAndValuesCaseInsensitive		JSON	allow
+JSONExtractKeysAndValuesRaw		JSON	allow
+JSONExtractKeysAndValuesRawCaseInsensitive		JSON	allow
+JSONExtractKeysCaseInsensitive		JSON	allow
+JSONExtractRaw		JSON	allow
+JSONExtractRawCaseInsensitive		JSON	allow
+JSONExtractString		JSON	allow
+JSONExtractStringCaseInsensitive		JSON	allow
+JSONExtractUInt		JSON	allow
+JSONExtractUIntCaseInsensitive		JSON	allow
+JSONHas		JSON	allow
+JSONKey		JSON	allow
+JSONLength		JSON	allow
+JSONMergePatch		JSON	allow
+JSONSharedDataPaths		JSON	allow
+JSONSharedDataPathsWithTypes		JSON	allow
+JSONType		JSON	allow
+JSON_ARRAY_LENGTH	JSONArrayLength		
+JSON_EXISTS		JSON	allow
+JSON_QUERY		JSON	allow
+JSON_VALUE		JSON	allow
+L1Distance		Distance	allow
+L1Norm		Distance	allow
+L1Normalize		Distance	allow
+L2Distance		Distance	allow
+L2DistanceTransposed		Distance	allow
+L2Norm		Distance	allow
+L2Normalize		Distance	allow
+L2SquaredDistance		Distance	allow
+L2SquaredNorm		Distance	allow
+LAST_DAY	toLastDayOfMonth		
+LinfDistance		Distance	allow
+LinfNorm		Distance	allow
+LinfNormalize		Distance	allow
+LpDistance		Distance	allow
+LpNorm		Distance	allow
+LpNormalize		Distance	allow
+MACNumToString		Other	allow
+MACStringToNum		Other	allow
+MACStringToOUI		Other	allow
+MAP_FROM_ARRAYS	mapFromArrays		
+MD4		Hash	allow
+MD5		Hash	allow
+MILLISECOND	toMillisecond		
+MINUTE	toMinute		
+MONTH	toMonth		
+NATURAL_SORT_KEY	naturalSortKey		
+OCTET_LENGTH	length		
+QUARTER	toQuarter		
+REGEXP_EXTRACT	regexpExtract		
+REGEXP_MATCHES	match		
+REGEXP_REPLACE	replaceRegexpAll		
+RIPEMD160		Hash	allow
+SCHEMA	currentDatabase		
+SECOND	toSecond		
+SHA1		Hash	allow
+SHA224		Hash	allow
+SHA256		Hash	allow
+SHA384		Hash	allow
+SHA512		Hash	allow
+SHA512_256		Hash	allow
+STD	stddevPop		
+STDDEV_POP	stddevPop		
+STDDEV_SAMP	stddevSamp		
+ST_LineFromWKB	readWKBLineString		
+ST_MLineFromWKB	readWKBMultiLineString		
+ST_MPolyFromWKB	readWKBMultiPolygon		
+ST_PointFromWKB	readWKBPoint		
+ST_PolyFromWKB	readWKBPolygon		
+SUBSTRING_INDEX	substringIndex		
+SVG	svg		
+TIMESTAMP_DIFF	dateDiff		
+TO_BASE64	base64Encode		
+TO_DAYS	toDaysSinceYearZero		
+TO_UNIXTIME	parseDateTime		
+ULIDStringToDateTime		ULID	allow
+URLHash		Hash	allow
+URLHierarchy		URL	allow
+URLPathHierarchy		URL	allow
+UTCTimestamp		Dates and Times	allow
+UTC_timestamp	UTCTimestamp		
+UUIDNumToString		UUID	allow
+UUIDStringToNum		UUID	allow
+UUIDToNum		UUID	allow
+UUIDv7ToDateTime		UUID	allow
+VAR_POP	varPop		
+VAR_SAMP	varSamp		
+WKB	wkb		
+WKT	wkt		
+YEAR	toYear		
+YYYYMMDDToDate		Dates and Times	allow
+YYYYMMDDToDate32		Dates and Times	allow
+YYYYMMDDhhmmssToDateTime		Dates and Times	allow
+YYYYMMDDhhmmssToDateTime64		Dates and Times	allow
+_CAST		Internal	allow
+__actionName		Internal	allow
+__applyFilter		Internal	allow
+__bitBoolMaskAnd		Internal	allow
+__bitBoolMaskOr		Internal	allow
+__bitSwapLastTwo		Internal	allow
+__bitWrapperFunc		Internal	allow
+__getScalar		Internal	allow
+__patchPartitionID		Internal	allow
+__scalarSubqueryResult		Internal	allow
+abs		Arithmetic	allow
+accurateCast		Type Conversion	allow
+accurateCastOrDefault		Type Conversion	allow
+accurateCastOrNull		Type Conversion	allow
+acos		Mathematical	allow
+acosh		Mathematical	allow
+addDate		Dates and Times	allow
+addDays		Dates and Times	allow
+addHours		Dates and Times	allow
+addInterval		Dates and Times	allow
+addMicroseconds		Dates and Times	allow
+addMilliseconds		Dates and Times	allow
+addMinutes		Dates and Times	allow
+addMonths		Dates and Times	allow
+addNanoseconds		Dates and Times	allow
+addQuarters		Dates and Times	allow
+addSeconds		Dates and Times	allow
+addTupleOfIntervals		Dates and Times	allow
+addWeeks		Dates and Times	allow
+addYears		Dates and Times	allow
+addressToLine		Introspection	deny
+addressToLineWithInlines		Introspection	deny
+addressToSymbol		Introspection	deny
+aes_decrypt_mysql		Encryption	allow
+aes_encrypt_mysql		Encryption	allow
+age		Dates and Times	allow
+aggThrow		Aggregate Functions	allow
+alphaTokens		String Splitting	allow
+analysisOfVariance		Aggregate Functions	allow
+and		Logical	allow
+anova	analysisOfVariance		
+any		Aggregate Functions	allow
+anyHeavy		Aggregate Functions	allow
+anyLast		Aggregate Functions	allow
+anyLastRespectNulls	anyLast_respect_nulls		
+anyLast_respect_nulls			allow
+anyRespectNulls	any_respect_nulls		
+anyValueRespectNulls	any_respect_nulls		
+any_respect_nulls			allow
+any_value	any		
+any_value_respect_nulls	any_respect_nulls		
+appendTrailingCharIfAbsent		String	allow
+approx_top_count	approx_top_k		
+approx_top_k		Aggregate Functions	allow
+approx_top_sum		Aggregate Functions	allow
+areaCartesian		Geo	allow
+areaSpherical		Geo	allow
+argAndMax		Aggregate Functions	allow
+argAndMin		Aggregate Functions	allow
+argMax		Aggregate Functions	allow
+argMin		Aggregate Functions	allow
+array		Arrays	allow
+arrayAUC	arrayROCAUC		
+arrayAUCPR		Arrays	allow
+arrayAll		Arrays	allow
+arrayAvg		Arrays	allow
+arrayCompact		Arrays	allow
+arrayConcat		Arrays	allow
+arrayCount		Arrays	allow
+arrayCumSum		Arrays	allow
+arrayCumSumNonNegative		Arrays	allow
+arrayDifference		Arrays	allow
+arrayDistinct		Arrays	allow
+arrayDotProduct		Arrays	allow
+arrayElement		Arrays	allow
+arrayElementOrNull		Arrays	allow
+arrayEnumerate		Arrays	allow
+arrayEnumerateDense		Arrays	allow
+arrayEnumerateDenseRanked		Arrays	allow
+arrayEnumerateUniq		Arrays	allow
+arrayEnumerateUniqRanked		Arrays	allow
+arrayExcept		Arrays	allow
+arrayExists		Arrays	allow
+arrayFill		Arrays	allow
+arrayFilter		Arrays	allow
+arrayFirst		Arrays	allow
+arrayFirstIndex		Arrays	allow
+arrayFirstOrNull		Arrays	allow
+arrayFlatten		Arrays	allow
+arrayFold		Arrays	allow
+arrayIntersect		Arrays	allow
+arrayJaccardIndex		Arrays	allow
+arrayJoin		Arrays	allow
+arrayLast		Arrays	allow
+arrayLastIndex		Arrays	allow
+arrayLastOrNull		Arrays	allow
+arrayLevenshteinDistance		Arrays	allow
+arrayLevenshteinDistanceWeighted		Arrays	allow
+arrayMap		Arrays	allow
+arrayMax		Arrays	allow
+arrayMin		Arrays	allow
+arrayNormalizedGini		Arrays	allow
+arrayPRAUC	arrayAUCPR		
+arrayPartialReverseSort		Arrays	allow
+arrayPartialShuffle		Arrays	allow
+arrayPartialSort		Arrays	allow
+arrayPopBack		Arrays	allow
+arrayPopFront		Arrays	allow
+arrayProduct		Arrays	allow
+arrayPushBack		Arrays	allow
+arrayPushFront		Arrays	allow
+arrayROCAUC		Arrays	allow
+arrayRandomSample		Arrays	allow
+arrayReduce		Arrays	allow
+arrayReduceInRanges		Arrays	allow
+arrayRemove		Arrays	allow
+arrayResize		Arrays	allow
+arrayReverse		Arrays	allow
+arrayReverseFill		Arrays	allow
+arrayReverseSort		Arrays	allow
+arrayReverseSplit		Arrays	allow
+arrayRotateLeft		Arrays	allow
+arrayRotateRight		Arrays	allow
+arrayShiftLeft		Arrays	allow
+arrayShiftRight		Arrays	allow
+arrayShingles		Arrays	allow
+arrayShuffle		Arrays	allow
+arraySimilarity		Arrays	allow
+arraySlice		Arrays	allow
+arraySort		Arrays	allow
+arraySplit		Arrays	allow
+arrayStringConcat		String Splitting	allow
+arraySum		Arrays	allow
+arraySymmetricDifference		Arrays	allow
+arrayUnion		Arrays	allow
+arrayUniq		Arrays	allow
+arrayWithConstant		Arrays	allow
+arrayZip		Arrays	allow
+arrayZipUnaligned		Arrays	allow
+array_agg	groupArray		
+array_concat_agg	groupArrayArray		allow
+array_remove	arrayRemove		
+ascii		String	allow
+asin		Mathematical	allow
+asinh		Mathematical	allow
+assumeNotNull		Null	allow
+atan		Mathematical	allow
+atan2		Mathematical	allow
+atanh		Mathematical	allow
+authUser	authenticatedUser		
+authenticatedUser		Other	deny
+avg		Aggregate Functions	allow
+avg2		Arithmetic	allow
+avgWeighted		Aggregate Functions	allow
+bar		Other	allow
+base32Decode		String	allow
+base32Encode		String	allow
+base58Decode		String	allow
+base58Encode		String	allow
+base64Decode		String	allow
+base64Encode		String	allow
+base64URLDecode		String	allow
+base64URLEncode		String	allow
+basename		String	allow
+bech32Decode		Encoding	allow
+bech32Encode		Encoding	allow
+bin		Encoding	allow
+bitAnd		Bit	allow
+bitCount		Bit	allow
+bitHammingDistance		Bit	allow
+bitNot		Bit	allow
+bitOr		Bit	allow
+bitPositionsToArray		Encoding	allow
+bitRotateLeft		Bit	allow
+bitRotateRight		Bit	allow
+bitShiftLeft		Bit	allow
+bitShiftRight		Bit	allow
+bitSlice		Bit	allow
+bitTest		Bit	allow
+bitTestAll		Bit	allow
+bitTestAny		Bit	allow
+bitXor		Bit	allow
+bitmapAnd		Bitmap	allow
+bitmapAndCardinality		Bitmap	allow
+bitmapAndnot		Bitmap	allow
+bitmapAndnotCardinality		Bitmap	allow
+bitmapBuild		Bitmap	allow
+bitmapCardinality		Bitmap	allow
+bitmapContains		Bitmap	allow
+bitmapHasAll		Bitmap	allow
+bitmapHasAny		Bitmap	allow
+bitmapMax		Bitmap	allow
+bitmapMin		Bitmap	allow
+bitmapOr		Bitmap	allow
+bitmapOrCardinality		Bitmap	allow
+bitmapSubsetInRange		Bitmap	allow
+bitmapSubsetLimit		Bitmap	allow
+bitmapToArray		Bitmap	allow
+bitmapTransform		Bitmap	allow
+bitmapXor		Bitmap	allow
+bitmapXorCardinality		Bitmap	allow
+bitmaskToArray		Encoding	allow
+bitmaskToList		Encoding	allow
+blockNumber		Other	allow
+blockSerializedSize		Other	allow
+blockSize		Other	allow
+boundingRatio		Aggregate Functions	allow
+buildId		Other	deny
+byteHammingDistance		String	allow
+byteSize		Other	allow
+byteSlice	substring		
+byteSwap		Arithmetic	allow
+caseFoldUTF8		String	allow
+caseWithExpr	caseWithExpression		
+caseWithExpression		Internal	allow
+caseWithoutExpr	multiIf		
+caseWithoutExpression	multiIf		
+catboostEvaluate		Other	deny
+categoricalInformationValue		Aggregate Functions	allow
+cbrt		Mathematical	allow
+ceil		Rounding	allow
+ceiling	ceil		
+changeDay		Dates and Times	allow
+changeHour		Dates and Times	allow
+changeMinute		Dates and Times	allow
+changeMonth		Dates and Times	allow
+changeSecond		Dates and Times	allow
+changeYear		Dates and Times	allow
+char		Encoding	allow
+cityHash64		Hash	allow
+clamp		Conditional	allow
+coalesce		Null	allow
+colorOKLABToSRGB		Other	allow
+colorOKLCHToSRGB		Other	allow
+colorSRGBToOKLAB		Other	allow
+colorSRGBToOKLCH		Other	allow
+compareSubstrings		String	allow
+concat		String	allow
+concatAssumeInjective		String	allow
+concatWithSeparator		String	allow
+concatWithSeparatorAssumeInjective		String	allow
+concat_ws	concatWithSeparator		
+connectionId		Other	deny
+connection_id	connectionID		
+contingency		Aggregate Functions	allow
+conv		String	allow
+convertCharset		String	allow
+corr		Aggregate Functions	allow
+corrMatrix		Aggregate Functions	allow
+corrStable		Aggregate Functions	allow
+cos		Mathematical	allow
+cosh		Mathematical	allow
+cosineDistance		Distance	allow
+cosineDistanceTransposed		Distance	allow
+count		Aggregate Functions	allow
+countDigits		Other	allow
+countEqual		Arrays	allow
+countMatches		String Search	allow
+countMatchesCaseInsensitive		String Search	allow
+countSubstrings		String Search	allow
+countSubstringsCaseInsensitive		String Search	allow
+countSubstringsCaseInsensitiveUTF8		String Search	allow
+covarPop		Aggregate Functions	allow
+covarPopMatrix		Aggregate Functions	allow
+covarPopStable		Aggregate Functions	allow
+covarSamp		Aggregate Functions	allow
+covarSampMatrix		Aggregate Functions	allow
+covarSampStable		Aggregate Functions	allow
+cramersV		Aggregate Functions	allow
+cramersVBiasCorrected		Aggregate Functions	allow
+cume_dist			allow
+curdate	today		
+currentDatabase		Other	deny
+currentProfiles		Other	deny
+currentQueryID		Other	allow
+currentRoles		Other	deny
+currentSchemas		Other	deny
+currentUser		Other	deny
+current_database	currentDatabase		
+current_date	today		
+current_query_id	currentQueryID		
+current_schemas	currentSchemas		
+current_timestamp	now		
+current_user	currentUser		
+cutFragment		URL	allow
+cutIPv6		IP Address	allow
+cutQueryString		URL	allow
+cutQueryStringAndFragment		URL	allow
+cutToFirstSignificantSubdomain		URL	allow
+cutToFirstSignificantSubdomainCustom		URL	allow
+cutToFirstSignificantSubdomainCustomRFC		URL	allow
+cutToFirstSignificantSubdomainCustomWithWWW		URL	allow
+cutToFirstSignificantSubdomainCustomWithWWWRFC		URL	allow
+cutToFirstSignificantSubdomainRFC		URL	allow
+cutToFirstSignificantSubdomainWithWWW		URL	allow
+cutToFirstSignificantSubdomainWithWWWRFC		URL	allow
+cutURLParameter		URL	allow
+cutWWW		URL	allow
+damerauLevenshteinDistance		String	allow
+dateDiff		Dates and Times	allow
+dateName		Dates and Times	allow
+dateTime64ToSnowflake		UUID	allow
+dateTime64ToSnowflakeID		UUID	allow
+dateTimeToSnowflake		UUID	allow
+dateTimeToSnowflakeID		UUID	allow
+dateTimeToUUIDv7		UUID	allow
+dateTrunc		Dates and Times	allow
+date_bin	toStartOfInterval		
+date_diff	dateDiff		
+decodeHTMLComponent		String	allow
+decodeURLComponent		URL	allow
+decodeURLFormComponent		URL	allow
+decodeXMLComponent		String	allow
+decrypt		Encryption	allow
+defaultProfiles		Other	deny
+defaultRoles		Other	deny
+defaultValueOfArgumentType		Other	allow
+defaultValueOfTypeName		Other	allow
+degrees		Mathematical	allow
+deltaSum		Aggregate Functions	allow
+deltaSumTimestamp		Aggregate Functions	allow
+demangle		Introspection	deny
+denseRank			allow
+dense_rank	denseRank		
+detectCharset		Natural Language Processing	allow
+detectLanguage		Natural Language Processing	allow
+detectLanguageMixed		Natural Language Processing	allow
+detectLanguageUnknown		Natural Language Processing	allow
+detectTonality		Natural Language Processing	allow
+dictGet		Dictionary	deny
+dictGetAll		Dictionary	deny
+dictGetChildren		Dictionary	deny
+dictGetDate		Dictionary	deny
+dictGetDateOrDefault		Dictionary	deny
+dictGetDateTime		Dictionary	deny
+dictGetDateTimeOrDefault		Dictionary	deny
+dictGetDescendants		Dictionary	deny
+dictGetFloat32		Dictionary	deny
+dictGetFloat32OrDefault		Dictionary	deny
+dictGetFloat64		Dictionary	deny
+dictGetFloat64OrDefault		Dictionary	deny
+dictGetHierarchy		Dictionary	deny
+dictGetIPv4		Dictionary	deny
+dictGetIPv4OrDefault		Dictionary	deny
+dictGetIPv6		Dictionary	deny
+dictGetIPv6OrDefault		Dictionary	deny
+dictGetInt16		Dictionary	deny
+dictGetInt16OrDefault		Dictionary	deny
+dictGetInt32		Dictionary	deny
+dictGetInt32OrDefault		Dictionary	deny
+dictGetInt64		Dictionary	deny
+dictGetInt64OrDefault		Dictionary	deny
+dictGetInt8		Dictionary	deny
+dictGetInt8OrDefault		Dictionary	deny
+dictGetKeys		Dictionary	deny
+dictGetOrDefault		Dictionary	deny
+dictGetOrNull		Dictionary	deny
+dictGetString		Dictionary	deny
+dictGetStringOrDefault		Dictionary	deny
+dictGetUInt16		Dictionary	deny
+dictGetUInt16OrDefault		Dictionary	deny
+dictGetUInt32		Dictionary	deny
+dictGetUInt32OrDefault		Dictionary	deny
+dictGetUInt64		Dictionary	deny
+dictGetUInt64OrDefault		Dictionary	deny
+dictGetUInt8		Dictionary	deny
+dictGetUInt8OrDefault		Dictionary	deny
+dictGetUUID		Dictionary	deny
+dictGetUUIDOrDefault		Dictionary	deny
+dictHas		Dictionary	deny
+dictIsIn		Dictionary	deny
+displayName		Other	deny
+distanceCosine	cosineDistance		
+distanceCosineTransposed	cosineDistanceTransposed		
+distanceL1	L1Distance		
+distanceL2	L2Distance		
+distanceL2Squared	L2SquaredDistance		
+distanceL2Transposed	L2DistanceTransposed		
+distanceLinf	LinfDistance		
+distanceLp	LpDistance		
+distinctDynamicTypes		Aggregate Functions	allow
+distinctJSONPaths		Aggregate Functions	allow
+distinctJSONPathsAndTypes		Aggregate Functions	allow
+divide		Arithmetic	allow
+divideDecimal		Arithmetic	allow
+divideOrNull		Arithmetic	allow
+domain		URL	allow
+domainRFC		URL	allow
+domainWithoutWWW		URL	allow
+domainWithoutWWWRFC		URL	allow
+dotProduct		Tuple	allow
+dumpColumnStructure		Other	allow
+dynamicElement		JSON	allow
+dynamicType		JSON	allow
+e		Mathematical	allow
+editDistance		String	allow
+editDistanceUTF8		String	allow
+empty		Arrays	allow
+emptyArrayDate		Arrays	allow
+emptyArrayDateTime		Arrays	allow
+emptyArrayFloat32		Arrays	allow
+emptyArrayFloat64		Arrays	allow
+emptyArrayInt16		Arrays	allow
+emptyArrayInt32		Arrays	allow
+emptyArrayInt64		Arrays	allow
+emptyArrayInt8		Arrays	allow
+emptyArrayString		Arrays	allow
+emptyArrayToSingle		Arrays	allow
+emptyArrayUInt16		Arrays	allow
+emptyArrayUInt32		Arrays	allow
+emptyArrayUInt64		Arrays	allow
+emptyArrayUInt8		Arrays	allow
+enabledProfiles		Other	deny
+enabledRoles		Other	deny
+encodeURLComponent		URL	allow
+encodeURLFormComponent		URL	allow
+encodeXMLComponent		String	allow
+encrypt		Encryption	allow
+endsWith		String	allow
+endsWithCaseInsensitive		String	allow
+endsWithCaseInsensitiveUTF8		String	allow
+endsWithUTF8		String	allow
+entropy		Aggregate Functions	allow
+equals		Comparison	allow
+erf		Mathematical	allow
+erfc		Mathematical	allow
+errorCodeToName		Other	allow
+estimateCompressionRatio		Aggregate Functions	allow
+evalMLMethod		Machine Learning	allow
+exp		Mathematical	allow
+exp10		Mathematical	allow
+exp2		Mathematical	allow
+exponentialMovingAverage		Aggregate Functions	allow
+exponentialTimeDecayedAvg		Aggregate Functions	allow
+exponentialTimeDecayedCount		Aggregate Functions	allow
+exponentialTimeDecayedMax		Aggregate Functions	allow
+exponentialTimeDecayedSum		Aggregate Functions	allow
+extract		String Search	allow
+extractAll		String Search	allow
+extractAllGroups	extractAllGroupsVertical		
+extractAllGroupsHorizontal		String Search	allow
+extractAllGroupsVertical		String Splitting	allow
+extractGroups		String Search	allow
+extractKeyValuePairs		Map	allow
+extractKeyValuePairsWithEscaping		Map	allow
+extractTextFromHTML		String	allow
+extractURLParameter		URL	allow
+extractURLParameterNames		URL	allow
+extractURLParameters		URL	allow
+factorial		Mathematical	allow
+farmFingerprint64		Hash	allow
+farmHash64		Hash	allow
+file		Other	deny
+filesystemAvailable		Other	deny
+filesystemCapacity		Other	deny
+filesystemUnreserved		Other	deny
+finalizeAggregation		Other	allow
+financialInternalRateOfReturn		Financial	allow
+financialInternalRateOfReturnExtended		Financial	allow
+financialNetPresentValue		Financial	allow
+financialNetPresentValueExtended		Financial	allow
+firstLine		String	allow
+firstNonDefault		Null	allow
+firstSignificantSubdomain		URL	allow
+firstSignificantSubdomainCustom		URL	allow
+firstSignificantSubdomainCustomRFC		URL	allow
+firstSignificantSubdomainRFC		URL	allow
+firstValueRespectNulls	any_respect_nulls		
+first_value	any		
+first_value_respect_nulls	any_respect_nulls		
+flameGraph		Aggregate Functions	allow
+flatten	arrayFlatten		
+flattenTuple		Tuple	allow
+flipCoordinates		Other	allow
+floor		Rounding	allow
+format		String Replacement	allow
+formatDateTime		Dates and Times	allow
+formatDateTimeInJodaSyntax		Dates and Times	allow
+formatQuery		Other	allow
+formatQueryOrNull		Other	allow
+formatQuerySingleLine		Other	allow
+formatQuerySingleLineOrNull		Other	allow
+formatReadableDecimalSize		Other	allow
+formatReadableQuantity		Other	allow
+formatReadableSize		Other	allow
+formatReadableTimeDelta		Other	allow
+formatRow		Type Conversion	allow
+formatRowNoNewline		Type Conversion	allow
+fragment		URL	allow
+fromDaysSinceYearZero		Dates and Times	allow
+fromDaysSinceYearZero32		Dates and Times	allow
+fromModifiedJulianDay		Dates and Times	allow
+fromModifiedJulianDayOrNull		Dates and Times	allow
+fromUTCTimestamp		Dates and Times	allow
+fromUnixTimestamp		Dates and Times	allow
+fromUnixTimestamp64Micro		Type Conversion	allow
+fromUnixTimestamp64Milli		Type Conversion	allow
+fromUnixTimestamp64Nano		Type Conversion	allow
+fromUnixTimestamp64Second		Type Conversion	allow
+fromUnixTimestampInJodaSyntax		Dates and Times	allow
+from_utc_timestamp	fromUTCTimestamp		
+fullHostName	FQDN		
+fuzzBits		Random Number	allow
+fuzzQuery		Other	allow
+gccMurmurHash		Hash	allow
+gcd		Arithmetic	allow
+generateRandomStructure		Other	allow
+generateSerialID		Other	deny
+generateSnowflakeID		UUID	allow
+generateULID		ULID	allow
+generateUUIDv4		UUID	allow
+generateUUIDv7		UUID	allow
+geoDistance		Geo	allow
+geoToH3		Geo	allow
+geoToS2		Geo	allow
+geohashDecode		Geo	allow
+geohashEncode		Geo	allow
+geohashesInBox		Geo	allow
+getClientHTTPHeader		Other	deny
+getMacro		Other	deny
+getMaxTableNameLengthForDatabase		Other	deny
+getMergeTreeSetting		Other	deny
+getOSKernelVersion		Other	deny
+getServerPort		Other	deny
+getServerSetting		Other	deny
+getSetting		Other	deny
+getSettingOrDefault		Other	deny
+getSizeOfEnumType		Other	allow
+getSubcolumn		Other	allow
+getTypeSerializationStreams		Other	allow
+globalIn		Comparison	allow
+globalInIgnoreSet		Comparison	allow
+globalNotIn		Comparison	allow
+globalNotInIgnoreSet		Comparison	allow
+globalNotNullIn		Comparison	allow
+globalNotNullInIgnoreSet		Comparison	allow
+globalNullIn		Comparison	allow
+globalNullInIgnoreSet		Comparison	allow
+globalVariable		Other	deny
+greatCircleAngle		Geo	allow
+greatCircleDistance		Geo	allow
+greater		Comparison	allow
+greaterOrEquals		Comparison	allow
+greatest		Conditional	allow
+groupArray		Aggregate Functions	allow
+groupArrayInsertAt		Aggregate Functions	allow
+groupArrayIntersect		Aggregate Functions	allow
+groupArrayLast		Aggregate Functions	allow
+groupArrayMovingAvg		Aggregate Functions	allow
+groupArrayMovingSum		Aggregate Functions	allow
+groupArraySample		Aggregate Functions	allow
+groupArraySorted		Aggregate Functions	allow
+groupBitAnd		Aggregate Functions	allow
+groupBitOr		Aggregate Functions	allow
+groupBitXor		Aggregate Functions	allow
+groupBitmap		Aggregate Functions	allow
+groupBitmapAnd		Aggregate Functions	allow
+groupBitmapOr		Aggregate Functions	allow
+groupBitmapXor		Aggregate Functions	allow
+groupConcat		Aggregate Functions	allow
+groupNumericIndexedVector			allow
+groupUniqArray		Aggregate Functions	allow
+group_concat	groupConcat		
+h3CellAreaM2		Geo	allow
+h3CellAreaRads2		Geo	allow
+h3Distance		Geo	allow
+h3EdgeAngle		Geo	allow
+h3EdgeLengthKm		Geo	allow
+h3EdgeLengthM		Geo	allow
+h3ExactEdgeLengthKm		Geo	allow
+h3ExactEdgeLengthM		Geo	allow
+h3ExactEdgeLengthRads		Geo	allow
+h3GetBaseCell		Geo	allow
+h3GetDestinationIndexFromUnidirectionalEdge		Geo	allow
+h3GetFaces		Geo	allow
+h3GetIndexesFromUnidirectionalEdge		Geo	allow
+h3GetOriginIndexFromUnidirectionalEdge		Geo	allow
+h3GetPentagonIndexes		Geo	allow
+h3GetRes0Indexes		Geo	allow
+h3GetResolution		Geo	allow
+h3GetUnidirectionalEdge		Geo	allow
+h3GetUnidirectionalEdgeBoundary		Geo	allow
+h3GetUnidirectionalEdgesFromHexagon		Geo	allow
+h3HexAreaKm2		Geo	allow
+h3HexAreaM2		Geo	allow
+h3HexRing		Geo	allow
+h3IndexesAreNeighbors		Geo	allow
+h3IsPentagon		Geo	allow
+h3IsResClassIII		Geo	allow
+h3IsValid		Geo	allow
+h3Line		Geo	allow
+h3NumHexagons		Geo	allow
+h3PointDistKm		Geo	allow
+h3PointDistM		Geo	allow
+h3PointDistRads		Geo	allow
+h3PolygonToCells		Geo	allow
+h3ToCenterChild		Geo	allow
+h3ToChildren		Geo	allow
+h3ToGeo		Geo	allow
+h3ToGeoBoundary		Geo	allow
+h3ToParent		Geo	allow
+h3ToString		Geo	allow
+h3UnidirectionalEdgeIsValid		Geo	allow
+h3kRing		Geo	allow
+halfMD5		Hash	allow
+has		Arrays	allow
+hasAll		Arrays	allow
+hasAllToken	hasAllTokens		
+hasAllTokens		String Search	allow
+hasAny		Arrays	allow
+hasAnyToken	hasAnyTokens		
+hasAnyTokens		String Search	allow
+hasColumnInTable		Other	deny
+hasSubsequence		String Search	allow
+hasSubsequenceCaseInsensitive		String Search	allow
+hasSubsequenceCaseInsensitiveUTF8		String Search	allow
+hasSubsequenceUTF8		String Search	allow
+hasSubstr		Arrays	allow
+hasThreadFuzzer		Other	deny
+hasToken		String Search	allow
+hasTokenCaseInsensitive		String Search	allow
+hasTokenCaseInsensitiveOrNull		String Search	allow
+hasTokenOrNull		String Search	allow
+hex		Encoding	allow
+hilbertDecode		Encoding	allow
+hilbertEncode		Encoding	allow
+histogram			allow
+hiveHash		Hash	allow
+hop		Time Window	allow
+hopEnd		Time Window	allow
+hopStart		Time Window	allow
+hostName		Other	deny
+hostname	hostName		
+hypot		Mathematical	allow
+icebergBucket		Other	allow
+icebergHash		Hash	allow
+icebergTruncate		Other	allow
+identity		Other	allow
+idnaDecode		String	allow
+idnaEncode		String	allow
+if		Conditional	allow
+ifNotFinite		Arithmetic	allow
+ifNull		Null	allow
+ignore		Other	allow
+ilike		String Search	allow
+in		Comparison	allow
+inIgnoreSet		Comparison	allow
+indexHint		Other	allow
+indexOf		Arrays	allow
+indexOfAssumeSorted		Arrays	allow
+initcap		String	allow
+initcapUTF8		String	allow
+initialQueryID		Other	allow
+initialQueryStartTime		Other	allow
+initial_query_id	initialQueryID		
+initial_query_start_time	initialQueryStartTime		
+initializeAggregation		Other	allow
+instr	positionCaseInsensitive		
+intDiv		Arithmetic	allow
+intDivOrNull		Arithmetic	allow
+intDivOrZero		Arithmetic	allow
+intExp10		Mathematical	allow
+intExp2		Mathematical	allow
+intHash32		Hash	allow
+intHash64		Hash	allow
+intervalLengthSum		Aggregate Functions	allow
+isASCII	isValidASCII		
+isConstant		Other	allow
+isDecimalOverflow		Other	allow
+isDistinctFrom		Comparison	allow
+isDynamicElementInSharedData		JSON	allow
+isFinite		Arithmetic	allow
+isIPAddressInRange		IP Address	allow
+isIPv4String		IP Address	allow
+isIPv6String		IP Address	allow
+isInfinite		Arithmetic	allow
+isMergeTreePartCoveredBy		Introspection	allow
+isNaN		Arithmetic	allow
+isNotDistinctFrom		Comparison	allow
+isNotNull		Null	allow
+isNull		Null	allow
+isNullable		Null	allow
+isValidASCII		String	allow
+isValidJSON		JSON	allow
+isValidUTF8		String	allow
+isZeroOrNull		Null	allow
+jaroSimilarity		String	allow
+jaroWinklerSimilarity		String	allow
+javaHash		Hash	allow
+javaHashUTF16LE		Hash	allow
+joinGet		Other	deny
+joinGetOrNull		Other	deny
+jsonMergePatch	JSONMergePatch		
+jumpConsistentHash		Hash	allow
+kafkaMurmurHash		Hash	allow
+keccak256		Hash	allow
+kolmogorovSmirnovTest		Aggregate Functions	allow
+kostikConsistentHash		Hash	allow
+kql_array_sort_asc		Arrays	allow
+kql_array_sort_desc		Arrays	allow
+kurtPop		Aggregate Functions	allow
+kurtSamp		Aggregate Functions	allow
+lag			allow
+lagInFrame			allow
+largestTriangleThreeBuckets		Aggregate Functions	allow
+lastValueRespectNulls	anyLast_respect_nulls		
+last_value	anyLast		
+last_value_respect_nulls	anyLast_respect_nulls		
+lcase	lower		
+lcm		Arithmetic	allow
+lead			allow
+leadInFrame			allow
+least		Conditional	allow
+left		String	allow
+leftPad		String	allow
+leftPadUTF8		String	allow
+leftUTF8		String	allow
+lemmatize		Natural Language Processing	allow
+length		Arrays	allow
+lengthUTF8		String	allow
+less		Comparison	allow
+lessOrEquals		Comparison	allow
+levenshteinDistance	editDistance		
+levenshteinDistanceUTF8	editDistanceUTF8		
+lgamma		Mathematical	allow
+like		String Search	allow
+ln	log		
+locate		String Search	allow
+log		Mathematical	allow
+log10		Mathematical	allow
+log1p		Mathematical	allow
+log2		Mathematical	allow
+logTrace		Introspection	deny
+lowCardinalityIndices		Other	allow
+lowCardinalityKeys		Other	allow
+lower		String	allow
+lowerUTF8		String	allow
+lpad	leftPad		
+ltrim	trimLeft		
+lttb	largestTriangleThreeBuckets		
+makeDate		Dates and Times	allow
+makeDate32		Dates and Times	allow
+makeDateTime		Dates and Times	allow
+makeDateTime64		Dates and Times	allow
+mannWhitneyUTest		Aggregate Functions	allow
+map		Map	allow
+mapAdd		Map	allow
+mapAll		Map	allow
+mapApply		Map	allow
+mapConcat		Map	allow
+mapContains	mapContainsKey		
+mapContainsKey		Map	allow
+mapContainsKeyLike		Map	allow
+mapContainsValue		Map	allow
+mapContainsValueLike		Map	allow
+mapExists		Map	allow
+mapExtractKeyLike		Map	allow
+mapExtractValueLike		Map	allow
+mapFilter		Map	allow
+mapFromArrays		Map	allow
+mapFromString	extractKeyValuePairs		
+mapKeys		Map	allow
+mapPartialReverseSort		Map	allow
+mapPartialSort		Map	allow
+mapPopulateSeries		Map	allow
+mapReverseSort		Map	allow
+mapSort		Map	allow
+mapSubtract		Map	allow
+mapUpdate		Map	allow
+mapValues		Map	allow
+match		String Search	allow
+materialize		Other	allow
+max		Aggregate Functions	allow
+max2		Arithmetic	allow
+maxIntersections		Aggregate Functions	allow
+maxIntersectionsPosition		Aggregate Functions	allow
+maxMappedArrays		Aggregate Functions	allow
+meanZTest		Aggregate Functions	allow
+median	quantile		
+medianBFloat16	quantileBFloat16		
+medianBFloat16Weighted	quantileBFloat16Weighted		
+medianDD	quantileDD		
+medianDeterministic	quantileDeterministic		
+medianExact	quantileExact		
+medianExactHigh	quantileExactHigh		
+medianExactLow	quantileExactLow		
+medianExactWeighted	quantileExactWeighted		
+medianExactWeightedInterpolated	quantileExactWeightedInterpolated		
+medianGK	quantileGK		
+medianInterpolatedWeighted	quantileInterpolatedWeighted		
+medianTDigest	quantileTDigest		
+medianTDigestWeighted	quantileTDigestWeighted		
+medianTiming	quantileTiming		
+medianTimingWeighted	quantileTimingWeighted		
+mergeTreePartInfo		Introspection	allow
+metroHash64		Hash	allow
+mid	substring		
+midpoint		Arithmetic	allow
+min		Aggregate Functions	allow
+min2		Arithmetic	allow
+minMappedArrays		Aggregate Functions	allow
+minSampleSizeContinous	minSampleSizeContinuous		
+minSampleSizeContinuous		Other	allow
+minSampleSizeConversion		Other	allow
+minus		Arithmetic	allow
+mismatches	byteHammingDistance		
+mod	modulo		
+modOrNull	moduloOrNull		
+modulo		Arithmetic	allow
+moduloLegacy		Arithmetic	allow
+moduloOrNull		Arithmetic	allow
+moduloOrZero		Arithmetic	allow
+monthName		Dates and Times	allow
+mortonDecode		Encoding	allow
+mortonEncode		Encoding	allow
+multiFuzzyMatchAllIndices		String Search	allow
+multiFuzzyMatchAny		String Search	allow
+multiFuzzyMatchAnyIndex		String Search	allow
+multiIf		Conditional	allow
+multiMatchAllIndices		String Search	allow
+multiMatchAny		String Search	allow
+multiMatchAnyIndex		String Search	allow
+multiSearchAllPositions		String Search	allow
+multiSearchAllPositionsCaseInsensitive		String Search	allow
+multiSearchAllPositionsCaseInsensitiveUTF8		String Search	allow
+multiSearchAllPositionsUTF8		String Search	allow
+multiSearchAny		String Search	allow
+multiSearchAnyCaseInsensitive		String Search	allow
+multiSearchAnyCaseInsensitiveUTF8		String Search	allow
+multiSearchAnyUTF8		String Search	allow
+multiSearchFirstIndex		String Search	allow
+multiSearchFirstIndexCaseInsensitive		String Search	allow
+multiSearchFirstIndexCaseInsensitiveUTF8		String Search	allow
+multiSearchFirstIndexUTF8		String Search	allow
+multiSearchFirstPosition		String Search	allow
+multiSearchFirstPositionCaseInsensitive		String Search	allow
+multiSearchFirstPositionCaseInsensitiveUTF8		String Search	allow
+multiSearchFirstPositionUTF8		String Search	allow
+multiply		Arithmetic	allow
+multiplyDecimal		Arithmetic	allow
+murmurHash2_32		Hash	allow
+murmurHash2_64		Hash	allow
+murmurHash3_128		Hash	allow
+murmurHash3_32		Hash	allow
+murmurHash3_64		Hash	allow
+naiveBayesClassifier		Machine Learning	allow
+naturalSortKey		String	allow
+negate		Arithmetic	allow
+neighbor		Other	allow
+nested		Internal	allow
+netloc		URL	allow
+ngramDistance		String Search	allow
+ngramDistanceCaseInsensitive		String Search	allow
+ngramDistanceCaseInsensitiveUTF8		String Search	allow
+ngramDistanceUTF8		String Search	allow
+ngramMinHash		Hash	allow
+ngramMinHashArg		Hash	allow
+ngramMinHashArgCaseInsensitive		Hash	allow
+ngramMinHashArgCaseInsensitiveUTF8		Hash	allow
+ngramMinHashArgUTF8		Hash	allow
+ngramMinHashCaseInsensitive		Hash	allow
+ngramMinHashCaseInsensitiveUTF8		Hash	allow
+ngramMinHashUTF8		Hash	allow
+ngramSearch		String Search	allow
+ngramSearchCaseInsensitive		String Search	allow
+ngramSearchCaseInsensitiveUTF8		String Search	allow
+ngramSearchUTF8		String Search	allow
+ngramSimHash		Hash	allow
+ngramSimHashCaseInsensitive		Hash	allow
+ngramSimHashCaseInsensitiveUTF8		Hash	allow
+ngramSimHashUTF8		Hash	allow
+ngrams		String Splitting	allow
+nonNegativeDerivative			allow
+normL1	L1Norm		
+normL2	L2Norm		
+normL2Squared	L2SquaredNorm		
+normLinf	LinfNorm		
+normLp	LpNorm		
+normalizeL1	L1Normalize		
+normalizeL2	L2Normalize		
+normalizeLinf	LinfNormalize		
+normalizeLp	LpNormalize		
+normalizeQuery		Other	allow
+normalizeQueryKeepNames		Other	allow
+normalizeUTF8NFC		String	allow
+normalizeUTF8NFD		String	allow
+normalizeUTF8NFKC		String	allow
+normalizeUTF8NFKCCasefold		String	allow
+normalizeUTF8NFKD		String	allow
+normalizedQueryHash		Other	allow
+normalizedQueryHashKeepNames		Other	allow
+not		Logical	allow
+notEmpty		Arrays	allow
+notEquals		Comparison	allow
+notILike		String Search	allow
+notIn		Comparison	allow
+notInIgnoreSet		Comparison	allow
+notLike		String Search	allow
+notNullIn		Comparison	allow
+notNullInIgnoreSet		Comparison	allow
+nothing			allow
+nothingNull			allow
+nothingUInt64			allow
+now		Dates and Times	allow
+now64		Dates and Times	allow
+nowInBlock		Dates and Times	allow
+nowInBlock64		Dates and Times	allow
+nth_value			allow
+ntile			allow
+nullIf		Null	allow
+nullIn		Comparison	allow
+nullInIgnoreSet		Comparison	allow
+numericIndexedVectorAllValueSum		NumericIndexedVector	allow
+numericIndexedVectorBuild		NumericIndexedVector	allow
+numericIndexedVectorCardinality		NumericIndexedVector	allow
+numericIndexedVectorGetValue		NumericIndexedVector	allow
+numericIndexedVectorPointwiseAdd		NumericIndexedVector	allow
+numericIndexedVectorPointwiseDivide		NumericIndexedVector	allow
+numericIndexedVectorPointwiseEqual		NumericIndexedVector	allow
+numericIndexedVectorPointwiseGreater		NumericIndexedVector	allow
+numericIndexedVectorPointwiseGreaterEqual		NumericIndexedVector	allow
+numericIndexedVectorPointwiseLess		NumericIndexedVector	allow
+numericIndexedVectorPointwiseLessEqual		NumericIndexedVector	allow
+numericIndexedVectorPointwiseMultiply		NumericIndexedVector	allow
+numericIndexedVectorPointwiseNotEqual		NumericIndexedVector	allow
+numericIndexedVectorPointwiseSubtract		NumericIndexedVector	allow
+numericIndexedVectorShortDebugString		NumericIndexedVector	allow
+numericIndexedVectorToMap		NumericIndexedVector	allow
+or		Logical	allow
+overlay		String Replacement	allow
+overlayUTF8		String Replacement	allow
+parseDateTime		Type Conversion	allow
+parseDateTime32BestEffort		Type Conversion	allow
+parseDateTime32BestEffortOrNull		Type Conversion	allow
+parseDateTime32BestEffortOrZero		Type Conversion	allow
+parseDateTime64		Type Conversion	allow
+parseDateTime64BestEffort		Type Conversion	allow
+parseDateTime64BestEffortOrNull		Type Conversion	allow
+parseDateTime64BestEffortOrZero		Type Conversion	allow
+parseDateTime64BestEffortUS		Type Conversion	allow
+parseDateTime64BestEffortUSOrNull		Type Conversion	allow
+parseDateTime64BestEffortUSOrZero		Type Conversion	allow
+parseDateTime64InJodaSyntax		Type Conversion	allow
+parseDateTime64InJodaSyntaxOrNull		Type Conversion	allow
+parseDateTime64InJodaSyntaxOrZero		Type Conversion	allow
+parseDateTime64OrNull		Type Conversion	allow
+parseDateTime64OrZero		Type Conversion	allow
+parseDateTimeBestEffort		Type Conversion	allow
+parseDateTimeBestEffortOrNull		Type Conversion	allow
+parseDateTimeBestEffortOrZero		Type Conversion	allow
+parseDateTimeBestEffortUS		Type Conversion	allow
+parseDateTimeBestEffortUSOrNull		Type Conversion	allow
+parseDateTimeBestEffortUSOrZero		Type Conversion	allow
+parseDateTimeInJodaSyntax		Type Conversion	allow
+parseDateTimeInJodaSyntaxOrNull		Type Conversion	allow
+parseDateTimeInJodaSyntaxOrZero		Type Conversion	allow
+parseDateTimeOrNull		Type Conversion	allow
+parseDateTimeOrZero		Type Conversion	allow
+parseReadableSize		Other	allow
+parseReadableSizeOrNull		Other	allow
+parseReadableSizeOrZero		Other	allow
+parseTimeDelta		Other	allow
+partitionID	partitionId		
+partitionId		Other	allow
+path		URL	allow
+pathFull		URL	allow
+percentRank			allow
+percent_rank	percentRank		
+perimeterCartesian		Geo	allow
+perimeterSpherical		Geo	allow
+pi		Mathematical	allow
+plus		Arithmetic	allow
+pmod	positiveModulo		
+pmodOrNull	positiveModuloOrNull		
+pointInEllipses		Geo	allow
+pointInPolygon		Geo	allow
+polygonAreaCartesian		Geo Polygon	allow
+polygonAreaSpherical		Geo Polygon	allow
+polygonConvexHullCartesian		Geo Polygon	allow
+polygonPerimeterCartesian		Geo Polygon	allow
+polygonPerimeterSpherical		Geo Polygon	allow
+polygonsDistanceCartesian		Geo Polygon	allow
+polygonsDistanceSpherical		Geo Polygon	allow
+polygonsEqualsCartesian		Geo Polygon	allow
+polygonsIntersectCartesian		Geo	allow
+polygonsIntersectSpherical		Geo	allow
+polygonsIntersectionCartesian		Geo Polygon	allow
+polygonsIntersectionSpherical		Geo Polygon	allow
+polygonsSymDifferenceCartesian		Geo Polygon	allow
+polygonsSymDifferenceSpherical		Geo Polygon	allow
+polygonsUnionCartesian		Geo Polygon	allow
+polygonsUnionSpherical		Geo Polygon	allow
+polygonsWithinCartesian		Geo Polygon	allow
+polygonsWithinSpherical		Geo Polygon	allow
+port		URL	allow
+portRFC		URL	allow
+position		String Search	allow
+positionCaseInsensitive		String Search	allow
+positionCaseInsensitiveUTF8		String Search	allow
+positionUTF8		String Search	allow
+positiveModulo		Arithmetic	allow
+positiveModuloOrNull		Arithmetic	allow
+positive_modulo	positiveModulo		
+positive_modulo_or_null	positiveModuloOrNull		
+pow		Mathematical	allow
+power	pow		
+printf		String Replacement	allow
+proportionsZTest		Mathematical	allow
+protocol		URL	allow
+punycodeDecode		String	allow
+punycodeEncode		String	allow
+quantile		Aggregate Functions	allow
+quantileBFloat16		Aggregate Functions	allow
+quantileBFloat16Weighted		Aggregate Functions	allow
+quantileDD		Aggregate Functions	allow
+quantileDeterministic		Aggregate Functions	allow
+quantileExact		Aggregate Functions	allow
+quantileExactExclusive		Aggregate Functions	allow
+quantileExactHigh		Aggregate Functions	allow
+quantileExactInclusive		Aggregate Functions	allow
+quantileExactLow		Aggregate Functions	allow
+quantileExactWeighted		Aggregate Functions	allow
+quantileExactWeightedInterpolated		Aggregate Functions	allow
+quantileGK		Aggregate Functions	allow
+quantileInterpolatedWeighted		Aggregate Functions	allow
+quantilePrometheusHistogram		Aggregate Functions	allow
+quantileTDigest		Aggregate Functions	allow
+quantileTDigestWeighted		Aggregate Functions	allow
+quantileTiming		Aggregate Functions	allow
+quantileTimingWeighted		Aggregate Functions	allow
+quantiles		Aggregate Functions	allow
+quantilesBFloat16			allow
+quantilesBFloat16Weighted			allow
+quantilesDD			allow
+quantilesDeterministic			allow
+quantilesExact			allow
+quantilesExactExclusive		Aggregate Functions	allow
+quantilesExactHigh			allow
+quantilesExactInclusive		Aggregate Functions	allow
+quantilesExactLow			allow
+quantilesExactWeighted			allow
+quantilesExactWeightedInterpolated			allow
+quantilesGK		Aggregate Functions	allow
+quantilesInterpolatedWeighted			allow
+quantilesPrometheusHistogram		Aggregate Functions	allow
+quantilesTDigest		Aggregate Functions	allow
+quantilesTDigestWeighted		Aggregate Functions	allow
+quantilesTiming		Aggregate Functions	allow
+quantilesTimingWeighted		Aggregate Functions	allow
+queryID		Other	allow
+queryString		URL	allow
+queryStringAndFragment		URL	allow
+query_id	queryID		
+radians		Mathematical	allow
+rand		Random Number	allow
+rand32	rand		
+rand64		Random Number	allow
+randBernoulli		Random Number	allow
+randBinomial		Random Number	allow
+randCanonical		Random Number	allow
+randChiSquared		Random Number	allow
+randConstant		Random Number	allow
+randExponential		Random Number	allow
+randFisherF		Random Number	allow
+randLogNormal		Random Number	allow
+randNegativeBinomial		Random Number	allow
+randNormal		Random Number	allow
+randPoisson		Random Number	allow
+randStudentT		Random Number	allow
+randUniform		Random Number	allow
+randomFixedString		Random Number	allow
+randomPrintableASCII		Random Number	allow
+randomString		Random Number	allow
+randomStringUTF8		Random Number	allow
+range		Arrays	allow
+rank			allow
+rankCorr		Aggregate Functions	allow
+readWKB		Geo	allow
+readWKBLineString		Geo Polygon	allow
+readWKBMultiLineString		Geo Polygon	allow
+readWKBMultiPolygon		Geo Polygon	allow
+readWKBPoint		Geo Polygon	allow
+readWKBPolygon		Geo Polygon	allow
+readWKT		Geo	allow
+readWKTLineString		Geo Polygon	allow
+readWKTMultiLineString		Geo Polygon	allow
+readWKTMultiPolygon		Geo Polygon	allow
+readWKTPoint		Geo Polygon	allow
+readWKTPolygon		Geo Polygon	allow
+readWKTRing		Geo Polygon	allow
+readWkb	readWKB		
+readWkt	readWKT		
+regexpExtract		String	allow
+regexpQuoteMeta		String Replacement	allow
+regionHierarchy		Embedded Dictionary	allow
+regionIn		Embedded Dictionary	allow
+regionToArea		Embedded Dictionary	allow
+regionToCity		Embedded Dictionary	allow
+regionToContinent		Embedded Dictionary	allow
+regionToCountry		Embedded Dictionary	allow
+regionToDistrict		Embedded Dictionary	allow
+regionToName		Embedded Dictionary	allow
+regionToPopulation		Embedded Dictionary	allow
+regionToTopContinent		Embedded Dictionary	allow
+reinterpret		Type Conversion	allow
+reinterpretAsDate		Type Conversion	allow
+reinterpretAsDateTime		Type Conversion	allow
+reinterpretAsFixedString		Type Conversion	allow
+reinterpretAsFloat32		Type Conversion	allow
+reinterpretAsFloat64		Type Conversion	allow
+reinterpretAsInt128		Type Conversion	allow
+reinterpretAsInt16		Type Conversion	allow
+reinterpretAsInt256		Type Conversion	allow
+reinterpretAsInt32		Type Conversion	allow
+reinterpretAsInt64		Type Conversion	allow
+reinterpretAsInt8		Type Conversion	allow
+reinterpretAsString		Type Conversion	allow
+reinterpretAsUInt128		Type Conversion	allow
+reinterpretAsUInt16		Type Conversion	allow
+reinterpretAsUInt256		Type Conversion	allow
+reinterpretAsUInt32		Type Conversion	allow
+reinterpretAsUInt64		Type Conversion	allow
+reinterpretAsUInt8		Type Conversion	allow
+reinterpretAsUUID		Type Conversion	allow
+removeAccentsUTF8	removeDiacriticsUTF8		
+removeDiacriticsUTF8		String	allow
+repeat		String	allow
+replace	replaceAll		
+replaceAll		String Replacement	allow
+replaceOne		String Replacement	allow
+replaceRegexpAll		String Replacement	allow
+replaceRegexpOne		String Replacement	allow
+replicate		Arrays	allow
+retention			allow
+reverse		Arrays	allow
+reverseBySeparator		String Splitting	allow
+reverseUTF8		String	allow
+revision		Other	deny
+right		String	allow
+rightPad		String	allow
+rightPadUTF8		String	allow
+rightUTF8		String	allow
+round		Rounding	allow
+roundAge		Rounding	allow
+roundBankers		Rounding	allow
+roundDown		Rounding	allow
+roundDuration		Rounding	allow
+roundToExp2		Rounding	allow
+rowNumberInAllBlocks		Other	allow
+rowNumberInBlock		Other	allow
+row_number			allow
+rpad	rightPad		
+rtrim	trimRight		
+runningAccumulate		Other	allow
+runningConcurrency		Other	allow
+runningDifference		Other	allow
+runningDifferenceStartingWithFirstValue		Other	allow
+s2CapContains		Geo	allow
+s2CapUnion		Geo	allow
+s2CellsIntersect		Geo	allow
+s2GetNeighbors		Geo	allow
+s2RectAdd		Geo	allow
+s2RectContains		Geo	allow
+s2RectIntersection		Geo	allow
+s2RectUnion		Geo	allow
+s2ToGeo		Geo	allow
+scalarProduct	dotProduct		
+sequenceCount			allow
+sequenceMatch			allow
+sequenceMatchEvents			allow
+sequenceNextNode			allow
+seriesDecomposeSTL		Time Series	allow
+seriesOutliersDetectTukey		Time Series	allow
+seriesPeriodDetectFFT		Time Series	allow
+serverTimeZone	serverTimezone		
+serverTimezone		Dates and Times	allow
+serverUUID		Other	deny
+shardCount		Other	deny
+shardNum		Other	deny
+showCertificate		Other	deny
+sigmoid		Mathematical	allow
+sign		Mathematical	allow
+simpleJSONExtractBool		JSON	allow
+simpleJSONExtractFloat		JSON	allow
+simpleJSONExtractInt		JSON	allow
+simpleJSONExtractRaw		JSON	allow
+simpleJSONExtractString		JSON	allow
+simpleJSONExtractUInt		JSON	allow
+simpleJSONHas		JSON	allow
+simpleLinearRegression		Aggregate Functions	allow
+sin		Mathematical	allow
+singleValueOrNull		Aggregate Functions	allow
+sinh		Mathematical	allow
+sipHash128		Hash	allow
+sipHash128Keyed		Hash	allow
+sipHash128Reference		Hash	allow
+sipHash128ReferenceKeyed		Hash	allow
+sipHash64		Hash	allow
+sipHash64Keyed		Hash	allow
+skewPop		Aggregate Functions	allow
+skewSamp		Aggregate Functions	allow
+sleep		Other	deny
+sleepEachRow		Other	deny
+snowflakeIDToDateTime		UUID	allow
+snowflakeIDToDateTime64		UUID	allow
+snowflakeToDateTime		UUID	allow
+snowflakeToDateTime64		UUID	allow
+soundex		String	allow
+space		String	allow
+sparkBar	sparkbar		
+sparkbar		Aggregate Functions	allow
+sparseGrams		String	allow
+sparseGramsHashes		String	allow
+sparseGramsHashesUTF8		String	allow
+sparseGramsUTF8		String	allow
+splitByAlpha	alphaTokens		
+splitByChar		String Splitting	allow
+splitByNonAlpha		String Splitting	allow
+splitByRegexp		String Splitting	allow
+splitByString		String Splitting	allow
+splitByWhitespace		String Splitting	allow
+sqid	sqidEncode		
+sqidDecode		Encoding	allow
+sqidEncode		Encoding	allow
+sqrt		Mathematical	allow
+startsWith		String	allow
+startsWithCaseInsensitive		String	allow
+startsWithCaseInsensitiveUTF8		String	allow
+startsWithUTF8		String	allow
+stddevPop		Aggregate Functions	allow
+stddevPopStable		Aggregate Functions	allow
+stddevSamp		Aggregate Functions	allow
+stddevSampStable		Aggregate Functions	allow
+stem		Natural Language Processing	allow
+stochasticLinearRegression		Machine Learning	allow
+stochasticLogisticRegression		Machine Learning	allow
+str_to_date	parseDateTimeOrNull		
+str_to_map	extractKeyValuePairs		
+stringBytesEntropy		String	allow
+stringBytesUniq		String	allow
+stringJaccardIndex		String	allow
+stringJaccardIndexUTF8		String	allow
+stringToH3		Geo	allow
+structureToCapnProtoSchema		Other	allow
+structureToProtobufSchema		Other	allow
+studentTTest		Aggregate Functions	allow
+studentTTestOneSample		Aggregate Functions	allow
+subBitmap		Bitmap	allow
+subDate		Dates and Times	allow
+substr	substring		
+substring		String	allow
+substringIndex		String	allow
+substringIndexUTF8		String	allow
+substringUTF8		String	allow
+subtractDays		Dates and Times	allow
+subtractHours		Dates and Times	allow
+subtractInterval		Dates and Times	allow
+subtractMicroseconds		Dates and Times	allow
+subtractMilliseconds		Dates and Times	allow
+subtractMinutes		Dates and Times	allow
+subtractMonths		Dates and Times	allow
+subtractNanoseconds		Dates and Times	allow
+subtractQuarters		Dates and Times	allow
+subtractSeconds		Dates and Times	allow
+subtractTupleOfIntervals		Dates and Times	allow
+subtractWeeks		Dates and Times	allow
+subtractYears		Dates and Times	allow
+sum		Aggregate Functions	allow
+sumCount		Aggregate Functions	allow
+sumKahan		Aggregate Functions	allow
+sumMapFiltered			allow
+sumMapFilteredWithOverflow			allow
+sumMapWithOverflow		Aggregate Functions	allow
+sumMappedArrays		Aggregate Functions	allow
+sumWithOverflow		Aggregate Functions	allow
+svg		Geo	allow
+synonyms		Natural Language Processing	allow
+tan		Mathematical	allow
+tanh		Mathematical	allow
+tcpPort		Other	deny
+tgamma		Mathematical	allow
+theilsU		Aggregate Functions	allow
+throwIf		Other	allow
+tid		Introspection	deny
+timeDiff		Dates and Times	allow
+timeSeriesChangesToGrid		Aggregate Functions	allow
+timeSeriesCopyTag		Time Series	allow
+timeSeriesCopyTags		Time Series	allow
+timeSeriesDeltaToGrid		Aggregate Functions	allow
+timeSeriesDerivToGrid		Aggregate Functions	allow
+timeSeriesExtractTag		Time Series	allow
+timeSeriesFromGrid		Time Series	allow
+timeSeriesGroupArray		Aggregate Functions	allow
+timeSeriesGroupToTags		Time Series	allow
+timeSeriesIdToGroup		Time Series	allow
+timeSeriesIdToTags		Time Series	allow
+timeSeriesIdToTagsGroup	timeSeriesIdToGroup		
+timeSeriesInstantDeltaToGrid		Aggregate Functions	allow
+timeSeriesInstantRateToGrid		Aggregate Functions	allow
+timeSeriesJoinTags		Time Series	allow
+timeSeriesLastToGrid	timeSeriesResampleToGridWithStaleness		
+timeSeriesLastTwoSamples		Aggregate Functions	allow
+timeSeriesPredictLinearToGrid		Aggregate Functions	allow
+timeSeriesRange		Time Series	allow
+timeSeriesRateToGrid		Aggregate Functions	allow
+timeSeriesRemoveAllTagsExcept		Time Series	allow
+timeSeriesRemoveTag		Time Series	allow
+timeSeriesRemoveTags		Time Series	allow
+timeSeriesReplaceTag		Time Series	allow
+timeSeriesResampleToGridWithStaleness		Aggregate Functions	allow
+timeSeriesResetsToGrid		Aggregate Functions	allow
+timeSeriesStoreTags		Time Series	allow
+timeSeriesTagsGroupToTags	timeSeriesGroupToTags		
+timeSeriesTagsToGroup		Time Series	allow
+timeSeriesThrowDuplicateSeriesIf		Time Series	allow
+timeSlot		Dates and Times	allow
+timeSlots		Dates and Times	allow
+timeZone	timezone		
+timeZoneOf	timezoneOf		
+timeZoneOffset	timezoneOffset		
+time_bucket	toStartOfInterval		
+timestamp		Dates and Times	allow
+timestampDiff	dateDiff		
+timestamp_diff	dateDiff		
+timezone		Dates and Times	allow
+timezoneOf		Dates and Times	allow
+timezoneOffset		Dates and Times	allow
+toBFloat16		Type Conversion	allow
+toBFloat16OrNull		Type Conversion	allow
+toBFloat16OrZero		Type Conversion	allow
+toBool		Type Conversion	allow
+toColumnTypeName		Other	allow
+toDate		Type Conversion	allow
+toDate32		Type Conversion	allow
+toDate32OrDefault		Type Conversion	allow
+toDate32OrNull		Type Conversion	allow
+toDate32OrZero		Type Conversion	allow
+toDateOrDefault		Type Conversion	allow
+toDateOrNull		Type Conversion	allow
+toDateOrZero		Type Conversion	allow
+toDateTime		Type Conversion	allow
+toDateTime32		Type Conversion	allow
+toDateTime64		Type Conversion	allow
+toDateTime64OrDefault		Type Conversion	allow
+toDateTime64OrNull		Type Conversion	allow
+toDateTime64OrZero		Type Conversion	allow
+toDateTimeOrDefault		Type Conversion	allow
+toDateTimeOrNull		Type Conversion	allow
+toDateTimeOrZero		Type Conversion	allow
+toDayOfMonth		Dates and Times	allow
+toDayOfWeek		Dates and Times	allow
+toDayOfYear		Dates and Times	allow
+toDaysInMonth		Dates and Times	allow
+toDaysSinceYearZero		Dates and Times	allow
+toDecimal128		Type Conversion	allow
+toDecimal128OrDefault		Type Conversion	allow
+toDecimal128OrNull		Type Conversion	allow
+toDecimal128OrZero		Type Conversion	allow
+toDecimal256		Type Conversion	allow
+toDecimal256OrDefault		Type Conversion	allow
+toDecimal256OrNull		Type Conversion	allow
+toDecimal256OrZero		Type Conversion	allow
+toDecimal32		Type Conversion	allow
+toDecimal32OrDefault		Type Conversion	allow
+toDecimal32OrNull		Type Conversion	allow
+toDecimal32OrZero		Type Conversion	allow
+toDecimal64		Type Conversion	allow
+toDecimal64OrDefault		Type Conversion	allow
+toDecimal64OrNull		Type Conversion	allow
+toDecimal64OrZero		Type Conversion	allow
+toDecimalString		Type Conversion	allow
+toFixedString		Type Conversion	allow
+toFloat32		Type Conversion	allow
+toFloat32OrDefault		Type Conversion	allow
+toFloat32OrNull		Type Conversion	allow
+toFloat32OrZero		Type Conversion	allow
+toFloat64		Type Conversion	allow
+toFloat64OrDefault		Type Conversion	allow
+toFloat64OrNull		Type Conversion	allow
+toFloat64OrZero		Type Conversion	allow
+toHour		Dates and Times	allow
+toIPv4		IP Address	allow
+toIPv4OrDefault		IP Address	allow
+toIPv4OrNull		IP Address	allow
+toIPv4OrZero		IP Address	allow
+toIPv6		IP Address	allow
+toIPv6OrDefault		IP Address	allow
+toIPv6OrNull		IP Address	allow
+toIPv6OrZero		IP Address	allow
+toISOWeek		Dates and Times	allow
+toISOYear		Dates and Times	allow
+toInt128		Type Conversion	allow
+toInt128OrDefault		Type Conversion	allow
+toInt128OrNull		Type Conversion	allow
+toInt128OrZero		Type Conversion	allow
+toInt16		Type Conversion	allow
+toInt16OrDefault		Type Conversion	allow
+toInt16OrNull		Type Conversion	allow
+toInt16OrZero		Type Conversion	allow
+toInt256		Type Conversion	allow
+toInt256OrDefault		Type Conversion	allow
+toInt256OrNull		Type Conversion	allow
+toInt256OrZero		Type Conversion	allow
+toInt32		Type Conversion	allow
+toInt32OrDefault		Type Conversion	allow
+toInt32OrNull		Type Conversion	allow
+toInt32OrZero		Type Conversion	allow
+toInt64		Type Conversion	allow
+toInt64OrDefault		Type Conversion	allow
+toInt64OrNull		Type Conversion	allow
+toInt64OrZero		Type Conversion	allow
+toInt8		Type Conversion	allow
+toInt8OrDefault		Type Conversion	allow
+toInt8OrNull		Type Conversion	allow
+toInt8OrZero		Type Conversion	allow
+toInterval		Type Conversion	allow
+toIntervalDay		Type Conversion	allow
+toIntervalHour		Type Conversion	allow
+toIntervalMicrosecond		Type Conversion	allow
+toIntervalMillisecond		Type Conversion	allow
+toIntervalMinute		Type Conversion	allow
+toIntervalMonth		Type Conversion	allow
+toIntervalNanosecond		Type Conversion	allow
+toIntervalQuarter		Type Conversion	allow
+toIntervalSecond		Type Conversion	allow
+toIntervalWeek		Type Conversion	allow
+toIntervalYear		Type Conversion	allow
+toJSONString		JSON	allow
+toLastDayOfMonth		Dates and Times	allow
+toLastDayOfWeek		Dates and Times	allow
+toLowCardinality		Type Conversion	allow
+toMillisecond		Dates and Times	allow
+toMinute		Dates and Times	allow
+toModifiedJulianDay		Dates and Times	allow
+toModifiedJulianDayOrNull		Dates and Times	allow
+toMonday		Dates and Times	allow
+toMonth		Dates and Times	allow
+toMonthNumSinceEpoch		Dates and Times	allow
+toNullable		Null	allow
+toQuarter		Dates and Times	allow
+toRelativeDayNum		Dates and Times	allow
+toRelativeHourNum		Dates and Times	allow
+toRelativeMinuteNum		Dates and Times	allow
+toRelativeMonthNum		Dates and Times	allow
+toRelativeQuarterNum		Dates and Times	allow
+toRelativeSecondNum		Dates and Times	allow
+toRelativeWeekNum		Dates and Times	allow
+toRelativeYearNum		Dates and Times	allow
+toSecond		Dates and Times	allow
+toStartOfDay		Dates and Times	allow
+toStartOfFifteenMinutes		Dates and Times	allow
+toStartOfFiveMinute	toStartOfFiveMinutes		
+toStartOfFiveMinutes		Dates and Times	allow
+toStartOfHour		Dates and Times	allow
+toStartOfISOYear		Dates and Times	allow
+toStartOfInterval		Dates and Times	allow
+toStartOfMicrosecond		Dates and Times	allow
+toStartOfMillisecond		Dates and Times	allow
+toStartOfMinute		Dates and Times	allow
+toStartOfMonth		Dates and Times	allow
+toStartOfNanosecond		Dates and Times	allow
+toStartOfQuarter		Dates and Times	allow
+toStartOfSecond		Dates and Times	allow
+toStartOfTenMinutes		Dates and Times	allow
+toStartOfWeek		Dates and Times	allow
+toStartOfYear		Dates and Times	allow
+toString		Type Conversion	allow
+toStringCutToZero		Type Conversion	allow
+toTime		Type Conversion	allow
+toTime64		Type Conversion	allow
+toTime64OrNull		Type Conversion	allow
+toTime64OrZero		Type Conversion	allow
+toTimeOrNull		Type Conversion	allow
+toTimeOrZero		Type Conversion	allow
+toTimeWithFixedDate		Dates and Times	allow
+toTimeZone	toTimezone		
+toTimezone		Dates and Times	allow
+toTypeName		Other	allow
+toUInt128		Type Conversion	allow
+toUInt128OrDefault		Type Conversion	allow
+toUInt128OrNull		Type Conversion	allow
+toUInt128OrZero		Type Conversion	allow
+toUInt16		Type Conversion	allow
+toUInt16OrDefault		Type Conversion	allow
+toUInt16OrNull		Type Conversion	allow
+toUInt16OrZero		Type Conversion	allow
+toUInt256		Type Conversion	allow
+toUInt256OrDefault		Type Conversion	allow
+toUInt256OrNull		Type Conversion	allow
+toUInt256OrZero		Type Conversion	allow
+toUInt32		Type Conversion	allow
+toUInt32OrDefault		Type Conversion	allow
+toUInt32OrNull		Type Conversion	allow
+toUInt32OrZero		Type Conversion	allow
+toUInt64		Type Conversion	allow
+toUInt64OrDefault		Type Conversion	allow
+toUInt64OrNull		Type Conversion	allow
+toUInt64OrZero		Type Conversion	allow
+toUInt8		Type Conversion	allow
+toUInt8OrDefault		Type Conversion	allow
+toUInt8OrNull		Type Conversion	allow
+toUInt8OrZero		Type Conversion	allow
+toUTCTimestamp		Dates and Times	allow
+toUUID		Type Conversion	allow
+toUUIDOrDefault		UUID	allow
+toUUIDOrNull		UUID	allow
+toUUIDOrZero		Type Conversion	allow
+toUnixTimestamp		Dates and Times	allow
+toUnixTimestamp64Micro		Type Conversion	allow
+toUnixTimestamp64Milli		Type Conversion	allow
+toUnixTimestamp64Nano		Type Conversion	allow
+toUnixTimestamp64Second		Type Conversion	allow
+toValidUTF8		String	allow
+toWeek		Dates and Times	allow
+toYYYYMM		Dates and Times	allow
+toYYYYMMDD		Dates and Times	allow
+toYYYYMMDDhhmmss		Dates and Times	allow
+toYear		Dates and Times	allow
+toYearNumSinceEpoch		Dates and Times	allow
+toYearWeek		Dates and Times	allow
+to_utc_timestamp	toUTCTimestamp		
+today		Dates and Times	allow
+tokens		String Splitting	allow
+tokensForLikePattern		String Splitting	allow
+topK		Aggregate Functions	allow
+topKWeighted		Aggregate Functions	allow
+topLevelDomain		URL	allow
+topLevelDomainRFC		URL	allow
+transactionID		Other	deny
+transactionLatestSnapshot		Other	deny
+transactionOldestSnapshot		Other	deny
+transform		Other	allow
+translate		String Replacement	allow
+translateUTF8		String Replacement	allow
+trim	trimBoth		
+trimBoth		String	allow
+trimLeft		String	allow
+trimRight		String	allow
+trunc		Rounding	allow
+truncate	trunc		
+tryBase32Decode		String	allow
+tryBase58Decode		String	allow
+tryBase64Decode		String	allow
+tryBase64URLDecode		String	allow
+tryDecrypt		Encryption	allow
+tryIdnaEncode		String	allow
+tryPunycodeDecode		String	allow
+tumble		Time Window	allow
+tumbleEnd		Time Window	allow
+tumbleStart		Time Window	allow
+tuple		Tuple	allow
+tupleConcat		Tuple	allow
+tupleDivide		Tuple	allow
+tupleDivideByNumber		Tuple	allow
+tupleElement		Tuple	allow
+tupleHammingDistance		Tuple	allow
+tupleIntDiv		Tuple	allow
+tupleIntDivByNumber		Tuple	allow
+tupleIntDivOrZero		Tuple	allow
+tupleIntDivOrZeroByNumber		Tuple	allow
+tupleMinus		Tuple	allow
+tupleModulo		Tuple	allow
+tupleModuloByNumber		Tuple	allow
+tupleMultiply		Tuple	allow
+tupleMultiplyByNumber		Tuple	allow
+tupleNames		Tuple	allow
+tupleNegate		Tuple	allow
+tuplePlus		Tuple	allow
+tupleToNameValuePairs		Tuple	allow
+ucase	upper		
+unbin		Encoding	allow
+unhex		Encoding	allow
+uniq		Aggregate Functions	allow
+uniqCombined		Aggregate Functions	allow
+uniqCombined64		Aggregate Functions	allow
+uniqExact		Aggregate Functions	allow
+uniqHLL12		Aggregate Functions	allow
+uniqTheta		Aggregate Functions	allow
+uniqThetaIntersect		Other	allow
+uniqThetaNot		Other	allow
+uniqThetaUnion		Other	allow
+uniqUpTo			allow
+upper		String	allow
+upperUTF8		String	allow
+uptime		Other	deny
+user	currentUser		
+validateNestedArraySizes		Internal	allow
+varPop		Aggregate Functions	allow
+varPopStable		Aggregate Functions	allow
+varSamp		Aggregate Functions	allow
+varSampStable		Aggregate Functions	allow
+variantElement		Other	allow
+variantType		Other	allow
+vectorDifference	tupleMinus		
+vectorSum	tuplePlus		
+version		Other	deny
+visibleWidth		Other	allow
+visitParamExtractBool	simpleJSONExtractBool		
+visitParamExtractFloat	simpleJSONExtractFloat		
+visitParamExtractInt	simpleJSONExtractInt		
+visitParamExtractRaw	simpleJSONExtractRaw		
+visitParamExtractString	simpleJSONExtractString		
+visitParamExtractUInt	simpleJSONExtractUInt		
+visitParamHas	simpleJSONHas		
+week	toWeek		
+welchTTest		Aggregate Functions	allow
+widthBucket		Mathematical	allow
+width_bucket	widthBucket		
+windowFunnel			allow
+windowID		Time Window	allow
+wkb		Geo	allow
+wkt		Geo	allow
+wordShingleMinHash		Hash	allow
+wordShingleMinHashArg		Hash	allow
+wordShingleMinHashArgCaseInsensitive		Hash	allow
+wordShingleMinHashArgCaseInsensitiveUTF8		Hash	allow
+wordShingleMinHashArgUTF8		Hash	allow
+wordShingleMinHashCaseInsensitive		Hash	allow
+wordShingleMinHashCaseInsensitiveUTF8		Hash	allow
+wordShingleMinHashUTF8		Hash	allow
+wordShingleSimHash		Hash	allow
+wordShingleSimHashCaseInsensitive		Hash	allow
+wordShingleSimHashCaseInsensitiveUTF8		Hash	allow
+wordShingleSimHashUTF8		Hash	allow
+wyHash64		Hash	allow
+xor		Logical	allow
+xxHash32		Hash	allow
+xxHash64		Hash	allow
+xxh3		Hash	allow
+xxh3_128		Hash	allow
+yandexConsistentHash	kostikConsistentHash		
+yearweek	toYearWeek		
+yesterday		Dates and Times	allow
+zookeeperSessionUptime		Other	deny

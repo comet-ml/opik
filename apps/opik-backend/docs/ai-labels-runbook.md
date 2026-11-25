@@ -118,7 +118,7 @@ Every body has `today` and `window_from` (UTC dates, both included) and `topics`
 
 | `status` | When | Other fields |
 |---|---|---|
-| `disabled` | The workspace is not opted in to both topics and ai-labels. This includes a workspace opted out after a run: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
+| `disabled` | The workspace is not opted in to both topics and ai-labels, or `TOPICS_ENABLED_WORKSPACES` lists it at a stage before `ui`. This includes a workspace opted out after a run: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
 | `collecting` | Opted in, and the project has no live topic: before its discovery run, or after all its topics retired. | `vectors_in_window` (traces with a topic vector in the window) and `min_vectors` (`TOPICS_RUN_MIN_VECTORS`). `last_run_at` after a saved run. `attempt` (`status` only) when the project's newest `topic_runs` row (by `started_at`, then `run_id`) is `running` or `failed`. |
 | `ready` | Opted in, and the project has at least one live topic. | `last_run_at`, `total_traces`, `labelled_from`, `topics` in rank order, `other`. |
 | `too_large` | Opted in, and a ClickHouse read of `collecting` or `ready` hit a `TOPICS_READ_*` size guard: rows (158), memory (241), bytes (307) or rows or bytes (396). A retry fails the same way, so the page shows the state and does not retry. The backend logs a WARN `Topics read is too large` with the workspace and the project. | None. Not cached: the next request reads again. |
@@ -169,8 +169,8 @@ The queries only read, so a read-only database user can run them for any workspa
 takes their output.
 
 ```sql
--- MySQL: 1 when the workspace is enabled in ai-labels. The workspace must also be in TOGGLE_TOPICS_WORKSPACES (see
--- "Opting workspaces in and out"). Not in the list, or 0 here, means `disabled`
+-- MySQL: 1 when the workspace is enabled in ai-labels. The workspace must also be in TOPICS_ENABLED_WORKSPACES, with no
+-- stage or as `<id>:ui`. Not in the list, at an earlier stage, or 0 here, means `disabled`
 SELECT COUNT(*) > 0 AS eligible
 FROM ai_label_workspaces
 WHERE workspace_id = '<workspace_id>' AND enabled = TRUE;
@@ -285,8 +285,10 @@ cache runs no query. No alert reads these metrics.
 | `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` | `60` | The time bucket, in seconds. |
 | `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION` | `PT5M` | How long the counts of a `ready` project stay in Redis. |
 
-The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
-stay.
+The endpoint has no deployment-wide switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored
+topics and rows stay. To hide topics for one workspace and keep its jobs running, list it in
+`TOPICS_ENABLED_WORKSPACES` at a stage before `ui` (for example `<id>:nightly`); it is a Helm value, so the change
+needs a deploy.
 
 ## Topics discovery runs
 
@@ -320,25 +322,20 @@ flowchart TD
     A["Every pod fires TopicsDiscoveryJob every planInterval"] --> B{"Takes topics:discovery:leader?"}
     B -->|no| B1["Another pod plans"]
     B -->|yes| P{"Takes topics:discovery:plan?"}
-    P -->|no| S
+    P -->|no| E["Done: a plan ran less than one interval ago"]
     P -->|yes| R["Reconcile the runs in flight"]
     R --> C["Find candidates: unfinished labelling passes and discovery runs"]
     C --> Q["Queue runs on topic_projects up to maxInFlight,<br/>publish each on the topics-runs stream"]
-    Q --> S{"Takes topics:discovery:sweep?"}
-    S -->|yes| D["Delete the topics of deleted projects"]
-    S -->|no| E["Done"]
-    D --> E
     Q -.-> X["Any pod reads the stream, claims the run<br/>(queued to running) and runs it"]
 ```
 
-- Every pod fires the job every `TOPICS_RUNS_PLAN_INTERVAL`, each at its own second. Three Redis locks make
+- Every pod fires the job every `TOPICS_RUNS_PLAN_INTERVAL`, each at its own second. Two Redis locks make
   that one plan per interval across the cluster:
   - `topics:discovery:leader` is held for the plan and released when it ends, so two plans never overlap. Its lease
     is `TOPICS_RUNS_PLAN_BUDGET` + `TOPICS_RUN_COUNT_TIMEOUT` + `TOPICS_RUNS_LEASE_SLACK`. A plan that runs longer is
     cancelled.
   - `topics:discovery:plan` is taken by the leader before it plans and never released. It expires one interval
     (less up to 1s for trigger jitter) after the plan started, so a pod that fires sooner skips.
-  - `topics:discovery:sweep` works the same way for `TOPICS_STORAGE_SWEEP_INTERVAL`.
 - A plan first reconciles the runs in flight (see "Stuck runs"). Then it fills the free slots: `TOPICS_RUNS_MAX_IN_FLIGHT`
   minus the runs `queued`, `running` or `cancelling` across the cluster. It takes one unfinished labelling pass, then
   one discovery run, in turn.
@@ -397,7 +394,8 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 |---|---|---|
 | `TOPICS_RUNS_PLAN_INTERVAL` | `5m` | How often the leader plans. Longer than `TOPICS_RUNS_PLAN_BUDGET`, from `10s` to `1h`. |
 | `TOPICS_RUNS_LEASE_SLACK` | `1m` | How much longer than the plan's budget and one count the leader lock lasts. At most `5m`. |
-| `TOPICS_STORAGE_SWEEP_INTERVAL` | `24h` | How often the leader deletes the topics of deleted projects. From `1h` to `7d`. |
+| `TOPICS_STORAGE_SWEEP_INTERVAL` | `24h` | How often each pod's `TopicsSweepJob` deletes the topics of deleted projects. From `1h` to `7d`. |
+| `TOPICS_STORAGE_SWEEP_TIMEOUT` | `5m` | How long one sweep, and its lock `topics:sweep`, may last. A cut sweep frees the lock, so the next fire sweeps again. From `10s` to `30m`. |
 | `TOPICS_DISCOVERY_BACKFILL_MAX_WAIT` | `72h` | How long a discovery run waits for the project's vectors backfill (see "Discovery runs and the vectors backfill"). |
 | `TOPICS_DISCOVERY_TIMED_OUT_SHARE` | `0.99` | Past the max wait, the share of the backfill's traces with a vector that lets the build start. |
 | `TOPICS_RUNS_MAX_IN_FLIGHT` | `2` | Runs `queued`, `running` or `cancelling` across the cluster. Runs by hand do not wait for a slot. |
@@ -577,28 +575,34 @@ The planner's rules apply: the workspace is opted in to topics at stage `build` 
 run in flight, its window holds at least `TOPICS_RUN_MIN_VECTORS` vectors, and its vectors backfill has drained (see
 "Discovery runs and the vectors backfill"). The retry wait and `TOPICS_RUNS_MAX_IN_FLIGHT` do not apply.
 `&night=yyyy-MM-dd` sets the window's end: today (UTC) by default, so the window ends at today's start. It is at most
-tomorrow, whose window holds today's traces so far, and at least 365 days ago. `&ignore_backfill=true` builds it anyway,
+tomorrow, whose window holds today's traces so far. It is no older than the vectors backfill reaches:
+`TOPICS_VECTORS_BACKFILL_WINDOW` when set, else `TOPICS_VECTORS_LONG_WINDOW`. `&ignore_backfill=true` builds it anyway,
 from the vectors it has so far; the call logs a WARN `ignores the vectors backfill gate`.
 
 | Answer | Meaning |
 |---|---|
 | `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
 | `409` | The workspace is not opted in at stage `build` or later (or topics are off), the project has a list or a run in flight or no trace in the window, the window has too few vectors, or the backfill has not drained. The body's message says which. |
-| `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
+| `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill reaches. |
 | `503` | The run could not be started, so nothing is queued. Try again. |
 
-To build a project that already has a list again (for example after a bad discovery run), delete its list first. Keep
-the project's `topic_projects` row: its `backfill_*` columns are the vectors tick's, and the discovery run waits for
-them. Its `trace_topics` rows stay until the new run replaces them:
+To build a project that already has a list again (for example after a bad discovery run), forget its list first. An
+internal endpoint does it in one transaction: it clears the list on the project's `topic_projects` row, only when the
+project has no run in flight, and then deletes the project's topics.
 
-```sql
--- MySQL: forget a project's list, so the next plan (or the endpoint) builds it again. Not while a run is in flight.
-DELETE FROM topics WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
-UPDATE topic_projects
-SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
-WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
-AND (run_status IS NULL OR run_status IN ('saved', 'failed'));
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/reset?workspace_id=<workspace_id>"
 ```
+
+The row stays, with its run state and its `backfill_*` columns: those are the vectors tick's, and the discovery run waits
+for them. The project's `trace_topics` rows stay too. No read uses them while the project has no list, and the new run
+writes a newer row for each trace it labels. A trace the new run does not label keeps its old row, whose topic is gone,
+so it counts under Other. The next plan, or the run endpoint above, builds the list again.
+
+| Answer | Meaning |
+|---|---|
+| `204` | The list is forgotten and the project's topics are deleted. |
+| `409` | The workspace is not opted in at stage `build` or later (or topics are off), or the project has no `topic_projects` row or a run in flight. Nothing changed. The body's message says which. |
 
 ### Discovery runs and the vectors backfill
 
@@ -680,6 +684,6 @@ both. Deleting a project:
   next heartbeat;
 - deletes its `topics`, with their prototype vectors, `TOPICS_STORAGE_DELETE_BATCH_SIZE` projects per transaction.
 
-When that fails, the job's sweep (every `TOPICS_STORAGE_SWEEP_INTERVAL`, in the same batches) deletes
+When that fails, `TopicsSweepJob` (every `TOPICS_STORAGE_SWEEP_INTERVAL` on each pod, in the same batches) deletes
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

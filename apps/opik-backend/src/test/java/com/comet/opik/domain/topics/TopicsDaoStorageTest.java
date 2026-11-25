@@ -1053,8 +1053,8 @@ class TopicsDaoStorageTest {
         template.inTransaction(WRITE, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
             var projectDAO = handle.attach(TopicProjectDAO.class);
-            assertThat(projectDAO.resetList(workspaceId, projectId, newId(), savedAt)).isZero();
-            assertThat(projectDAO.resetList(workspaceId, projectId, listRunId, savedAt)).isEqualTo(1);
+            assertThat(projectDAO.clearList(workspaceId, projectId, newId(), savedAt)).isZero();
+            assertThat(projectDAO.clearList(workspaceId, projectId, listRunId, savedAt)).isEqualTo(1);
             assertThat(topicDAO.deleteTopics(workspaceId, projectId, List.of(topic.id()))).isEqualTo(1);
             return null;
         });

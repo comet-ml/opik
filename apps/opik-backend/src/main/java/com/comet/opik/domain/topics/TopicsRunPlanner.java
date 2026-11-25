@@ -4,6 +4,7 @@ import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -93,9 +94,7 @@ public class TopicsRunPlanner {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> enabled
                         ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs "
-                                + "to be in topics.enabledWorkspaces at stage build or later, and enabled in "
-                                + "ai_label_workspaces").formatted(workspaceId))))
+                        : Mono.error(notOptedIn(workspaceId)))
                 .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
                         + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
@@ -120,6 +119,34 @@ public class TopicsRunPlanner {
                 })
                 .doOnNext(runId -> log.info("Topics run '{}' queued by hand, workspace '{}', project '{}', window "
                         + "until '{}'", runId, workspaceId, projectId, night));
+    }
+
+    /**
+     * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
+     * workspace comes from the Reactor context.
+     *
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, or the project has
+     *                           no topics row or a run in flight
+     */
+    public Mono<Void> resetByHand(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(enabled -> enabled ? store.resetList(projectId) : Mono.error(notOptedIn(workspaceId)))
+                    .filter(Boolean::booleanValue)
+                    .switchIfEmpty(Mono.error(() -> new ConflictException(
+                            "Project '%s' has no topics row or a run in flight".formatted(projectId))))
+                    .doOnNext(reset -> log.info("Topics list reset by hand, workspace '{}', project '{}'",
+                            workspaceId, projectId))
+                    .then();
+        });
+    }
+
+    private static ConflictException notOptedIn(String workspaceId) {
+        return new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs to be in "
+                + "topics.enabledWorkspaces at stage build or later, and enabled in ai_label_workspaces")
+                .formatted(workspaceId));
     }
 
     /**

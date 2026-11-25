@@ -7,12 +7,10 @@ import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.RetryUtils;
-import com.google.common.collect.Lists;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -20,13 +18,13 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -39,10 +37,13 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  */
 @Slf4j
 @Singleton
-public class TopicRunStore {
+class TopicRunStore {
+
+    private static final List<TopicProject.RunStatus> ENDED = Stream.of(TopicProject.RunStatus.values())
+            .filter(status -> !status.inFlight())
+            .toList();
 
     private final TopicsConfig.RunConfig runConfig;
-    private final TopicsConfig.StorageConfig storage;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final ProjectService projectService;
@@ -56,7 +57,6 @@ public class TopicRunStore {
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics,
             @NonNull WorkspaceNameService workspaceNames) {
         this.runConfig = config.getRun();
-        this.storage = config.getStorage();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
@@ -229,8 +229,8 @@ public class TopicRunStore {
      * longer {@code running} (failed by its timeout, cancelled, abandoned or requeued) rolls the save back.
      *
      * <p>The project's row is not locked. After the commit, one delete removes the run's topics if the project is gone
-     * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until the discovery job's
-     * sweep of deleted projects deletes them.
+     * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until {@code TopicsSweepJob}
+     * deletes them.
      */
     Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
         return jdbi(() -> {
@@ -305,7 +305,7 @@ public class TopicRunStore {
      * Saves a nightly update in one transaction: the list on the project's row (a compare-and-set on the
      * {@code list_run_id} the run read), the retired topics deleted, the kept ones updated (lifecycle, size, vectors),
      * tonight's new ones inserted, the run saved. When no topic stayed live it clears the list instead
-     * ({@link TopicProjectDAO#resetList}). A run failed meanwhile, by its timeout, rolls the save back.
+     * ({@link TopicProjectDAO#clearList}). A run failed meanwhile, by its timeout, rolls the save back.
      *
      * <p>As {@link #save}, the project's row is not locked: after the commit the save reads it, and when the project is
      * gone the topics are deleted and the result is false. False too when the list was cleared: either way the caller
@@ -321,7 +321,7 @@ public class TopicRunStore {
                 int listed = save.keep()
                         ? projectDAO.saveList(run.workspaceId(), run.projectId(), saved.listRunId(), run.runId(), now,
                                 run.to(), save.otherVectors(), TopicEmbedding.MODEL)
-                        : projectDAO.resetList(run.workspaceId(), run.projectId(), saved.listRunId(), now);
+                        : projectDAO.clearList(run.workspaceId(), run.projectId(), saved.listRunId(), now);
                 if (listed != 1) {
                     throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
                 }
@@ -384,45 +384,6 @@ public class TopicRunStore {
     }
 
     /**
-     * Deletes the topics of deleted projects, for the project-delete listener. The workspace comes from the Reactor
-     * context. Returns how many topics it deleted.
-     */
-    public Mono<Integer> deleteTopicsOfProjects(@NonNull Collection<UUID> projectIds) {
-        return Mono.deferContextual(ctx -> deleteTopics(ctx.get(RequestContext.WORKSPACE_ID), projectIds));
-    }
-
-    /**
-     * Deletes the topics of the workspaces' projects that no longer exist: those a project delete left, because its
-     * listener failed or a run saved after it. A plain read finds them, then each workspace's are deleted by key.
-     * Returns how many topics it deleted.
-     */
-    public Mono<Integer> deleteTopicsOfMissingProjects(@NonNull List<String> workspaceIds) {
-        if (workspaceIds.isEmpty()) {
-            return Mono.just(0);
-        }
-        return jdbi(() -> template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(workspaceIds)))
-                .flatMapMany(missing -> Flux.fromIterable(missing.stream()
-                        .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
-                                Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
-                        .entrySet()))
-                .concatMap(workspace -> deleteTopics(workspace.getKey(), workspace.getValue()))
-                .reduce(0, Integer::sum);
-    }
-
-    /**
-     * One transaction per {@code topics.storage.deleteBatchSize} projects, so a bulk project delete is never one large
-     * delete.
-     */
-    private Mono<Integer> deleteTopics(String workspaceId, Collection<UUID> projectIds) {
-        return Flux.fromIterable(Lists.partition(List.copyOf(projectIds), storage.getDeleteBatchSize()))
-                .concatMap(batch -> jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                        .deleteTopicsByProjects(workspaceId, batch)))
-                        .retryWhen(RetryUtils.handleOnDeadLocks()))
-                .reduce(0, Integer::sum);
-    }
-
-    /**
      * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass. A transient error is
      * retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per trace); any other
      * fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
@@ -460,6 +421,25 @@ public class TopicRunStore {
             return project.map(found -> new SavedList(found,
                     handle.attach(TopicDAO.class).findByProject(workspaceId, projectId))).orElse(null);
         }));
+    }
+
+    /**
+     * Forgets the project's saved list in one transaction: first the row, a compare-and-set on no run in flight, then
+     * the project's topics, only when the row moved. False when the project has no row or a run in flight. Its
+     * {@code trace_topics} rows stay: no read uses them while the project has no list, and the new run writes a newer
+     * row for each trace it labels. The workspace comes from the Reactor context.
+     */
+    Mono<Boolean> resetList(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return jdbi(() -> template.inTransaction(WRITE, handle -> {
+                if (handle.attach(TopicProjectDAO.class).resetList(workspaceId, projectId, ENDED) != 1) {
+                    return false;
+                }
+                handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, List.of(projectId));
+                return true;
+            }));
+        });
     }
 
     /** Sets {@code labels_complete} for the run, only while the project still names it; false when it no longer does. */

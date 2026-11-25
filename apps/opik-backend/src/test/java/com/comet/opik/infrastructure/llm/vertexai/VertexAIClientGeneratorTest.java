@@ -1285,6 +1285,40 @@ class VertexAIClientGeneratorTest {
     }
 
     @Nested
+    @DisplayName("Judge retries")
+    class JudgeRetries {
+
+        /**
+         * The SDK retries a 503 on its own, under LangChain4j's retries, so a judge would multiply its attempts against
+         * a provider that hangs. Only the configured retries may apply.
+         */
+        @ParameterizedTest(name = "{0} retries")
+        @ValueSource(ints = {0, 1})
+        @DisplayName("a judge call reaches Vertex AI once plus its configured retries")
+        void aJudgeCallReachesVertexAIOncePlusItsRetries(int judgeMaxRetries) {
+            wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse().withStatus(503).withHeader("Content-Type", "application/json")
+                            .withBody(JsonUtils.writeValueAsString(Map.of("error",
+                                    Map.of("code", 503, "message", "unavailable", "status", "UNAVAILABLE"))))));
+            var clientConfig = clientConfig();
+            clientConfig.setJudgeMaxRetries(judgeMaxRetries);
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            var judge = new VertexAIClientGenerator(clientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(config, LlmAsJudgeModelParameters.builder().name(MODEL).build());
+            var failure = catchThrowable(() -> judge.chat(UserMessage.from("Is the answer correct?")));
+
+            assertThat(failure).isNotNull();
+            assertThat(wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH))))
+                    .hasSize(1 + judgeMaxRetries);
+        }
+    }
+
+    @Nested
     @DisplayName("Resending")
     class Resending {
 

@@ -524,6 +524,14 @@ class TraceDAOImpl implements TraceDAO {
      *
      * <p>Both {@code spans} accesses are bounded to {@code trace_span_weeks}, sourced as described in
      * {@link #SELECT_TRACES_SPANS_STATS}.
+     *
+     * <p>A trace id can exist in more than one project. The trace row returned is the one with the highest
+     * {@code project_id}, and every joined subquery (spans, comments, feedback scores, span feedback scores,
+     * guardrails and annotation queues) is keyed on {@code (id, project_id)}, so the aggregates come from that same
+     * project. The project lookups by trace id ({@link #SELECT_PROJECT_ID_FROM_TRACE} and
+     * {@link #SELECT_DETAILS_BY_ID}) resolve the highest {@code project_id} in the same way.
+     * {@code experiments_agg} is keyed on {@code trace_id} only, because {@code experiment_items.project_id} holds
+     * the project the item named, which can differ from the trace's project.
      */
     private static final String SELECT_BY_IDS = """
             WITH <if(spans_partitioned)>trace_span_weeks AS (
@@ -538,7 +546,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
             ), <endif>target_spans AS (
-                SELECT id, trace_id, type
+                SELECT project_id, id, trace_id, type
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -670,7 +678,7 @@ class TraceDAOImpl implements TraceDAO {
                            fs.last_updated_by AS author,
                            CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores AS fs
-                    INNER JOIN target_spans s ON fs.entity_id = s.id
+                    INNER JOIN target_spans s ON fs.entity_id = s.id AND fs.project_id = s.project_id
                     WHERE fs.entity_type = 'span'
                     AND fs.workspace_id = :workspace_id
                     <if(has_target_projects)>AND fs.project_id IN :target_project_ids<endif>
@@ -692,7 +700,7 @@ class TraceDAOImpl implements TraceDAO {
                            afs.author,
                            afs.source_queue_id
                     FROM authored_feedback_scores AS afs
-                    INNER JOIN target_spans s ON afs.entity_id = s.id
+                    INNER JOIN target_spans s ON afs.entity_id = s.id AND afs.project_id = s.project_id
                     WHERE afs.entity_type = 'span'
                     AND afs.workspace_id = :workspace_id
                     <if(has_target_projects)>AND afs.project_id IN :target_project_ids<endif>
@@ -735,6 +743,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM span_feedback_scores_grouped
             ), spans_deduped AS (
                 SELECT
+                    project_id,
                     trace_id,
                     id,
                     type,
@@ -750,6 +759,7 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
                 SELECT
+                    project_id,
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
@@ -758,7 +768,7 @@ class TraceDAOImpl implements TraceDAO {
                     countIf(type = 'tool') > 0 AS has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans_deduped
-                GROUP BY trace_id
+                GROUP BY project_id, trace_id
             ), experiments_agg AS (
                 SELECT
                     ei.trace_id,
@@ -801,12 +811,13 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), trace_annotation_queues AS (
-                SELECT trace_id,
+                SELECT project_id,
+                       trace_id,
                        groupArray(tuple(id, name)) AS annotation_queues
                 FROM (
-                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
+                    SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.project_id as project_id, aqi.item_id as trace_id
                     FROM (
-                        SELECT queue_id, item_id
+                        SELECT queue_id, project_id, item_id
                         FROM annotation_queue_items
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -815,7 +826,7 @@ class TraceDAOImpl implements TraceDAO {
                     ) AS aqi
                     JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
                 ) AS queues_with_trace_id
-                GROUP BY trace_id
+                GROUP BY project_id, trace_id
             )
             <endif>
             SELECT
@@ -849,17 +860,19 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS t
-            LEFT JOIN spans_agg s ON t.id = s.trace_id
+            LEFT JOIN spans_agg s ON t.id = s.trace_id AND t.project_id = s.project_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
-            <if(include_annotation_queues)>LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id<endif>
+            <if(include_annotation_queues)>LEFT JOIN trace_annotation_queues taq ON taq.trace_id = t.id AND taq.project_id = t.project_id<endif>
             LEFT JOIN (
                 SELECT
+                    project_id,
                     entity_id,
                     groupUniqArrayArray(comments_array) as comments
                 FROM (
                     SELECT
+                        project_id,
                         entity_id,
-                        groupArray(tuple(*)) AS comments_array
+                        groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by, source_queue_id, entity_id)) AS comments_array
                     FROM (
                         SELECT
                             id,
@@ -869,20 +882,22 @@ class TraceDAOImpl implements TraceDAO {
                             created_by,
                             last_updated_by,
                             source_queue_id,
-                            entity_id
+                            entity_id,
+                            project_id
                         FROM comments
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND entity_id IN :ids
                         ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        LIMIT 1 BY project_id, id
                     )
-                    GROUP BY entity_id
+                    GROUP BY project_id, entity_id
                 )
-                GROUP BY entity_id
-            ) AS c ON t.id = c.entity_id
+                GROUP BY project_id, entity_id
+            ) AS c ON t.id = c.entity_id AND t.project_id = c.project_id
             LEFT JOIN (
                 SELECT
+                    project_id,
                     entity_id,
                     mapFromArrays(
                             groupArray(name),
@@ -902,9 +917,10 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS feedback_scores_list
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
-            ) AS fs ON t.id = fs.entity_id
+            ) AS fs ON t.id = fs.entity_id AND t.project_id = fs.project_id
             LEFT JOIN (
                 SELECT
+                    project_id,
                     trace_id,
                     groupArray(tuple(
                         name,
@@ -920,9 +936,10 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS span_feedback_scores_list
                 FROM span_feedback_scores_final
                 GROUP BY workspace_id, project_id, trace_id
-            ) AS sfs ON t.id = sfs.trace_id
+            ) AS sfs ON t.id = sfs.trace_id AND t.project_id = sfs.project_id
             LEFT JOIN (
                 SELECT
+                    project_id,
                     entity_id,
                     groupArray(tuple(
                          entity_id,
@@ -937,24 +954,27 @@ class TraceDAOImpl implements TraceDAO {
                     FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, id
+                    LIMIT 1 BY project_id, entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ) AS gr ON t.id = gr.entity_id
+            ) AS gr ON t.id = gr.entity_id AND t.project_id = gr.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     /** Carries the {@code <id_weeks>} bound, see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES}. */
     private static final String SELECT_DETAILS_BY_ID = """
-            SELECT DISTINCT
+            SELECT
                 workspace_id,
                 project_id
             FROM traces
             WHERE id = :id
             <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+            ORDER BY workspace_id DESC, project_id DESC
+            LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2519,11 +2539,13 @@ class TraceDAOImpl implements TraceDAO {
     /** Carries the {@code <id_weeks>} bound, see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES}. */
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
-                DISTINCT project_id
+                project_id
             FROM traces
             WHERE id = :id
             <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             AND workspace_id = :workspace_id
+            ORDER BY project_id DESC
+            LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;

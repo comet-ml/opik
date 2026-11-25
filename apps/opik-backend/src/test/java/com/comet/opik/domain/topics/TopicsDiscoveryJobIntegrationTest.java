@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.v1.events.TopicProjectsDeletedListener;
 import com.comet.opik.api.resources.v1.jobs.TopicsDiscoveryJob;
+import com.comet.opik.api.resources.v1.jobs.TopicsSweepJob;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -79,7 +80,6 @@ class TopicsDiscoveryJobIntegrationTest {
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final Duration WAIT = Duration.ofSeconds(90);
     private static final Lock PLAN_LOCK = new Lock("topics:discovery:plan");
-    private static final Lock SWEEP_LOCK = new Lock("topics:discovery:sweep");
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -126,6 +126,8 @@ class TopicsDiscoveryJobIntegrationTest {
     private TopicsTestData data;
     private GuiceJobManager jobManager;
     private TopicsDiscoveryJob job;
+    private TopicsSweepJob sweepJob;
+    private TopicsRunPlanner planner;
     private LockService lockService;
     private TopicProjectsDeletedListener projectDeletedListener;
     private ClientSupport client;
@@ -134,7 +136,8 @@ class TopicsDiscoveryJobIntegrationTest {
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
-            @Jit TopicsDiscoveryJob job, @Jit TopicProjectsDeletedListener projectDeletedListener,
+            @Jit TopicsDiscoveryJob job, @Jit TopicsSweepJob sweepJob, @Jit TopicsRunPlanner planner,
+            @Jit TopicProjectsDeletedListener projectDeletedListener,
             @Jit TopicVectorsDAO vectorsDAO) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -142,6 +145,8 @@ class TopicsDiscoveryJobIntegrationTest {
         this.template = template;
         this.jobManager = jobManager;
         this.job = job;
+        this.sweepJob = sweepJob;
+        this.planner = planner;
         this.lockService = lockService;
         this.projectDeletedListener = projectDeletedListener;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
@@ -159,11 +164,8 @@ class TopicsDiscoveryJobIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Each test opts in its own workspaces: the earlier ones must not be planned again.
-        template.inTransaction(WRITE, handle -> {
-            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
-            return null;
-        });
+        // Each test opts in its own workspaces. Topics takes a workspace only while it is listed here too, so clearing
+        // the list keeps the earlier tests' workspaces from being planned again.
         opikConfig.getTopics().setEnabledWorkspaces("");
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
@@ -171,16 +173,29 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("with topics on, the discovery job is scheduled on topics.runs.planInterval")
-    void jobIsScheduled() throws SchedulerException {
-        var scheduler = jobManager.getScheduler();
-        var triggers = scheduler.getJobKeys(GroupMatcher.anyGroup()).stream()
-                .filter(key -> jobClass(key) == TopicsDiscoveryJob.class)
-                .flatMap(key -> triggers(key).stream())
-                .toList();
-
-        assertThat(triggers).singleElement().isInstanceOfSatisfying(SimpleTrigger.class,
+    @DisplayName("with topics on, the discovery job is scheduled on topics.runs.planInterval and the sweep job on "
+            + "topics.storage.sweepInterval")
+    void jobsAreScheduled() throws SchedulerException {
+        assertThat(triggers(TopicsDiscoveryJob.class)).singleElement().isInstanceOfSatisfying(SimpleTrigger.class,
                 trigger -> assertThat(trigger.getRepeatInterval()).isEqualTo(Duration.ofHours(1).toMillis()));
+        assertThat(triggers(TopicsSweepJob.class)).singleElement().isInstanceOfSatisfying(SimpleTrigger.class,
+                trigger -> assertThat(trigger.getRepeatInterval()).isEqualTo(Duration.ofHours(24).toMillis()));
+    }
+
+    @Test
+    @DisplayName("an interrupted discovery job plans nothing, even when a plan is due")
+    void interruptedJobPlansNothing() throws Exception {
+        var workspaceId = enabledWorkspace();
+        var projectId = TopicsTestData.newId();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        lockService.unlockUsingToken(PLAN_LOCK).block();
+        var stopped = new TopicsDiscoveryJob(opikConfig.getTopics(), planner, lockService);
+
+        stopped.interrupt();
+        stopped.doJob(null);
+
+        Awaitility.await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertNoRun(projectId));
     }
 
     @Test
@@ -209,7 +224,7 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("a job fire deletes the topics of projects that no longer exist, with their prototype vectors, in "
+    @DisplayName("a sweep job fire deletes the topics of projects that no longer exist, with their prototype vectors, in "
             + "batches, and keeps an existing project's")
     void jobSweepsDeletedProjects() {
         var workspaceId = enabledWorkspace();
@@ -219,10 +234,9 @@ class TopicsDiscoveryJobIntegrationTest {
         data.project(workspaceId, kept);
         deleted.forEach(projectId -> data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size()));
         data.savedList(workspaceId, kept, tomorrowStart(), FIXTURE.size());
-        lockService.unlockUsingToken(SWEEP_LOCK).block();
-
+        // A fire can skip while the startup fire still holds the lock: fire until one sweeps.
         Awaitility.await().atMost(WAIT).untilAsserted(() -> {
-            job.doJob(null);
+            sweepJob.doJob(null);
             assertThat(deleted).allSatisfy(projectId -> assertThat(data.topics(projectId)).isEmpty());
         });
         assertThat(data.topics(kept)).singleElement()
@@ -257,6 +271,46 @@ class TopicsDiscoveryJobIntegrationTest {
             try (var response = runProject(workspaceId, TopicsTestData.newId(), night)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
+        }
+    }
+
+    @Test
+    @DisplayName("the internal reset forgets a saved list and deletes its topics, so a new discovery run builds one; with "
+            + "a run in flight it is refused (409) and changes nothing")
+    void resetByHand() {
+        var workspaceId = enabledWorkspace();
+        var projectId = TopicsTestData.newId();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        var firstRun = awaitSaved(projectId);
+        assertThat(data.topics(projectId)).isNotEmpty();
+
+        try (var response = resetProject(workspaceId, projectId)) {
+            assertThat(response.getStatus()).isEqualTo(204);
+        }
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.topicProject(projectId).listRunId()).isNull();
+        try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        assertThat(awaitSaved(projectId)).isNotEqualTo(firstRun);
+
+        var inFlight = TopicsTestData.newId();
+        data.savedList(workspaceId, inFlight, tomorrowStart(), FIXTURE.size());
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).queue(workspaceId, inFlight,
+                TopicsTestData.newId(), TopicProject.RunMode.UPDATE, Instant.now()));
+        var listRun = data.topicProject(inFlight).listRunId();
+        try (var response = resetProject(workspaceId, inFlight)) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("a run in flight");
+        }
+        assertThat(data.topicProject(inFlight).listRunId()).isEqualTo(listRun);
+        assertThat(data.topics(inFlight)).hasSize(1);
+        try (var response = resetProject(aiLabelsOnlyWorkspace(), inFlight)) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("not opted in");
         }
     }
 
@@ -315,6 +369,13 @@ class TopicsDiscoveryJobIntegrationTest {
         }
     }
 
+    private List<? extends org.quartz.Trigger> triggers(Class<?> jobClass) throws SchedulerException {
+        return jobManager.getScheduler().getJobKeys(GroupMatcher.anyGroup()).stream()
+                .filter(key -> jobClass(key) == jobClass)
+                .flatMap(key -> triggers(key).stream())
+                .toList();
+    }
+
     private List<? extends org.quartz.Trigger> triggers(org.quartz.JobKey key) {
         try {
             return jobManager.getScheduler().getTriggersOfJob(key);
@@ -340,6 +401,13 @@ class TopicsDiscoveryJobIntegrationTest {
         return client.target("%s/v1/internal/topics/projects/%s/run".formatted(baseUrl, projectId))
                 .queryParam("workspace_id", workspaceId)
                 .queryParam("night", night)
+                .request(MediaType.APPLICATION_JSON_TYPE)
+                .post(Entity.json(""));
+    }
+
+    private Response resetProject(String workspaceId, UUID projectId) {
+        return client.target("%s/v1/internal/topics/projects/%s/reset".formatted(baseUrl, projectId))
+                .queryParam("workspace_id", workspaceId)
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));
     }
