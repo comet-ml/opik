@@ -22,13 +22,24 @@ describe("Contains Metric", () => {
       expect(result.reason).toContain("not found in output");
     });
 
-    it("should handle empty strings correctly", async () => {
+    it("should score an empty output against a non-empty substring", async () => {
       const result = await contains.score({ output: "", substring: "test" });
       expect(result.value).toBe(0.0);
-
-      const result2 = await contains.score({ output: "test", substring: "" });
-      expect(result2.value).toBe(1.0);
     });
+
+    it.each(["", null])(
+      "should reject invalid substring %s clearly",
+      async (substring) => {
+        const result = contains.score({
+          output: "test",
+          substring: substring as string,
+        });
+        await expect(result).rejects.toThrow(TypeError);
+        await expect(result).rejects.toThrow(
+          /^substring must be a non-empty string$/,
+        );
+      },
+    );
   });
 
   describe("case-sensitive", () => {

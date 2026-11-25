@@ -55,6 +55,15 @@ describe("useDashboardWidgetQuery", () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 
+  it("gives up on a 429 after 12 retries", async () => {
+    post.mockReset().mockRejectedValue(httpError(429));
+
+    const { result } = renderWidgetQuery();
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(post).toHaveBeenCalledTimes(13);
+  });
+
   it.each([
     ["an unsaved widget", true, 2],
     ["a saved widget", false, 1],

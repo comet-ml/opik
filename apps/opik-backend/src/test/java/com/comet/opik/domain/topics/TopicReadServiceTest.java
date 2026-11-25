@@ -1,18 +1,14 @@
 package com.comet.opik.domain.topics;
 
+import com.clickhouse.client.ClickHouseException;
 import com.clickhouse.client.api.ServerException;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ProjectTopics;
-import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.filter.Operator;
-import com.comet.opik.api.filter.TraceField;
-import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.TopicsStage;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -25,7 +21,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Flux;
-import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
@@ -35,7 +30,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
@@ -95,7 +89,7 @@ class TopicReadServiceTest {
         template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(true);
         when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
         service = service(NOW);
     }
@@ -107,12 +101,12 @@ class TopicReadServiceTest {
             "2026-11-02T23:59:59.999Z, 2026-11-02"})
     @DisplayName("today is the UTC date of the request, from its first to its last millisecond")
     void today(Instant now, LocalDate today) {
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(false);
 
         var body = service(now).get(WORKSPACE_ID, projectId);
 
         assertThat(body.today()).isEqualTo(today);
-        assertThat(body.windowFrom()).isEqualTo(today.minusDays(config.getBuild().getWindowDays() - 1L));
+        assertThat(body.windowFrom()).isEqualTo(today.minusDays(config.getRun().getWindowDays() - 1L));
     }
 
     @Test
@@ -120,10 +114,9 @@ class TopicReadServiceTest {
     void ready() {
         var topic = topic();
         saved(List.of(topic));
-        when(traceTopicsDAO.countByTopicAndDay(WORKSPACE_ID, projectId, FROM, TO,
-                TopicReadService.MAX_EXECUTION_SECONDS)).thenReturn(Flux.just(
-                        TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
-                        TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
+        when(traceTopicsDAO.countByTopicAndDay(WORKSPACE_ID, projectId, FROM, TO)).thenReturn(Flux.just(
+                TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
+                TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
 
         var body = service.get(WORKSPACE_ID, projectId);
 
@@ -139,7 +132,7 @@ class TopicReadServiceTest {
     @Test
     @DisplayName("disabled: a workspace not eligible reads no topics and calls no ClickHouse")
     void disabled() {
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(false);
 
         var body = service.get(WORKSPACE_ID, projectId);
 
@@ -152,50 +145,62 @@ class TopicReadServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
 
-    static Stream<Arguments> busyErrors() {
+    static Stream<Arguments> guardTrips() {
         return Stream.of(
-                arguments("a time limit (159)", new RuntimeException(new ServerException(159, "time limit", 500,
-                        "query-id"))),
-                arguments("a memory limit (241)", new RuntimeException(new ServerException(241, "memory limit", 500,
-                        "query-id"))),
+                arguments("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158)",
+                        new ClickHouseException(158, "Limit for rows (controlled by "
+                                + "'max_rows_to_read' setting) exceeded", null)),
+                arguments("a memory limit (241)",
+                        new RuntimeException(new ClickHouseException(241, "memory limit", null))),
+                arguments("a bytes limit (307)",
+                        new RuntimeException(new ClickHouseException(307, "Limit exceeded", null))),
+                arguments("a rows-or-bytes limit (396)",
+                        new RuntimeException(new ClickHouseException(396, "Limit exceeded", null))));
+    }
+
+    @ParameterizedTest(name = "{0} of the ready counts is status too_large: a retry fails the same way")
+    @MethodSource("guardTrips")
+    void readyGuardTripIsTooLarge(String name, Throwable error) {
+        readyWithCounts(Flux.error(error));
+
+        var body = service.get(WORKSPACE_ID, projectId);
+
+        assertThat(body.status()).isEqualTo(ProjectTopics.Status.TOO_LARGE);
+        assertThat(body.today()).isEqualTo(TODAY);
+        assertThat(body.topics()).isEmpty();
+        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
+                .satisfies(point -> assertThat(point.get("status")).isEqualTo("too_large"));
+    }
+
+    @Test
+    @DisplayName("a guard trip of the collecting count is status too_large, without the collecting fields")
+    void collectingGuardTripIsTooLarge() {
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new RuntimeException(new ClickHouseException(241, "memory limit", null))));
+
+        var body = service.get(WORKSPACE_ID, projectId);
+
+        assertThat(body.status()).isEqualTo(ProjectTopics.Status.TOO_LARGE);
+        assertThat(body.vectorsInWindow()).isNull();
+    }
+
+    static Stream<Arguments> busy() {
+        return Stream.of(
+                arguments("a time limit (159)", new RuntimeException(
+                        new ClickHouseException(159, "time limit", null))),
+                arguments("the spent budget", new TopicsReadErrors.BudgetExceededException("spent")),
                 arguments("the client timeout", new TimeoutException("Did not observe any item")));
     }
 
-    @ParameterizedTest(name = "{0} is a 503 with Retry-After, status error: a retry can pass")
-    @MethodSource("busyErrors")
-    void busyIs503(String name, Throwable error) {
+    @ParameterizedTest(name = "{0} is a 503 with Retry-After, status error")
+    @MethodSource("busy")
+    void busyIs503WithRetryAfter(String name, Throwable error) {
         readyWithCounts(Flux.error(error));
 
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
                         exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
                         .isEqualTo(TopicsReadErrors.RETRY_AFTER_SECONDS));
-        assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
-                .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
-    }
-
-    static Stream<Arguments> tooLargeErrors() {
-        return Stream.of(
-                arguments("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158)",
-                        new com.clickhouse.client.ClickHouseException(158, "Limit for rows (controlled by "
-                                + "'max_rows_to_read' setting) exceeded", null)),
-                arguments("a bytes limit (307)", new RuntimeException(new ServerException(307, "Limit exceeded", 500,
-                        "query-id"))),
-                arguments("a rows-or-bytes limit (396)", new RuntimeException(new ServerException(396,
-                        "Limit exceeded", 500, "query-id"))));
-    }
-
-    @ParameterizedTest(name = "{0} is a 400 with the too-large message, status error")
-    @MethodSource("tooLargeErrors")
-    void tooLargeIs400(String name, Throwable error) {
-        readyWithCounts(Flux.error(error));
-
-        assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOfSatisfying(BadRequestException.class, exception -> {
-                    assertThat(exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
-                    assertThat(exception.getResponse().getEntity()).isEqualTo(
-                            new ErrorMessage(List.of(TopicReadService.TOO_LARGE_MESSAGE)));
-                });
         assertThat(TopicsMetricsReader.points(metricReader, DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
@@ -220,7 +225,7 @@ class TopicReadServiceTest {
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOf(NotFoundException.class);
         verifyNoInteractions(workspaces, topicDAO, traceTopicsDAO);
-        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
+        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), any(), anyLong());
         assertThat(TopicsMetricsReader.points(metricReader, DURATION)).isEmpty();
     }
 
@@ -245,7 +250,7 @@ class TopicReadServiceTest {
 
     private void readyWithCounts(Flux<TopicDayCount> counts) {
         saved(List.of(topic()));
-        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+        when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any()))
                 .thenReturn(counts);
     }
 
@@ -261,42 +266,4 @@ class TopicReadServiceTest {
                 .vectors(new PrototypeVectors(List.of(new float[TopicEmbedding.DIMENSIONS])))
                 .build();
     }
-    @Test
-    @DisplayName("filter scope: no topic filter reads nothing; a workspace not enabled or no live topic is empty; "
-            + "else the live ids and the guards of topics.filter")
-    void filterScope() {
-        var topicFilter = List.of(TraceFilter.builder()
-                .field(TraceField.TOPIC_ID).operator(Operator.EQUAL).value(UUID.randomUUID().toString()).build());
-        var nameFilter = List.of(TraceFilter.builder()
-                .field(TraceField.NAME).operator(Operator.EQUAL).value("name").build());
-        var topic = topic();
-        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
-
-        assertThat(filterScope(null)).isEmpty();
-        assertThat(filterScope(nameFilter)).isEmpty();
-        verifyNoInteractions(workspaces, topicDAO);
-
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
-        assertThat(filterScope(topicFilter)).isEmpty();
-        verifyNoInteractions(topicDAO);
-
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
-        assertThat(filterScope(topicFilter)).hasValueSatisfying(scope -> {
-            assertThat(scope.liveIds()).containsExactly(topic.id().toString());
-            assertThat(scope.maxExecutionSeconds()).isEqualTo(30L);
-            assertThat(scope.maxMemoryUsage()).isEqualTo(4L * 1024 * 1024 * 1024);
-        });
-        // No project row read: the filter needs only the live topics.
-        verify(projectDAO, never()).findProjects(any(), any());
-
-        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of());
-        assertThat(filterScope(topicFilter)).isEmpty();
-    }
-
-    private Optional<TopicFilterScope> filterScope(List<TraceFilter> filters) {
-        return service.filterScope(filters, projectId)
-                .contextWrite(Context.of(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
-                .block();
-    }
-
 }

@@ -1,7 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicProjectDAO.Backfill;
-import com.comet.opik.domain.topics.TopicProjectDAO.Progress;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
@@ -20,6 +18,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,39 +70,45 @@ class TopicVectorBackfiller {
      * starts empty and discovers every workspace once more, which changes no row's drained mark.
      */
     private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
+    /** The discoveries a tick's budget cut short, resumed by the next tick; a new leader starts them again. */
+    private final Map<String, Discovery> discoveries = new ConcurrentHashMap<>();
     /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
     private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
     /** A workspace read's candidates to serve, and the projects it saw for the first time and started. */
-    record Served(@NonNull List<Candidate> candidates, @NonNull List<Backfill> started) {
+    record Served(@NonNull List<Candidate> candidates, @NonNull List<TopicBackfill> started) {
     }
 
-    /** One project's turn: what to record, if anything, and whether the project should get another turn. */
-    private record Turn(@NonNull TickResult result, @NonNull Optional<Progress> progress, boolean more) {
+    /**
+     * One project's turn: what to record, if anything, whether the project should get another turn, the keys it
+     * settled, and the workspace's topic on arrival after it.
+     */
+    private record Turn(@NonNull TickResult result, @NonNull Optional<TopicBackfillProgress> progress, boolean more,
+            @NonNull Set<VectorKey> settled, @NonNull ArrivalSteps arrival) {
     }
 
     /**
      * Backfill first those that can drain in one read, smallest first, then the large ones; the most recently active
      * first among equals, so the projects users look at get their vectors first.
      */
-    static Comparator<Backfill> order(int maxTracesPerTick) {
-        Comparator<Backfill> recentFirst = Comparator.comparing(Backfill::backfillLastDoneAt).reversed();
+    static Comparator<TopicBackfill> order(int maxTracesPerTick) {
+        Comparator<TopicBackfill> recentFirst = Comparator.comparing(TopicBackfill::backfillLastDoneAt).reversed();
         return Comparator
-                .comparing((Backfill backfill) -> backfill.remaining() > maxTracesPerTick)
+                .comparing((TopicBackfill backfill) -> backfill.remaining() > maxTracesPerTick)
                 .thenComparingLong(backfill -> backfill.remaining() > maxTracesPerTick ? 0 : backfill.remaining())
                 .thenComparing(recentFirst)
-                .thenComparing(Backfill::projectId);
+                .thenComparing(TopicBackfill::projectId);
     }
 
     /** The started backfills not drained yet, by workspace. */
-    Mono<Map<String, List<Backfill>>> undrained(@NonNull List<String> workspaceIds) {
+    Mono<Map<String, List<TopicBackfill>>> undrained(@NonNull List<String> workspaceIds) {
         return Mono.fromCallable(() -> backfills.findUndrained(workspaceIds)).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
      * Discovers the projects of the workspaces due for it, one at a time: never discovered by this pod, or not for
-     * {@code longWindowInterval}. Per workspace, two plain aggregates over the backfill window: the projects with done
-     * statuses, and their vector counts. A workspace's rows not checked for twice the interval start again, because the
+     * {@code longWindowInterval}, those a tick cut short first. Per workspace, two plain aggregates over the backfill
+     * window, a slice at a time: the projects with done statuses, and their vector counts. A workspace's rows not checked for twice the interval start again, because the
      * tick did not run for it meanwhile. A workspace no longer enabled is forgotten, so one enabled again is discovered
      * at its first tick.
      *
@@ -113,12 +118,15 @@ class TopicVectorBackfiller {
     Mono<Void> discover(@NonNull List<String> workspaceIds, @NonNull Instant lowerBound,
             @NonNull Instant createdAfter, @NonNull TickBudget budget) {
         return Mono.defer(() -> {
-            discoveredAt.keySet().retainAll(new HashSet<>(workspaceIds));
+            var enabled = new HashSet<>(workspaceIds);
+            discoveredAt.keySet().retainAll(enabled);
+            discoveries.keySet().retainAll(enabled);
             var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
             var due = workspaceIds.stream()
                     .filter(id -> Optional.ofNullable(discoveredAt.get(id))
                             .map(last -> Duration.between(last, budget.start()).compareTo(interval) >= 0)
                             .orElse(true))
+                    .sorted(Comparator.comparing(id -> !discoveries.containsKey(id)))
                     .limit(MAX_DISCOVERIES_PER_TICK)
                     .toList();
             long started = System.nanoTime();
@@ -129,51 +137,121 @@ class TopicVectorBackfiller {
         });
     }
 
+    /**
+     * One workspace's discovery, a slice at a time while half the tick budget is left; the next tick resumes it. Its
+     * rows are written once every slice of both reads is read.
+     */
     private Mono<Void> discover(String workspaceId, Instant lowerBound, Instant createdAfter, TickBudget budget,
             Duration interval) {
         return Mono.defer(() -> {
             var reserve = config.getVectors().getEmbedTimeout().toJavaDuration();
-            if (!budget.hasTimeForRead(reserve)) {
+            var discoveryReserve = discoveryReserve(budget, reserve);
+            if (!budget.hasTimeForRead(discoveryReserve)) {
                 return Mono.empty();
             }
             var maxExecutionTime = config.getVectors().getFind().getMaxExecutionTime().toJavaDuration();
-            var start = budget.start();
-            return dao.findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, createdAfter,
-                    budget.readSeconds(maxExecutionTime, reserve))
-                    .collectList()
-                    .flatMap(projects -> dao.countTracesWithVectorsByProject(workspaceId, TopicEmbedding.SUMMARY_TASK,
-                            createdAfter, projects.stream().map(TopicVectorsDAO.BackfillProject::projectId).toList(),
-                            budget.readSeconds(maxExecutionTime, reserve))
-                            .map(withVectors -> projects.stream()
-                                    .map(project -> Backfill.builder()
-                                            .workspaceId(workspaceId)
-                                            .projectId(project.projectId())
-                                            .backfillStartedAt(start)
-                                            .backfillLastDoneAt(project.lastDoneAt())
-                                            .backfillTracesTotal(project.traces())
-                                            .backfillTracesDone(Math.min(project.traces(),
-                                                    withVectors.getOrDefault(project.projectId(), 0L)))
-                                            .build())
-                                    .toList()))
-                    .flatMap(rows -> Mono.fromCallable(
-                            () -> backfills.discovered(workspaceId, rows, start, start.minus(interval.multipliedBy(2))))
-                            .subscribeOn(Schedulers.boundedElastic()))
-                    .doOnNext(removed -> {
-                        if (removed > 0) {
-                            log.info("Topic vectors backfill rows of deleted projects removed, workspace '{}', rows "
-                                    + "'{}'", workspaceId, removed);
-                        }
-                        discoveredAt.put(workspaceId, start);
-                    })
+            var discovery = discoveries.computeIfAbsent(workspaceId,
+                    __ -> new Discovery(budget.start(), lowerBound, dao.slices(createdAfter)));
+            return Mono.defer(() -> readSlice(workspaceId, discovery,
+                    budget.readSeconds(maxExecutionTime, discoveryReserve)))
+                    .repeat(() -> !discovery.done() && budget.hasTimeForRead(discoveryReserve))
+                    .then(Mono.defer(() -> discovery.done() ? save(workspaceId, discovery, interval) : Mono.empty()))
                     .onErrorResume(exception -> {
+                        discoveries.remove(workspaceId);
                         log.warn("Topic vectors project discovery failed, trying again next tick, workspace '{}'",
                                 workspaceId, exception);
                         return metrics.workspace(workspaceId)
                                 .doOnNext(workspace -> metrics.readFailure("discover", workspace, exception))
                                 .then(Mono.empty());
+                    });
+        });
+    }
+
+    /**
+     * What a discovery slice leaves for after it: half of the tick budget, and at least what one more read needs. A
+     * slice starts only with that plus a read's minimum left, and its {@code max_execution_time} ends before it, so a
+     * long discovery (a 365d backfill window is over 100 reads per workspace) leaves the fresh and backfill phases the
+     * other half; the next tick resumes it.
+     */
+    private static Duration discoveryReserve(TickBudget budget, Duration reserve) {
+        var half = Duration.between(budget.start(), budget.deadline()).dividedBy(2);
+        var oneRead = TickBudget.MIN_READ_TIME.plus(reserve);
+        return half.compareTo(oneRead) > 0 ? half : oneRead;
+    }
+
+    /** The next slice: the projects' slices first, then their vector counts. */
+    private Mono<Void> readSlice(String workspaceId, Discovery discovery, long maxExecutionSeconds) {
+        if (!discovery.toFind.isEmpty()) {
+            return dao.findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, discovery.lowerBound,
+                    discovery.toFind.peek(), maxExecutionSeconds)
+                    .collectList()
+                    .doOnNext(found -> {
+                        found.forEach(project -> discovery.projects.merge(project.projectId(), project,
+                                TopicVectorsDAO.BackfillProject::merge));
+                        discovery.toFind.poll();
                     })
                     .then();
-        });
+        }
+        return dao.countTracesWithVectorsByProject(workspaceId, TopicEmbedding.SUMMARY_TASK,
+                discovery.toCount.peek(), List.copyOf(discovery.projects.keySet()), maxExecutionSeconds)
+                .doOnNext(counts -> {
+                    counts.forEach((projectId, traces) -> discovery.withVectors.merge(projectId, traces, Long::sum));
+                    discovery.toCount.poll();
+                })
+                .then();
+    }
+
+    private Mono<Void> save(String workspaceId, Discovery discovery, Duration interval) {
+        var start = discovery.start;
+        var rows = discovery.projects.values().stream()
+                .map(project -> TopicBackfill.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(project.projectId())
+                        .backfillStartedAt(start)
+                        .backfillLastDoneAt(project.lastDoneAt())
+                        .backfillTracesTotal(project.traces())
+                        .backfillTracesDone(Math.min(project.traces(),
+                                discovery.withVectors.getOrDefault(project.projectId(), 0L)))
+                        .build())
+                .toList();
+        return Mono
+                .fromCallable(
+                        () -> backfills.discovered(workspaceId, rows, start, start.minus(interval.multipliedBy(2))))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnNext(removed -> {
+                    if (removed > 0) {
+                        log.info("Topic vectors backfill rows of deleted projects removed, workspace '{}', rows "
+                                + "'{}'", workspaceId, removed);
+                    }
+                    discoveredAt.put(workspaceId, start);
+                    discoveries.remove(workspaceId);
+                })
+                .then();
+    }
+
+    /**
+     * A workspace's discovery in progress: the slices each read has left, and what the slices read so far found. Its
+     * bounds and start are those of the tick that began it. Only one tick at a time touches it.
+     */
+    private static final class Discovery {
+
+        private final Instant start;
+        private final Instant lowerBound;
+        private final ArrayDeque<TopicVectorsDAO.Slice> toFind;
+        private final ArrayDeque<TopicVectorsDAO.Slice> toCount;
+        private final Map<UUID, TopicVectorsDAO.BackfillProject> projects = new HashMap<>();
+        private final Map<UUID, Long> withVectors = new HashMap<>();
+
+        private Discovery(Instant start, Instant lowerBound, List<TopicVectorsDAO.Slice> slices) {
+            this.start = start;
+            this.lowerBound = lowerBound;
+            this.toFind = new ArrayDeque<>(slices);
+            this.toCount = new ArrayDeque<>(slices);
+        }
+
+        private boolean done() {
+            return toFind.isEmpty() && toCount.isEmpty();
+        }
     }
 
     /**
@@ -181,7 +259,7 @@ class TopicVectorBackfiller {
      * when there are more than {@link #MAX_EXCLUDED_PROJECTS}: the workspace read skips it until its backfill brings it
      * under, and its traces are the backfill's for now.
      */
-    Optional<List<UUID>> readableWithout(@NonNull String workspaceId, @NonNull List<Backfill> undrained) {
+    Optional<List<UUID>> readableWithout(@NonNull String workspaceId, @NonNull List<TopicBackfill> undrained) {
         if (undrained.size() > MAX_EXCLUDED_PROJECTS) {
             if (overExcluded.add(workspaceId)) {
                 log.warn("Topic vectors workspace reads skipped until the backfill brings the projects in backfill "
@@ -194,7 +272,7 @@ class TopicVectorBackfiller {
             log.info("Topic vectors workspace reads resumed, workspace '{}', projects in backfill '{}'", workspaceId,
                     undrained.size());
         }
-        return Optional.of(undrained.stream().map(Backfill::projectId).toList());
+        return Optional.of(undrained.stream().map(TopicBackfill::projectId).toList());
     }
 
     /**
@@ -213,7 +291,7 @@ class TopicVectorBackfiller {
             var known = backfills.findByKeys(workspaceId, lastDone.keySet());
             var started = lastDone.entrySet().stream()
                     .filter(entry -> !known.containsKey(entry.getKey()))
-                    .map(entry -> Backfill.builder()
+                    .map(entry -> TopicBackfill.builder()
                             .workspaceId(workspaceId)
                             .projectId(entry.getKey())
                             .backfillStartedAt(start)
@@ -227,7 +305,7 @@ class TopicVectorBackfiller {
             }
             var served = candidates.stream()
                     .filter(candidate -> Optional.ofNullable(known.get(candidate.projectId()))
-                            .map(Backfill::backfillDrainedAt).isPresent())
+                            .map(TopicBackfill::backfillDrainedAt).isPresent())
                     .toList();
             return new Served(served, started);
         }).subscribeOn(Schedulers.boundedElastic());
@@ -241,21 +319,23 @@ class TopicVectorBackfiller {
      * write at the end; a failed write only means the projects are read again next tick.
      *
      * @param window the backfill window's bounds and the workspace
-     * @param arrival the tick's arrival steps
+     * @param arrival the workspace's topic on arrival after its fresh phase
      */
-    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<Backfill> projects,
-            @NonNull TopicVectorsFind window, @NonNull TickBudget budget, @NonNull TopicsArrivalService.Tick arrival) {
+    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull Collection<TopicBackfill> projects,
+            @NonNull TopicVectorsFind window, @NonNull TickBudget budget, @NonNull ArrivalSteps arrival) {
         if (projects.isEmpty()) {
             return Mono.just(TickResult.EMPTY);
         }
         var vectors = config.getVectors();
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
         var run = new Run(projects.stream().sorted(order(vectors.getMaxTracesPerTick()))
-                .collect(Collectors.toCollection(ArrayDeque::new)));
+                .collect(Collectors.toCollection(ArrayDeque::new)), arrival);
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(workspace, project, window, budget, arrival).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, run.settled, run.arrival)
+                    .doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
@@ -272,33 +352,43 @@ class TopicVectorBackfiller {
     /** One workspace's backfill in progress: the projects still to take a turn, and what the turns did. */
     private static final class Run {
 
-        private final ArrayDeque<Backfill> queue;
-        private final List<Progress> progress = new ArrayList<>();
+        private final ArrayDeque<TopicBackfill> queue;
+        private final List<TopicBackfillProgress> progress = new ArrayList<>();
+        private final Set<VectorKey> settled = new HashSet<>();
         private TickResult result = TickResult.EMPTY;
+        private ArrivalSteps arrival;
         private boolean stopped;
 
-        private Run(ArrayDeque<Backfill> queue) {
+        private Run(ArrayDeque<TopicBackfill> queue, ArrivalSteps arrival) {
             this.queue = queue;
+            this.arrival = arrival;
         }
 
-        private void add(Backfill project, Turn turn) {
+        private void add(TopicBackfill project, Turn turn) {
             result = result.plus(turn.result());
             turn.progress().ifPresent(progress::add);
+            settled.addAll(turn.settled());
+            arrival = turn.arrival();
             if (turn.more()) {
                 queue.addFirst(project);
             }
+            // A back-off: the service would answer the next project the same way this tick.
             stopped = turn.result().skipped().containsKey(SkipReason.EMBED_FAILED);
         }
     }
 
     /**
      * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
-     * its candidates were left for a later tick ({@link TickResult#cut}). No progress when there is nothing to record:
+     * its candidates were left for a later tick ({@link TopicVectorWriter.ChunkWrite#leftForLater}). No progress when there is nothing to record:
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
-     * was left and vectors were written, so another read now finds the next ones.
+     * was left and some got a vector or a status row, so another read now finds the next ones.
+     *
+     * <p>A read can return keys an earlier turn of the tick settled: a replica behind the insert does not see the new
+     * vector and status rows yet. They are not embedded again; a read that returns only those writes nothing and ends
+     * the project's turns.
      */
-    private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, Backfill project, TopicVectorsFind window,
-            TickBudget budget, TopicsArrivalService.Tick arrival) {
+    private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, TopicBackfill project, TopicVectorsFind window,
+            TickBudget budget, Set<VectorKey> settledBefore, ArrivalSteps arrival) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
         // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
@@ -308,25 +398,35 @@ class TopicVectorBackfiller {
                 : null;
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
-                .flatMap(read -> writer.embedAndWrite(workspace, read.candidates(), budget, null, arrival)
-                        .map(TopicVectorWriter.ChunkWrite::result)
-                        .map(result -> {
-                            boolean drained = read.complete() && !result.cut();
-                            if (!drained && result.written() == 0) {
-                                return new Turn(result, Optional.empty(), false);
-                            }
-                            return new Turn(result, Optional.of(Progress.builder()
-                                    .workspaceId(workspaceId)
-                                    .projectId(project.projectId())
-                                    .drainedAt(drained ? budget.start() : null)
-                                    .written(result.written())
-                                    .build()), !read.complete() && !result.cut());
-                        }))
+                .flatMap(read -> {
+                    var candidates = read.candidates().stream()
+                            .filter(candidate -> !settledBefore.contains(VectorKey.of(candidate)))
+                            .toList();
+                    return writer.embedAndWrite(workspace, candidates, budget, null, arrival)
+                            .map(written -> {
+                                var result = written.result();
+                                boolean cut = written.leftForLater(candidates);
+                                boolean drained = read.complete() && !cut;
+                                // A page of only traces that got a status row moves on too: the next read leaves
+                                // them out.
+                                boolean more = !read.complete() && !cut && !written.settled().isEmpty();
+                                if (!drained && result.written() == 0) {
+                                    return new Turn(result, Optional.empty(), more, written.settled(),
+                                            written.arrival());
+                                }
+                                return new Turn(result, Optional.of(TopicBackfillProgress.builder()
+                                        .workspaceId(workspaceId)
+                                        .projectId(project.projectId())
+                                        .drainedAt(drained ? budget.start() : null)
+                                        .written(result.written())
+                                        .build()), more, written.settled(), written.arrival());
+                            });
+                })
                 .onErrorResume(exception -> {
                     metrics.readFailure("backfill", workspace, exception);
                     log.warn("Topic vectors backfill read failed, reading it again next tick, workspace '{}', project "
                             + "'{}'", workspaceId, project.projectId(), exception);
-                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false));
+                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false, Set.of(), arrival));
                 });
     }
 }

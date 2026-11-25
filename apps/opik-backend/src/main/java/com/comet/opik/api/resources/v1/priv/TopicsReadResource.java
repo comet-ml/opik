@@ -44,16 +44,15 @@ public class TopicsReadResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Operation(operationId = "getProjectTopics", summary = "Get a project's topics", description = "The project's topics over the window, the last topics.build.windowDays UTC days (default 30), today included: per topic its count, share, rank and a daily series, plus Other's daily series. Counts can be up to 5 minutes old. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, and ready otherwise. Fields of other states are omitted.", responses = {
-            @ApiResponse(responseCode = "200", description = "The project's topics", content = @Content(schema = @Schema(implementation = ProjectTopics.class))),
-            @ApiResponse(responseCode = "400", description = "No project_id, or the project is too large for topics: the counts read hit its rows or bytes limit (message 'This project is too large for topics'); a retry fails the same way", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    @Operation(operationId = "getProjectTopics", summary = "Get a project's topics", description = "The project's topics over the window, the last topics.run.windowDays UTC days (default 30), today included: per topic its count, share, rank and a daily series, plus Other's daily series. Counts can be up to 5 minutes old. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, too_large when a ClickHouse read hit a rows, bytes or memory guard (a retry answers the same, so do not retry), and ready otherwise. Fields of other states are omitted.", responses = {
+            @ApiResponse(responseCode = "200", description = "The project's topics, or status too_large when a read hit a size guard", content = @Content(schema = @Schema(implementation = ProjectTopics.class))),
+            @ApiResponse(responseCode = "400", description = "No project_id", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "The project is not in the workspace", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Topics are off"),
-            @ApiResponse(responseCode = "503", description = "A ClickHouse read hit its time or memory limit, or the client timeout; retry after Retry-After seconds", headers = {
-                    @Header(name = "Retry-After", required = true, description = "Seconds to wait before a retry", schema = @Schema(implementation = Integer.class))}, content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "503", description = "ClickHouse is busy: a read hit its time guard or topics.read.budget; retry after Retry-After", headers = @Header(name = "Retry-After", description = "Seconds to wait before retrying", schema = @Schema(type = "integer")), content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     @RateLimited(value = "getProjectTopics:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getProjectTopics(@QueryParam("project_id") @NotNull UUID projectId) {

@@ -3,6 +3,8 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -19,7 +21,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -28,10 +29,10 @@ import java.util.function.BiFunction;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
- * Plans the Topics runs. One plan, on the leader only: settle the runs in flight ({@link TopicsRunReconciler}), then
- * fill the free slots of {@code topics.runs.maxInFlight}, across the cluster: first with the night's nightly updates
- * while the night's budget lasts ({@link TopicsNightPass}), then with labelling passes that did not finish and first
- * builds ({@link TopicsFirstBuildCandidates}), one of each in turn. Each run is written
+ * Plans the Topics runs of the workspaces listed at stage {@code build} or later. One plan, on the leader only:
+ * settle the runs in flight ({@link TopicsRunReconciler}), then fill the free slots of {@code topics.runs.maxInFlight},
+ * across the cluster, with labelling passes that did not finish and discovery runs ({@link TopicsDiscoveryCandidates}),
+ * one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -44,10 +45,9 @@ public class TopicsRunPlanner {
     private final @NonNull TopicWorkspaceService workspaceService;
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicsRunReconciler reconciler;
-    private final @NonNull TopicsFirstBuildCandidates candidates;
+    private final @NonNull TopicsDiscoveryCandidates candidates;
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
-    private final @NonNull TopicsNightPass nightPass;
 
     /** A run to queue: its message once queued, which gives it its id. */
     @Builder(toBuilder = true)
@@ -62,57 +62,43 @@ public class TopicsRunPlanner {
     /** One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. */
     public Mono<Integer> plan(@NonNull Instant start) {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
-        return Mono.fromCallable(workspaceService::enabledWorkspaceIds)
+        return Mono.fromCallable(() -> workspaceService.enabledWorkspaceIds(TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(workspaceIds -> store.findInFlight()
                         .flatMap(runs -> reconciler.reconcile(runs, workspaceIds, night, start))
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
-                            if (workspaceIds.isEmpty()) {
+                            if (free <= 0 || workspaceIds.isEmpty()) {
                                 return Mono.just(0);
                             }
-                            // The night pass runs with no free slot too: its skips and its end need none.
-                            return nightPass.plan(workspaceIds, start, free, this::queueOne)
-                                    .flatMap(nightly -> {
-                                        int left = free - nightly;
-                                        if (left <= 0) {
-                                            return Mono.just(nightly);
-                                        }
-                                        return labelsDue(workspaceIds, start)
-                                                .zipWith(candidates.find(workspaceIds, night, start))
-                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
-                                                        left))
-                                                .map(queued -> nightly + queued);
-                                    });
+                            return labelsDue(workspaceIds, start)
+                                    .zipWith(candidates.find(workspaceIds, night, start))
+                                    .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night), free));
                         }))
                 .doOnNext(queued -> log.info("Topics plan done, window until '{}', runs queued '{}'", night, queued));
     }
 
     /**
-     * Queues the project's first build now, for the window that ends at {@code night}'s start, and returns its run id.
+     * Queues the project's discovery run now, for the window that ends at {@code night}'s start, and returns its run id.
      * {@code ignoreBackfill} is the operator's way to build a project whose backfill cannot drain. The retry wait and
      * {@code maxInFlight} do not apply.
      *
-     * @throws ConflictException when the workspace is not opted in, the window has too few vectors, the project has a
-     *                           list or a run in flight or no trace in the window, or its backfill gate is closed and
-     *                           {@code ignoreBackfill} is false
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, the window has too
+     *                           few vectors, the project has a list or a run in flight or no trace in the window, or
+     *                           its backfill gate is closed and {@code ignoreBackfill} is false
      */
     public Mono<UUID> runByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             boolean ignoreBackfill) {
         var now = Instant.now();
-        return Mono.fromCallable(() -> workspaceService.isEnabled(workspaceId))
+        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> enabled
                         ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(new ConflictException(("Workspace '%s' is not opted in to topics: it needs to "
-                                + "be in topics.enabledWorkspaces and enabled in ai_label_workspaces")
-                                .formatted(workspaceId))))
+                        : Mono.error(notOptedIn(workspaceId)))
+                .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
+                        + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
-                    if (project.isEmpty()) {
-                        return Mono.error(new ConflictException(("Project '%s' has a topic list, a run in flight, "
-                                + "or no trace in the window until '%s'").formatted(projectId, night)));
-                    }
-                    var gate = backfillGate.firstBuildGate(project.get(), now);
+                    var gate = backfillGate.discoveryGate(project, now);
                     if (!ignoreBackfill && !gate.isOpen()) {
                         return Mono.error(new ConflictException(("Project '%s' waits for its vectors backfill to "
                                 + "drain, gate '%s'; ignore_backfill=true builds it anyway").formatted(projectId,
@@ -121,13 +107,13 @@ public class TopicsRunPlanner {
                     return candidates.windowVectors(workspaceId, projectId, night);
                 })
                 .flatMap(vectors -> {
-                    if (vectors < config.getBuild().getMinVectors()) {
+                    if (vectors < config.getRun().getMinVectors()) {
                         return Mono.error(new ConflictException(
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
-                                        .formatted(projectId, vectors, night, config.getBuild().getMinVectors())));
+                                        .formatted(projectId, vectors, night, config.getRun().getMinVectors())));
                     }
                     return queueByHand(Planned.builder().workspaceId(workspaceId).projectId(projectId)
-                            .mode(RunMode.FIRST_BUILD).night(night).windowTraces(vectors).build())
+                            .mode(RunMode.DISCOVERY).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
                 })
@@ -136,17 +122,31 @@ public class TopicsRunPlanner {
     }
 
     /**
-     * Queues the project's nightly update for {@code night} now, by hand, and returns its run id
-     * ({@link TopicsNightPass#byHand}).
+     * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
+     * workspace comes from the Reactor context.
      *
-     * @throws ConflictException           when the nightly job is off, the workspace is not opted in, the project is
-     *                                     gone or has no list, its list already covers the night, its window has too
-     *                                     few vectors, or it has a run in flight
-     * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
-     *                                     again
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, or the project has
+     *                           no topics row or a run in flight
      */
-    public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return nightPass.byHand(workspaceId, projectId, night, this::queueByHand);
+    public Mono<Void> resetByHand(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(enabled -> enabled ? store.resetList(projectId) : Mono.error(notOptedIn(workspaceId)))
+                    .filter(Boolean::booleanValue)
+                    .switchIfEmpty(Mono.error(() -> new ConflictException(
+                            "Project '%s' has no topics row or a run in flight".formatted(projectId))))
+                    .doOnNext(reset -> log.info("Topics list reset by hand, workspace '{}', project '{}'",
+                            workspaceId, projectId))
+                    .then();
+        });
+    }
+
+    private static ConflictException notOptedIn(String workspaceId) {
+        return new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs to be in "
+                + "topics.enabledWorkspaces at stage build or later, and enabled in ai_label_workspaces")
+                .formatted(workspaceId));
     }
 
     /**
@@ -165,15 +165,15 @@ public class TopicsRunPlanner {
      * Queues a run started by hand and publishes it. When the publish fails, the run is dropped and the caller gets an
      * error to retry on: a run left queued would block the project's next run by hand until a plan publishes it again.
      * A run that a pod already claimed was published after all, for example by a publish that timed out after the
-     * stream took it, so the caller gets its id.
+     * stream took it, so the caller gets its id. The drop is one compare-and-set on "never claimed", and a requeue
+     * keeps the claim, so a pod that stops meanwhile cannot turn a claimed run into a 503.
      */
     private Mono<UUID> queueByHand(Planned run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run by hand not published, dropping it, run '{}', project '{}'", runId,
                     run.projectId(), error);
-            // No reason: nothing cancelled the run, no pod ever had it.
-            return store.dropQueued(run.workspaceId(), run.projectId(), runId, null)
-                    // Not dropped: the run left the queue, claimed by a pod or cancelled by a plan.
+            return store.dropUnclaimed(run.workspaceId(), run.projectId(), runId)
+                    // Not dropped: a pod claimed the run, or a plan cancelled it.
                     .flatMap(dropped -> dropped
                             ? Mono.just(false)
                             : store.isClaimed(run.workspaceId(), run.projectId(), runId))
@@ -199,36 +199,27 @@ public class TopicsRunPlanner {
     /** Queues the run and publishes it; empty when the project has a run in flight. */
     private Mono<UUID> queueAndPublish(Planned run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
         return store.queue(run.workspaceId(), run.projectId(), run.mode())
-                .flatMap(Mono::justOrEmpty)
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
                         .onErrorResume(error -> onPublishError.apply(runId, error)));
     }
 
     private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
-        var failedAfter = now.minus(config.getFirstBuild().getRetryDelays().getFirst().toJavaDuration());
+        var failedAfter = now.minus(config.getDiscovery().retryDelays().getFirst());
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findLabelsDue(workspaceIds, failedAfter)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** One labelling pass, then one first build, in turn. */
+    /** One labelling pass, then one discovery run, in turn. */
     private static List<Planned> interleave(List<TopicProjectKey> labels,
-            List<TopicsFirstBuildCandidates.Candidate> builds, LocalDate night) {
-        var result = new ArrayList<Planned>();
-        for (int i = 0; i < Math.max(labels.size(), builds.size()); i++) {
-            if (i < labels.size()) {
-                var project = labels.get(i);
-                result.add(Planned.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
-                        .mode(RunMode.LABELS).build());
-            }
-            if (i < builds.size()) {
-                var build = builds.get(i);
-                result.add(Planned.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
-                        .mode(RunMode.FIRST_BUILD).night(night).windowTraces(build.vectors()).build());
-            }
-        }
-        return result;
+            List<TopicsDiscoveryCandidates.Candidate> builds, LocalDate night) {
+        return TopicsDiscoveryCandidates.roundRobin(List.of(
+                labels.stream().map(project -> Planned.builder().workspaceId(project.workspaceId())
+                        .projectId(project.projectId()).mode(RunMode.LABELS).build()).toList(),
+                builds.stream().map(build -> Planned.builder().workspaceId(build.workspaceId())
+                        .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
+                        .windowTraces(build.vectors()).build()).toList()));
     }
 
     /** Queues the runs in order until {@code free} are queued; a project that got a run meanwhile is skipped. */

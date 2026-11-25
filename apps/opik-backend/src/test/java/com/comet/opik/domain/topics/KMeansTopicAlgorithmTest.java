@@ -16,7 +16,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** The k-means algorithm through its entry points: a first build's sizing and author call, and its labeller. */
+/** The k-means algorithm through its entry points: a discovery run's sizing and author call, and its labeller. */
 @DisplayName("k-means topic algorithm")
 class KMeansTopicAlgorithmTest {
 
@@ -27,7 +27,7 @@ class KMeansTopicAlgorithmTest {
 
     @ParameterizedTest(name = "{0} unique texts make {1} groups with {2} examples each")
     @CsvSource({"1068, 35, 7", "481, 30, 8", "4622, 50, 5", "20, 20, 10"})
-    @DisplayName("a first build makes one group per 30 unique texts, at least 30, at most 50 or the unique texts, and "
+    @DisplayName("a discovery run makes one group per 30 unique texts, at least 30, at most 50 or the unique texts, and "
             + "shows round(250 / k) texts per group, from 5 to 10")
     void sizing(int uniqueTexts, int expectedGroups, int expectedExamples) throws IOException {
         var stats = algorithm.cluster(randomWindow(uniqueTexts), 10).stats();
@@ -44,7 +44,7 @@ class KMeansTopicAlgorithmTest {
         var task = new TopicTasks().author();
         var clustering = algorithm.cluster(randomWindow(40), 3);
 
-        var build = clustering.finish(AuthorAnswer.parse(emptyAnswer()));
+        var discovered = clustering.finish(AuthorAnswer.parse(emptyAnswer()));
 
         assertThat(clustering.author()).satisfies(call -> {
             assertThat(call.call()).isEqualTo(LlmCall.AUTHOR);
@@ -54,8 +54,8 @@ class KMeansTopicAlgorithmTest {
                     .doesNotContain(TopicTasks.MAX_TOPICS_PLACEHOLDER, TopicTasks.CLUSTERS_PLACEHOLDER);
         });
         assertThat(clustering.stats().get("author_task_version").asInt()).isEqualTo(task.version());
-        assertThat(build.topics()).isEmpty();
-        assertThat(build.labels()).containsOnly(TopicAlgorithm.OTHER);
+        assertThat(discovered.topics()).isEmpty();
+        assertThat(discovered.labels()).containsOnly(TopicAlgorithm.OTHER);
     }
 
     /**

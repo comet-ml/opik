@@ -12,7 +12,7 @@ import java.util.stream.IntStream;
 /** The topics metrics a test recorded, read from an in-memory OTel reader. */
 final class TopicsMetricsReader {
 
-    /** One point of a metric: a counter's sum, a histogram's sum or a gauge's value, for one set of attributes. */
+    /** One point of a metric: a counter's sum or a histogram's sum, for one set of attributes. */
     record Point(double value, Attributes attributes) {
 
         String get(String key) {
@@ -43,10 +43,6 @@ final class TopicsMetricsReader {
                             .map(point -> new Point(point.getValue(), point.getAttributes()));
                     case HISTOGRAM -> metric.getHistogramData().getPoints().stream()
                             .map(point -> new Point(point.getSum(), point.getAttributes()));
-                    case DOUBLE_GAUGE -> metric.getDoubleGaugeData().getPoints().stream()
-                            .map(point -> new Point(point.getValue(), point.getAttributes()));
-                    case LONG_GAUGE -> metric.getLongGaugeData().getPoints().stream()
-                            .map(point -> new Point(point.getValue(), point.getAttributes()));
                     default -> throw new IllegalStateException("unexpected metric type " + metric.getType());
                 })
                 .toList();

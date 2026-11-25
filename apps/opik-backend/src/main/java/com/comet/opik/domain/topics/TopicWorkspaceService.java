@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -26,8 +27,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * </ul>
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
+ * {@link #reaches} also checks the workspace's {@link TopicsStage} from the list.
  *
- * <p>Also keeps the vectors tick's per-workspace watermark in {@code topic_vector_watermarks}.
+ * <p>Also keeps the vectors tick's per-workspace watermark and long-window pass progress in
+ * {@code topic_vector_watermarks}.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -55,6 +58,20 @@ public class TopicWorkspaceService {
                         .orElse(false);
     }
 
+    /** The {@link #enabledWorkspaceIds} whose listed stage is {@code stage} or a later one. */
+    public List<String> enabledWorkspaceIds(@NonNull TopicsStage stage) {
+        var stages = config.enabledWorkspaceStages();
+        return enabledWorkspaceIds().stream()
+                .filter(workspaceId -> stages.get(workspaceId).includes(stage))
+                .toList();
+    }
+
+    /** True when the workspace {@link #isEnabled} and its listed stage is {@code stage} or a later one. */
+    public boolean reaches(@NonNull String workspaceId, @NonNull TopicsStage stage) {
+        var listed = config.enabledWorkspaceStages().get(workspaceId);
+        return listed != null && listed.includes(stage) && isEnabled(workspaceId);
+    }
+
     /** The vectors tick's watermark of each workspace that has one. */
     Map<String, Instant> vectorsWatermarks(@NonNull Collection<String> workspaceIds) {
         if (workspaceIds.isEmpty()) {
@@ -67,6 +84,22 @@ public class TopicWorkspaceService {
     void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark) {
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark);
+            return null;
+        });
+    }
+
+    /** When the long-window pass last read each workspace completely, for those it has. */
+    Map<String, Instant> vectorsLongWindowReads(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).longWindowReads(workspaceIds));
+    }
+
+    void setVectorsLongWindowRead(@NonNull String workspaceId, @NonNull Instant readAt) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).setLongWindowRead(workspaceId, readAt);
             return null;
         });
     }

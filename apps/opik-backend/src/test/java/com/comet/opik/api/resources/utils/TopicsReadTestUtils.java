@@ -1,7 +1,12 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.api.Source;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.PrototypeVectors;
 import com.comet.opik.domain.topics.Topic;
@@ -9,24 +14,31 @@ import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicProjectDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +50,8 @@ public class TopicsReadTestUtils {
     public static final String RESOURCE_PATH = "%s/v1/private/topics";
 
     private static final String USER = "user-" + UUID.randomUUID();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final PodamFactory PODAM = PodamFactoryUtils.newPodamFactory();
 
     private final @NonNull WireMockServer wireMock;
     private final @NonNull ClientSupport client;
@@ -61,16 +75,58 @@ public class TopicsReadTestUtils {
         return projectClient.createProject("topics-" + UUID.randomUUID(), caller.apiKey(), caller.workspaceName());
     }
 
-    /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces as a Helm change would. */
+    /**
+     * {@code count} SDK traces in the project, created through the API, read back for their {@code created_at}, in
+     * creation order. The API sets {@code created_at} itself and takes no visibility: a test that needs a past day or
+     * a hidden trace writes it with {@link PostCutoverTraces#insertTraces}.
+     */
+    public List<Trace> createTraces(Caller caller, UUID projectId, int count) {
+        var traceClient = new TraceResourceClient(client, baseUrl);
+        var projectName = projectClient.getProject(projectId, caller.apiKey(), caller.workspaceName()).name();
+        var traces = IntStream.range(0, count)
+                .mapToObj(i -> PODAM.manufacturePojo(Trace.class).toBuilder()
+                        .id(ID_GENERATOR.generateId())
+                        .projectId(null)
+                        .projectName(projectName)
+                        // As the SDK logs it, so the Logs filters keep it.
+                        .source(Source.SDK)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .comments(null)
+                        .build())
+                .toList();
+        traceClient.batchCreateTraces(traces, caller.apiKey(), caller.workspaceName());
+        // After the cut-over the API writes through the Distributed traces table, which ships rows in the background
+        // (prefer_localhost_replica = 0 in users.xml): wait until each trace reads back.
+        return traces.stream()
+                .map(trace -> Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
+                        .ignoreExceptions()
+                        .until(() -> traceClient.getById(trace.id(), caller.workspaceName(), caller.apiKey()),
+                                read -> read.createdAt() != null))
+                .toList();
+    }
+
+    /**
+     * Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces without a stage, as a Helm change would.
+     */
     public void optIn(String workspaceId) {
+        optIn(workspaceId, TopicsStage.ALL);
+    }
+
+    /** As {@link #optIn(String)}, listed as {@code id:stage}. The other listed workspaces keep their stage. */
+    public void optIn(String workspaceId, TopicsStage stage) {
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;
         });
         var topics = opikConfig.getTopics();
-        var listed = new TreeSet<>(topics.enabledWorkspaceIds());
-        listed.add(workspaceId);
-        topics.setEnabledWorkspaces(String.join(",", listed));
+        var listed = new TreeMap<>(topics.enabledWorkspaceStages());
+        listed.put(workspaceId, stage);
+        topics.setEnabledWorkspaces(listed.entrySet().stream()
+                .map(entry -> entry.getValue() == TopicsStage.ALL
+                        ? entry.getKey()
+                        : entry.getKey() + ":" + entry.getValue().configName())
+                .collect(Collectors.joining(",")));
     }
 
     public Invocation.Builder request(Caller caller, UUID projectId) {
@@ -94,17 +150,23 @@ public class TopicsReadTestUtils {
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         var runDAO = handle.attach(TopicProjectDAO.class);
-        startRun(runDAO, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
+        startRun(handle, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
         runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
         runDAO.markSaved(workspaceId, projectId, runId, savedAt);
     }
 
-    /** Puts first build {@code runId} on the project's row, running since {@code at}, as a queue and a claim do. */
-    public static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId, Instant at) {
+    /**
+     * Starts run {@code runId} at {@code startedAt} as the queue does: queued, then claimed by a pod. It is a nightly
+     * update when the project has a list, else a discovery run.
+     */
+    public static void startRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant startedAt) {
+        var runDAO = handle.attach(TopicProjectDAO.class);
         runDAO.ensureRow(workspaceId, projectId);
-        if (runDAO.queue(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, at) != 1
-                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+        var listed = runDAO.findProjects(workspaceId, List.of(projectId)).getFirst().listRunId() != null;
+        var mode = listed ? TopicProject.RunMode.UPDATE : TopicProject.RunMode.DISCOVERY;
+        if (runDAO.queue(workspaceId, projectId, runId, mode, startedAt) != 1
+                || runDAO.claim(workspaceId, projectId, runId, startedAt, startedAt.plus(Duration.ofHours(1))) != 1) {
             throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
         }
     }

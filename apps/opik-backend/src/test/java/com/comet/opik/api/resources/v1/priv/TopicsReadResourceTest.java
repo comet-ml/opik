@@ -3,12 +3,12 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.ProjectTopics.TopicStats;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
+import com.comet.opik.api.resources.utils.PostCutoverTraces.TraceRow;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -16,8 +16,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
 import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
-import com.comet.opik.api.resources.utils.TopicsTraces;
-import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.IdGenerator;
@@ -27,7 +25,6 @@ import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicProjectDAO;
-import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.domain.topics.TraceTopic;
@@ -35,6 +32,7 @@ import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -76,7 +74,6 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.saveRun;
-import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.startRun;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -141,7 +138,7 @@ class TopicsReadResourceTest {
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
                         new CustomConfig("topics.nightly.enabled", "false"),
-                        new CustomConfig("topics.firstBuild.enabled", "false")))
+                        new CustomConfig("topics.discovery.enabled", "false")))
                 .build());
     }
 
@@ -188,18 +185,18 @@ class TopicsReadResourceTest {
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
-        var firstBuild = today.minusDays(20);
-        var first = topic(caller.workspaceId(), projectId, firstBuild);
+        var discovery = today.minusDays(20);
+        var first = topic(caller.workspaceId(), projectId, discovery);
         var newborn = topic(caller.workspaceId(), projectId, today.minusDays(3));
-        var largest = topic(caller.workspaceId(), projectId, firstBuild);
+        var largest = topic(caller.workspaceId(), projectId, discovery);
         // Retired since: no topics row, its trace_topics rows remain.
-        var retired = topic(caller.workspaceId(), projectId, firstBuild);
+        var retired = topic(caller.workspaceId(), projectId, discovery);
         var lastRun = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var saved = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
             var firstRun = ID_GENERATOR.generateId();
             saveRun(handle, caller.workspaceId(), projectId, firstRun,
-                    firstBuild.atTime(2, 0).toInstant(ZoneOffset.UTC));
+                    discovery.atTime(2, 0).toInstant(ZoneOffset.UTC));
             handle.attach(TopicProjectDAO.class).saveList(caller.workspaceId(), projectId, firstRun, saved, lastRun,
                     today.atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
             handle.attach(TopicDAO.class).insertTopics(List.of(first, newborn, largest));
@@ -245,7 +242,7 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, queued: no live topic and no run; the window's vectors and the first build's minimum, "
+    @DisplayName("collecting, queued: no live topic and no run; the window's vectors and the discovery run's minimum, "
             + "without the ready fields, attempt or last_run_at")
     void collecting() {
         var caller = topics.caller();
@@ -265,7 +262,7 @@ class TopicsReadResourceTest {
             assertThat(json.get("status").asText()).isEqualTo("collecting");
             assertThat(json.get("vectors_in_window").asLong()).isEqualTo(2);
             assertThat(json.get("min_vectors").asLong())
-                    .isEqualTo(opikConfig.getTopics().getBuild().getMinVectors());
+                    .isEqualTo(opikConfig.getTopics().getRun().getMinVectors());
             assertThat(json.get("topics")).isEmpty();
             assertThat(json.has("total_traces")).isFalse();
             assertThat(json.has("other")).isFalse();
@@ -381,48 +378,51 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("400 with the too-large message when the counts read hits its rows limit (max_rows_to_read): the real "
+    @DisplayName("too_large without Retry-After when the counts read hits its rows limit (max_rows_to_read): the real "
             + "driver's error, not a mock")
-    void clickHouseRowsLimitIs400() {
+    void clickHouseRowsLimitIsTooLarge() {
         var caller = topics.caller();
         var projectId = readyProject(caller);
-        var find = opikConfig.getTopics().getVectors().getFind();
-        var maxRowsToRead = find.getMaxRowsToRead();
-        find.setMaxRowsToRead(1);
+        var read = opikConfig.getTopics().getRead();
+        var maxRowsToRead = read.getMaxRowsToRead();
+        read.setMaxRowsToRead(1);
 
         try (var response = topics.request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
-            assertThat(response.readEntity(ErrorMessage.class).errors())
-                    .containsExactly(TopicReadService.TOO_LARGE_MESSAGE);
+            assertThat(response.readEntity(JsonNode.class).get("status").asText()).isEqualTo("too_large");
             // The driver's own error is the v1 client's ClickHouseException, not the v2 client's ServerException.
             var today = LocalDate.now(ZoneOffset.UTC);
             var from = today.minusDays(29).atStartOfDay().toInstant(ZoneOffset.UTC);
             var to = today.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
             assertThatThrownBy(() -> traceTopicsDAO
-                    .countByTopicAndDay(caller.workspaceId(), projectId, from, to, 10).collectList().block())
+                    .countByTopicAndDay(caller.workspaceId(), projectId, from, to).collectList().block())
                     .satisfies(error -> assertThat(Throwables.getCausalChain(error))
                             .anyMatch(cause -> cause instanceof com.clickhouse.client.ClickHouseException)
                             .noneMatch(cause -> cause instanceof com.clickhouse.client.api.ServerException));
         } finally {
-            find.setMaxRowsToRead(maxRowsToRead);
+            read.setMaxRowsToRead(maxRowsToRead);
         }
     }
 
     @Test
-    @DisplayName("503 with Retry-After when the counts read hits its memory limit (max_memory_usage): a retry can pass")
-    void clickHouseMemoryLimitIs503() {
+    @DisplayName("too_large without Retry-After when the collecting count hits its memory limit (max_memory_usage): "
+            + "a retry fails the same way")
+    void clickHouseMemoryLimitIsTooLarge() {
         var caller = topics.caller();
-        var projectId = readyProject(caller);
-        var find = opikConfig.getTopics().getVectors().getFind();
-        var maxMemoryUsage = find.getMaxMemoryUsage();
-        find.setMaxMemoryUsage(1);
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
+        vectorsDAO.insert(List.of(vector(caller.workspaceId(), projectId, LocalDate.now(ZoneOffset.UTC)))).block();
+        var read = opikConfig.getTopics().getRead();
+        var maxMemoryUsage = read.getMaxMemoryUsage();
+        read.setMaxMemoryUsage(1);
 
         try (var response = topics.request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(503);
-            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("5");
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
+            assertThat(response.readEntity(JsonNode.class).get("status").asText()).isEqualTo("too_large");
         } finally {
-            find.setMaxMemoryUsage(maxMemoryUsage);
+            read.setMaxMemoryUsage(maxMemoryUsage);
         }
     }
 
@@ -463,14 +463,19 @@ class TopicsReadResourceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"true, true, true", "true, false, false", "false, true, false", "false, false, false"})
-    @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible; when false, the "
-            + "API answers 501 or status disabled")
-    void togglesTopicsEnabled(boolean enabled, boolean eligible, boolean expected) {
+    @CsvSource({
+            "true, unstaged, true", "true, vectors, false", "true, nightly, false", "true, unlisted, false",
+            "false, unstaged, false", "false, vectors, false", "false, unlisted, false"})
+    @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible at the ui stage, "
+            + "which a workspace listed without a stage is; when false, the API answers 501 or status disabled")
+    void togglesTopicsEnabled(boolean enabled, String listed, boolean expected) {
         var caller = topics.caller();
         var projectId = topics.project(caller);
-        if (eligible) {
-            topics.optIn(caller.workspaceId());
+        switch (listed) {
+            case "unlisted" -> {
+            }
+            case "unstaged" -> topics.optIn(caller.workspaceId());
+            default -> topics.optIn(caller.workspaceId(), TopicsStage.fromConfigName(listed).orElseThrow());
         }
         opikConfig.getTopics().setEnabled(enabled);
 
@@ -523,7 +528,7 @@ class TopicsReadResourceTest {
         }
     }
 
-    /** A ready project: one live topic with three traces in the window. */
+    /** A ready project: one live topic with three of today's traces, created through the API. */
     private UUID readyProject(Caller caller) {
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
@@ -535,14 +540,27 @@ class TopicsReadResourceTest {
             saveRun(handle, caller.workspaceId(), projectId, saved, Instant.now().truncatedTo(ChronoUnit.MICROS));
             return null;
         });
-        insertShown(run(caller.workspaceId(), projectId, live.id(), today, 3, saved));
+        traceTopicsDAO.insert(topics.createTraces(caller, projectId, 3).stream()
+                .map(trace -> TraceTopic.builder()
+                        .workspaceId(caller.workspaceId())
+                        .projectId(projectId)
+                        .traceId(trace.id())
+                        .traceCreatedAt(trace.createdAt())
+                        .topicId(live.id())
+                        .source(TraceTopic.Source.RUN)
+                        .runId(saved)
+                        .build())
+                .toList()).block();
         return projectId;
     }
 
-    /** The rows, and a trace Logs shows for each of their traces: the API counts only those. */
+    /**
+     * The rows, and a trace Logs shows for each of their traces: the API counts only those. Written straight into the
+     * table, as the rows fall on past days and the API sets {@code created_at} itself.
+     */
     private void insertShown(List<TraceTopic> rows) {
         traceTopicsDAO.insert(rows).block();
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, rows.stream()
+        PostCutoverTraces.insertTraces(connectionFactory, rows.stream()
                 .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
                 .distinct()
                 .toList());
@@ -574,10 +592,10 @@ class TopicsReadResourceTest {
     private void attempt(String workspaceId, UUID projectId, TopicProject.RunStatus status, Instant startedAt) {
         var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicProjectDAO.class);
-            startRun(runDAO, workspaceId, projectId, runId, startedAt);
+            TopicsReadTestUtils.startRun(handle, workspaceId, projectId, runId, startedAt);
             if (status == TopicProject.RunStatus.FAILED) {
-                runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
+                handle.attach(TopicProjectDAO.class).markFailed(workspaceId, projectId, runId,
+                        startedAt.plus(Duration.ofMinutes(5)),
                         TopicProject.RunError.ABANDONED);
             }
             return null;

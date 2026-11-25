@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,12 +16,14 @@ import java.util.stream.IntStream;
 
 /**
  * One nightly update of a project's topic list, on a {@link NightState} read before and written after by the caller.
- * Pure: its LLM calls are {@link NightStep.Ask} steps the caller answers; the state is changed in place. Topic prototypes are frozen: a
+ * No I/O: its LLM calls are {@link NightStep.Ask} steps the caller answers. It changes {@code state} in place. Topic
+ * prototypes are frozen: a
  * topic keeps the group centres it was born with and the ones a night's decision adds, while they take traces (step
  * g), so its meaning does not drift from its name.
  *
  * <ol type="a">
- * <li>every trace to its nearest prototype at cosine 0.75, with the 0.95 Other gate, as the final assignment: a
+ * <li>every trace to its nearest prototype at {@code assignMinCosine}, with the {@code otherGate} Other gate, as the
+ * final assignment: a
  * topic's, a known-Other one (the memory: the centres of groups earlier nights left in Other), or none;</li>
  * <li>{@link CandidateGrouper} on the Other traces, held by the memory or unassigned; a group of at least
  * {@value CandidateGrouper#MIN_CANDIDATE} traces is a candidate;</li>
@@ -30,8 +31,9 @@ import java.util.stream.IntStream;
  * stay Other;</li>
  * <li>decisions become prototypes: the centre of every group given to a live topic is appended to its prototypes. The
  * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
- * in Other (not a loose one), unless one kept is within {@value #SAME_MEMORY} of it;</li>
- * <li>the final assignment, as the first build's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
+ * in Other (not a loose one), unless one kept is within {@code nightlySameMemory} of it;</li>
+ * <li>the final assignment, as the discovery run's ({@link PrototypeAssigner}, with the {@code otherGate} Other
+ * gate);</li>
  * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
  * reassignment when one happened, then the sizes;</li>
  * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
@@ -39,21 +41,14 @@ import java.util.stream.IntStream;
  * </ol>
  */
 @UtilityClass
-public class NightlyUpdate {
+class NightlyUpdate {
 
-    /** A candidate's share of the window that makes it big: a new topic needs it. */
-    static final double BIG_SHARE = 0.02;
-    /** A known-Other prototype this close to one already kept is not kept again. */
-    static final double SAME_MEMORY = 0.95;
-    /** A group mapped to Other in the group map. */
-    public static final int OTHER = -1;
     /** Step a's owner of the traces held by known-Other prototype {@code m}: {@code HELD - m}. */
     private static final int HELD = -10;
-    static final int PROMPT_EXAMPLES = 4;
 
     /** The night as steps: a to b at once, c's calls as asks, d to g once the naming is done. */
-    public static NightStep<Result> run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
-            @NonNull AlgorithmConfig config) {
+    static NightStep<Result> run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
+            @NonNull AlgorithmConfig config, @NonNull TopicTasks tasks) {
         int n = window.size();
         var memory = new ArrayList<>(state.getOtherPrototypes());
         // a. one assignment: topic index, HELD - m for known-Other prototype m, or OTHER
@@ -71,25 +66,27 @@ public class NightlyUpdate {
                         .thenComparingInt(NightGroup::group))
                 .toList();
         var big = candidates.stream()
-                .filter(group -> group.share() >= BIG_SHARE)
+                .filter(group -> group.share() >= config.getNightlyBigShare())
                 .map(NightGroup::group)
                 .sorted()
                 .toList();
         // c. the naming call
-        Map<Integer, Integer> map = new LinkedHashMap<>();
-        NightStep<List<ForcedBirth.Outcome>> naming = candidates.isEmpty()
-                ? NightStep.done(List.of())
-                : ForcedBirth.apply(state, candidates, map, () -> promptTopics(state, window, before, recent),
-                        maxTopics, config.getRecentDays());
-        return naming.map(forced -> decided(state, window, config, owners, before, grouped, grouping, candidates,
-                big, map, forced, memory));
+        NightStep<ForcedBirth.Named> naming = candidates.isEmpty()
+                ? NightStep.done(ForcedBirth.Named.EMPTY)
+                : ForcedBirth.apply(state, candidates,
+                        () -> liveTopics(state, window, before, recent, config.getNightlyTopicExamples()), maxTopics,
+                        config, tasks);
+        return naming.map(named -> decided(state, window, config, owners, before, grouped, grouping, candidates,
+                big, named, memory));
     }
 
     /** Steps d to g, once the naming has decided. */
     private static Result decided(NightState state, NightWindow window, AlgorithmConfig config, int[] owners,
             int[] before, int[] grouped, CandidateGrouper.Grouping grouping, List<NightGroup> candidates,
-            List<Integer> big, Map<Integer, Integer> map, List<ForcedBirth.Outcome> forced, List<float[]> memory) {
+            List<Integer> big, ForcedBirth.Named named, List<float[]> memory) {
         int d = window.dimensions();
+        var map = named.groupMap();
+        var forced = named.outcomes();
         // d. decisions become prototypes
         var placed = new HashSet<Integer>();
         map.forEach((group, topic) -> {
@@ -100,7 +97,8 @@ public class NightlyUpdate {
                 placed.add(group);
             }
         });
-        state.setOtherPrototypes(memory(memory, owners, grouped, grouping, placed, forced, d));
+        state.setOtherPrototypes(memory(memory, owners, grouped, grouping, placed, forced, d,
+                config.getNightlySameMemory()));
         // e. final assignment; f. lifecycle
         var last = assignFinal(state, window, config);
         int liveBefore = state.liveCount();
@@ -176,11 +174,12 @@ public class NightlyUpdate {
 
     /**
      * Step d's memory: the prototypes most of whose held traces are not in a placed group, then the centre of every
-     * group the naming left in Other (not a loose one; a new topic under {@value #BIG_SHARE} included) that is not
-     * within {@value #SAME_MEMORY} of one kept.
+     * group the naming left in Other (not a loose one; a new topic under {@code nightlyBigShare} included) that is not
+     * within {@code sameMemory} of one kept.
      */
     private static List<float[]> memory(List<float[]> memory, int[] owners, int[] grouped,
-            CandidateGrouper.Grouping grouping, Set<Integer> placed, List<ForcedBirth.Outcome> forced, int d) {
+            CandidateGrouper.Grouping grouping, Set<Integer> placed, List<ForcedBirth.Outcome> forced, int d,
+            double sameMemory) {
         var held = new int[memory.size()];
         var placedHeld = new int[memory.size()];
         var labels = grouping.labels();
@@ -206,7 +205,7 @@ public class NightlyUpdate {
                 continue;
             }
             var centre = grouping.centre(outcome.group(), d);
-            if (out.stream().noneMatch(kept -> VectorMath.dot(kept, 0, centre, 0, d) >= SAME_MEMORY)) {
+            if (out.stream().noneMatch(kept -> VectorMath.dot(kept, 0, centre, 0, d) >= sameMemory)) {
                 out.add(centre);
             }
         }
@@ -279,20 +278,19 @@ public class NightlyUpdate {
     }
 
     /**
-     * The live topics as the naming and verify prompts show them, from the step a labels: prompt id = position in the
-     * live list, share of the window, share of the recent days and {@value #PROMPT_EXAMPLES} member texts, picked as a
+     * The live topics as they stand now, in live order, from the step a labels: share of the window, share of the recent
+     * days and {@code examples} member texts, picked as a
      * group's ({@link GroupSummaries#pick}): texts that repeat first, most frequent first (ties by code point order),
      * then the most typical ones, nearest to any of the topic's prototypes (ties by trace order).
      */
-    static List<TopicPrompts.PromptTopic> promptTopics(NightState state, NightWindow window, int[] before,
-            boolean[] recent) {
+    static List<LiveTopic> liveTopics(NightState state, NightWindow window, int[] before, boolean[] recent,
+            int examples) {
         int n = window.size();
         int recentTotal = 0;
         for (boolean r : recent) {
             recentTotal += r ? 1 : 0;
         }
-        var out = new ArrayList<TopicPrompts.PromptTopic>();
-        int id = 0;
+        var out = new ArrayList<LiveTopic>();
         for (int t : state.live()) {
             var topic = state.topic(t);
             int recentCount = 0;
@@ -304,22 +302,21 @@ public class NightlyUpdate {
                 }
             }
             int count = members.size();
-            out.add(TopicPrompts.PromptTopic.builder()
-                    .id(++id)
+            out.add(LiveTopic.builder()
                     .topic(t)
                     .name(topic.getName())
                     .definition(topic.getDefinition())
                     .share((double) count / n)
                     .recentShare((double) recentCount / Math.max(1, recentTotal))
                     .examples(examples(window, members.stream().mapToInt(Integer::intValue).toArray(),
-                            topic.getPrototypes()))
+                            topic.getPrototypes(), examples))
                     .build());
         }
         return out;
     }
 
-    /** A topic's {@value #PROMPT_EXAMPLES} prompt texts among its member traces, picked as a group's. */
-    private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes) {
+    /** A topic's {@code examples} prompt texts among its member traces, picked as a group's. */
+    private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes, int examples) {
         if (members.length == 0) {
             return List.of();
         }
@@ -333,7 +330,7 @@ public class NightlyUpdate {
             }
         }
         return GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0, merged.size(),
-                merged.weights(), sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES);
+                merged.weights(), sims, examples, examples);
     }
 
     /**
@@ -351,7 +348,7 @@ public class NightlyUpdate {
      * ones, the naming outcomes and the group map at the end.
      */
     @Builder(toBuilder = true)
-    public record Result(@NonNull int[] labels, @NonNull int[] before, int unassigned,
+    record Result(@NonNull int[] labels, @NonNull int[] before, int unassigned,
             @NonNull List<Integer> candidates, @NonNull List<Integer> big, @NonNull List<ForcedBirth.Outcome> forced,
             @NonNull Map<Integer, Integer> groupMap) {
     }

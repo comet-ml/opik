@@ -11,10 +11,10 @@ import lombok.NonNull;
  * one run need their own tags ({@code naming}, {@code naming_new}).
  */
 @Builder(toBuilder = true)
-public record LlmRequest(@NonNull LlmCall call, @Nullable String tag, @NonNull String prompt, @NonNull JsonNode schema,
+record LlmRequest(@NonNull LlmCall call, @Nullable String tag, @NonNull String prompt, @NonNull JsonNode schema,
         int maxTokens) {
 
-    public LlmRequest {
+    LlmRequest {
         tag = tag == null ? call.getValue() : tag;
     }
 }

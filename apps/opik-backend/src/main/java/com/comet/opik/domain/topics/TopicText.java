@@ -6,6 +6,7 @@ import lombok.experimental.UtilityClass;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
+import java.util.regex.Pattern;
 
 /**
  * The string rules of the topics algorithm, with Python's semantics, so its outputs match the fixture byte for byte:
@@ -20,6 +21,9 @@ public class TopicText {
 
     /** The most characters a topic name keeps: {@code topics.name} is {@code VARCHAR(255)}. */
     public static final int MAX_NAME_LENGTH = 255;
+
+    /** Python's whitespace: Unicode White_Space and the separators U+001C to U+001F. */
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s\\x1C-\\x1F]+", Pattern.UNICODE_CHARACTER_CLASS);
 
     public static int compareCodePoints(@NonNull String a, @NonNull String b) {
         int i = 0;
@@ -70,6 +74,18 @@ public class TopicText {
             return stripped;
         }
         return pythonStrip(stripped.substring(0, stripped.offsetByCodePoints(0, MAX_NAME_LENGTH)));
+    }
+
+    /**
+     * {@code text} as one line of a prompt: every run of whitespace, line breaks included, becomes one space, then the
+     * line is stripped and cut to {@code maxLength} code points, so a text can't start a line of its own in the prompt.
+     */
+    static String oneLine(@NonNull String text, int maxLength) {
+        var line = pythonStrip(WHITESPACE.matcher(text).replaceAll(" "));
+        if (line.codePointCount(0, line.length()) <= maxLength) {
+            return line;
+        }
+        return pythonStrip(line.substring(0, line.offsetByCodePoints(0, maxLength)));
     }
 
     /** {@code str.isspace()} for one code point: bidi class WS, B or S, or category Zs. */

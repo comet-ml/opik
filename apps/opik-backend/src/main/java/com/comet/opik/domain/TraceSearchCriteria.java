@@ -5,8 +5,6 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.topics.TopicFilterScope;
-import jakarta.annotation.Nullable;
 import lombok.Builder;
 
 import java.util.List;
@@ -28,7 +26,5 @@ public record TraceSearchCriteria(
         UUID uuidFromTime,
         UUID uuidToTime,
         String searchText,
-        UUID annotationQueueId,
-        /** Set by {@code TraceService} for a search with a {@code topic_id} filter and a scope; else null. */
-        @Nullable TopicFilterScope topicScope) {
+        UUID annotationQueueId) {
 }

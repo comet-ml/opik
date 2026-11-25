@@ -27,11 +27,10 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
-import com.comet.opik.domain.topics.TopicReadService;
-import com.comet.opik.domain.topics.TopicsReadErrors;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -55,6 +54,7 @@ import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.ContextView;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
@@ -158,7 +158,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull @Config OpikConfiguration config;
-    private final @NonNull TopicReadService topicReadService;
+    private final @NonNull OrganizationResolver organizationResolver;
 
     @Override
     @WithSpan
@@ -186,8 +186,14 @@ class TraceServiceImpl implements TraceService {
                                     .doOnSuccess(__ -> {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
-                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
-                                                workspaceName, cipxDeviceId));
+                                        eventBus.post(TracesCreated.builder()
+                                                .traces(List.of(savedTrace))
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .workspaceName(workspaceName)
+                                                .cipxDeviceId(cipxDeviceId)
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build());
                                     }));
                 }));
     }
@@ -248,8 +254,14 @@ class TraceServiceImpl implements TraceService {
                             // own pool, and nonTransaction does not close what it hands out.
                             .flatMap(traces -> dao.batchInsert(traces)
                                     .doOnSuccess(__ -> {
-                                        eventBus.post(new TracesCreated(traces, workspaceId, userName,
-                                                workspaceName, cipxDeviceId));
+                                        eventBus.post(TracesCreated.builder()
+                                                .traces(traces)
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .workspaceName(workspaceName)
+                                                .cipxDeviceId(cipxDeviceId)
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build());
                                     }));
                 }));
     }
@@ -370,14 +382,16 @@ class TraceServiceImpl implements TraceService {
                                         .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
                                                 .thenReturn(id))
                                         .onErrorResume(this::handleDBError)
-                                        .doOnSuccess(__ -> eventBus.post(new TracesUpdated(
-                                                Set.of(project.id()),
-                                                Set.of(id),
-                                                ctx.get(RequestContext.WORKSPACE_ID),
-                                                ctx.get(RequestContext.USER_NAME),
-                                                traceUpdate,
-                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""),
-                                                Map.of(id, project.id()))))
+                                        .doOnSuccess(__ -> eventBus.post(TracesUpdated.builder()
+                                                .projectIds(Set.of(project.id()))
+                                                .traceIds(Set.of(id))
+                                                .workspaceId(ctx.get(RequestContext.WORKSPACE_ID))
+                                                .userName(ctx.get(RequestContext.USER_NAME))
+                                                .traceUpdate(traceUpdate)
+                                                .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))
+                                                .traceIdToProjectId(Map.of(id, project.id()))
+                                                .organizationId(organizationIdLookup(ctx))
+                                                .build()))
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
@@ -404,13 +418,30 @@ class TraceServiceImpl implements TraceService {
                                 .onErrorResume(TagOperations::mapTagLimitError)
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
-                                    eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap));
+                                    eventBus.post(TracesUpdated.builder()
+                                            .projectIds(projectIds)
+                                            .traceIds(batchUpdate.ids())
+                                            .workspaceId(workspaceId)
+                                            .userName(userName)
+                                            .traceUpdate(batchUpdate.update())
+                                            .workspaceName(workspaceName)
+                                            .traceIdToProjectId(traceToProjectMap)
+                                            .organizationId(organizationIdLookup(ctx))
+                                            .build());
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
                                             batchUpdate.update(), workspaceId, userName, cipxDeviceId));
                                 });
                     });
         });
+    }
+
+    /**
+     * Lazy so the response never waits for it: only a listener that needs the organization subscribes. It keeps the
+     * request's context because listeners run on the EventBus thread, where the request's Comet credentials are gone
+     * and the lookup could only read the cache. Cached so all listeners share one lookup.
+     */
+    private Mono<String> organizationIdLookup(ContextView requestContext) {
+        return organizationResolver.organizationId().contextWrite(requestContext).cache();
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
@@ -474,11 +505,9 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<TraceSearchCriteria> findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
         return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
-                .flatMap(projectId -> topicReadService.filterScope(criteria.filters(), projectId)
-                        .map(topicScope -> criteria.toBuilder()
-                                .projectId(projectId)
-                                .topicScope(topicScope.orElse(null))
-                                .build()));
+                .map(projectId -> criteria.toBuilder()
+                        .projectId(projectId)
+                        .build());
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -726,8 +755,8 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMap(resolvedCriteria -> TopicsReadErrors.busyOnFilterGuard(resolvedCriteria.topicScope() != null,
-                        template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection)))
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection))
                         .flatMap(tracePage -> {
                             // If stripAttachments=false, reinject attachments into all traces
                             var reinjectAttachments = !resolvedCriteria.stripAttachments();
@@ -816,8 +845,7 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMap(resolvedCriteria -> TopicsReadErrors.busyOnFilterGuard(resolvedCriteria.topicScope() != null,
-                        dao.getStats(resolvedCriteria)))
+                .flatMap(dao::getStats)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 

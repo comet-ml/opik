@@ -36,6 +36,12 @@ class TopicVectorsMetrics {
         static Workspace unnamed(@NonNull String id) {
             return new Workspace(id, workspace(id, id).build());
         }
+
+        /** The name its attributes carry: the one looked up, or the id. */
+        String name() {
+            var name = attributes.get(WORKSPACE_NAME_KEY);
+            return name == null ? id : name;
+        }
     }
 
     private final WorkspaceNameService names;

@@ -89,6 +89,11 @@ class GLEU(base_metric.BaseMetric):
         reference: Union[str, Sequence[str]],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"GLEU metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty (GLEU metric).")
         hypothesis_tokens = output.split()
@@ -98,7 +103,14 @@ class GLEU(base_metric.BaseMetric):
             ref_list = list(reference)
             if not ref_list:
                 raise MetricComputationError("Reference is empty (GLEU metric).")
-            references = [ref.split() for ref in ref_list]
+            references = []
+            for ref in ref_list:
+                if not isinstance(ref, str):
+                    raise MetricComputationError(
+                        f"GLEU metric requires string 'reference' items, "
+                        f"got {type(ref).__name__}"
+                    )
+                references.append(ref.split())
 
         if any(len(ref) == 0 for ref in references):
             raise MetricComputationError(

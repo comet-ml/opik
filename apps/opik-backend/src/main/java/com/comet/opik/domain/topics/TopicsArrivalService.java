@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -9,53 +10,47 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
-
 /**
- * Topic on arrival: right after the vectors tick inserts a chunk of vectors, each trace gets the topic of its project's
+ * Topic on arrival: right after the vectors tick writes a chunk of vectors, each trace gets the topic of its project's
  * saved list, as a {@code trace_topics} row with source {@code arrival} and no run id.
  *
  * <p>The rule is the algorithm's {@link TopicAlgorithm#labeller}, the same one the labelling pass uses, made from the
- * project's {@code topics} rows and the list's known-Other vectors ({@code topic_projects.other_vectors}). A tick reads
- * each project's list once, in one read-only MySQL transaction for the projects of a chunk. A project with no saved
- * list, or a list with no topic, has no labeller: its traces get no row and wait for the project's next run. The
- * labelling runs on {@link Schedulers#parallel()}.
+ * project's topics and the list's known-Other vectors. A workspace's turn reads the saved lists of its read's projects
+ * once, before their embed calls ({@link TopicRunStore#readSavedLists}). A project with no saved list, or a list with
+ * no topic, has no labeller: its traces get no row and wait for the project's next run. The labelling runs on
+ * {@link Schedulers#parallel()}. Only a workspace listed at the {@link TopicsStage#ARRIVAL} stage or a later one gets
+ * rows.
  *
  * <p>Every vector it gets has a non-blank text and {@link TopicEmbedding#DIMENSIONS} values, because the tick wrote
- * it: the tick embeds only a non-blank summary and keeps only vectors of that length, the length of a saved prototype.
- * So nothing is filtered before the labeller.
+ * it, and its trace was live after the write. So nothing is filtered before the labeller.
  *
  * <p>A run's row wins over an arrival row: readers take the latest row per trace by {@code last_updated_at}, and on an
  * equal time the row with {@code source = 'run'}.
  *
  * <p>Best effort: a failure is logged and counted, never returned as an error, and the tick writes and counts its
- * vectors as without arrival; the next run labels those traces. Any failure (the read, the insert, or anything else in
- * a step) stops arrival for the rest of the tick, so a failing MySQL or ClickHouse costs the tick at most one step's
- * time per workspace in flight. The traces of the later chunks count as {@link ArrivalOutcome#AFTER_FAILURE}.
+ * vectors as without arrival; the next run labels those traces. Any failure (the read, the labelling or the insert)
+ * stops arrival for the workspace for the rest of the tick: its later chunks count as
+ * {@link ArrivalOutcome#AFTER_FAILURE}.
  *
  * <p>Bounded in time: the steps of one workspace in one tick take {@code topics.arrival.timeout} in all, and each one
- * ends before the tick's deadline. A workspace's steps run one after another, so its time spent is exact while the
- * tick visits several workspaces at once. A step with less than {@code topics.arrival.minStepTime} left does not
- * start; its traces count as {@link ArrivalOutcome#OVER_BUDGET}. A read or insert that outlasts the time left fails
- * with error type {@code TimeoutException}.
+ * ends before the tick's deadline. A step with less than {@code topics.arrival.minStepTime} left does not start; its
+ * traces count as {@link ArrivalOutcome#OVER_BUDGET}. A read or insert that outlasts the time left fails with error
+ * type {@code TimeoutException}.
+ *
+ * <p>Holds no state: each step takes the workspace's {@link ArrivalSteps} and returns the next.
  */
 @Slf4j
 @Singleton
@@ -63,208 +58,189 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 class TopicsArrivalService {
 
     private final @NonNull @Config("topics") TopicsConfig config;
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull TraceTopicsDAO traceTopicsDAO;
+    private final @NonNull TopicWorkspaceService workspaces;
+    private final @NonNull TopicRunStore store;
     private final @NonNull TopicAlgorithm algorithm;
     private final @NonNull TopicsArrivalMetrics metrics;
 
-    /** One tick's arrival steps; a no-op when arrival is off. */
-    Tick tick() {
-        return new Tick(config.getArrival().isEnabled());
+    /**
+     * Once per workspace and tick: the steps of a workspace listed at the arrival stage or a later one, else off. A
+     * failed check is off.
+     */
+    Mono<ArrivalSteps> start(@NonNull String workspaceId) {
+        return Mono.fromCallable(() -> workspaces.reaches(workspaceId, TopicsStage.ARRIVAL)
+                ? ArrivalSteps.STARTED
+                : ArrivalSteps.OFF)
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(exception -> {
+                    log.warn("Topic arrival stage check failed, no arrival this tick, workspace '{}'", workspaceId,
+                            exception);
+                    return Mono.just(ArrivalSteps.OFF);
+                });
     }
 
-    /** The arrival steps of one tick. Safe to share between the workspaces the tick visits at once. */
-    final class Tick {
-
-        private final boolean enabled;
-        // Per project read this tick: its labeller, or empty when it has no saved list or one with no topic.
-        private final Map<UUID, Optional<TopicLabeller>> labellers = new ConcurrentHashMap<>();
-        // Set by any failure: arrival does nothing more this tick.
-        private final AtomicBoolean stopped = new AtomicBoolean();
-        // Per workspace: the time its steps took this tick.
-        private final Map<String, AtomicLong> spentNanosByWorkspace = new ConcurrentHashMap<>();
-
-        private Tick(boolean enabled) {
-            this.enabled = enabled;
+    /**
+     * Reads the saved lists of those of {@code projectIds} not read yet this tick, in one read-only transaction, and
+     * asks the algorithm for each list's labeller. A failed read stops arrival for the workspace.
+     */
+    Mono<ArrivalSteps> read(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<UUID> projectIds,
+            @NonNull TickBudget budget, @NonNull ArrivalSteps steps) {
+        var toRead = projectIds.stream().filter(projectId -> !steps.read().contains(projectId)).distinct().toList();
+        if (!steps.on() || steps.stopped() || toRead.isEmpty()) {
+            return Mono.just(steps);
         }
-
-        /**
-         * Labels the vectors one insert wrote, all of one workspace, and writes their {@code trace_topics} rows, within
-         * what is left of the workspace's {@code topics.arrival.timeout} for the tick and of the tick's budget.
-         * Completes empty, and never with an error.
-         */
-        Mono<Void> label(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull List<TopicVector> vectors,
-                @NonNull TickBudget budget) {
-            if (!enabled || vectors.isEmpty()) {
-                return Mono.empty();
-            }
-            return Mono.defer(() -> {
-                if (stopped.get()) {
-                    metrics.labelled(workspace, ArrivalOutcome.AFTER_FAILURE, vectors.size());
-                    return Mono.<Void>empty();
-                }
-                var arrival = config.getArrival();
-                var spent = spentNanosByWorkspace.computeIfAbsent(workspace.id(), __ -> new AtomicLong());
-                var left = min(arrival.getTimeout().toJavaDuration().minusNanos(spent.get()), budget.left());
-                if (left.compareTo(arrival.getMinStepTime().toJavaDuration()) < 0) {
-                    metrics.labelled(workspace, ArrivalOutcome.OVER_BUDGET, vectors.size());
-                    return Mono.<Void>empty();
-                }
-                var clock = budget.clock();
-                var until = clock.instant().plus(left);
-                long started = System.nanoTime();
-                return Mono.defer(() -> labelChunk(workspace, vectors, until, clock))
-                        .onErrorResume(exception -> {
-                            stop(workspace, ArrivalPhase.ASSIGN, exception);
-                            log.warn("Topic arrival failed, arrival stops for this tick, workspace '{}', vectors '{}'",
-                                    workspace.id(), vectors.size(), exception);
-                            return Mono.empty();
-                        })
-                        .doFinally(signal -> {
-                            long took = System.nanoTime() - started;
-                            spent.addAndGet(took);
-                            metrics.duration(workspace, Duration.ofNanos(took));
-                        });
-            });
+        var left = left(steps, budget);
+        if (left.compareTo(config.getArrival().getMinStepTime().toJavaDuration()) < 0) {
+            // Not read: the chunks of these projects count as over_budget.
+            return Mono.just(steps);
         }
+        return timed(workspace, steps, store.readSavedLists(workspace.id(), toRead)
+                .timeout(left)
+                .map(saved -> {
+                    var read = new HashSet<>(steps.read());
+                    read.addAll(toRead);
+                    var labellers = new HashMap<>(steps.labellers());
+                    // A list with no topic would label every trace Other: it gets no row, as no list.
+                    saved.stream().filter(list -> !list.topics().isEmpty())
+                            .forEach(list -> labellers.put(list.project().projectId(),
+                                    algorithm.labeller(list.topics(), list.project().otherVectors())));
+                    return steps.toBuilder().read(Set.copyOf(read)).labellers(Map.copyOf(labellers)).build();
+                })
+                .onErrorResume(exception -> {
+                    log.warn("Topic arrival read failed, arrival stops for the workspace this tick, workspace '{}', "
+                            + "projects '{}'", workspace.id(), toRead.size(), exception);
+                    return Mono.just(stop(workspace, steps, ArrivalPhase.READ, exception));
+                }));
+    }
 
-        private Mono<Void> labelChunk(TopicVectorsMetrics.Workspace workspace, List<TopicVector> vectors,
-                Instant until, Clock clock) {
-            var byProject = vectors.stream().collect(Collectors.groupingBy(TopicVector::projectId,
-                    LinkedHashMap::new, Collectors.toList()));
-            return read(workspace, byProject.keySet(), until, clock)
-                    .flatMap(__ -> Mono.fromCallable(() -> rows(byProject)).subscribeOn(Schedulers.parallel()))
-                    .flatMap(labelled -> {
-                        metrics.labelled(workspace, ArrivalOutcome.NO_PROTOTYPES, labelled.noPrototypes());
-                        return insert(workspace, labelled, until, clock);
-                    });
+    /**
+     * Labels the vectors one write put in, all of one workspace, and writes their {@code trace_topics} rows, within
+     * what is left of the workspace's {@code topics.arrival.timeout} and of the tick's budget. Never fails.
+     */
+    Mono<ArrivalSteps> label(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull List<TopicVector> vectors,
+            @NonNull TickBudget budget, @NonNull ArrivalSteps steps) {
+        if (!steps.on() || vectors.isEmpty()) {
+            return Mono.just(steps);
         }
-
-        /** The rows of the projects that have a labeller; no I/O. */
-        private Labelled rows(Map<UUID, List<TopicVector>> byProject) {
-            var rows = new ArrayList<TraceTopic>();
-            int topics = 0;
-            int other = 0;
-            int noPrototypes = 0;
-            for (var entry : byProject.entrySet()) {
-                var group = entry.getValue();
-                var labeller = labellers.get(entry.getKey());
-                if (labeller.isEmpty()) {
-                    noPrototypes += group.size();
-                    continue;
-                }
-                var topicIds = labeller.get().label(group.stream().map(TopicVector::vector).toList());
-                for (int i = 0; i < group.size(); i++) {
-                    var vector = group.get(i);
-                    rows.add(TraceTopic.builder()
-                            .workspaceId(vector.workspaceId())
-                            .projectId(vector.projectId())
-                            .traceId(vector.traceId())
-                            .traceCreatedAt(vector.traceCreatedAt())
-                            .topicId(topicIds[i])
-                            .source(TraceTopic.Source.ARRIVAL)
-                            .runId(null)
-                            .build());
-                    if (TraceTopic.OTHER.equals(topicIds[i])) {
-                        other++;
-                    } else {
-                        topics++;
+        if (steps.stopped()) {
+            metrics.labelled(workspace, ArrivalOutcome.AFTER_FAILURE, vectors.size());
+            return Mono.just(steps);
+        }
+        var left = left(steps, budget);
+        var unread = vectors.stream().filter(vector -> !steps.read().contains(vector.projectId())).toList();
+        metrics.labelled(workspace, ArrivalOutcome.OVER_BUDGET, unread.size());
+        var read = vectors.stream().filter(vector -> steps.read().contains(vector.projectId())).toList();
+        if (read.isEmpty()) {
+            return Mono.just(steps);
+        }
+        if (left.compareTo(config.getArrival().getMinStepTime().toJavaDuration()) < 0) {
+            metrics.labelled(workspace, ArrivalOutcome.OVER_BUDGET, read.size());
+            return Mono.just(steps);
+        }
+        var clock = budget.clock();
+        var until = clock.instant().plus(left);
+        return timed(workspace, steps, Mono.fromCallable(() -> rows(steps.labellers(), read))
+                .subscribeOn(Schedulers.parallel())
+                .flatMap(labelled -> {
+                    metrics.labelled(workspace, ArrivalOutcome.NO_PROTOTYPES, labelled.noPrototypes());
+                    var rest = Duration.between(clock.instant(), until);
+                    if (labelled.rows().isEmpty()) {
+                        return Mono.just(steps);
                     }
-                }
-            }
-            return new Labelled(rows, topics, other, noPrototypes);
-        }
-
-        /**
-         * Reads the saved lists of the projects this tick has not read yet, in one read-only transaction, and asks the
-         * algorithm for each project's labeller. Stops waiting at {@code until}. Emits once the labellers are known;
-         * a failed read stops arrival for the tick and completes empty.
-         */
-        private Mono<Boolean> read(TopicVectorsMetrics.Workspace workspace, Set<UUID> projectIds, Instant until,
-                Clock clock) {
-            var toRead = projectIds.stream().filter(projectId -> !labellers.containsKey(projectId)).toList();
-            if (toRead.isEmpty()) {
-                return Mono.just(true);
-            }
-            var workspaceId = workspace.id();
-            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                return new SavedLists(handle.attach(TopicProjectDAO.class).findProjects(workspaceId, toRead),
-                        handle.attach(TopicDAO.class).findByProjects(workspaceId, toRead));
-            }))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .timeout(left(until, clock))
-                    .onErrorResume(exception -> {
-                        stop(workspace, ArrivalPhase.READ, exception);
-                        log.warn("Topic arrival read failed, arrival stops for this tick, workspace '{}', projects "
-                                + "'{}'", workspaceId, toRead.size(), exception);
-                        return Mono.empty();
-                    })
-                    .map(saved -> {
-                        var projects = saved.projects().stream()
-                                .collect(Collectors.toMap(TopicProject::projectId, Function.identity()));
-                        // In (born, id) order within each project: the query's order, which grouping keeps.
-                        var topics = saved.topics().stream().collect(Collectors.groupingBy(Topic::projectId));
-                        for (var projectId : toRead) {
-                            var project = projects.get(projectId);
-                            var live = topics.getOrDefault(projectId, List.<Topic>of());
-                            // A list with no topic would label every trace Other: it gets no row, as no list.
-                            labellers.put(projectId, project == null || project.listRunId() == null || live.isEmpty()
-                                    ? Optional.empty()
-                                    : Optional.of(algorithm.labeller(live, project.otherVectors())));
-                        }
-                        return true;
-                    });
-        }
-
-        /**
-         * The rows are built: they are inserted with whatever time is left, and count as over_budget only when none
-         * is.
-         */
-        private Mono<Void> insert(TopicVectorsMetrics.Workspace workspace, Labelled labelled, Instant until,
-                Clock clock) {
-            var rows = labelled.rows();
-            if (rows.isEmpty()) {
-                return Mono.empty();
-            }
-            var left = left(until, clock);
-            if (!left.isPositive()) {
-                metrics.labelled(workspace, ArrivalOutcome.OVER_BUDGET, rows.size());
-                return Mono.empty();
-            }
-            return Mono.defer(() -> traceTopicsDAO.insert(rows))
-                    .timeout(left)
-                    .doOnSuccess(inserted -> {
-                        metrics.labelled(workspace, ArrivalOutcome.TOPIC, labelled.topics());
-                        metrics.labelled(workspace, ArrivalOutcome.OTHER, labelled.other());
-                    })
-                    .onErrorResume(exception -> {
-                        stop(workspace, ArrivalPhase.INSERT, exception);
-                        log.warn("Topic arrival insert failed, arrival stops for this tick, workspace '{}', rows '{}'",
-                                workspace.id(), rows.size(), exception);
-                        return Mono.empty();
-                    })
-                    .then();
-        }
-
-        private void stop(TopicVectorsMetrics.Workspace workspace, ArrivalPhase phase, Throwable error) {
-            stopped.set(true);
-            metrics.failure(workspace, phase, error);
-        }
+                    if (!rest.isPositive()) {
+                        metrics.labelled(workspace, ArrivalOutcome.OVER_BUDGET, labelled.rows().size());
+                        return Mono.just(steps);
+                    }
+                    return insert(workspace, labelled, rest, steps);
+                })
+                .onErrorResume(exception -> {
+                    log.warn("Topic arrival failed, arrival stops for the workspace this tick, workspace '{}', "
+                            + "vectors '{}'", workspace.id(), read.size(), exception);
+                    return Mono.just(stop(workspace, steps, ArrivalPhase.ASSIGN, exception));
+                }));
     }
 
-    private record SavedLists(List<TopicProject> projects, List<Topic> topics) {
+    private Mono<ArrivalSteps> insert(TopicVectorsMetrics.Workspace workspace, Labelled labelled, Duration left,
+            ArrivalSteps steps) {
+        var rows = labelled.rows();
+        return store.insertTraceTopics(new TopicsMetrics.Workspace(workspace.id(), workspace.name()), rows)
+                .timeout(left)
+                .then(Mono.fromCallable(() -> {
+                    metrics.labelled(workspace, ArrivalOutcome.TOPIC, labelled.topics());
+                    metrics.labelled(workspace, ArrivalOutcome.OTHER, labelled.other());
+                    return steps;
+                }))
+                .onErrorResume(exception -> {
+                    log.warn("Topic arrival insert failed, arrival stops for the workspace this tick, workspace '{}', "
+                            + "rows '{}'", workspace.id(), rows.size(), exception);
+                    return Mono.just(stop(workspace, steps, ArrivalPhase.INSERT, exception));
+                });
+    }
+
+    /** The step, with the time it took recorded and added to the workspace's time spent. */
+    private Mono<ArrivalSteps> timed(TopicVectorsMetrics.Workspace workspace, ArrivalSteps before,
+            Mono<ArrivalSteps> step) {
+        return Mono.defer(() -> {
+            long started = System.nanoTime();
+            return step.map(after -> {
+                var took = Duration.ofNanos(System.nanoTime() - started);
+                metrics.duration(workspace, took);
+                return after.spend(took);
+            });
+        });
+    }
+
+    private ArrivalSteps stop(TopicVectorsMetrics.Workspace workspace, ArrivalSteps steps, ArrivalPhase phase,
+            Throwable error) {
+        metrics.failure(workspace, phase, error);
+        return steps.toBuilder().stopped(true).build();
+    }
+
+    /** What is left of the workspace's arrival time and of the tick's budget. */
+    private Duration left(ArrivalSteps steps, TickBudget budget) {
+        var ownLeft = config.getArrival().getTimeout().toJavaDuration().minus(steps.spent());
+        var left = ownLeft.compareTo(budget.left()) <= 0 ? ownLeft : budget.left();
+        return left.isNegative() ? Duration.ZERO : left;
+    }
+
+    /** The rows of the vectors whose project has a labeller; no I/O. */
+    private static Labelled rows(Map<UUID, TopicLabeller> labellers, List<TopicVector> vectors) {
+        var byProject = vectors.stream().collect(Collectors.groupingBy(TopicVector::projectId, LinkedHashMap::new,
+                Collectors.toList()));
+        var rows = new ArrayList<TraceTopic>();
+        int topics = 0;
+        int other = 0;
+        int noPrototypes = 0;
+        for (var entry : byProject.entrySet()) {
+            var group = entry.getValue();
+            var labeller = labellers.get(entry.getKey());
+            if (labeller == null) {
+                noPrototypes += group.size();
+                continue;
+            }
+            var topicIds = labeller.label(group.stream().map(TopicVector::vector).toList());
+            for (int i = 0; i < group.size(); i++) {
+                var vector = group.get(i);
+                rows.add(TraceTopic.builder()
+                        .workspaceId(vector.workspaceId())
+                        .projectId(vector.projectId())
+                        .traceId(vector.traceId())
+                        .traceCreatedAt(vector.traceCreatedAt())
+                        .topicId(topicIds[i])
+                        .source(TraceTopic.Source.ARRIVAL)
+                        .runId(null)
+                        .build());
+                if (TraceTopic.OTHER.equals(topicIds[i])) {
+                    other++;
+                } else {
+                    topics++;
+                }
+            }
+        }
+        return new Labelled(rows, topics, other, noPrototypes);
     }
 
     /** One chunk's rows, with the count of traces per outcome: topic, other, and no_prototypes (no row). */
     private record Labelled(List<TraceTopic> rows, int topics, int other, int noPrototypes) {
-    }
-
-    private static Duration min(Duration a, Duration b) {
-        return a.compareTo(b) <= 0 ? a : b;
-    }
-
-    private static Duration left(Instant until, Clock clock) {
-        var left = Duration.between(clock.instant(), until);
-        return left.isNegative() ? Duration.ZERO : left;
     }
 }

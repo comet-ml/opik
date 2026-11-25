@@ -8,6 +8,7 @@ import com.clickhouse.client.api.metrics.Metric;
 import com.clickhouse.client.api.metrics.OperationMetrics;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +16,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayOutputStream;
@@ -24,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +70,13 @@ class JsonEachRowBulkInsertTest {
         return RandomStringUtils.secure().nextAlphanumeric(32);
     }
 
+    /** The analytics config with only the knob this class reads set; shared with the other bulk insert tests. */
+    static DatabaseAnalyticsFactory streamPayloads(boolean streamPayloads) {
+        var databaseAnalytics = new DatabaseAnalyticsFactory();
+        databaseAnalytics.setStreamPayloads(streamPayloads);
+        return databaseAnalytics;
+    }
+
     private static final Function<String, ObjectNode> ROW_MAPPER = value -> {
         ObjectNode node = JsonUtils.createObjectNode();
         node.put("name", value);
@@ -74,11 +86,11 @@ class JsonEachRowBulkInsertTest {
     private record Captured(String body, InsertSettings settings) {
     }
 
-    private Captured insertAndCapture(Client client, List<String> items) throws IOException {
+    private Captured insertAndCapture(boolean streamPayloads, Client client, List<String> items) throws IOException {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var settingsCaptor = ArgumentCaptor.forClass(InsertSettings.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", items, ROW_MAPPER)
                 .block();
 
@@ -102,7 +114,8 @@ class JsonEachRowBulkInsertTest {
                 .orElseGet(() -> "ABSENT, settings were " + settings.getAllSettings().keySet());
     }
 
-    private Client clientReturning(long rowsWritten) {
+    /** A client whose insert succeeds with the given row count; shared with {@code JsonRowValuesTest}. */
+    static Client clientReturning(long rowsWritten) {
         var metric = mock(Metric.class);
         when(metric.getLong()).thenReturn(rowsWritten);
 
@@ -113,28 +126,29 @@ class JsonEachRowBulkInsertTest {
         when(response.getMetrics()).thenReturn(metrics);
 
         var client = mock(Client.class);
-        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+        when(client.insert(any(String.class), any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow),
                 any(InsertSettings.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 
         return client;
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("cancelled mid-insert: the response that arrives later is still closed, future left alone")
-    void cancelledInsertClosesTheLateResponse() {
+    void cancelledInsertClosesTheLateResponse(boolean streamPayloads) {
         var response = mock(InsertResponse.class);
         var insertFuture = new CompletableFuture<InsertResponse>();
         var client = mock(Client.class);
         when(client.insert(eq("feedback_scores"), any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow),
                 any(InsertSettings.class))).thenReturn(insertFuture);
 
-        var subscription = new JsonEachRowBulkInsert(client, MAPPER)
+        var subscription = new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of(randomValue()), ROW_MAPPER)
                 .subscribe();
 
-        // The body is serialized on boundedElastic, so wait for the call to reach the client before
-        // cancelling - otherwise this races the serialization and cancels before there is a future at all.
+        // Wait for the call to reach the client before cancelling, or this could cancel before there is a
+        // future at all.
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(client).insert(eq("feedback_scores"),
                 any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow), any(InsertSettings.class)));
         subscription.dispose();
@@ -147,11 +161,12 @@ class JsonEachRowBulkInsertTest {
         verify(response).close();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("one row per item, newline delimited, no trailing separator issues")
-    void writesOneNewlineDelimitedRowPerItem() throws Exception {
+    void writesOneNewlineDelimitedRowPerItem(boolean streamPayloads) throws Exception {
         var items = List.of(randomValue(), randomValue(), randomValue());
-        var captured = insertAndCapture(clientReturning(items.size()), items);
+        var captured = insertAndCapture(streamPayloads, clientReturning(items.size()), items);
 
         var expected = items.stream()
                 .map("{\"name\":\"%s\"}\n"::formatted)
@@ -160,24 +175,26 @@ class JsonEachRowBulkInsertTest {
         assertThat(captured.body().lines()).hasSize(items.size());
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("a single row still terminates with a newline")
-    void singleRowIsNewlineTerminated() throws Exception {
+    void singleRowIsNewlineTerminated(boolean streamPayloads) throws Exception {
         var only = randomValue();
-        var captured = insertAndCapture(clientReturning(1L), List.of(only));
+        var captured = insertAndCapture(streamPayloads, clientReturning(1L), List.of(only));
 
         assertThat(captured.body()).isEqualTo("{\"name\":\"%s\"}\n".formatted(only));
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("the writer is replayable, so a client retry sends an identical body")
-    void writerIsReplayable() throws Exception {
+    void writerIsReplayable(boolean streamPayloads) throws Exception {
         var client = clientReturning(2L);
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var first0 = randomValue();
         var second0 = randomValue();
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("authored_feedback_scores", "log-comment", List.of(first0, second0), ROW_MAPPER).block();
 
         verify(client).insert(eq("authored_feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -197,23 +214,101 @@ class JsonEachRowBulkInsertTest {
     }
 
     @Test
+    @DisplayName("rows are mapped only when the client writes the body, which stays open for the client to close")
+    void writesRowsIntoTheBodyWithoutClosingIt() throws Exception {
+        var client = clientReturning(1L);
+        var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var mapped = new AtomicInteger();
+        var only = randomValue();
+
+        new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(true))
+                .insert("feedback_scores", "log-comment", List.of(only), value -> {
+                    mapped.incrementAndGet();
+                    return ROW_MAPPER.apply(value);
+                })
+                .block();
+
+        // No batch is built up front: the mock client never asked for the body.
+        assertThat(mapped).hasValue(0);
+
+        verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), eq(ClickHouseFormat.JSONEachRow),
+                any(InsertSettings.class));
+        var closed = new AtomicBoolean();
+        var body = new ByteArrayOutputStream() {
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        writerCaptor.getValue().onOutput(body);
+
+        assertThat(mapped).hasValue(1);
+        assertThat(closed).isFalse();
+        assertThat(body.toString(StandardCharsets.UTF_8)).isEqualTo("{\"name\":\"%s\"}\n".formatted(only));
+    }
+
+    @Test
+    @DisplayName("buffered: rows are mapped before the client is called, and the body is the same")
+    void bufferedModeMapsRowsBeforeTheInsert() throws Exception {
+        var client = clientReturning(2L);
+        var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var mapped = new AtomicInteger();
+        var items = List.of(randomValue(), randomValue());
+
+        new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(false))
+                .insert("feedback_scores", "log-comment", items, value -> {
+                    mapped.incrementAndGet();
+                    return ROW_MAPPER.apply(value);
+                })
+                .block();
+
+        // The batch is built before the insert: the mock client never asked for the body.
+        assertThat(mapped).hasValue(items.size());
+
+        verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), eq(ClickHouseFormat.JSONEachRow),
+                any(InsertSettings.class));
+        var first = new ByteArrayOutputStream();
+        var second = new ByteArrayOutputStream();
+        writerCaptor.getValue().onOutput(first);
+        writerCaptor.getValue().onRetry();
+        writerCaptor.getValue().onOutput(second);
+
+        var expected = "{\"name\":\"%s\"}\n{\"name\":\"%s\"}\n".formatted(items.get(0), items.get(1));
+        assertThat(first.toString(StandardCharsets.UTF_8)).isEqualTo(expected);
+        assertThat(second.toString(StandardCharsets.UTF_8)).isEqualTo(expected);
+        assertThat(mapped).hasValue(items.size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("the per-request server settings the row encoding depends on are set")
-    void setsTheServerSettingsTheEncodingDependsOn() throws Exception {
-        var captured = insertAndCapture(clientReturning(1L), List.of("a"));
+    void setsTheServerSettingsTheEncodingDependsOn(boolean streamPayloads) throws Exception {
+        var captured = insertAndCapture(streamPayloads, clientReturning(1L), List.of("a"));
 
         // Matched by key suffix: the client may namespace server settings internally, and this test is
         // about the settings being applied, not about that internal key shape.
         assertThat(settingValue(captured.settings(), "date_time_input_format")).isEqualTo("best_effort");
         assertThat(settingValue(captured.settings(), "input_format_defaults_for_omitted_fields")).isEqualTo("1");
         assertThat(settingValue(captured.settings(), "input_format_json_read_numbers_as_strings")).isEqualTo("1");
+        // Only streamed rows embed objects and arrays as raw JSON; buffered rows carry them as strings, as on main.
+        if (streamPayloads) {
+            assertThat(settingValue(captured.settings(), "input_format_json_read_objects_as_strings")).isEqualTo("1");
+            assertThat(settingValue(captured.settings(), "input_format_json_read_arrays_as_strings")).isEqualTo("1");
+        } else {
+            assertThat(settingValue(captured.settings(), "input_format_json_read_objects_as_strings"))
+                    .startsWith("ABSENT");
+            assertThat(settingValue(captured.settings(), "input_format_json_read_arrays_as_strings"))
+                    .startsWith("ABSENT");
+        }
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("an empty batch is a no-op rather than an empty insert")
-    void emptyBatchDoesNotCallTheClient() {
+    void emptyBatchDoesNotCallTheClient(boolean streamPayloads) {
         var client = mock(Client.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of(), ROW_MAPPER)
                 .block();
 
@@ -222,9 +317,10 @@ class JsonEachRowBulkInsertTest {
                 any(InsertSettings.class));
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("an explicit null is written, not dropped by NON_NULL inclusion")
-    void writesExplicitNulls() throws Exception {
+    void writesExplicitNulls(boolean streamPayloads) throws Exception {
         // The configured mapper sets serialization inclusion to NON_NULL, so a putNull() would be dropped
         // unless the writer is derived from it the way this class does. That distinction is load-bearing
         // for any column that must receive SQL NULL rather than its DDL default: an omitted field takes
@@ -240,7 +336,7 @@ class JsonEachRowBulkInsertTest {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var value = randomValue();
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of(value), nullMapper).block();
 
         verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -253,9 +349,10 @@ class JsonEachRowBulkInsertTest {
                 .isEqualTo("{\"name\":\"%s\",\"project_id\":null}\n".formatted(value));
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("the InsertResponse is closed on success")
-    void closesTheResponse() throws Exception {
+    void closesTheResponse(boolean streamPayloads) throws Exception {
         var metric = mock(Metric.class);
         when(metric.getLong()).thenReturn(1L);
         var metrics = mock(OperationMetrics.class);
@@ -266,7 +363,7 @@ class JsonEachRowBulkInsertTest {
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
 
-        new JsonEachRowBulkInsert(client, MAPPER)
+        new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER).block();
 
         // try-with-resources should release it; an unclosed response holds its stream, which over a
@@ -274,9 +371,10 @@ class JsonEachRowBulkInsertTest {
         verify(response).close();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("a client failure surfaces its cause, not the CompletionException wrapper")
-    void unwrapsTheClientFailure() {
+    void unwrapsTheClientFailure(boolean streamPayloads) {
         var client = mock(Client.class);
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class)))
@@ -285,17 +383,18 @@ class JsonEachRowBulkInsertTest {
         // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
         // still wrapped in the future's CompletionException would silently bypass the retry the R2DBC
         // path gets. Mono.fromFuture unwraps that wrapper; this pins the behaviour we depend on.
-        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER)
+        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER)
                 .block())
                 .hasRootCauseInstanceOf(SocketException.class);
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     @DisplayName("the row count comes from the server, not from items.size()")
-    void returnsTheServerRowCount() {
+    void returnsTheServerRowCount(boolean streamPayloads) {
         // Deduplication or truncation would make these differ; the caller must see the server's number.
-        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), MAPPER)
+        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), MAPPER, streamPayloads(streamPayloads))
                 .insert("feedback_scores", "log-comment", List.of("a", "b", "c"), ROW_MAPPER)
                 .block();
 

@@ -69,10 +69,26 @@ public class PrototypeAssigner {
         Preconditions.checkArgument(vectors.length % dimensions == 0, "vectors must be whole rows");
         int n = vectors.length / dimensions;
         var out = new int[n];
+        var cosines = new double[2];
+        int count = owners.length;
         for (int i = 0; i < n; i++) {
             int best = NO_WINNER;
             double bestCosine = Double.NEGATIVE_INFINITY;
-            for (int p = 0; p < owners.length; p++) {
+            int p = 0;
+            // Two prototypes per pass read each trace value once; dot2's cosines are dot's bit for bit.
+            for (; p + 1 < count; p += 2) {
+                VectorMath.dot2(vectors, i * dimensions, prototypes, p * dimensions, (p + 1) * dimensions, dimensions,
+                        cosines);
+                if (cosines[0] > bestCosine) {
+                    bestCosine = cosines[0];
+                    best = p;
+                }
+                if (cosines[1] > bestCosine) {
+                    bestCosine = cosines[1];
+                    best = p + 1;
+                }
+            }
+            if (p < count) {
                 double cosine = VectorMath.dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
                 if (cosine > bestCosine) {
                     bestCosine = cosine;
@@ -93,7 +109,7 @@ public class PrototypeAssigner {
         return out;
     }
 
-    public int prototypeCount() {
+    int prototypeCount() {
         return owners.length;
     }
 
