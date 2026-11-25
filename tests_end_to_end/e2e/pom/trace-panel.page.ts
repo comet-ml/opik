@@ -763,15 +763,43 @@ export class TracePanelPage {
   }
 
   /**
-   * Clear the score in a named annotate score row. The clear button sits in a
-   * grid cell that is a sibling of the score-input cell (the one carrying the
-   * row testid), not a descendant — so it's scoped to the panel root. With a
-   * single seeded definition this is unambiguous; the void param documents
-   * which score the call clears.
+   * The "Clear score" button belonging to a named annotate score row.
+   *
+   * `AnnotateRow` is a fragment in a three-column grid — label cell, value cell
+   * (the one carrying the row testid), clear cell — so the button is the row's
+   * SIBLING and not its descendant, and there is no per-row element to scope to.
+   * Hence the structural step: the clear cell is the element immediately after
+   * the testid'd value cell. A `data-testid="annotate-score-clear-<name>"` on
+   * the button would replace this; it cannot be added from here, because this
+   * suite's QA branch is not allowed to touch `apps/opik-frontend/`.
+   *
+   * Addressed per row rather than panel-wide on purpose. The button renders for
+   * EVERY row whose value is non-empty, so a panel-wide locator is unambiguous
+   * only while exactly one definition holds a score — true of the two specs
+   * that first used this, and not something a caller should have to know.
+   */
+  annotateClearScoreButton(definitionName: string): Locator {
+    return this.annotateScoreRow(definitionName)
+      .locator('xpath=following-sibling::div[1]')
+      .getByRole('button', { name: 'Clear score' });
+  }
+
+  /**
+   * Clear the score in a named annotate score row.
+   *
+   * Asserts the button resolved to exactly one element before clicking it: the
+   * locator walks the grid structurally (see {@link annotateClearScoreButton}),
+   * so a layout change that made it match two cells — or none — must fail here
+   * naming the score, rather than clearing whichever score came first.
    */
   async clearAnnotateScore(definitionName: string): Promise<void> {
     return test.step(`Clear ${definitionName} score`, async () => {
-      await this.root.getByRole('button', { name: 'Clear score' }).click();
+      const clear = this.annotateClearScoreButton(definitionName);
+      await expect(
+        clear,
+        `exactly one "Clear score" button belongs to the '${definitionName}' row`,
+      ).toHaveCount(1);
+      await clear.click();
     });
   }
 

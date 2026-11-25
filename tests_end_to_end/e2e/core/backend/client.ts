@@ -1192,6 +1192,102 @@ export interface KpiCardStat {
   previousValue: number | null;
 }
 
+/**
+ * One check inside a `guardrails_validations` entry, as the trace read reports
+ * it.
+ *
+ * `result` is nullable because `GuardrailsValidation.Check` declares it so
+ * (only `name` is `@NonNull`): a check that came back without a verdict is a
+ * different answer from one that passed, and defaulting it would make the two
+ * compare equal.
+ */
+export interface GuardrailCheckRef {
+  name: string;
+  result: string | null;
+}
+
+/** One `guardrails_validations` entry — a guardrail span and its checks. */
+export interface GuardrailValidationRef {
+  /** The guardrail's `secondary_id` as written; the API calls it `span_id`. */
+  spanId: string;
+  checks: GuardrailCheckRef[];
+}
+
+/**
+ * A trace as `GET /v1/private/traces/{id}` and the project listing report it,
+ * reduced to the aggregates that are JOINED onto the trace rather than stored
+ * on its row.
+ *
+ * These nine are one subject, not nine: `TraceDAO.SELECT_BY_IDS` computes all
+ * of them in a single query, and opik#9643 (issue-7473) re-grouped and re-joined
+ * every one of them on `(id, project_id)` after finding they were keyed on the
+ * trace id alone. A trace id is client-minted, so the same id reaching two
+ * projects needs no exotic setup — and before the fix each of these fields
+ * silently summed, concatenated or deduped across every project that shared it.
+ * Reading them one at a time through separate helpers would make a spec issue
+ * nine requests to ask one question, and would let a caller assert the cheap
+ * half (cost) while leaving the joins nothing watches (guardrails, span scores)
+ * exactly as unexamined as they were.
+ *
+ * Every aggregate is `| null` rather than optional or defaulted, for the reason
+ * `TrackedSpanRef` gives: the API OMITS these fields rather than sending an
+ * empty value, and "this project's trace carries no comment" is a different
+ * answer from "the comments join returned nothing at all". A caller must assert
+ * the absence it means rather than let `?? []` turn a missing join into a
+ * passing empty list.
+ *
+ * `feedbackScores` and `spanFeedbackScores` keep only `name` and `value`: the
+ * authorship fields have their own reader (`getTraceScoreAuthors`), and
+ * `span_feedback_scores` is documented as an AVERAGE per score name over the
+ * trace's spans — which is what makes one score name written at two values in
+ * two projects a usable discriminator, since a leak surfaces as the mean rather
+ * than as an extra row. `comments` is the comment TEXTS, which is what
+ * `listTraceComments` returns and what a reader of the panel sees.
+ */
+export interface TraceAggregates {
+  id: string;
+  name: string;
+  /**
+   * The project the read resolved the id to. The whole point of the by-id
+   * variant: with one id in several projects, `SELECT_BY_IDS` orders by
+   * `(workspace_id, project_id, id) DESC LIMIT 1`, so this names which project's
+   * aggregates every other field here should be describing.
+   */
+  projectId: string;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
+  spanCount: number | null;
+  llmSpanCount: number | null;
+  hasToolSpans: boolean | null;
+  providers: string[] | null;
+  feedbackScores: Array<{ name: string; value: number }> | null;
+  spanFeedbackScores: Array<{ name: string; value: number }> | null;
+  comments: string[] | null;
+  guardrailsValidations: GuardrailValidationRef[] | null;
+}
+
+/**
+ * One guardrail row for `POST /v1/private/guardrails`.
+ *
+ * `secondaryId` is the guardrail SPAN id the API reports back as
+ * `guardrails_validations[].span_id`, and it is caller-minted for the same
+ * reason trace and span ids are: a spec that wants to assert WHICH project's
+ * guardrail came back has to know both ids before it writes either.
+ *
+ * `config` and `details` are both `@NotNull` on the server, so they are
+ * required here rather than defaulted — a seed that omitted them would be
+ * refused with a validation error that says nothing about the test.
+ */
+export interface GuardrailSeed {
+  /** The trace (or span) the guardrail validates. */
+  entityId: string;
+  secondaryId: string;
+  name: 'TOPIC' | 'PII' | 'LLM_JUDGE' | 'PROMPT_INJECTION' | 'CUSTOM_CLASSIFIER';
+  result: 'passed' | 'failed';
+  config: Record<string, unknown>;
+  details: Record<string, unknown>;
+}
+
 export interface TraceDetail {
   id: string;
   name: string;
@@ -7794,6 +7890,106 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/traces/{id}`, read for every aggregate that is JOINED
+     * onto the trace rather than stored on its row — see {@link TraceAggregates}.
+     *
+     * Raw-fetched rather than taken through the typed client, which is what
+     * `getTraceCost` and `getTracePayload` above do. Two reasons, and both are
+     * about the subject: the pinned SDK model does not carry
+     * `guardrails_validations` or `span_feedback_scores` at all, so a caller
+     * could not even ask about two of the nine joins; and the typed mapping
+     * defaults absent fields, which is precisely the distinction a scoping
+     * assertion rests on (a project whose trace carries NO comment, versus one
+     * whose comment leaked in from elsewhere).
+     *
+     * Null on 404 like `getTrace`, so a caller can poll a freshly-written trace
+     * into existence instead of treating the gap between the 201 and the row
+     * being queryable as a failure. `withRateLimitRetry` because the by-id read
+     * shares the traces bucket with every other spec's listing on a shared
+     * cloud workspace, and most callers wrap this in an `expect.poll`, which
+     * does not swallow a throw.
+     */
+    async readTraceAggregatesById(traceId: string): Promise<TraceAggregates | null> {
+      const result = await withRateLimitRetry(
+        async () => {
+          const r = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+          if (r.status !== 200 && r.status !== 404) {
+            throw new Error(
+              `readTraceAggregatesById(${traceId}): expected 200 or 404, got ${r.status}: ${r.message}`,
+            );
+          }
+          return r;
+        },
+        [2_000, 5_000, 10_000, 20_000, 30_000],
+      );
+      if (result.status === 404) return null;
+      return toTraceAggregates(result.json, `readTraceAggregatesById(${traceId})`);
+    },
+
+    /**
+     * The same aggregates for one trace id, read from the PROJECT-SCOPED
+     * listing (`GET /v1/private/traces?project_id=…`) instead of by id.
+     *
+     * The other half of a scoping question, and not a cheaper route to the same
+     * answer. `GET /traces/{id}` resolves ONE project for an id that may live in
+     * several (the highest `project_id`), so it can only ever describe one of
+     * them; the listing is bounded to the project asked for and is the only read
+     * that can say what each project holds on its own. A spec that asserted the
+     * by-id answer alone could not tell a correctly-scoped join from one that
+     * had quietly stopped aggregating at all.
+     *
+     * Returns the envelope's `total` beside the row, because the count is part
+     * of the answer: a project that holds the shared id once and a project whose
+     * listing has started returning a second copy of it are different states,
+     * and a reader that only looked up its own row would not see the second.
+     * `trace` is null when the project's listing does not carry the id, which is
+     * itself an assertable fact rather than an error.
+     */
+    async findTraceAggregatesInProject(args: {
+      projectId: string;
+      traceId: string;
+      size?: number;
+    }): Promise<{ total: number; trace: TraceAggregates | null }> {
+      const { json } = await withRateLimitRetry(
+        async () => {
+          const r = await rawFetch('GET', '/v1/private/traces', {
+            query: new URLSearchParams({
+              project_id: args.projectId,
+              page: '1',
+              size: String(args.size ?? 100),
+            }),
+          });
+          if (r.status !== 200) {
+            throw new Error(
+              `findTraceAggregatesInProject(${args.projectId}): expected 200, got ${r.status}: ${r.message}`,
+            );
+          }
+          return r;
+        },
+        [2_000, 5_000, 10_000, 20_000, 30_000],
+      );
+      const page = json as { total?: number; content?: unknown[] };
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `findTraceAggregatesInProject(${args.projectId}): 200 response carried no numeric ` +
+            "'total' — the envelope is where a duplicated row shows up, so it cannot be assumed.",
+        );
+      }
+      const rows = (page.content ?? []).map((row, index) =>
+        toTraceAggregates(row, `findTraceAggregatesInProject(${args.projectId}).content[${index}]`),
+      );
+      const matches = rows.filter((row) => row.id === args.traceId);
+      if (matches.length > 1) {
+        throw new Error(
+          `findTraceAggregatesInProject(${args.projectId}): the listing returned ` +
+            `${matches.length} rows for trace ${args.traceId} — a by-id lookup cannot ` +
+            'pick one of them, and silently taking the first would hide the duplication.',
+        );
+      }
+      return { total: page.total, trace: matches[0] ?? null };
+    },
+
+    /**
      * `PATCH /v1/private/traces/{id}` carrying tags and nothing else — the
      * update path's smallest possible partial write.
      *
@@ -9638,6 +9834,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/guardrails` — guardrail validations against a trace.
+     *
+     * The only writer for the one join on the trace read that nothing in this
+     * estate had ever produced. `GET /v1/private/traces/{id}` carries
+     * `guardrails_validations`, opik#9643 re-keyed its subquery on
+     * `(id, project_id)` and added `project_id` to its `LIMIT 1 BY` dedup, and
+     * no fixture, client method or spec could put a row there to notice.
+     *
+     * Scoped by `project_name` rather than by the entity: `Guardrail` carries
+     * its own project, and a row written without one lands in the workspace's
+     * Default Project — outside the run prefix the teardown sweeps, and
+     * attributed to a project no assertion here is about.
+     *
+     * NOT deletable. The resource exposes a batch create and a validation
+     * endpoint and no delete at all, so these rows outlive the test; they are
+     * keyed to a project and a trace that teardown removes, which is what makes
+     * that acceptable rather than a leak worth working around.
+     */
+    async createGuardrailsBatch(args: {
+      projectName: string;
+      guardrails: GuardrailSeed[];
+    }): Promise<void> {
+      await postSeedWrite(
+        '/v1/private/guardrails',
+        `createGuardrailsBatch of ${args.guardrails.length} into '${args.projectName}'`,
+        {
+          guardrails: args.guardrails.map((guardrail) => ({
+            entity_id: guardrail.entityId,
+            secondary_id: guardrail.secondaryId,
+            project_name: args.projectName,
+            name: guardrail.name,
+            result: guardrail.result,
+            config: guardrail.config,
+            details: guardrail.details,
+          })),
+        },
+        204,
+      );
+    },
+
+    /**
      * Create one span under an existing trace, with an explicit id and `source`.
      *
      * There is no span equivalent of the `trace` fixture because the estate's
@@ -10760,6 +10997,77 @@ async function withRateLimitRetry<T>(
       await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }
+}
+
+/**
+ * One trace row — by-id or out of a project listing — as {@link TraceAggregates}.
+ *
+ * Shared by both readers so the two answers are directly comparable: a scoping
+ * spec's whole claim is that the by-id read and the owning project's listing
+ * agree, and two mappers could differ in exactly the place that matters (which
+ * absent field becomes null, which number becomes a Number).
+ *
+ * `id` and `project_id` are required rather than mapped to `''`: a row the
+ * server sent without either is not a trace this can describe, and an empty
+ * string would compare unequal to a real project id and read as a scoping
+ * failure. Everything else maps absent to null and never to a zero, an empty
+ * list or a false — see {@link TraceAggregates}.
+ */
+function toTraceAggregates(row: unknown, describe: string): TraceAggregates {
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+    throw new Error(`${describe}: expected a trace object, got ${JSON.stringify(row)}`);
+  }
+  const t = row as Record<string, unknown>;
+  const required = (key: string): string => {
+    const value = t[key];
+    if (typeof value !== 'string' || value === '') {
+      throw new Error(
+        `${describe}: '${key}' came back as ${JSON.stringify(value)} — a trace row ` +
+          'without it cannot be attributed to a project at all.',
+      );
+    }
+    return value;
+  };
+  const numberOrNull = (value: unknown): number | null =>
+    value === undefined || value === null ? null : Number(value);
+  const scores = (value: unknown): Array<{ name: string; value: number }> | null =>
+    value === undefined || value === null
+      ? null
+      : (value as Array<{ name?: unknown; value?: unknown }>).map((score) => ({
+          name: String(score.name ?? ''),
+          value: Number(score.value),
+        }));
+  return {
+    id: required('id'),
+    name: typeof t.name === 'string' ? t.name : '',
+    projectId: required('project_id'),
+    totalEstimatedCost: numberOrNull(t.total_estimated_cost),
+    usage: (t.usage as Record<string, number> | undefined) ?? null,
+    spanCount: numberOrNull(t.span_count),
+    llmSpanCount: numberOrNull(t.llm_span_count),
+    hasToolSpans: typeof t.has_tool_spans === 'boolean' ? t.has_tool_spans : null,
+    providers: (t.providers as string[] | undefined) ?? null,
+    feedbackScores: scores(t.feedback_scores),
+    spanFeedbackScores: scores(t.span_feedback_scores),
+    comments:
+      t.comments === undefined || t.comments === null
+        ? null
+        : (t.comments as Array<{ text?: unknown }>).map((comment) => String(comment.text ?? '')),
+    guardrailsValidations:
+      t.guardrails_validations === undefined || t.guardrails_validations === null
+        ? null
+        : (
+            t.guardrails_validations as Array<{ span_id?: unknown; checks?: unknown }>
+          ).map((validation) => ({
+            spanId: String(validation.span_id ?? ''),
+            checks: ((validation.checks ?? []) as Array<{ name?: unknown; result?: unknown }>).map(
+              (check) => ({
+                name: String(check.name ?? ''),
+                result: check.result === undefined || check.result === null ? null : String(check.result),
+              }),
+            ),
+          })),
+  };
 }
 
 function isNotFoundError(err: unknown): boolean {

@@ -1,4 +1,4 @@
-export { test, expect } from './openrouter-regen-repriced-spans.fixture';
+export { test, expect } from './duplicate-trace-id-projects.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -854,3 +854,15 @@ export type {
   OpenRouterRegenRepricedSpansFixtures,
 } from './openrouter-regen-repriced-spans.fixture';
 export { OPENROUTER_REGEN_CATALOG_PROVIDER } from './openrouter-regen-repriced-spans.fixture';
+export type {
+  SeededScore,
+  ScoredTraceSpanRef,
+  ScoredTraceSpansRef,
+  ScoredTraceSpansFixtures,
+} from './scored-trace-spans.fixture';
+export type {
+  DuplicateTraceSpanSeed,
+  DuplicateTraceIdProjectSeed,
+  DuplicateTraceIdProjectsRef,
+  DuplicateTraceIdProjectsFixtures,
+} from './duplicate-trace-id-projects.fixture';
