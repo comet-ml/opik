@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -72,6 +73,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.Mockito.mock;
 
 /**
  * The run service end to end: the window read from ClickHouse, the save to MySQL, the {@code trace_topics} insert
@@ -171,7 +173,8 @@ class TopicsRunServiceTest {
         // The app's beans with a meter of the test's own, so each test reads only what its run recorded.
         metricReader = InMemoryMetricReader.create();
         metrics = metrics(metricReader);
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                mock(WorkspaceNameService.class));
         service = serviceWith(FIXTURE_ALGORITHM);
         workspaceId = idGenerator.generateId().toString();
         projectId = idGenerator.generateId();
@@ -269,12 +272,16 @@ class TopicsRunServiceTest {
     }
 
     @Test
-    @DisplayName("a first save of a project that has a list fails with save and leaves the list as it was")
+    @DisplayName("a discovery run whose project got a list while it ran fails its save with save, and leaves the "
+            + "list as it was")
     void secondSaveIsConflict() {
-        data.savedList(workspaceId, projectId, FIXTURE.night, 5);
-        var before = data.topics(projectId);
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
+        // The queue refuses a discovery run on a project with a list: here the list came after the claim.
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).saveList(workspaceId, projectId,
+                null, TopicsTestData.newId(), Instant.now(), FIXTURE.night,
+                new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL));
+        var before = data.topics(projectId);
 
         var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
 
@@ -303,26 +310,6 @@ class TopicsRunServiceTest {
         assertThat(data.topics(projectId)).isEmpty();
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
         assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isZero();
-    }
-
-    @Test
-    @DisplayName("a start that finds an attempt left running past the lease records it abandoned and counts it once")
-    void startRecordsAnAbandonedAttempt() {
-        var first = start();
-
-        var second = store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY,
-                Instant.now().plusSeconds(1)).block();
-
-        assertThat(second).isNotEqualTo(first);
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.runId()).isEqualTo(second);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
-        });
-        assertThat(points(metricReader, "topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(1);
-            assertThat(point.get("status")).isEqualTo("failed");
-            assertThat(point.get("error_code")).isEqualTo("abandoned");
-        });
     }
 
     @Test
@@ -539,8 +526,13 @@ class TopicsRunServiceTest {
         return s;
     }
 
+    /** Queues and claims a discovery run, as the planner and a pod's subscriber do. */
     private UUID start() {
-        return store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY, Instant.EPOCH).block();
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
+        var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(TopicProject.RunMode.DISCOVERY).night(NIGHT).windowTraces(FIXTURE.size()).build();
+        assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
+        return runId;
     }
 
     /** The workspace as the entry point hands it in; the test names it by its id. */

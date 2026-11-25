@@ -59,7 +59,8 @@ class TopicsCounts {
             return null;
         }
         var status = switch (project.runStatus()) {
-            case RUNNING -> ProjectTopics.Attempt.Status.RUNNING;
+            // Queued and cancelling are in flight too: the API has no states for the queue.
+            case QUEUED, RUNNING, CANCELLING -> ProjectTopics.Attempt.Status.RUNNING;
             case FAILED -> ProjectTopics.Attempt.Status.FAILED;
             case SAVED -> null;
         };

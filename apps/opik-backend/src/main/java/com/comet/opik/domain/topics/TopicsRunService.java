@@ -174,7 +174,7 @@ public class TopicsRunService {
 
     /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
     private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
-        return timed(run, phase, Mono.fromCallable(step).subscribeOn(Schedulers.parallel()));
+        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(Schedulers.parallel());
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */
