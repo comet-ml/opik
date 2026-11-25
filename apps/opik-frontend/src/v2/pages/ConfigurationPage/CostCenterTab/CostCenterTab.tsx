@@ -22,6 +22,7 @@ import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
 import { COLUMN_TYPE } from "@/types/shared";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -44,6 +45,7 @@ import CostCenterHeader from "./CostCenterHeader";
 import useSaveModelPrices from "./useSaveModelPrices";
 import { useToast } from "@/ui/use-toast";
 import HistorySheet from "./HistorySheet";
+import { toExportRows } from "./exportPrices";
 import PricesTable, {
   DEFAULT_COLUMNS_ORDER,
   DEFAULT_SELECTED_COLUMNS,
@@ -249,14 +251,19 @@ const CostCenterTab: React.FC = () => {
 
   // DataTable lifts pinned rows only within the page it is given, so they are
   // moved to the front before paging to land on the first page.
-  const visible = useMemo(() => {
-    const sorted = sortCatalog(
-      filterCatalog(catalog, { search, filters: chips.filters }),
-      sortDirection,
-      search,
-    );
-    return partition(sorted, isPinned).flat();
-  }, [catalog, search, chips.filters, sortDirection, isPinned]);
+  const sorted = useMemo(
+    () =>
+      sortCatalog(
+        filterCatalog(catalog, { search, filters: chips.filters }),
+        sortDirection,
+        search,
+      ),
+    [catalog, search, chips.filters, sortDirection],
+  );
+  const visible = useMemo(
+    () => partition(sorted, isPinned).flat(),
+    [sorted, isPinned],
+  );
   const pageEntries = useMemo(
     () => visible.slice((page - 1) * size, page * size),
     [visible, page, size],
@@ -388,6 +395,12 @@ const CostCenterTab: React.FC = () => {
           />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <ExportToButton
+            disabled={visible.length === 0}
+            tooltipContent="Nothing to export"
+            getData={() => toExportRows(sorted)}
+            generateFileName={(extension) => `model-prices.${extension}`}
+          />
           <ColumnsButton
             columns={PRICE_COLUMNS}
             selectedColumns={selectedColumns}

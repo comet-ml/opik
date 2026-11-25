@@ -77,10 +77,8 @@ const PriceCell = (context: CellContext<CatalogEntry, unknown>) => {
         <TooltipWrapper
           content={`Priced like ${describeAliasTarget(entry.row)}`}
         >
-          <span className="flex min-w-0 items-center gap-1">
-            {aliasPrice && (
-              <Link2 className="size-3 shrink-0 text-light-slate" />
-            )}
+          <span className="flex min-w-0 items-center gap-1 text-muted-slate">
+            {aliasPrice && <Link2 className="size-3 shrink-0" />}
             <span className="truncate">{aliasPrice ?? NO_VALUE}</span>
           </span>
         </TooltipWrapper>
