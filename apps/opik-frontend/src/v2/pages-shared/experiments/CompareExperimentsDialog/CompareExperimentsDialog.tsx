@@ -14,7 +14,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Loader from "@/shared/Loader/Loader";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import { formatExperimentSubtext } from "./formatExperimentSubtext";
+import { formatExperimentSubtext } from "@/v2/pages-shared/experiments/formatExperimentSubtext";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";

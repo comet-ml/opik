@@ -15,7 +15,7 @@ import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Checkbox } from "@/ui/checkbox";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { formatExperimentSubtext } from "@/v2/pages-shared/experiments/CompareExperimentsDialog/formatExperimentSubtext";
+import { formatExperimentSubtext } from "@/v2/pages-shared/experiments/formatExperimentSubtext";
 
 type FilterExperimentsToCompareDialogProps = {
   experiments: Experiment[];
@@ -84,7 +84,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
             <span className="comet-body-s truncate">{e.name}</span>
           </div>
           <div className="comet-body-xs break-words pl-[26px] text-light-slate">
-            {formatExperimentSubtext(e)}
+            {formatExperimentSubtext(e, { withSourceName: true })}
           </div>
         </label>
       );
