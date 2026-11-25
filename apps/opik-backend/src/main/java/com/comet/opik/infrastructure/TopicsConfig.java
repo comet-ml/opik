@@ -13,19 +13,25 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
-import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Topics settings; config.yml describes each key and its default. Deliberately not a service toggle. Needs ai-labels
  * on and uses its opik-inference deployment and credential: see {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
+@Slf4j
 @Data
 public class TopicsConfig {
 
@@ -116,6 +122,27 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(1_000) private int retireNights;
 
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyMinTightness;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlyBigShare;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double nightlySameMemory;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int nightlyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyTopicExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int verifyGroupExamples;
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.nightlyMinGroups must not be above nightlyMaxGroups") public boolean isNightlyGroupsOrdered() {
             return nightlyMinGroups <= nightlyMaxGroups;
@@ -142,7 +169,8 @@ public class TopicsConfig {
 
     /**
      * A String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to a
-     * collection. Null and blank both mean none. No getter: read it via {@link #enabledWorkspaceIds()}.
+     * collection. Null and blank both mean none. Entries are {@code id} or {@code id:stage}; see {@link TopicsStage}.
+     * No getter: read it via {@link #enabledWorkspaceStages()} or {@link #enabledWorkspaceIds()}.
      */
     @JsonProperty
     @Getter(AccessLevel.NONE)
@@ -150,6 +178,18 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
+
+    /** The last parse of {@link #enabledWorkspaces}, with the string it was parsed from. */
+    @Builder(toBuilder = true)
+    private record ParsedWorkspaces(String raw, Map<String, TopicsStage> stages) {
+    }
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private volatile ParsedWorkspaces parsedWorkspaces;
 
     /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
@@ -185,6 +225,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration llmDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call ({@code verify_naming}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /**
          * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
          * of its {@code trace_topics} insert.
@@ -193,6 +245,20 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration readTimeout;
+
+        /** The labelling pass's count of its window, which also takes the slice bounds. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration countTimeout;
+
+        /** The labelling pass's page: traces read, labelled and inserted at once. */
+        @JsonProperty
+        @Min(1) @Max(100_000) private int labelPageTraces;
+
+        /** The labelling pass's slice of the window: a page's read costs about one slice of keys. */
+        @JsonProperty
+        @Min(1) @Max(1_000_000) private int labelSliceTraces;
 
         /** Retries of the {@code trace_topics} insert after the save's commit. */
         @JsonProperty
@@ -208,6 +274,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.namingDeadline must be shorter than topics.run.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.verifyDeadline must be shorter than topics.run.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */
@@ -237,7 +315,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(0) @Max(1000) private int priority;
 
-        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        /** Rows per block of the run's reads: the count's per-trace arrays and the reads' vectors grow with it. */
         @JsonProperty
         @Min(1024) @Max(1_048_576) private int maxBlockSize;
 
@@ -306,15 +384,62 @@ public class TopicsConfig {
     }
 
     /**
-     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
-     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
-     * would keep an empty list for the life of the process.
+     * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
+     * {@link TopicsStage#ALL}. An id repeated with the same stage is listed once. Throws on an unknown stage or an id
+     * listed with two stages, which {@link #isEnabledWorkspacesValid()} rejects at startup. Not named as a bean getter,
+     * since Lombok and Jackson call getters. The parse is kept against the string it came from, so a value bound or set
+     * later is parsed again rather than served stale.
      */
+    public Map<String, TopicsStage> enabledWorkspaceStages() {
+        var raw = enabledWorkspaces;
+        var parsed = parsedWorkspaces;
+        if (parsed == null || !Objects.equals(parsed.raw(), raw)) {
+            parsed = ParsedWorkspaces.builder().raw(raw).stages(parse(raw)).build();
+            parsedWorkspaces = parsed;
+        }
+        return parsed.stages();
+    }
+
+    private static Map<String, TopicsStage> parse(String enabledWorkspaces) {
+        var stages = new HashMap<String, TopicsStage>();
+        for (var entry : Objects.toString(enabledWorkspaces, "").split(",")) {
+            var parts = entry.split(":", -1);
+            var workspaceId = parts[0].strip();
+            if (parts.length == 1 && workspaceId.isEmpty()) {
+                continue;
+            }
+            if (workspaceId.isEmpty() || parts.length > 2) {
+                throw new IllegalArgumentException("topics.enabledWorkspaces: malformed entry '%s'".formatted(entry));
+            }
+            var stage = parts.length == 1
+                    ? TopicsStage.ALL
+                    : TopicsStage.fromConfigName(parts[1].strip()).orElseThrow(() -> new IllegalArgumentException(
+                            "topics.enabledWorkspaces: unknown stage in '%s'".formatted(entry)));
+            var listed = stages.putIfAbsent(workspaceId, stage);
+            if (listed != null && listed != stage) {
+                throw new IllegalArgumentException(
+                        "topics.enabledWorkspaces: workspace '%s' is listed with stages '%s' and '%s'"
+                                .formatted(workspaceId, listed.configName(), stage.configName()));
+            }
+        }
+        return Map.copyOf(stages);
+    }
+
+    /** The listed workspace ids, whatever their stage. */
     public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
+        return enabledWorkspaceStages().keySet();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.enabledWorkspaces must list each workspace id as id or id:stage, with one stage per id and stage one of vectors, build, arrival, nightly, ui") public boolean isEnabledWorkspacesValid() {
+        try {
+            enabledWorkspaceStages();
+            return true;
+        } catch (IllegalArgumentException exception) {
+            // The constraint message is fixed text: this names the entry.
+            log.error("Topics config is not valid: {}", exception.getMessage());
+            return false;
+        }
     }
 
     @Data

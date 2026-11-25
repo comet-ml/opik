@@ -47,12 +47,16 @@ class TopicRunOutcomes {
     }
 
     /**
-     * Marks the run failed with the error's code ({@code internal} when it has none). When the run had ended already,
-     * a timeout raced its commit: the run is saved, without its trace_topics, which the labelling pass gives.
+     * Marks the run failed with the error's code ({@code internal} when it has none); the outcome and the log carry
+     * the window bounds and what the error says the run had read. When the run had ended already, a timeout raced its commit: the run is
+     * saved, without its trace_topics, which the labelling pass gives.
      */
     Mono<TopicRunOutcome> failed(@NonNull TopicRun run, @NonNull Throwable error) {
         var code = error instanceof TopicsRunException exception ? exception.getCode() : RunError.INTERNAL;
         var stats = bounds(run);
+        if (error instanceof TopicsRunException exception) {
+            stats.setAll(exception.getStats());
+        }
         return store.fail(run.runId(), run.workspace(), run.projectId(), code)
                 .flatMap(marked -> marked ? Mono.just(false) : store.isSaved(run))
                 .onErrorResume(markError -> {
@@ -66,7 +70,7 @@ class TopicRunOutcomes {
                                 + "code '{}'", run.runId(), run.projectId(), code.getValue());
                         return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
                     }
-                    logFailure(run, code, error);
+                    logFailure(run, code, stats, error);
                     return outcome(run, stats, TopicProject.RunStatus.FAILED, code.getValue());
                 });
     }
@@ -82,15 +86,15 @@ class TopicRunOutcomes {
                 });
     }
 
-    private static void logFailure(TopicRun run, RunError code, Throwable error) {
+    private static void logFailure(TopicRun run, RunError code, ObjectNode stats, Throwable error) {
         if (TEXT_CODES.contains(code)) {
             // The answer's length and SHA-256 are logged when it arrives.
-            log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", run.runId(), run.projectId(),
-                    code.getValue(), ExceptionUtils.getThrowableList(error).stream()
+            log.warn("Topics run '{}' failed, project '{}', code '{}', stats '{}', errors '{}'", run.runId(),
+                    run.projectId(), code.getValue(), stats, ExceptionUtils.getThrowableList(error).stream()
                             .map(TopicsErrors::formatError).toList());
         } else {
-            log.warn("Topics run '{}' failed, project '{}', code '{}'", run.runId(), run.projectId(),
-                    code.getValue(), error);
+            log.warn("Topics run '{}' failed, project '{}', code '{}', stats '{}'", run.runId(), run.projectId(),
+                    code.getValue(), stats, error);
         }
     }
 

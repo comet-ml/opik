@@ -14,8 +14,8 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -23,8 +23,8 @@ import java.util.stream.IntStream;
  * The topic algorithm in use. A discovery run merges identical texts, k-means them into fine groups, has the LLM name
  * topics over the groups ({@link TopicTasks#author()}), and assigns every trace to its nearest prototype with
  * {@link PrototypeAssigner}: the topic prototypes are the centres of each topic's groups, the known-Other ones the
- * centres of the Other groups. The labeller applies the same assigner to a saved list. Its tunables are
- * {@code topics.algorithm}.
+ * centres of the Other groups. A nightly update is {@link NightlyUpdate}. The labeller applies the same assigner to a
+ * saved list. Its tunables are {@code topics.algorithm}.
  */
 @Singleton
 public class KMeansTopicAlgorithm implements TopicAlgorithm {
@@ -124,22 +124,58 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     }
 
     /**
+     * {@link NightlyUpdate} over the saved list. An answer that is not a JSON object (null) leaves its groups in Other;
+     * for the verify call, it verifies no pair.
+     */
+    @Override
+    public NightStep<TopicUpdate> update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics) {
+        return NightlyUpdate.run(state, window, maxTopics, config, tasks).map(result -> {
+            var stats = JsonUtils.createObjectNode();
+            stats.put("naming_task_version", tasks.naming().version());
+            stats.put("naming_new_task_version", tasks.namingNew().version());
+            stats.put("verify_task_version", tasks.verify().version());
+            stats.put("unassigned", result.unassigned());
+            stats.put("candidates", result.candidates().size());
+            stats.put("big", result.big().size());
+            var forced = stats.putObject("forced");
+            result.forced().forEach(outcome -> {
+                var key = outcome.result().name().toLowerCase(Locale.ROOT);
+                forced.put(key, forced.path(key).asInt() + 1);
+            });
+            return TopicUpdate.builder().before(result.before()).labels(result.labels()).stats(stats).build();
+        });
+    }
+
+    /**
      * The {@link PrototypeAssigner} over the saved list, as the run made it: each topic's vectors in topic order,
      * owned by the topic's index, then the known-Other ones.
      */
     @Override
-    public Optional<TopicLabeller> labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
+    public TopicLabeller labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
         if (topics.isEmpty()) {
-            return Optional.empty();
+            return vectors -> vectors.stream().map(vector -> TopicEmbedding.usable(vector) ? TraceTopic.OTHER : null)
+                    .toArray(UUID[]::new);
         }
         var assigner = assigner(
                 topics.stream().flatMap(topic -> topic.vectors().vectors().stream()).toList(),
                 ownerOfEach(topics.stream().map(topic -> topic.vectors().size()).toList()),
                 otherVectors == null ? List.of() : otherVectors.vectors());
         var ids = topics.stream().map(Topic::id).toList();
-        return Optional.of(vectors -> Arrays.stream(assigner.assign(vectors))
-                .mapToObj(label -> label == OTHER ? TraceTopic.OTHER : ids.get(label))
-                .toArray(UUID[]::new));
+        return vectors -> {
+            var usableIndexes = IntStream.range(0, vectors.size()).filter(i -> TopicEmbedding.usable(vectors.get(i)))
+                    .toArray();
+            int d = TopicEmbedding.DIMENSIONS;
+            var flat = new float[usableIndexes.length * d];
+            for (int i = 0; i < usableIndexes.length; i++) {
+                System.arraycopy(vectors.get(usableIndexes[i]), 0, flat, i * d, d);
+            }
+            var labels = assigner.assign(flat);
+            var out = new UUID[vectors.size()];
+            for (int i = 0; i < usableIndexes.length; i++) {
+                out[usableIndexes[i]] = labels[i] == OTHER ? TraceTopic.OTHER : ids.get(labels[i]);
+            }
+            return out;
+        };
     }
 
     /** One group per {@code textsPerGroup} unique texts, within the configured bounds and never more than the texts. */

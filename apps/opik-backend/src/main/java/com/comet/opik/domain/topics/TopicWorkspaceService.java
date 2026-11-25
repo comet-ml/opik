@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -26,6 +27,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * </ul>
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
+ * {@link #reaches} also checks the workspace's {@link TopicsStage} from the list.
  *
  * <p>Also keeps the vectors tick's per-workspace watermark and long-window pass progress in
  * {@code topic_vector_watermarks}.
@@ -54,6 +56,12 @@ public class TopicWorkspaceService {
                 && template.inTransaction(READ_ONLY,
                         handle -> handle.attach(AiLabelWorkspaceDAO.class).enabled(workspaceId))
                         .orElse(false);
+    }
+
+    /** True when the workspace {@link #isEnabled} and its listed stage is {@code stage} or a later one. */
+    public boolean reaches(@NonNull String workspaceId, @NonNull TopicsStage stage) {
+        var listed = config.enabledWorkspaceStages().get(workspaceId);
+        return listed != null && listed.includes(stage) && isEnabled(workspaceId);
     }
 
     /** The vectors tick's watermark of each workspace that has one. */
