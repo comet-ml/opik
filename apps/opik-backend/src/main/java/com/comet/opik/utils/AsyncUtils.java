@@ -17,12 +17,18 @@ import reactor.util.context.Context;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 @UtilityClass
 @Slf4j
 public class AsyncUtils {
+
+    // Shared by every request: the pool Offload.resumeOriginal returns to on an API path. A new virtual thread per task,
+    // so it needs no sizing and no lifecycle.
+    private static final Scheduler REQUEST_SCHEDULER = Schedulers.fromExecutorService(
+            Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("request-vt-", 0).factory()), "request-vt");
 
     public static Context setRequestContext(Context ctx, Provider<RequestContext> requestContext) {
         return setRequestContext(ctx, requestContext.get());
@@ -35,6 +41,7 @@ public class AsyncUtils {
                 .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
+        context = Offload.originalOn(context, REQUEST_SCHEDULER);
         return requestContext.getCometCredentials() == null
                 ? context
                 : context.put(RequestContext.COMET_CREDENTIALS, requestContext.getCometCredentials());

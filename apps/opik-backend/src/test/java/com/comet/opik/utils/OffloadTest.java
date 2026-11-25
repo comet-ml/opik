@@ -1,5 +1,7 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -58,6 +60,29 @@ class OffloadTest {
             assertThat(cpuThread).startsWith("parallel-");
         } finally {
             workers.dispose();
+            client.dispose();
+        }
+    }
+
+    @Test
+    void resumeOriginalReturnsToARequestVirtualThreadOnAnApiPath() {
+        var client = Schedulers.newSingle("offload-test-client");
+        try {
+            var requestContext = RequestContext.builder()
+                    .userName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .workspaceId(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+
+            var resumed = Mono.just(1).publishOn(client)
+                    .transform(Offload::resumeOriginal)
+                    .map(__ -> Thread.currentThread())
+                    .contextWrite(context -> AsyncUtils.setRequestContext(context, requestContext))
+                    .block();
+
+            assertThat(resumed.isVirtual()).isTrue();
+            assertThat(resumed.getName()).startsWith("request-vt-");
+        } finally {
             client.dispose();
         }
     }
