@@ -571,6 +571,52 @@ areas:
       # naming a widget would have made that confusion permanent.
       span-by-id-fan-out:     { covered: false, note: "GET /v1/private/spans/{id} for a span id written under MORE THAN ONE project (opik#9311): the by-ids query dedups per (workspace_id, project_id, id), so the id returns a row per project, and the strict single-item reducer behind SpanDAO.getById used to answer that second row with IndexOutOfBoundsException — a hard 500 on a read every span-detail consumer depends on. Asserted as 200 plus WHICH write the read resolves to, over two orderings that are needed together: the natural one (the later write is also the later-created, higher-id project) proves the read no longer 500s, and an inverted one (the later write is the LOWER-id project, with the id order itself asserted under java.util.UUID.compareTo's signed semantics) is what separates the documented LATEST_SPAN_ORDER — comparing(lastUpdatedAt).thenComparing(projectId) — from its most plausible impostor, a resolver ordering by project id. Each copy carries its own `input` and `name`, so a resolver returning the right project's row with another's content fails too; each write is polled through the project-scoped by-trace read (which cannot fan out) before the next one, so the write ORDER is imposed rather than raced. NOT covered: the Add-to-dataset mapping Preview, which is the one UI surface that issues this read; whether the second write is REFUSED anywhere (nothing refuses it, which is why the fan-out exists); and the `GET /v1/private/spans` listing, which is project-scoped and cannot fan out." }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
+      # New for 2.3.2, from the release pass's own staging exploration of
+      # opik#9594 (OPIK-9233). `coverage/pending/` held nothing this release, so
+      # this key is authored here directly, as 2.2.139's, 2.2.140's and
+      # 2.2.146's were.
+      #
+      # Its own key, and not folded into a neighbour. `update-trace-api` and
+      # `update-span-api` are both the PATCH and what a partial write preserves;
+      # this is the CREATE path, and what survives it at size. `trace-heavy-
+      # payload` is the closest thing that exists, and it is in the LOAD
+      # dimension on a `payload-size` axis with `tests_load/` scenarios behind
+      # it — it measures whether a megabyte payload can be ingested at rate, not
+      # whether the bytes come back unchanged, and it is not joinable to Allure.
+      # `open-trace-panel` is already `covered: true` at t1 and names the panel,
+      # so folding a question about the WRITERS under it would retire that
+      # question for good — the call this area has now made four times.
+      #
+      # Deliberately named for the fidelity claim rather than for a writer or a
+      # flag. `ANALYTICS_DB_STREAM_PAYLOADS` is managed config on cloud (neither
+      # readable nor settable from a spec), so a key naming the flag would be
+      # unassertable on the deployments the suite actually runs against; and a
+      # key naming one writer could not hold the other two.
+      ingest-payload-fidelity: { covered: false, note: "A payload written at a size that reaches the streamed write path comes back byte-identically, across the three writers `ANALYTICS_DB_STREAM_PAYLOADS` governs (opik#9594 / OPIK-9233): `SpanDAO`'s single-row insert, `SpanDAO`'s batch insert (JsonEachRowBulkInsert) and `TraceDAO`'s payload write. The failure mode is why it is a capability at all rather than a backend test's business: a streamed write that truncates or blanks a payload answers 2xx, the row stays listed and the panel still opens, so only the content has quietly gone. PARTIAL. The single-row SPAN create is covered by span-large-payload-round-trip.spec.ts (which predates this key and is tagged update-span-api / open-trace-panel, not re-tagged here — it also covers the update and update-before-create modes). span-batch-payload-stream-paths.spec.ts covers the other two, which that spec deliberately does not reach: it seeds its host trace SMALL and says in its own comment why it avoids the batch endpoint. One seed, ~1 MiB in each of input/output/metadata on a trace POSTed to the single-row /v1/private/traces and on one span POSTed to /v1/private/spans/batch — six fields, each with its own marker key distinct ACROSS the two rows, so a payload that landed in the wrong field or on the wrong row fails as loudly as one that was truncated. Compared by length and SHA-256 rather than toEqual, because a megabyte-wide structural diff is unreadable when it fails. The truncated list read is asserted as a RANGE (non-blank, far under the megabyte) over the batch span, with the project's `total` asserted at 1 so a batch write that fanned one span into several rows fails. A UI leg re-reads the batch span's three sections in the trace panel against their own markers. NOT covered, and not coverable from this suite: the flag's VALUE and its flag-on path — managed cloud config is neither readable nor settable, so a spec that branched on it could only assert what it was told; the >100 MB max_query_size case 9146 exists to fix, which stays with the backend's LargePayloadTests because this suite runs on shared staging; and whether `metadata` is slimmed by truncate=true at all, which span-large-payload-round-trip.spec.ts records as an open soft finding (measured coming back whole while the endpoint's @Schema says otherwise) and which neither spec pins in either direction." }
+      # New for 2.3.2, from the release pass's own staging exploration of
+      # opik#9742 (OPIK-9217). Authored here for the same reason as the key
+      # above.
+      #
+      # Its own key, and NOT `open-trace-panel`, which the exploration candidate
+      # reached for and which the spec's UI leg does honestly assert — that key
+      # is already `covered: true` at t1-smoke, so tagging the redirect under it
+      # alone would have left the endpoint reading as tested while nothing in the
+      # estate read it. Not `list-traces` either: that names the Logs listing,
+      # and the listing is the thing the link LANDS on rather than the thing
+      # under test.
+      #
+      # Named for the LINK rather than for the endpoint path, because the
+      # endpoint is not the user-facing capability — the pasted URL is. The SDK
+      # prints one on every run, and the `path`/`workspace_name` query grammar
+      # is an implementation detail the key should outlive.
+      #
+      # OPEN, needs a human call: whether this key should live under `traces` at
+      # all, or whether `/v1/session/redirect/*` deserves an area of its own.
+      # Three of its four endpoints are not trace-shaped (`datasets`,
+      # `experiments`, `optimizations`), and the spec covers only the trace one,
+      # so the key as written understates the surface by three quarters. Raised
+      # for taxonomy-discovery rather than decided here.
+      sdk-redirect-link:      { covered: false, note: "GET /v1/session/redirect/projects — the link `opik.Opik` prints after every run ('Started logging traces to the ... project at .../v1/session/redirect/projects?trace_id=...&path=...'), and the workspace it resolves (opik#9742 / OPIK-9217). 9742 moved the no-`workspace_name` lookup onto the configured `reactService.url`, so the regression it can cause is not a 500 but a well-formed URL whose workspace segment belongs to somebody else — which nobody notices until they follow it. Nothing in the estate read this endpoint before. sdk-redirect-link-workspace.spec.ts covers: 303 with the WHOLE Location asserted as a string (a segment-wise or toContain assertion passes on exactly the failure 9742 could introduce); the same answer with `workspace_name` supplied; a deliberately wrong `workspace_name` echoed verbatim, which is the differential that makes the no-param answer a derived lookup rather than a copy of the request, asserted both as the echoed string and as NOT the correct one; 404 on an unknown trace id and 400 on the omitted-but-required `path` param, both with no Location; and 403 for a caller holding a valid Opik API key but no browser session, which is what pins the resolved workspace to the SESSION's. A second test follows the Location in a browser as given — nothing rebuilds it, which is the only way the link itself being wrong is observable — and asserts the trace's own panel open on it by name, the Logs row underneath, and the breadcrumb project. NOT covered, deliberately: the `datasets`, `experiments` and `optimizations` endpoints. Their Location is correct here too, but following it lands on 'This is a private project' on this workspace — TanStack's `removeBasepath` does an unbounded `pathname.replace(basepath, \"\")`, so under the `/opik` basepath a workspace named `opik-testing` is mangled to `-testing`. That is a known, documented hazard in the frontend's own tests (RecentActivitySection.test.tsx names it; parseExperimentReturnHref.ts works around it for other link surfaces), it is pre-existing rather than a 2.3.2 regression (this release ships zero frontend files), it reproduces on the plain /{ws}/datasets route, and per the frontend's own tests it only bites a workspace whose name STARTS WITH `opik`. Pinning those three to today's behaviour would pin a bug; asserting the correct behaviour would fail forever on this workspace. Reported as a finding instead." }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
     visual:
