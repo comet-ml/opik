@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -33,6 +34,8 @@ public class CustomModelPriceValidator {
     static final int MAX_NOTE_LENGTH = 500;
     static final int MAX_DECIMALS = 10;
     static final BigDecimal MAX_PRICE_PER_MILLION = new BigDecimal("100000");
+    static final int MAX_PRICE_TEXT_LENGTH = 40;
+    static final int MAX_ECHOED_LENGTH = 64;
     private static final BigDecimal OUT_OF_RANGE_FACTOR = BigDecimal.TEN;
 
     private static final String MODEL = "model";
@@ -169,7 +172,8 @@ public class CustomModelPriceValidator {
         int errorsBefore = errors.size();
         node.fieldNames().forEachRemaining(field -> {
             if (!FIELDS.contains(field) && !READ_ONLY_FIELDS.contains(field)) {
-                errors.add(problem(index, field, Code.UNKNOWN_FIELD, "Unknown field '%s'".formatted(field)));
+                errors.add(problem(index, echoed(field), Code.UNKNOWN_FIELD,
+                        "Unknown field '%s'".formatted(echoed(field))));
             }
         });
 
@@ -256,8 +260,8 @@ public class CustomModelPriceValidator {
         }
         aliasOf.fieldNames().forEachRemaining(field -> {
             if (!ALIAS_OF_FIELDS.contains(field)) {
-                errors.add(problem(index, ALIAS_OF + "." + field, Code.UNKNOWN_FIELD,
-                        "Unknown field '%s.%s'".formatted(ALIAS_OF, field)));
+                errors.add(problem(index, ALIAS_OF + "." + echoed(field), Code.UNKNOWN_FIELD,
+                        "Unknown field '%s.%s'".formatted(ALIAS_OF, echoed(field))));
             }
         });
         Optional<String> sentTarget = text(index, aliasOf, MODEL, ALIAS_OF_MODEL, errors);
@@ -350,15 +354,41 @@ public class CustomModelPriceValidator {
             }
             List<ModelPrice> bases = builtInBases(row);
             if (price.kind() == CustomModelPrice.Kind.ALIAS) {
-                if (!bases.isEmpty()) {
-                    warnings.add(problem(row.index(), MODEL, Code.SHADOWS_BUILTIN,
-                            "'%s' has a built-in price, which this alias replaces".formatted(price.modelName())));
-                }
+                warnings.addAll(aliasRowWarnings(row.index(), price, bases));
             } else {
                 warnings.addAll(fixedRowWarnings(row.index(), price, bases));
             }
         }
         return List.copyOf(warnings);
+    }
+
+    // Spans of a model priced per unit keep their built-in price when the alias target is priced per token, as token
+    // rates would bill them for tokens they never log.
+    private List<Problem> aliasRowWarnings(int index, CustomModelPrice alias, List<ModelPrice> bases) {
+        if (bases.isEmpty()) {
+            return List.of();
+        }
+        if (bases.stream().anyMatch(ModelPrice::isPricedPerUnit) && !isTargetPricedPerUnit(alias)) {
+            return List.of(problem(index, MODEL, Code.PRICED_PER_UNIT,
+                    "'%s' is priced per second or per character, so the token prices of '%s' don't apply"
+                            .formatted(alias.modelName(), alias.aliasModelName())));
+        }
+        return List.of(problem(index, MODEL, Code.SHADOWS_BUILTIN,
+                "'%s' has a built-in price, which this alias replaces".formatted(alias.modelName())));
+    }
+
+    // Only a built-in price is billed per unit, as a fixed row sets token rates, so this request's rows don't matter.
+    private boolean isTargetPricedPerUnit(CustomModelPrice alias) {
+        String targetProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider())
+                ? alias.provider()
+                : alias.aliasProvider();
+        if (targetProvider.isEmpty()) {
+            return ModelPriceResolver.builtInMatchesUnderEveryProvider(alias.aliasModelName()).stream()
+                    .anyMatch(match -> match.price().isPricedPerUnit());
+        }
+        return ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider)
+                .filter(match -> match.price().isPricedPerUnit())
+                .isPresent();
     }
 
     // The built-in prices the row's spans would get without it. Saving strips a vendor prefix that spans keep: a span
@@ -450,7 +480,7 @@ public class CustomModelPriceValidator {
             }
             default -> {
                 errors.add(problem(index, KIND, Code.UNKNOWN_KIND,
-                        "The kind is fixed or alias, got '%s'".formatted(kind)));
+                        "The kind is fixed or alias, got '%s'".formatted(echoed(kind))));
                 yield Optional.empty();
             }
         });
@@ -466,7 +496,12 @@ public class CustomModelPriceValidator {
             if (value.isNumber()) {
                 price = value.decimalValue();
             } else if (value.isTextual()) {
-                price = new BigDecimal(value.asText().trim());
+                String text = value.asText().trim();
+                // BigDecimal parsing time grows faster than the text's length, and a valid price is far shorter.
+                if (text.length() > MAX_PRICE_TEXT_LENGTH) {
+                    throw new NumberFormatException();
+                }
+                price = new BigDecimal(text);
             } else {
                 throw new NumberFormatException();
             }
@@ -517,6 +552,13 @@ public class CustomModelPriceValidator {
                     "%s is %d characters, at most %d".formatted(field, stripped.length(), MAX_NAME_LENGTH)));
             return Optional.empty();
         }
+        // Names are saved lower-cased, which can make them longer: 'İ' lower-cases to two characters.
+        int savedLength = stripped.toLowerCase(Locale.ROOT).length();
+        if (savedLength > MAX_NAME_LENGTH) {
+            errors.add(problem(index, field, Code.NAME_TOO_LONG, "%s is %d characters once lower-cased, at most %d"
+                    .formatted(field, savedLength, MAX_NAME_LENGTH)));
+            return Optional.empty();
+        }
         if (stripped.codePoints().anyMatch(CustomModelPriceValidator::isControlOrFormat)) {
             errors.add(problem(index, field, Code.CONTROL_CHARACTERS,
                     "%s can't contain control or invisible characters".formatted(field)));
@@ -558,6 +600,10 @@ public class CustomModelPriceValidator {
         return provider.isEmpty() ? "any provider" : "'%s'".formatted(provider);
     }
 
+    private String echoed(String sent) {
+        return StringUtils.abbreviate(sent, MAX_ECHOED_LENGTH);
+    }
+
     private Problem problem(Integer row, String field, Code code, String message) {
         return Problem.builder().row(row).field(field).code(code).message(message).build();
     }
@@ -565,7 +611,7 @@ public class CustomModelPriceValidator {
     /**
      * Answers which rows and prices an alias target reaches, cached per target for one validate call: many aliases
      * share a target, and an any-provider alias whose target names no provider is checked under every provider a span
-     * can have, about 160 of them.
+     * can have, which is every provider in the price file and every provider these rows name.
      */
     private static final class AliasTargets {
 
@@ -587,9 +633,9 @@ public class CustomModelPriceValidator {
                     .map(CustomModelPrice::provider)
                     .filter(provider -> !provider.isEmpty())
                     .collect(Collectors.toSet());
-            // Spans can also come from the providers of this request's fixed rows, which may have no built-in prices.
+            // Spans can also come from the providers of this request's rows, which may have no built-in prices.
             Set<List<String>> lookupOrders = Stream.concat(ModelPriceTable.pricedProviders().stream(),
-                    fixedPrices.stream().map(CustomModelPrice::provider).filter(provider -> !provider.isEmpty()))
+                    rowProviders.stream())
                     .map(ProviderRegistry::priceLookupOrder)
                     .collect(Collectors.toSet());
             this.everyProvidersLookupOrders = Stream.concat(
