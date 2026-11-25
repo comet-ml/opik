@@ -28,6 +28,7 @@ import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/Resiz
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import {
+  ANY_PROVIDER_LABEL,
   BuiltInPrice,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
@@ -85,6 +86,22 @@ const KeyName: React.FC<{ name: string }> = ({ name }) => (
 const READ_ONLY_INPUT = "bg-muted hover:shadow-none";
 
 const PROVIDER_EMPTY_MESSAGE = "Not in the list. Saved as a custom provider.";
+const MODEL_EMPTY_MESSAGE = "Not in the list. Saved as a custom model.";
+const SPANS_OWN_PROVIDER_LABEL = "The span's own provider";
+const MAX_MODEL_SUGGESTIONS = 50;
+
+const matching = (names: string[], typed: string) => {
+  const query = typed.trim().toLowerCase();
+  const matches = names.filter((name) => name.toLowerCase().includes(query));
+  return [
+    ...matches.filter((name) => name.toLowerCase().startsWith(query)),
+    ...matches.filter((name) => !name.toLowerCase().startsWith(query)),
+  ];
+};
+
+// The empty provider is offered as a named option, like the table's Provider filter.
+const fromProviderOption = (value: string, emptyLabel: string) =>
+  value === emptyLabel ? "" : value;
 
 type ModelPriceDrawerProps = {
   open: boolean;
@@ -93,11 +110,14 @@ type ModelPriceDrawerProps = {
   list: ModelPriceList;
   builtIns: BuiltInPrice[];
   providers: string[];
+  pricedModels: PricedModel[];
   canEdit: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
   navigation?: DrawerNavigation;
 };
+
+export type PricedModel = { model: string; provider: string };
 
 export type DrawerNavigation = {
   hasPrevious: boolean;
@@ -167,6 +187,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
   list,
   builtIns,
   providers,
+  pricedModels,
   canEdit,
   isPinned = false,
   onTogglePin,
@@ -431,12 +452,23 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
   const helpText = keepsBuiltIn
     ? "Per-token prices are shown per 1M tokens for readability. Empty = built-in price."
     : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
-  const providerLabel = provider.trim() || "Any provider";
+  const providerLabel = provider.trim() || ANY_PROVIDER_LABEL;
   const ProviderIcon = providerIconOf(provider.trim());
-  const providersMatching = (typed: string) => {
-    const query = typed.trim().toLowerCase();
-    return providers.filter((name) => name.toLowerCase().includes(query));
-  };
+  const aliasTargetProvider = aliasProvider.trim();
+  const modelsMatching = (typed: string) =>
+    matching(
+      Array.from(
+        new Set(
+          pricedModels
+            .filter(
+              (target) =>
+                !aliasTargetProvider || target.provider === aliasTargetProvider,
+            )
+            .map((target) => target.model),
+        ),
+      ),
+      typed,
+    ).slice(0, MAX_MODEL_SUGGESTIONS);
 
   return (
     <>
@@ -539,17 +571,17 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="model-price-provider">Provider</Label>
+              <Label id="model-price-provider">Provider</Label>
               <Autocomplete
-                id="model-price-provider"
+                aria-labelledby="model-price-provider"
                 dimension="sm"
-                placeholder="Any provider"
+                placeholder={ANY_PROVIDER_LABEL}
                 value={provider}
-                items={providersMatching(provider)}
+                items={matching([ANY_PROVIDER_LABEL, ...providers], provider)}
                 emptyMessage={PROVIDER_EMPTY_MESSAGE}
                 onValueChange={(value) => {
                   resetFeedback();
-                  setProvider(value);
+                  setProvider(fromProviderOption(value, ANY_PROVIDER_LABEL));
                 }}
               />
             </div>
@@ -594,42 +626,59 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         {kind === "alias" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="model-price-alias-model">Priced like</Label>
-              <Input
-                id="model-price-alias-model"
-                dimension="sm"
-                className={cn("font-mono", readOnly && READ_ONLY_INPUT)}
-                placeholder="e.g. gpt-4o"
-                value={aliasModel}
-                readOnly={readOnly}
-                onChange={(event) => {
-                  resetFeedback();
-                  setAliasModel(event.target.value);
-                }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="model-price-alias-provider">On provider</Label>
+              <Label id="model-price-alias-model">Priced like</Label>
               {readOnly ? (
                 <Input
-                  id="model-price-alias-provider"
+                  aria-labelledby="model-price-alias-model"
+                  dimension="sm"
+                  className={cn("font-mono", READ_ONLY_INPUT)}
+                  placeholder="e.g. gpt-4o"
+                  value={aliasModel}
+                  readOnly
+                />
+              ) : (
+                <Autocomplete
+                  aria-labelledby="model-price-alias-model"
+                  dimension="sm"
+                  className="font-mono"
+                  placeholder="e.g. gpt-4o"
+                  value={aliasModel}
+                  items={modelsMatching(aliasModel)}
+                  emptyMessage={MODEL_EMPTY_MESSAGE}
+                  onValueChange={(value) => {
+                    resetFeedback();
+                    setAliasModel(value);
+                  }}
+                />
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label id="model-price-alias-provider">On provider</Label>
+              {readOnly ? (
+                <Input
+                  aria-labelledby="model-price-alias-provider"
                   dimension="sm"
                   className={READ_ONLY_INPUT}
-                  placeholder="The span's own provider"
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
                   value={aliasProvider}
                   readOnly
                 />
               ) : (
                 <Autocomplete
-                  id="model-price-alias-provider"
+                  aria-labelledby="model-price-alias-provider"
                   dimension="sm"
-                  placeholder="The span's own provider"
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
                   value={aliasProvider}
-                  items={providersMatching(aliasProvider)}
+                  items={matching(
+                    [SPANS_OWN_PROVIDER_LABEL, ...providers],
+                    aliasProvider,
+                  )}
                   emptyMessage={PROVIDER_EMPTY_MESSAGE}
                   onValueChange={(value) => {
                     resetFeedback();
-                    setAliasProvider(value);
+                    setAliasProvider(
+                      fromProviderOption(value, SPANS_OWN_PROVIDER_LABEL),
+                    );
                   }}
                 />
               )}

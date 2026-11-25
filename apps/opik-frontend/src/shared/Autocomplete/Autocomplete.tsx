@@ -18,7 +18,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import { Button } from "@/ui/button";
 
 type Props<T extends string> = {
-  id?: string;
+  "aria-labelledby"?: string;
   value: T;
   onValueChange: (value: T) => void;
   items: T[];
@@ -32,7 +32,7 @@ type Props<T extends string> = {
 };
 
 const AutoComplete = <T extends string>({
-  id,
+  "aria-labelledby": ariaLabelledBy,
   value,
   onValueChange,
   items,
@@ -146,10 +146,10 @@ const AutoComplete = <T extends string>({
               onBlur={handleBlur}
             >
               <Input
-                id={id}
-                // cmdk names the input after its own empty label, which would
-                // hide the caller's <label htmlFor={id}> from screen readers.
-                {...(id && { "aria-labelledby": undefined })}
+                // cmdk keeps focus by finding the input through the id it
+                // generates, so a caller's label names the input this way
+                // instead of through an id of its own.
+                {...(ariaLabelledBy && { "aria-labelledby": ariaLabelledBy })}
                 dimension={dimension}
                 className={cn(
                   { "border-destructive": hasError },

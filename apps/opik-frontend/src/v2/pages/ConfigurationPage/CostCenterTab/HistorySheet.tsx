@@ -111,10 +111,6 @@ const HistorySheet: React.FC<HistorySheetProps> = ({
             getRowId={(row) => row.id}
             columnPinning={COLUMN_PINNING}
           />
-          <p className="comet-body-xs mt-3 text-light-slate">
-            Every save keeps each row before and after, so any change can be
-            traced.
-          </p>
         </div>
       </SheetContent>
     </Sheet>

@@ -113,6 +113,13 @@ const CostCenterTab: React.FC = () => {
     [builtIns, list],
   );
   const providerOptions = useMemo(() => providersOf(catalog), [catalog]);
+  const pricedModels = useMemo(
+    () =>
+      catalog
+        .filter((entry) => entry.type !== "alias")
+        .map(({ model, provider }) => ({ model, provider })),
+    [catalog],
+  );
   const namedProviders = useMemo(
     () => providerOptions.filter((name) => name !== ANY_PROVIDER_LABEL),
     [providerOptions],
@@ -490,6 +497,7 @@ const CostCenterTab: React.FC = () => {
           list={list}
           builtIns={builtIns ?? []}
           providers={namedProviders}
+          pricedModels={pricedModels}
           canEdit={canEdit}
           isPinned={drawerEntry ? isPinned(drawerEntry) : false}
           onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}

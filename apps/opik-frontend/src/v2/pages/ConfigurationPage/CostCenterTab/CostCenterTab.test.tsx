@@ -753,6 +753,70 @@ describe("CostCenterTab", () => {
       expect(unknown.querySelector("svg")).toBeNull();
     });
 
+    it("keeps focus in the alias fields when their list first opens", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      const alias = screen.getByRole("radio", { name: "Alias" });
+      act(() => alias.focus());
+      fireEvent.click(alias);
+      const onProvider = screen.getByLabelText("On provider");
+      act(() => onProvider.focus());
+
+      expect(
+        await screen.findByRole("option", { name: "openai" }),
+      ).toBeInTheDocument();
+      expect(onProvider).toHaveFocus();
+    });
+
+    it("offers an empty provider choice in each provider list", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      const provider = screen.getByLabelText("Provider");
+      fireEvent.focus(provider);
+      fireEvent.click(await screen.findByRole("option", { name: "openai" }));
+      fireEvent.keyDown(provider, { key: "a" });
+      fireEvent.change(provider, { target: { value: "" } });
+      fireEvent.click(
+        await screen.findByRole("option", { name: "Any provider" }),
+      );
+      fireEvent.blur(provider);
+      expect(provider).toHaveValue("");
+
+      fireEvent.click(screen.getByRole("radio", { name: "Alias" }));
+      fireEvent.focus(screen.getByLabelText("On provider"));
+      expect(
+        await screen.findByRole("option", { name: "The span's own provider" }),
+      ).toBeInTheDocument();
+    });
+
+    it("suggests models to alias, narrowed to the chosen provider", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.click(screen.getByRole("radio", { name: "Alias" }));
+      const pricedLike = screen.getByLabelText("Priced like");
+      fireEvent.focus(pricedLike);
+      expect(
+        await screen.findByRole("option", { name: "gpt-4o" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "claude-sonnet-4-5" }),
+      ).toBeInTheDocument();
+
+      const onProvider = screen.getByLabelText("On provider");
+      fireEvent.focus(onProvider);
+      fireEvent.click(await screen.findByRole("option", { name: "anthropic" }));
+      fireEvent.focus(pricedLike);
+      await waitFor(() =>
+        expect(screen.queryByRole("option", { name: "gpt-4o" })).toBeNull(),
+      );
+      expect(
+        screen.getByRole("option", { name: "claude-sonnet-4-5" }),
+      ).toBeInTheDocument();
+    });
+
     it("suggests known providers and keeps a typed custom one", async () => {
       renderTab(ADMIN);
 
