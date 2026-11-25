@@ -17,7 +17,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -49,8 +48,9 @@ public class TopicDataCleanupService {
         if (workspaceIds.isEmpty()) {
             return Mono.just(0);
         }
-        return jdbi(() -> template.inTransaction(READ_ONLY,
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(workspaceIds)))
+                .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(missing -> Flux.fromIterable(missing.stream()
                         .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
                                 Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
@@ -61,13 +61,10 @@ public class TopicDataCleanupService {
 
     private Mono<Integer> deleteTopics(String workspaceId, Collection<UUID> projectIds) {
         return Flux.fromIterable(Lists.partition(List.copyOf(projectIds), config.getStorage().getDeleteBatchSize()))
-                .concatMap(batch -> jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                        .deleteTopicsByProjects(workspaceId, batch)))
+                .concatMap(batch -> Mono.fromCallable(() -> template.inTransaction(WRITE,
+                        handle -> handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, batch)))
+                        .subscribeOn(Schedulers.boundedElastic())
                         .retryWhen(RetryUtils.handleOnDeadLocks()))
                 .reduce(0, Integer::sum);
-    }
-
-    private <T> Mono<T> jdbi(Callable<T> call) {
-        return Mono.fromCallable(call).subscribeOn(Schedulers.boundedElastic());
     }
 }
