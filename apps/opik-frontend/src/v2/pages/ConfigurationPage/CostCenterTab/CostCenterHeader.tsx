@@ -1,5 +1,4 @@
 import React from "react";
-import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
 import { getTimeFromNow } from "@/lib/date";
 import { HistoryVersion } from "@/lib/model-prices";
@@ -10,9 +9,6 @@ type CostCenterHeaderProps = {
   canEdit: boolean;
   isAccessPending: boolean;
   latest?: HistoryVersion;
-  history: HistoryVersion[];
-  isHistoryOpen: boolean;
-  onToggleHistory: () => void;
   actions?: React.ReactNode;
 };
 
@@ -41,73 +37,32 @@ const CostCenterHeader: React.FC<CostCenterHeaderProps> = ({
   canEdit,
   isAccessPending,
   latest,
-  history,
-  isHistoryOpen,
-  onToggleHistory,
   actions,
 }) => {
   const access = describeAccess(organizationName, canEdit, isAccessPending);
   return (
-    <div className="mb-4 flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <h2 className="comet-title-xs">Cost center</h2>
-          {actions}
-        </div>
-        <div className="comet-body-s flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-slate">
-          {!canEdit && !isAccessPending && (
-            <Tag variant="yellow" size="md">
-              View only · ask an organization admin
-            </Tag>
-          )}
-          <span>
-            {version > 0
-              ? `Organization prices: version ${version}`
-              : "No organization prices saved yet"}
-            {latest &&
-              ` · saved by ${latest.createdBy} · ${getTimeFromNow(
-                latest.createdAt,
-              )}`}
-          </span>
-          {access && <span>· {access}</span>}
-          {history.length > 0 && (
-            <Button variant="link" size="3xs" onClick={onToggleHistory}>
-              {isHistoryOpen ? "Hide history" : "History"}
-            </Button>
-          )}
-        </div>
+    <div className="mb-4 flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <h2 className="comet-title-xs">Cost center</h2>
+        {actions}
       </div>
-
-      {isHistoryOpen && history.length > 0 && (
-        <div
-          className="rounded-md border p-4"
-          data-testid="model-price-history"
-        >
-          <h3 className="comet-body-accented mb-2">History</h3>
-          <ul className="flex flex-col gap-2">
-            {history.map((entry) => (
-              <li key={entry.version} className="comet-body-s">
-                <span className="comet-body-s-accented">
-                  Version {entry.version}
-                </span>
-                <span className="text-muted-slate">
-                  {" "}
-                  · {entry.createdBy} · {getTimeFromNow(entry.createdAt)}
-                </span>
-                <ul className="list-disc pl-5 text-muted-slate">
-                  {entry.lines.map((line, index) => (
-                    <li key={index}>{line}</li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-          <p className="comet-body-xs mt-3 text-light-slate">
-            Every save keeps each row before and after, so any change can be
-            traced.
-          </p>
-        </div>
-      )}
+      <div className="comet-body-s flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-slate">
+        {!canEdit && !isAccessPending && (
+          <Tag variant="yellow" size="md">
+            View only · ask an organization admin
+          </Tag>
+        )}
+        <span>
+          {version > 0
+            ? `Organization prices: version ${version}`
+            : "No organization prices saved yet"}
+          {latest &&
+            ` · saved by ${latest.createdBy} · ${getTimeFromNow(
+              latest.createdAt,
+            )}`}
+        </span>
+        {access && <span>· {access}</span>}
+      </div>
     </div>
   );
 };

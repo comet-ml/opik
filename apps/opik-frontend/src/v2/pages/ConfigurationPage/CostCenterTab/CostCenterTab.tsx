@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import partition from "lodash/partition";
-import { Layers, Plus } from "lucide-react";
+import { History as HistoryIcon, Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
 import { useModelPricesAccess } from "@/contexts/ModelPricesAccessContext";
@@ -20,6 +20,7 @@ import { COLUMN_TYPE } from "@/types/shared";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Button } from "@/ui/button";
 import {
@@ -34,6 +35,7 @@ import {
   sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
+import HistoryPanel from "./HistoryPanel";
 import PricesTable, {
   DEFAULT_COLUMNS_ORDER,
   DEFAULT_SELECTED_COLUMNS,
@@ -247,9 +249,6 @@ const CostCenterTab: React.FC = () => {
         canEdit={canEdit}
         isAccessPending={access.isPending}
         latest={history[0]}
-        history={history}
-        isHistoryOpen={isHistoryOpen}
-        onToggleHistory={() => setIsHistoryOpen((open) => !open)}
         actions={
           canEdit && (
             <div className="flex items-center gap-2">
@@ -316,8 +315,27 @@ const CostCenterTab: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
+          {history.length > 0 && (
+            <TooltipWrapper
+              content={isHistoryOpen ? "Hide history" : "History"}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="History"
+                aria-pressed={isHistoryOpen}
+                onClick={() => setIsHistoryOpen((open) => !open)}
+              >
+                <HistoryIcon className="size-3.5" />
+              </Button>
+            </TooltipWrapper>
+          )}
         </div>
       </div>
+
+      {isHistoryOpen && history.length > 0 && (
+        <HistoryPanel history={history} />
+      )}
 
       <PricesTable
         entries={pageEntries}

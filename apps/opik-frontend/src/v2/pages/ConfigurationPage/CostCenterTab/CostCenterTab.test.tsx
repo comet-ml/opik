@@ -264,6 +264,22 @@ describe("CostCenterTab", () => {
     ).toBeVisible();
   });
 
+  it("opens and closes the history from the History button", () => {
+    renderTab(ADMIN);
+
+    expect(screen.queryByTestId("model-price-history")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    expect(
+      within(screen.getByTestId("model-price-history")).getByText("Version 3"),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    expect(screen.queryByTestId("model-price-history")).toBeNull();
+  });
+
   describe("catalog", () => {
     it("merges built-in prices with the organization's rows", () => {
       renderTab(ADMIN);
