@@ -35,6 +35,31 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 Use `resumeOriginal` once, after the last client call and before your own logic. Not between client calls, and not
 before `Offload.blocking` or `Offload.cpu`: those hop themselves, and every extra hop is a queue handoff.
 
+## Critical: Always Request Changes
+
+These shapes have all shipped and held a shared thread in tests: S3 deletes on `ClickHouseWorker`, a MySQL transaction
+and a sync HTTP call on `redisson-netty`, response chunks written on `ClickHouseWorker`. Flag them as critical when a diff
+adds or moves them, wherever the chain sits:
+
+1. A blocking call inside an operator lambda (`map`, `flatMap`, `filter`, `handle`, `doOnNext`, `doOnSuccess`,
+   `then(...)`), or inside `Mono.fromCallable` / `fromRunnable` / `fromSupplier` / `Mono.create` with no
+   `Offload.blocking` or `subscribeOn` directly on it.
+2. A per-item blocking call or chunk write on a `Flux` from a DAO or Redis with no `Offload.blockingEach` before it.
+3. `.block()`, `.toFuture().join()` or `CompletableFuture.get()` / `join()` inside a reactive chain.
+
+**How to tell a call is blocking:** it does I/O and returns a plain value or `void`, not a `Mono`, `Flux` or
+`CompletableFuture`. In Opik that includes:
+
+- `FileService` (S3, MinIO) and anything that calls it
+- JDBI: `TransactionTemplate`, `*DAO` interfaces on MySQL, and services whose methods return plain values from them
+- sync Redisson: `RBucket.get/set`, `RMap.get/put`, `RLock.lock`, and `@Cacheable` methods that return a plain value
+  (the cache interceptor reads Redis synchronously; Redisson refuses that on `redisson-netty`, so the cache never hits
+  there)
+- sync HTTP: a Jersey `Invocation.Builder.get/post/put/delete` without `.async()` or `.rx()`, and `WorkspaceNameService`
+- `InetAddress.getAllByName`, `Thread.sleep`, `ChunkedOutput.write`, `OutputStream.write` to a response
+
+When unsure, open the callee. A name never proves a method is non-blocking.
+
 ## Rule 1: A Blocking Call Wraps Itself
 
 Every blocking call must run inside its own `Offload.blocking(...)`, which is
@@ -62,8 +87,9 @@ return bucketService.readyBuckets()
   even if the step before it happens to emit on `boundedElastic` today. The next refactor will move it.
 - **Wrap only the call.** Keep light work outside the wrapped source. Never wrap a whole chain to make one call
   safe.
-- Code that already runs on a request thread (`dw-*`) or an event-bus virtual thread may block directly. Its caller
-  is waiting anyway.
+- Only a resource method body outside the chain (before it is built, or after `block()`) and an event-bus listener
+  may block directly. A service never knows which thread calls it, so a blocking call in a service always wraps
+  itself.
 - Code that holds a Redis lock follows the same rule. `RedissonLockService` already moves the locked action off the
   event loop (`runAction`); do the same for any new Redisson-driven flow.
 
@@ -139,7 +165,7 @@ sizes or passes a scheduler.
 For every new or changed reactive chain:
 
 1. Which thread emits into each step? Name it from the table above.
-2. Does any step block? Is it an `Offload.blocking(...)`?
+2. Does any step block (see "How to tell a call is blocking")? Is it an `Offload.blocking(...)`? A miss is critical.
 3. Does any step do CPU that grows with the input? Is it an `Offload.cpu(...)`, with a concurrency cap if it runs for
    seconds?
 4. Does a `Flux` do per-item CPU or I/O? Is there an `Offload.blockingEach(...)` right before it?

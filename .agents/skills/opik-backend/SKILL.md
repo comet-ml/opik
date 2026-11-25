@@ -131,7 +131,8 @@ interface MyService {
 
 After Redis or ClickHouse, code runs on the client's I/O thread until something moves it. Wrap every blocking call in
 `Offload.blocking(...)` and every CPU step that grows with its input in `Offload.cpu(...)`. Never block on
-`redisson-netty`, `ClickHouseWorker` or `parallel`. See [reactive-threading.md](reactive-threading.md).
+`redisson-netty`, `ClickHouseWorker` or `parallel`. A call that does I/O and returns a plain value (S3, JDBI, sync
+Redisson, `@Cacheable` getters, sync HTTP) is blocking, wherever it sits. See [reactive-threading.md](reactive-threading.md).
 
 ### StringTemplate Memory Leak
 
