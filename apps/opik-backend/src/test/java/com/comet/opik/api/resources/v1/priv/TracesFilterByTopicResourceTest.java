@@ -43,6 +43,7 @@ import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -301,11 +302,15 @@ class TracesFilterByTopicResourceTest {
         }
     }
 
-    @Test
-    @DisplayName("topics off: a project with topics gives no trace, with no error")
-    void topicsOffFilter() {
+    @ParameterizedTest(name = "{0}: a project with topics gives no trace, with no error")
+    @ValueSource(strings = {"topics off", "workspace listed at vectors"})
+    void topicsOffFilter(String reason) {
         var seed = seed();
-        opikConfig.getTopics().setEnabled(false);
+        if (reason.equals("topics off")) {
+            opikConfig.getTopics().setEnabled(false);
+        } else {
+            topics.optIn(seed.caller().workspaceId(), TopicsStage.VECTORS);
+        }
 
         assertFilter(seed, Operator.EQUAL, seed.labelled().id().toString(), List.of());
     }
