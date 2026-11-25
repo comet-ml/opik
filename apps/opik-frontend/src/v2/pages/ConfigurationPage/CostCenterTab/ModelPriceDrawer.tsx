@@ -61,6 +61,7 @@ import {
   providerIconOf,
 } from "./format";
 import useSaveModelPrices from "./useSaveModelPrices";
+import PriceFormula from "./PriceFormula";
 
 export type DrawerTarget = {
   entry?: CatalogEntry;
@@ -844,6 +845,12 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 Add price
               </Button>
             )}
+            <PriceFormula
+              prices={Object.fromEntries(
+                lines.map((line) => [line.field, line.value]),
+              )}
+              builtIn={builtIn}
+            />
           </div>
         )}
 
