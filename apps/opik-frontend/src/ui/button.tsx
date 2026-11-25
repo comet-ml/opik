@@ -21,8 +21,10 @@ const buttonVariants = cva(
           "bg-primary-100 text-primary hover:bg-secondary hover:text-primary-hover active:bg-secondary active:text-primary-active disabled:bg-muted-disabled disabled:text-muted-gray disabled:opacity-100 dark:bg-input dark:text-foreground hover:dark:bg-primary-100 dark:disabled:text-muted-gray",
         ghost:
           "font-normal hover:text-primary-hover active:text-primary-active disabled:text-muted-gray disabled:opacity-100",
+        // Disabled fades via opacity: Tailwind's `white` is a CSS var, so
+        // modifiers like disabled:text-white/40 don't generate any style.
         ghostInverted:
-          "text-white/80 hover:bg-white/10 active:bg-white/15 disabled:text-white/40 font-normal hover:text-white active:text-white disabled:opacity-100",
+          "text-white/80 hover:bg-white/10 active:bg-white/15 font-normal hover:text-white active:text-white disabled:opacity-40",
         minimal:
           "font-normal text-light-slate hover:text-foreground active:text-foreground disabled:text-muted-gray disabled:opacity-100",
         link: "text-primary underline-offset-4 hover:underline dark:text-primary-hover dark:disabled:text-muted-gray",
