@@ -76,7 +76,7 @@ public class TopicsMetrics {
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
                 .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save (discovery); "
-                        + "window, state, update, llm, save (nightly update); label (both)")
+                        + "window, state, update, llm, rows, save (nightly update); label (both)")
                 .build();
         this.llmCalls = meter.counterBuilder("topics.llm.calls")
                 .setDescription("LLM calls, by call (author) and outcome: ok, timeout, error, bad_answer")
@@ -96,7 +96,7 @@ public class TopicsMetrics {
         this.liveTopics = meter.histogramBuilder("topics.topics.live")
                 .setDescription("Live topics of a project after each saved nightly update")
                 .build();
-        this.retired = meter.counterBuilder("topics.retired")
+        this.retired = meter.counterBuilder("topics.topics.retired")
                 .setDescription("Topics retired (deleted) by saved nightly updates, by reason: low_share, replaced")
                 .build();
         this.born = meter.counterBuilder("topics.topics.born")

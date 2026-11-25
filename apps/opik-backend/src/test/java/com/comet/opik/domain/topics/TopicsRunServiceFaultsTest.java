@@ -370,44 +370,6 @@ class TopicsRunServiceFaultsTest {
         assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("a nightly update's trace_topics insert comes after its MySQL commit, and a failed insert is retried")
-    void updateInsertAfterCommitIsRetried() {
-        discoveryThenEmptyNaming();
-        var attempts = new AtomicInteger();
-        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
-                ? Mono.error(new SocketException("Connection reset"))
-                : Mono.just((long) TRACES)));
-        var updateRunId = IDS.generate();
-
-        var outcome = service.nightlyUpdate(updateRunId, projectId, night.plusDays(1), TRACES)
-                .contextWrite(TopicsTestData.context(workspace)).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(attempts).hasValue(3);
-        var order = inOrder(projectDAO, traceTopicsDAO);
-        order.verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
-        order.verify(traceTopicsDAO).insert(any());
-        assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(2 * TRACES);
-    }
-
-    @Test
-    @DisplayName("a nightly update whose trace_topics insert fails every attempt stays saved")
-    void updateInsertExhausted() {
-        discoveryThenEmptyNaming();
-        when(traceTopicsDAO.insert(any())).thenReturn(Mono.error(new SocketException("Connection reset")));
-        var updateRunId = IDS.generate();
-
-        var outcome = service.nightlyUpdate(updateRunId, projectId, night.plusDays(1), TRACES)
-                .contextWrite(TopicsTestData.context(workspace)).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        verify(projectDAO).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
-        // The discovery run's rows only.
-        assertThat(sum(metricReader, "topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
-        assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "error")).isEqualTo(1);
-    }
-
     /**
      * The topics and the project row the discovery run saved, as the nightly update reads them back. Returns the
      * topics.

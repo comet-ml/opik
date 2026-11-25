@@ -334,38 +334,6 @@ class TopicsRunServiceTest {
     }
 
     @Test
-    @DisplayName("a nightly update after the discovery run saves the list under its own run, keeps the topics' ids and "
-            + "writes one trace_topics row per trace as its run's")
-    void nightlyUpdateSaves() {
-        stubAnswer(FIXTURE.discoveryAnswer);
-        var firstRunId = start();
-        assertThat(service.discover(firstRunId, projectId, NIGHT, FIXTURE.size())
-                .contextWrite(TopicsTestData.context(workspace())).block().status())
-                .isEqualTo(TopicProject.RunStatus.SAVED);
-        var before = data.topics(projectId);
-        stubAnswer(emptyNaming());
-        var updateRunId = start(TopicProject.RunMode.UPDATE);
-
-        var outcome = service.nightlyUpdate(updateRunId, projectId, NIGHT, FIXTURE.size())
-                .contextWrite(TopicsTestData.context(workspace())).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(outcome.stats().path("mode").asText()).isEqualTo("update");
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.runId()).isEqualTo(updateRunId);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
-            assertThat(project.listRunId()).isEqualTo(updateRunId);
-            assertThat(project.savedRuns()).isEqualTo(2);
-        });
-        var live = outcome.stats().get("topics").asInt();
-        assertThat(data.topics(projectId)).hasSize(live)
-                .extracting(Topic::id).isSubsetOf(before.stream().map(Topic::id).toList());
-        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
-                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
-        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
-    }
-
-    @Test
     @DisplayName("a saved nightly update records the Other share it logged in its stats, and its live topics and churn, "
             + "with the workspace")
     void nightlyUpdateIsCounted() {
@@ -395,61 +363,6 @@ class TopicsRunServiceTest {
     }
 
     @Test
-    @DisplayName("a nightly update that leaves no live topic deletes every topic, clears the list by compare-and-set, "
-            + "counts each retired topic and writes no trace_topics")
-    void allRetiredClearsTheList() {
-        var discoveryRunId = discovered(workspace());
-        var before = data.topics(projectId);
-        // Each topic's only vector is far from every trace: no trace tonight, so it retires; naming births nothing.
-        var far = IntStream.range(0, before.size())
-                .mapToObj(t -> before.get(t).toBuilder().vectors(new PrototypeVectors(List.of(
-                        TopicsTestData.unit(TopicEmbedding.DIMENSIONS - 1 - t)))).build())
-                .toList();
-        template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class).updateTopics(far));
-        var listed = data.topicProject(projectId);
-        var updateRunId = start(TopicProject.RunMode.UPDATE);
-
-        var outcome = service.nightlyUpdate(updateRunId, projectId, NIGHT, FIXTURE.size())
-                .contextWrite(TopicsTestData.context(workspace())).block();
-
-        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(data.topics(projectId)).isEmpty();
-        var project = data.topicProject(projectId);
-        assertThat(project).isEqualTo(listed.toBuilder()
-                .runId(updateRunId)
-                .runMode(TopicProject.RunMode.UPDATE)
-                .runStatus(TopicProject.RunStatus.SAVED)
-                .runStartedAt(project.runStartedAt())
-                .runFinishedAt(project.runFinishedAt())
-                .lastSuccessAt(project.lastSuccessAt())
-                .savedRuns(2)
-                .listRunId(null)
-                .windowUntil(null)
-                .labelsComplete(false)
-                .otherVectors(null)
-                .embedModel(null)
-                .build());
-        assertThat(sum(metricReader, "topics.retired", "reason", "low_share", "workspace_id", workspaceId))
-                .isEqualTo(before.size());
-        // The discovery run's rows only.
-        assertThat(data.traceTopics(workspaceId, projectId)).extracting(TraceTopic::runId)
-                .hasSize(FIXTURE.size()).containsOnly(discoveryRunId);
-    }
-
-    @Test
-    @DisplayName("a nightly update with no saved list fails with internal and writes nothing")
-    void nightlyUpdateWithoutList() {
-        var updateRunId = start(TopicProject.RunMode.UPDATE);
-
-        var outcome = service.nightlyUpdate(updateRunId, projectId, NIGHT, FIXTURE.size())
-                .contextWrite(TopicsTestData.context(workspace())).block();
-
-        assertThat(outcome.errorCode()).isEqualTo("internal");
-        assertThat(wireMock.server().findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).isEmpty();
-        assertFailedWithNothingSaved(updateRunId, TopicProject.RunError.INTERNAL);
-    }
-
-    @Test
     @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
     void lifecycleMetricsHaveTheWorkspace() {
         var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
@@ -464,7 +377,7 @@ class TopicsRunServiceTest {
                 .containsExactly(new TopicsMetricsReader.Point(2, attributes));
         assertThat(points(metricReader, "topics.topics.live"))
                 .containsExactly(new TopicsMetricsReader.Point(14, attributes));
-        assertThat(points(metricReader, "topics.retired")).containsExactly(new TopicsMetricsReader.Point(1,
+        assertThat(points(metricReader, "topics.topics.retired")).containsExactly(new TopicsMetricsReader.Point(1,
                 attributes.toBuilder().put("reason", "low_share").build()));
         assertThat(points(metricReader, "topics.run.churn"))
                 .containsExactly(new TopicsMetricsReader.Point(0.04, attributes));

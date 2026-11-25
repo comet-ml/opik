@@ -16,7 +16,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -38,7 +37,7 @@ import java.util.function.Function;
  * <p>A nightly update ({@link #nightlyUpdate}) reads the same window and the project's saved list, has the algorithm
  * update the list and saves the changed list the same way: one transaction that checks no other run saved the project
  * since this one read it, then the {@code trace_topics} insert. A retired topic's row is deleted, with a log line and
- * {@code topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
+ * {@code topics.topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
  * a later discovery run makes a new one.
  */
 @Slf4j
@@ -145,17 +144,6 @@ public class TopicsRunService {
         return rows.toBuilder().stats(stats).build();
     }
 
-    /** What a nightly update saves, with the counts its metrics carry after the commit and the run's stats. */
-    private record Night(NightList list, NightSave save, List<NightTopic> retired,
-            List<TraceTopic> traceTopics, int born, int live, double otherShare, TopicChurn.Churn churn,
-            ObjectNode stats) {
-
-        /** Saved, but its project was deleted meanwhile, or no topic stayed: no trace_topics to write. */
-        Night discarded() {
-            return new Night(list, save, retired, List.of(), born, live, otherShare, churn, stats);
-        }
-    }
-
     private Mono<TopicRunOutcome> nightly(TopicRun run, LocalDate night, long windowTraces) {
         var timeout = config.getRun().getProjectTimeout().toJavaDuration();
         return timed(run, "window", reader.read(run, windowTraces))
@@ -164,7 +152,8 @@ public class TopicsRunService {
                             // The update changes the state in place.
                             int topicsBefore = list.state().liveCount();
                             return update(run, list.state(), nightWindow(run, window))
-                                    .map(result -> nightRows(run, window, list, topicsBefore, result));
+                                    .flatMap(result -> cpu(run, "rows",
+                                            () -> rows(run, window, list, topicsBefore, result)));
                         })
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.list(), updated.save()))
@@ -184,87 +173,31 @@ public class TopicsRunService {
                 .from(run.from()).night(run.to()).dimensions(TopicEmbedding.DIMENSIONS).build();
     }
 
-    /** The night's rows and the counts its log line and metrics carry. */
-    private Night nightRows(TopicRun run, RunWindow window, NightList list, int topicsBefore,
-            TopicUpdate result) {
-        var state = list.state();
-        NightInvariants.check(state, TopicEmbedding.DIMENSIONS);
+    /** The night's rows, with the run's stats; a state that breaks the night's invariants fails the run. */
+    private NightRows rows(TopicRun run, RunWindow window, NightList list, int topicsBefore, TopicUpdate result) {
+        NightRows rows;
+        try {
+            NightInvariants.check(list.state(), TopicEmbedding.DIMENSIONS);
+            rows = NightRows.of(run, window.traces(), list, topicsBefore, result);
+        } catch (IllegalArgumentException exception) {
+            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
+        }
         var stats = TopicRunOutcomes.bounds(run);
         stats.setAll(window.stats());
         stats.put("mode", TopicProject.RunMode.UPDATE.getValue());
-        stats.put("saved_runs_before", state.getRebuilds());
-        stats.put("topics_before", topicsBefore);
-        stats.setAll(result.stats());
-        var traces = window.traces();
-        int n = traces.size();
-        boolean keep = state.liveCount() > 0;
-        int other = 0;
-        var topicIds = new UUID[n];
-        for (int i = 0; i < n; i++) {
-            int label = result.labels()[i];
-            other += label == TopicAlgorithm.OTHER ? 1 : 0;
-            topicIds[i] = label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
-        }
-        var traceTopics = keep
-                ? TopicRunRows.traceTopics(run.workspaceId(), run.projectId(), run.runId(), traces, topicIds)
-                : List.<TraceTopic>of();
-        var churn = TopicChurn.of(result.before(), result.labels());
-        var inserted = new ArrayList<Topic>();
-        var updated = new ArrayList<Topic>();
-        var retired = new ArrayList<NightTopic>();
-        var retiredStats = stats.putObject("retired");
-        for (var topic : state.getTopics()) {
-            boolean stored = list.topicIds().contains(topic.getId());
-            if (!topic.isLive()) {
-                var reason = topic.getRetiredReason().getValue();
-                retiredStats.put(reason, retiredStats.path(reason).asInt() + 1);
-                if (stored) {
-                    retired.add(topic);
-                }
-                continue;
-            }
-            var row = Topic.builder()
-                    .id(topic.getId())
-                    .workspaceId(run.workspaceId())
-                    .projectId(run.projectId())
-                    .name(topic.getName())
-                    .definition(topic.getDefinition())
-                    .born(topic.getBorn())
-                    .lowNights(topic.getLowNights())
-                    .size(topic.getSize())
-                    .vectors(new PrototypeVectors(topic.getPrototypes()))
-                    .build();
-            (stored ? updated : inserted).add(row);
-        }
-        int born = (int) state.getTopics().stream().filter(topic -> !list.topicIds().contains(topic.getId())).count();
-        double otherShare = (double) other / n;
-        stats.put("born", born);
-        stats.put("topics", state.liveCount());
-        stats.put("other_share", otherShare);
-        stats.put("other_prototypes", state.getOtherPrototypes().size());
-        stats.put("churn", churn.churn());
-        stats.put("churn_any", churn.churnAny());
+        stats.setAll(rows.stats());
         log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', born '{}', retired '{}', "
-                + "topics '{}', Other share '{}', churn '{}'", run.runId(), run.projectId(), run.from(), run.to(), n,
-                born, retiredStats, state.liveCount(), TopicText.fixed(otherShare, 3), churn);
-        var otherVectors = !keep || state.getOtherPrototypes().isEmpty()
-                ? null
-                : new PrototypeVectors(state.getOtherPrototypes());
-        var save = NightSave.builder()
-                .keep(keep)
-                .inserted(inserted)
-                .updated(updated)
-                .retired(retired.stream().map(NightTopic::getId).toList())
-                .otherVectors(otherVectors)
-                .build();
-        return new Night(list, save, retired, traceTopics, born, state.liveCount(), otherShare, churn, stats);
+                + "topics '{}', Other share '{}', churn '{}'", run.runId(), run.projectId(), run.from(), run.to(),
+                window.traces().size(), rows.born(), stats.get("retired"), rows.live(),
+                TopicText.fixed(rows.otherShare(), 3), rows.churn());
+        return rows.toBuilder().stats(stats).build();
     }
 
     /**
-     * After the commit: the night's metrics, a log line and {@code topics.retired} per retired topic, then the
-     * {@code trace_topics} insert, unless the list was cleared or the project is gone.
+     * After the commit: the night's metrics, a log line and {@code topics.topics.retired} per retired topic, then the
+     * shared post-save step. A cleared list has no {@code trace_topics} to write.
      */
-    private Mono<TopicRunOutcome> savedNight(TopicRun run, Night night) {
+    private Mono<TopicRunOutcome> savedNight(TopicRun run, NightRows night) {
         metrics.topics(run.workspace(), night.live(), night.born());
         for (var topic : night.retired()) {
             // Ids only: a name and definition come from trace text and must not reach the logs.
@@ -272,29 +205,12 @@ public class TopicsRunService {
                     topic.getId(), run.projectId(), topic.getRetiredReason().getValue(), topic.getSize());
             metrics.retired(run.workspace(), topic.getRetiredReason());
         }
-        metrics.otherShare(run.workspace(), night.otherShare());
         metrics.churn(run.workspace(), night.churn());
-        var outcome = TopicRunOutcome.builder().runId(run.runId()).status(TopicProject.RunStatus.SAVED)
-                .stats(night.stats()).build();
         if (!night.save().keep()) {
             log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
                     + "cleared, so a later discovery run makes a new one", run.runId(), run.projectId());
-            return Mono.just(outcome);
         }
-        return store.insertTraceTopics(run.workspace(), night.traceTopics())
-                .thenReturn(!night.traceTopics().isEmpty())
-                .onErrorResume(exception -> {
-                    log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
-                            + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
-                    return Mono.just(false);
-                })
-                .map(inserted -> {
-                    log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated "
-                            + "'{}', deleted '{}', stats '{}'", run.runId(), run.projectId(),
-                            inserted ? night.traceTopics().size() : 0, night.save().inserted().size(),
-                            night.save().updated().size(), night.retired().size(), night.stats());
-                    return outcome;
-                });
+        return afterSave(run, night.traceTopics(), night.otherShare(), night.stats());
     }
 
     /**
@@ -339,15 +255,25 @@ public class TopicsRunService {
     }
 
     private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows) {
-        metrics.otherShare(run.workspace(), rows.otherShare());
-        return store.insertTraceTopics(run.workspace(), rows.traceTopics())
-                .thenReturn(!rows.traceTopics().isEmpty())
+        return afterSave(run, rows.traceTopics(), rows.otherShare(), rows.stats());
+    }
+
+    /**
+     * After a run's commit, for a discovery run and a nightly update alike: the Other share metric, then the
+     * {@code trace_topics} insert. A failed insert leaves the run saved: the labelling pass gives the window's traces
+     * their topics.
+     */
+    private Mono<TopicRunOutcome> afterSave(TopicRun run, List<TraceTopic> traceTopics, double otherShare,
+            ObjectNode stats) {
+        metrics.otherShare(run.workspace(), otherShare);
+        return store.insertTraceTopics(run.workspace(), traceTopics)
+                .thenReturn(traceTopics.size())
                 .onErrorResume(exception -> {
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
-                    return Mono.just(false);
+                    return Mono.just(0);
                 })
-                .map(inserted -> outcomes.saved(run, rows, inserted));
+                .map(inserted -> outcomes.saved(run, stats, inserted));
     }
 
     private TopicsRunException timedOut() {
