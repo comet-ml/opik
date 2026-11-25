@@ -147,6 +147,7 @@ public class InferenceConfig {
         /** Room past that deadline for the answer to arrive, or for a quick retry of an overloaded call. */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
         private Duration decideMargin;
     }
 }

@@ -383,22 +383,28 @@ public class InferenceClient {
                         // Cancelled before the response arrived: the read below then fails at once.
                         closeQuietly(response);
                     }
-                    T value;
+                    // The slot is given back only once the result is delivered: the thread is busy until then.
                     try {
-                        value = read(call, response);
-                    } catch (RuntimeException exception) {
-                        sink.error(exception);
-                        return;
+                        T value;
+                        try {
+                            value = read(call, response);
+                        } catch (RuntimeException exception) {
+                            sink.error(exception);
+                            return;
+                        }
+                        sink.success(value);
                     } finally {
                         release.run();
                     }
-                    sink.success(value);
                 }
 
                 @Override
                 public void failed(Throwable throwable) {
-                    release.run();
-                    sink.error(InferenceException.transport(throwable));
+                    try {
+                        sink.error(InferenceException.transport(throwable));
+                    } finally {
+                        release.run();
+                    }
                 }
             };
             try {

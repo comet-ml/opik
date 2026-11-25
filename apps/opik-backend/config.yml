@@ -2659,7 +2659,7 @@ inference:
     decideDeadline: ${OPIK_INFERENCE_REALTIME_DECIDE_DEADLINE:-5s}
     #  Default: 1s
     #  Description: Room past decideDeadline for the answer to arrive, or for a quick retry of an overloaded call. A
-    #  check not answered by then fails closed
+    #  check not answered by then fails closed. At most 5s, so a request never waits on a check much past 10s
     decideMargin: ${OPIK_INFERENCE_REALTIME_DECIDE_MARGIN:-1s}
 
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
