@@ -26,14 +26,21 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentUtilsTest;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.validation.ValidationErrorMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -46,11 +53,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -212,6 +222,48 @@ class AttachmentResourceTest {
         attachmentResourceClient.downloadAttachment(attachmentInfo.fileName(), attachmentInfo.containerId(),
                 attachmentInfo.mimeType(), attachmentInfo.entityType(), attachmentInfo.entityId(), apiKey,
                 workspaceName, 403);
+    }
+
+    Stream<Arguments> completeUploadWithInvalidParts() {
+        var validPart = MultipartUploadPart.builder()
+                .eTag(RandomStringUtils.secure().nextAlphanumeric(32))
+                .partNumber(1)
+                .build();
+        return Stream.of(
+                arguments(List.of(), List.of("uploadedFileParts must not be empty")),
+                arguments(Collections.singletonList(null),
+                        List.of("uploadedFileParts[0].<list element> must not be null")),
+                arguments(List.of(validPart.toBuilder().eTag(null).build()),
+                        List.of("uploadedFileParts[0].eTag must not be blank")),
+                arguments(List.of(validPart.toBuilder().eTag(" ").build()),
+                        List.of("uploadedFileParts[0].eTag must not be blank")),
+                arguments(List.of(validPart.toBuilder().partNumber(null).build()),
+                        List.of("uploadedFileParts[0].partNumber must not be null")));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Complete upload with invalid parts is rejected before reaching S3")
+    void completeUploadWithInvalidParts(List<MultipartUploadPart> uploadedFileParts, List<String> expectedErrors) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var startUploadRequest = factory.manufacturePojo(StartMultipartUploadRequest.class);
+        var completeUploadRequest = prepareCompleteUploadRequest(startUploadRequest,
+                RandomUtils.secure().randomLong(1, 1_000_000), UUID.randomUUID().toString(), List.of())
+                .toBuilder()
+                .uploadedFileParts(uploadedFileParts)
+                .build();
+
+        try (var actualResponse = attachmentResourceClient.completeMultiPartUploadWithResponse(
+                completeUploadRequest, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            assertThat(actualResponse.readEntity(ValidationErrorMessage.class).getErrors())
+                    .isEqualTo(expectedErrors);
+        }
     }
 
     private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data) {
