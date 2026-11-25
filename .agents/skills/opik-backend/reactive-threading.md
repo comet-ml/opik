@@ -32,6 +32,9 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 | Back to the entry point's pool after a call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.cpuOn`, or no hop |
 | Light work (map one row, build a DTO) | nothing | wherever it lands |
 
+Use `resumeOriginal` once, after the last client call and before your own logic. Not between client calls, and not
+before `Offload.blocking` or `Offload.cpu`: those hop themselves, and every extra hop is a queue handoff.
+
 ## Rule 1: A Blocking Call Wraps Itself
 
 Every blocking call must run inside its own `Offload.blocking(...)`, which is
