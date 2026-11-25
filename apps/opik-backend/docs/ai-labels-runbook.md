@@ -285,5 +285,7 @@ cache runs no query. No alert reads these metrics.
 | `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` | `60` | The time bucket, in seconds. |
 | `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION` | `PT5M` | How long the counts of a `ready` project stay in Redis. |
 
-The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
-stay.
+The endpoint has no deployment-wide switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored
+topics and rows stay. To hide topics for one workspace and keep its jobs running, list it in
+`TOPICS_ENABLED_WORKSPACES` at a stage before `ui` (for example `<id>:nightly`); it is a Helm value, so the change
+needs a deploy.
