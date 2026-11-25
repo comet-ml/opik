@@ -64,7 +64,7 @@ return Mono.defer(() -> processEvent(message, messageId))
 Where the code stands today:
 
 - **Redis subscribers** run `processEvent` on their workers (`subscribeOn(workersScheduler)`) but don't record it yet.
-- **Resources** record a shared `request-vt` virtual-thread scheduler through
+- **Resources** record `Offload.virtualThreads()`, a shared `request-vt` virtual-thread scheduler, through
   `AsyncUtils.setRequestContext(context, requestContext)`, but the chain still starts on the Jetty request thread in
   `block()`.
 - **Jobs and event-bus listeners** set nothing.

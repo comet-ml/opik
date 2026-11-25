@@ -9,6 +9,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 /**
  * Puts a unit of work on the scheduler its kind needs, so a chain never depends on which thread emitted before it.
@@ -36,7 +37,10 @@ import java.util.concurrent.Callable;
 @UtilityClass
 public class Offload {
 
-    private static final String ORIGINAL_SCHEDULER = Offload.class.getName() + ".originalScheduler";
+    private static final String ORIGINAL_SCHEDULER = "originalScheduler";
+
+    private static final Scheduler VIRTUAL_THREADS = Schedulers.fromExecutorService(
+            Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("request-vt-", 0).factory()), "request-vt");
 
     /**
      * Runs a blocking call on {@link Schedulers#boundedElastic()}. What follows runs there too until the next hop, so
@@ -59,6 +63,15 @@ public class Offload {
      */
     public static <T> Mono<T> cpu(@NonNull Callable<T> step) {
         return Mono.fromCallable(step).subscribeOn(Schedulers.parallel());
+    }
+
+    /**
+     * A scheduler that runs each task on a new virtual thread, shared across the service. It needs no sizing and no
+     * lifecycle, so an entry point without a pool of its own (a resource) records it with
+     * {@link #originalOn(Context, Scheduler)}.
+     */
+    public static Scheduler virtualThreads() {
+        return VIRTUAL_THREADS;
     }
 
     /**
