@@ -203,7 +203,7 @@ One gateway usually serves many applications. Opik reads two span attributes tha
 | `opik.project_name` | Project | The caller's API key metadata, or a request header |
 | `gen_ai.conversation.id` | Thread | A conversation ID that the application sends in a request header |
 
-Traces without `opik.project_name` go to the project in the `projectName` header. The child spans of the gateway go to the project of their request span.
+Traces without `opik.project_name` go to the project in the `projectName` header. The child spans of the gateway go to the project of their request span. Opik can do this only when the child span and its request span arrive in the same export. agentgateway usually exports them together, but under heavy load a child span can arrive alone and go to the `projectName` header project.
 
 <Tabs>
   <Tab value="Standalone" title="Standalone">
