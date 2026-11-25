@@ -16,13 +16,11 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -37,6 +35,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
@@ -46,9 +45,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -83,8 +84,7 @@ class TopicsRunServiceFaultsTest {
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunService service;
-    /** The scheduler the entry point would hand in. */
-    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-faults-compute");
+    private TopicAlgorithm algorithm;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -115,13 +115,32 @@ class TopicsRunServiceFaultsTest {
         store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
+        algorithm = spy(TopicsTestAlgorithm.algorithm());
         service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
-                metrics, TopicsTestAlgorithm.algorithm());
+                metrics, algorithm);
     }
 
-    @AfterEach
-    void tearDown() {
-        compute.dispose();
+    @Test
+    @DisplayName("clustering runs on parallel(), not on the thread that emitted the window")
+    void clusteringLeavesTheReadThread() {
+        var driver = Schedulers.newSingle("topics-test-driver");
+        try {
+            when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
+                    .thenReturn(Flux.fromIterable(window()).subscribeOn(driver));
+            var thread = new AtomicReference<String>();
+            doAnswer(invocation -> {
+                thread.set(Thread.currentThread().getName());
+                return invocation.callRealMethod();
+            }).when(algorithm).cluster(any(), anyInt());
+            answer(FIXTURE.answer);
+
+            var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
+
+            assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(thread.get()).startsWith("parallel-");
+        } finally {
+            driver.dispose();
+        }
     }
 
     @Test
@@ -155,7 +174,7 @@ class TopicsRunServiceFaultsTest {
                 .doOnSubscribe(__ -> calls.incrementAndGet())
                 .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.discover(runId, workspace, projectId, night, TRACES, compute).subscribe();
+        var subscription = service.discover(runId, workspace, projectId, night, TRACES).subscribe();
         Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
 
@@ -175,7 +194,7 @@ class TopicsRunServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -194,7 +213,7 @@ class TopicsRunServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -215,7 +234,7 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -237,7 +256,7 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, workspace, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -256,10 +275,10 @@ class TopicsRunServiceFaultsTest {
             return Mono.<Long>never().doOnCancel(cancelled::incrementAndGet);
         }));
         answer(FIXTURE.answer);
-        var scheduler = VirtualTimeScheduler.create();
+        var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -267,7 +286,7 @@ class TopicsRunServiceFaultsTest {
             });
             outcome = run.get();
         } finally {
-            scheduler.dispose();
+            VirtualTimeScheduler.reset();
         }
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
@@ -286,23 +305,22 @@ class TopicsRunServiceFaultsTest {
         when(client.generate(any(), any()))
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
         var timeout = TestConfigUtils.loadConfigTest().getTopics().getRun().getProjectTimeout().toJavaDuration();
-        var scheduler = VirtualTimeScheduler.create();
+        var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, workspace, projectId, night, TRACES).toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
             });
             outcome = run.get();
         } finally {
-            scheduler.dispose();
+            VirtualTimeScheduler.reset();
         }
 
         assertThat(outcome.errorCode()).isEqualTo("timeout");
         assertThat(outcome.stats().has("window_from")).isTrue();
-        assertThat(outcome.stats().has("window_traces")).as("a timed-out run carries the window bounds only")
-                .isFalse();
+        assertThat(outcome.stats().has("window_traces")).as("the timeout cuts the chain from outside").isFalse();
         assertThat(points(metricReader, "topics.run.duration_seconds")).extracting(point -> point.get("phase"))
                 .contains("window", "cluster", "llm");
         assertThat(cancelled).hasValue(1);
