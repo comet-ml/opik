@@ -44,6 +44,33 @@ virtual thread, whatever thread posted the event.
 Use `resumeOriginal` once, after the last client call and before your own logic. Not between client calls, and not
 before `Offload.blocking` or `Offload.cpu`: those hop themselves, and every extra hop is a queue handoff.
 
+## Entry Points Set Their Scheduler
+
+Best practice: every entry point (a resource, a job, a Redis subscriber, an event-bus listener) runs its chain on its own
+scheduler and records that scheduler as the original with `Offload.originalOn`, in the same place. Then the chain starts
+on a known thread, and `resumeOriginal` returns there instead of to whatever thread replied last.
+
+```java
+// ✅ GOOD - the subscriber starts on its workers and records them
+return Mono.defer(() -> processEvent(message, messageId))
+        .subscribeOn(workersScheduler)
+        .contextWrite(context -> Offload.originalOn(context, workersScheduler));
+
+// ❌ BAD - starts on workers but records nothing: resumeOriginal adds no hop
+return Mono.defer(() -> processEvent(message, messageId))
+        .subscribeOn(workersScheduler);
+```
+
+Where the code stands today:
+
+- **Redis subscribers** run `processEvent` on their workers (`subscribeOn(workersScheduler)`) but don't record it yet.
+- **Resources** record a shared `request-vt` virtual-thread scheduler through
+  `AsyncUtils.setRequestContext(context, requestContext)`, but the chain still starts on the Jetty request thread in
+  `block()`.
+- **Jobs and event-bus listeners** set nothing.
+
+New entry points follow the practice; existing ones move to it with the flow changes that need it.
+
 ## How to Tell a Call Is Blocking
 
 It does I/O and returns a plain value or `void`, not a `Mono`, `Flux` or `CompletableFuture`. In Opik that includes:

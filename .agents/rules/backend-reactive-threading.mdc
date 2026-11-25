@@ -13,4 +13,6 @@ its "Validate" steps.
 - CPU that grows with the input runs in `Offload.cpu(...)`, never on `boundedElastic` or a client thread.
 - Per-item blocking on a `Flux` (chunk writes, per-item S3 or lookups): one `Offload.blockingEach(...)` right before it.
 - Never block on `ClickHouseWorker`, `chc-operation`, `redisson-netty` or `parallel`; `block()` only at the edge.
+- An entry point (resource, job, subscriber, listener) runs its chain on its own scheduler and records it with
+  `Offload.originalOn`.
 - Light work gets no hop.
