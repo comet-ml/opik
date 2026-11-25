@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Denied;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Found;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Lookup;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.NoOrganization;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.inject.OutOfScopeException;
@@ -13,6 +14,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.ProcessingException;
@@ -45,12 +47,10 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             Could not check whether you are an organization admin, please try again\
             """;
 
-    private static final AttributeKey<String> SOURCE = AttributeKey.stringKey("source");
-    private static final AttributeKey<String> RESULT = AttributeKey.stringKey("result");
-    private static final Attributes FROM_FRESH_ENTRY = Attributes.of(SOURCE, "fresh_entry");
-    private static final Attributes FROM_STALE_ENTRY = Attributes.of(SOURCE, "stale_entry");
-    private static final Attributes FROM_FAILURE_MARKER = Attributes.of(SOURCE, "failure_marker");
-    private static final Attributes FROM_COMET = Attributes.of(SOURCE, "comet");
+    private static final String METRIC_NAMESPACE = "organization_lookup";
+    private static final AttributeKey<String> SOURCE_KEY = AttributeKey.stringKey("source");
+    private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
+    private static final AttributeKey<String> ANSWER_KEY = AttributeKey.stringKey("answer");
 
     @Builder(toBuilder = true)
     private record Caller(@NonNull String workspaceId, @NonNull String workspaceName,
@@ -66,16 +66,15 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private final @NonNull WorkspaceOrganizationCache cache;
     private final boolean organizationIdLookupEnabled;
     private final ConcurrentMap<String, SharedLookup> lookupsInFlight = new ConcurrentHashMap<>();
-    private final LongCounter answers = GlobalOpenTelemetry.getMeter("opik.organization")
-            .counterBuilder("opik_organization_resolver_answers_total")
-            .setDescription("Organization answers for requests with Comet credentials, by source: fresh_entry, "
-                    + "stale_entry (served while it is refreshed in the background), failure_marker (none until the "
-                    + "retry window ends) or comet (waited for a lookup, shared or its own)")
+    private final Meter meter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE);
+    private final LongCounter answers = meter.counterBuilder("%s_answers_total".formatted(METRIC_NAMESPACE))
+            .setDescription("Organization answers for requests with Comet credentials, by workspace and source: "
+                    + "fresh_entry, stale_entry (served while it is refreshed in the background), failure_marker "
+                    + "(none until the retry window ends) or comet (waited for a lookup, shared or its own)")
             .build();
-    private final LongCounter cometCalls = GlobalOpenTelemetry.getMeter("opik.organization")
-            .counterBuilder("opik_organization_resolver_comet_calls_total")
-            .setDescription("Organization lookups sent to Comet, by result: found, no_organization, denied, "
-                    + "comet_down (remembered for the workspace) or failed (specific to the call)")
+    private final LongCounter cometCalls = meter.counterBuilder("%s_comet_calls_total".formatted(METRIC_NAMESPACE))
+            .setDescription("Organization lookups sent to Comet, by workspace and result: success with its answer "
+                    + "(found / no_organization / denied), or error with its error_type")
             .build();
 
     @Override
@@ -145,9 +144,9 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     private Mono<String> fromCache(WorkspaceOrganizationCache.Entry entry, Caller caller) {
         if (entry.isFresh(cache.now())) {
-            answers.add(1, FROM_FRESH_ENTRY);
+            countAnswer(caller, "fresh_entry");
         } else {
-            answers.add(1, FROM_STALE_ENTRY);
+            countAnswer(caller, "stale_entry");
             refreshInBackground(caller);
         }
         return Mono.justOrEmpty(entry.organizationId());
@@ -168,7 +167,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private Mono<String> lookUp(Caller caller) {
         return cache.failedRecently(caller.workspaceId())
                 .flatMap(failed -> {
-                    answers.add(1, failed ? FROM_FAILURE_MARKER : FROM_COMET);
+                    countAnswer(caller, failed ? "failure_marker" : "comet");
                     return failed
                             ? Mono.<String>empty()
                             : lookupFor(caller, false).flatMap(RemoteOrganizationResolver::organizationOf);
@@ -186,7 +185,13 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             if (!(answer instanceof Denied) || caller.credentials().equals(lookup.credentials())) {
                 return Mono.just(answer);
             }
-            return deniedForOthersBefore ? ask(caller) : lookupFor(caller, true);
+            if (deniedForOthersBefore) {
+                return ask(caller);
+            }
+            // The denied lookup leaves the map only after all its waiters got the answer: dropped here, so this
+            // caller starts the next lookup instead of joining the finished one again
+            lookupsInFlight.remove(caller.workspaceId(), lookup);
+            return lookupFor(caller, true);
         });
     }
 
@@ -203,9 +208,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
         // timeout) must not cancel a lookup other callers wait on, or the refresh behind a stale answer
         Mono.defer(() -> ask(caller))
                 .contextWrite(caller.context())
-                // Before the answer reaches the waiters: a waiter denied by these credentials looks up again, and must
-                // start a new lookup rather than join this finished one
-                .doOnEach(signal -> lookupsInFlight.remove(caller.workspaceId(), started))
+                .doFinally(signal -> lookupsInFlight.remove(caller.workspaceId(), started))
                 .subscribe(started.answer()::tryEmitValue, started.answer()::tryEmitError,
                         started.answer()::tryEmitEmpty);
         return started;
@@ -213,17 +216,17 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     private Mono<Lookup> ask(Caller caller) {
         return client.fetch(caller.credentials(), caller.workspaceName())
-                .doOnNext(lookup -> cometCalls.add(1, Attributes.of(RESULT, switch (lookup) {
+                .doOnNext(lookup -> countCometCall(caller, "success", ANSWER_KEY, switch (lookup) {
                     case Found found -> "found";
                     case NoOrganization noOrganization -> "no_organization";
                     case Denied denied -> "denied";
-                })))
+                }))
                 .flatMap(lookup -> remember(caller.workspaceId(), lookup).thenReturn(lookup))
                 .onErrorResume(cometFailed -> {
                     logCometFailed(ORGANIZATION_LOOKUP, caller.workspaceId(), cometFailed);
-                    var cometDown = isCometDown(cometFailed);
-                    cometCalls.add(1, Attributes.of(RESULT, cometDown ? "comet_down" : "failed"));
-                    var delay = cometDown
+                    countCometCall(caller, "error", ErrorMetricsResolver.ERROR_TYPE_KEY,
+                            ErrorMetricsResolver.errorType(cometFailed));
+                    var delay = isCometDown(cometFailed)
                             ? cache.retryLater(caller.workspaceId())
                             : cache.refreshLater(caller.workspaceId());
                     return delay.onErrorResume(error -> {
@@ -231,6 +234,17 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                         return Mono.empty();
                     }).then(Mono.empty());
                 });
+    }
+
+    private void countAnswer(Caller caller, String source) {
+        answers.add(1, Attributes.of(ErrorMetricsResolver.WORKSPACE_ID_KEY, caller.workspaceId(),
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY, caller.workspaceName(), SOURCE_KEY, source));
+    }
+
+    private void countCometCall(Caller caller, String result, AttributeKey<String> detailKey, String detail) {
+        cometCalls.add(1, Attributes.of(ErrorMetricsResolver.WORKSPACE_ID_KEY, caller.workspaceId(),
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY, caller.workspaceName(), RESULT_KEY, result, detailKey,
+                detail));
     }
 
     private static Mono<String> organizationOf(Lookup lookup) {
