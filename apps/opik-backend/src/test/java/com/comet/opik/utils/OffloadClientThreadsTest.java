@@ -24,6 +24,9 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -75,10 +78,7 @@ class OffloadClientThreadsTest {
     @Test
     void blockingCallAfterClickHouseReadRunsOnBoundedElastic() {
         // The attachment delete cascade: a DAO read, then an S3 delete
-        var actual = new Pools(
-                clickHouseRows(1).map(__ -> pool()).blockFirst(),
-                clickHouseRows(1).next().flatMap(__ -> Mono.fromCallable(this::pool)).block(),
-                clickHouseRows(1).next().flatMap(__ -> Offload.blocking(this::pool)).block());
+        var actual = pools(() -> clickHouseRows(1).next(), Offload::blocking);
 
         assertThat(actual).isEqualTo(new Pools(CLICKHOUSE_WORKER, CLICKHOUSE_WORKER, BOUNDED_ELASTIC));
     }
@@ -89,10 +89,7 @@ class OffloadClientThreadsTest {
         var key = RandomStringUtils.secure().nextAlphanumeric(20);
         redisClient.getBucket(key).set(RandomStringUtils.secure().nextAlphanumeric(10)).block();
 
-        var actual = new Pools(
-                redisClient.getBucket(key).get().map(__ -> pool()).block(),
-                redisClient.getBucket(key).get().flatMap(__ -> Mono.fromCallable(this::pool)).block(),
-                redisClient.getBucket(key).get().flatMap(__ -> Offload.blocking(this::pool)).block());
+        var actual = pools(() -> redisClient.getBucket(key).get(), Offload::blocking);
 
         assertThat(actual).isEqualTo(new Pools(REDISSON_NETTY, REDISSON_NETTY, BOUNDED_ELASTIC));
     }
@@ -119,21 +116,15 @@ class OffloadClientThreadsTest {
     @Test
     void cpuStepAfterClickHouseReadRunsOnParallel() {
         // The topics window build: rows from ClickHouse, then work that grows with them
-        var actual = new Pools(
-                clickHouseRows(1).map(__ -> pool()).blockFirst(),
-                clickHouseRows(1).next().map(__ -> pool()).block(),
-                clickHouseRows(1).next().flatMap(__ -> Offload.cpu(this::pool)).block());
+        var actual = pools(() -> clickHouseRows(1).next(), Offload::cpu);
 
         assertThat(actual).isEqualTo(new Pools(CLICKHOUSE_WORKER, CLICKHOUSE_WORKER, PARALLEL));
     }
 
     @Test
-    void stepAfterClickHouseV2InsertClientRunsOnItsOperationPool() {
-        // The JSONEachRow bulk insert path replies on the v2 client's pool, not on ClickHouseWorker
-        var actual = new Pools(
-                clickHouseV2Query().map(__ -> pool()).block(),
-                clickHouseV2Query().flatMap(__ -> Mono.fromCallable(this::pool)).block(),
-                clickHouseV2Query().flatMap(__ -> Offload.blocking(this::pool)).block());
+    void stepAfterClickHouseV2ClientRunsOnItsOperationPool() {
+        // The v2 client, which the JSONEachRow bulk insert uses, replies on its own pool, not on ClickHouseWorker
+        var actual = pools(this::clickHouseV2Query, Offload::blocking);
 
         assertThat(actual).isEqualTo(new Pools(CHC_OPERATION, CHC_OPERATION, BOUNDED_ELASTIC));
     }
@@ -181,6 +172,13 @@ class OffloadClientThreadsTest {
 
         assertThat(resumed.isVirtual()).isTrue();
         assertThat(resumed.getName()).startsWith("request-vt-");
+    }
+
+    private Pools pools(Supplier<Mono<?>> reply, Function<Callable<String>, Mono<String>> offload) {
+        return new Pools(
+                reply.get().map(__ -> pool()).block(),
+                reply.get().flatMap(__ -> Mono.fromCallable(this::pool)).block(),
+                reply.get().flatMap(__ -> offload.apply(this::pool)).block());
     }
 
     private Flux<Long> clickHouseRows(int count) {
