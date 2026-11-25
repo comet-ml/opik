@@ -105,6 +105,17 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
+  #  Default: false
+  #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
+  #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized). false is the string path: payloads serialized to strings, slim
+  #   copies reparsed from them, and bulk insert bodies buffered before the connection is taken.
+  #   Turn it on together with a larger clientMaxOpenConnections (20 was tested), sized to ClickHouse's headroom: at
+  #   the default 10, large batches can wait past the pool's lease timeout. Watch opik.clickhouse.client.pool.pending
+  #   to see inserts waiting for a connection; turning it off again restores the string path.
+  streamPayloads: false
+  clientMaxOpenConnections: 10
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:
@@ -258,10 +269,9 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: audit
   #  Default: 10s
@@ -811,6 +821,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: 2
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: 0
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -952,6 +966,8 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    topics_day_counts: PT5M
+    topics_vector_counts: PT1M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1057,10 +1073,13 @@ inference:
   connectTimeout: 5s
   readTimeout: 30s
   maxConcurrentDecides: 48
+  maxConcurrentGenerates: 4
   maxResponseBytes: 33554432
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxGenerateRealtimeDeadline: 60s
+    maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
     maxStatusJobIds: 1000
   retry:
@@ -1074,6 +1093,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
@@ -1081,6 +1101,7 @@ topics:
     embedBatchSize: 256
     embedConcurrency: 1
     embedTimeout: 10s
+    leaseSlack: 5s
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
@@ -1089,6 +1110,50 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
+  run:
+    projectTimeout: 15m
+    minVectors: 100
+    windowDays: 30
+    maxVectors: 100000
+    llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
+    readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
+    insertRetries: 3
+    insertBackoff: 500ms
+    insertSlack: 30s
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 1024
+      countSlice: 1d
+  discovery:
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: 1h,6h,1d
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 1
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
+    requeueWait: 5s
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1101,6 +1166,34 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    maxTopics: 10
+    provisionalBelow: 1000
+    nightlyMinCandidate: 20
+    nightlyMinGroups: 2
+    nightlyMaxGroups: 20
+    nightlyTextsPerGroup: 40
+    nightlyFrequent: 3
+    nightlyExamples: 5
+    recentDays: 7
+    retireShare: 0.005
+    retireNights: 3
+    nightlyMinTightness: 0.80
+    nightlyBigShare: 0.02
+    nightlySameMemory: 0.95
+    nightlyVerifyTokensPerPair: 25
+    nightlyTopicExamples: 4
+    verifyTopicExamples: 3
+    verifyGroupExamples: 5
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1179,6 +1272,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the backend runs guardrails itself
   guardrailsValidationsEnabled: "false"
+  # Default: false
+  # Description: Whether or not workspaces can train their own guardrail models
+  guardrailsTrainingEnabled: "false"
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
@@ -1381,6 +1477,10 @@ partitionMetrics:
   interval: 5m
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: traces,spans
+  # Tiered-storage gauges from system.query_log / system.part_log (fans out to every replica).
+  tieredStorageEnabled: false
+  # How far behind now the tiered-storage window ends, to wait for the system log flush (default 15s). Min 1s, max 5m.
+  tieredStorageLogFlushLag: 15s
 
 # Job timeout configuration
 jobTimeout:
@@ -1581,3 +1681,10 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
+guardrailsTrainingDataset:
+  maxFileSizeMb: 50
+  minRows: 20
+  maxRows: 50000
+  minRowsPerLabel: 5
+  maxTextLength: 12000

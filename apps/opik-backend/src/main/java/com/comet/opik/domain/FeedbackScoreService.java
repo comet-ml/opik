@@ -290,7 +290,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                 + "continuing without project scope", entityType, entityId, e);
                         return Mono.just(Optional.empty());
                     })
-                    .flatMap(projectId -> dao.deleteScoreFrom(entityType, entityId, score)
+                    // Scoped to the resolved project, so an entity id that also exists in another project keeps
+                    // that project's scores. Unscoped when the entity can't be found.
+                    .flatMap(projectId -> dao.deleteScoreFrom(entityType, entityId, score, projectId.orElse(null))
                             .doOnSuccess(__ -> eventBus.post(new FeedbackScoresDeleted(Set.of(entityId), entityType,
                                     workspaceId, userName, projectId.orElse(null)))));
         });

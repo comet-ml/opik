@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.NonNull;
 
 /**
- * The window a build reads: per trace, in time order, its intent text and its vector of
+ * The window a run reads: per trace, in time order, its intent text and its vector of
  * {@value TopicEmbedding#DIMENSIONS} values ({@code vectors} holds them one after another).
  */
 @Builder(toBuilder = true)

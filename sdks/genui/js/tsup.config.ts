@@ -25,6 +25,7 @@ export default defineConfig([
     platform: "browser",
     dts: false,
     minify: true,
+    metafile: true,
     noExternal: [/.*/],
     outExtension: () => ({ js: ".js" }),
   },

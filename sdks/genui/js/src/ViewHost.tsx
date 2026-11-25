@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { CONTRACTS, unknownVersionMessage } from "./contract";
-import { HtmlFrame } from "./HtmlFrame";
-import { TOKENS, type Theme } from "./tokens";
+import { CONTRACTS, unknownVersionMessage } from "./contract.js";
+import { HtmlFrame } from "./HtmlFrame.js";
+import { TOKENS, type Theme } from "./tokens.js";
 import {
   INPUT_KINDS,
   LIBRARIES,
@@ -9,7 +9,7 @@ import {
   type View,
   type ViewData,
   type ViewInput,
-} from "./view";
+} from "./view.js";
 
 export interface HostAdapter {
   fetchInput: (name: string, input: ViewInput) => Promise<unknown>;

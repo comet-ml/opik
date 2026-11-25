@@ -138,7 +138,7 @@ class CommentDAOImpl implements CommentDAO {
             """;
 
     private static final String SELECT_ENTITY_REFS_BY_COMMENT_IDS = """
-            SELECT id, entity_id, entity_type
+            SELECT id, entity_id, entity_type, project_id
             FROM comments
             WHERE workspace_id = :workspace_id
             AND id IN :ids
@@ -253,10 +253,12 @@ class CommentDAOImpl implements CommentDAO {
                     .bind("ids", commentIds.toArray(UUID[]::new));
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> Flux.from(result.map((row, rowMetadata) -> new CommentEntityRef(
-                            row.get("id", UUID.class),
-                            row.get("entity_id", UUID.class),
-                            parseEntityType(row.get("entity_type", String.class))))))
+                    .flatMap(result -> Flux.from(result.map((row, rowMetadata) -> CommentEntityRef.builder()
+                            .commentId(row.get("id", UUID.class))
+                            .entityId(row.get("entity_id", UUID.class))
+                            .entityType(parseEntityType(row.get("entity_type", String.class)))
+                            .projectId(row.get("project_id", UUID.class))
+                            .build())))
                     .collectList();
         }).flatMapMany(Flux::fromIterable);
     }

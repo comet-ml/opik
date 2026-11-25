@@ -80,8 +80,8 @@ recorded as such, with the reason, because silently changing a number to look di
 
 | knob | traces | spans | derived from |
 |---|---|---|---|
-| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. See ["Blocker 1"](#blocker-1--disk-headroom). |
-| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.381** | Destination bytes per source byte under the `000116` codec set, as measured during OPIK-7400 on representative spans data. It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. |
+| `backfill.sh --min-free-factor` | 2.0 of the **source** | **1.35 of the projected destination** | On a table whose source size is a large fraction of the volume, twice the source is unsatisfiable — and can be unsatisfiable even at factor 1.0. Sized instead from an explicit destination projection, with the factor covering merge scratch rather than a second whole copy. A resume credits what the destination already holds. See ["Blocker 1"](#blocker-1--disk-headroom). |
+| `backfill.sh --dest-compression-ratio` | — (no counterpart) | **0.420** | Destination bytes per source byte under the `000116` codec set, measured at the completion of a full prod-test copy (OPIK-8380). It is a flag precisely so the projection is an argument rather than an assumption: **re-measure it** — `estimate.sh` prints the projection it implies against your measured free space. Take the figure **at completion, once merges settle**: `backfill.sh` logs the measured ratio after every week and at the end, but a mid-run reading drifts substantially in either direction as the copy advances, so it shows the trend, not the answer, and the end-of-run reading precedes the destination's merges. Re-run `estimate.sh` once they have settled; it prints the measured ratio whenever `spans_local_v2` holds data. |
 | `backfill.sh --max-partitions-per-insert-block` (and the delta's / sweep's) | 2,000 | **20,000** | A block cannot span more partitions than the table has, so the destination's TOTAL distinct partition count is a hard upper bound on a block's spread. Same sizing rule as traces, different input. 20,000 is above the SCHEMA's own ceiling — `UUIDv7ToDateTime` is honest from the epoch to 2299, ~17,000 weekly partitions — so it cannot be too low for any estate. It is a limit check rather than an allocation, so a generous value costs nothing; confirm against `estimate.sh` audit 1 and move on. |
 | `backfill.sh --min-insert-block-size-bytes` | — (stock 256 MiB, implicit) | **256 MiB, carried explicitly** | Same value as traces, made explicit because on spans it is the ONE dial over peak insert memory and it trades against part count. Measured on spans-shaped rows: 256 MiB → ~1.1 GiB peak and the fewest parts; 32 MiB → ~315 MiB peak and ~5× the parts. Lower it only if the data nodes are memory-constrained. See ["Partition spread"](#partition-spread-and-the-one-setting-that-matters). |
 | `backfill.sh --max-insert-block-size` | 1,048,576 (stock) | **1,048,576 (unchanged, and re-derived)** | Re-derived rather than inherited, and it lands on the stock value: at spans' uncompressed row width the BYTE bound above fires long before this row count, so lowering it would be cosmetic on the backfill. It is carried explicitly only so the delta's and the sweep's lower value reads as a deliberate difference rather than drift. |
@@ -110,13 +110,14 @@ verdict and the arithmetic behind it.
 
 The traces gate was deliberately conservative: it sized from the **source**, because a driver cannot know what the
 destination will compress to. For spans the destination is substantially smaller — migration `000116`'s codec set was
-measured during OPIK-7400 at well under half the source's bytes per row. But "it should fit" is not a headroom plan for
+measured during OPIK-7400 at well under half the source's bytes per row, and at 0.420 at the completion of a full
+prod-test copy (OPIK-8380). But "it should fit" is not a headroom plan for
 a multi-day copy that also has to absorb merges.
 
 **The answer this runbook commits to: re-derive the factor from an explicit destination projection, and prove the
 projection before the production window.** Concretely:
 
-1. `backfill.sh --dest-compression-ratio` (default `0.381`) makes the projection an argument rather than an assumption,
+1. `backfill.sh --dest-compression-ratio` (default `0.420`) makes the projection an argument rather than an assumption,
    and `--min-free-factor` (default `1.35`) multiplies the **projection**, covering merge scratch on top of the finished
    copy rather than a second whole copy of the source. `estimate.sh` reports source size, projection, free space and the
    resulting margin as four numbers, so the decision is made on arithmetic rather than on a pass/fail flag.
@@ -133,7 +134,22 @@ projection before the production window.** Concretely:
 
 **What is explicitly NOT the answer: passing a lower `--min-free-factor`.** The gate is the only thing standing between
 a multi-day copy and a full volume, and lowering it makes the same copy run with less margin, not more room. The driver
-says this in its abort message, because the flag is right there.
+says this in its abort message, because the flag is right there. **`--min-free-factor 0` is worse than any lowered
+factor:** it skips the startup gate *and* the free-space floor `backfill.sh` re-checks after every week, which is the
+only guard left once the copy is running.
+
+**A resume is sized from the remaining work.** Free space falls as the copy writes, so a gate pinned to the full
+projection refuses a resume more firmly the further the copy has got. Whenever `spans_local_v2` already holds data
+(whatever `--from-week` says), `backfill.sh` instead requires the remaining work plus the same
+`(--min-free-factor − 1) ×` projection margin a fresh start reserves. The remaining work is the projection minus what
+the destination holds on disk, floored at zero. It is sized in bytes, not rows: the source keeps versions and updates the
+destination collapses, so their physical row counts never converge and a row-based estimate would refuse a finished
+copy. A destination already past the projection means the ratio is optimistic for this estate; the gate then requires
+only the margin, and `backfill.sh` warns to raise `--dest-compression-ratio` toward the measured ratio. The margin is deliberately not
+scaled down with progress: merge scratch grows with the destination rather than shrinking as the copy nears its end, and
+the same figure is the per-week floor, so a resumed run keeps the protection a fresh one has. On an empty destination the
+requirement is exactly `--min-free-factor ×` the projection, as before. A resume abort therefore means the remaining work
+does not fit at the projected ratio, and the levers are the same as for a fresh start.
 
 **On tiered storage the whole-node figure is necessary and not sufficient.** New parts land on the hot volume before
 they tier, so validate per-volume headroom out of band; `backfill.sh` refuses a tiered or mismatched `storage_policy`
@@ -385,6 +401,174 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 | During the backfill, after its row was copied | Delta can't see the mask flip | Captured in the bridge → **replayed** before EXCHANGE. |
 | During the delta and the final cutover window | Same as above | Same bridge, same replay step. |
 
+## The span weeks index (`span_weeks`)
+
+The cutover does not need this index, and the index does not need the cutover, but its read bound takes effect only on
+the successor, so its rollout is planned around the cutover. Two flags drive it, `spanWeeksBackfillEnabled` and
+`spanWeeksReadEnabled`; the second interacts with this runbook's `spanColumnsNonNullable` rollout.
+
+**What it is.** `span_weeks` (migration 000132, with `trace_id` skip indexes from 000133) records which weekly
+partitions each trace's spans occupy, keyed `(workspace_id, project_id, trace_id, id_week)`. `id_week` is the
+successor's partition id: the `YYYYMMDD` of the Monday of the span id's timestamp, derived from the id as
+`spans_local_v2` derives `id_at` (`19691229` for non-v7 ids, `22991225` for ids at or past 2300). A projection serves
+the per-project weeks. With `databaseAnalyticsDataModel.spanWeeksReadEnabled`, the spans reads keyed by trace ids or
+by a project bind `spans` to the weeks the index holds for them instead of considering every partition.
+
+**A missing week hides spans; an extra one only costs a partition.** A bounded read skips any span whose week the index
+does not hold, silently: the API answers `200` with those spans absent. Deletes are not bounded by it, so the
+trace-delete cascade still removes unindexed spans. Span deletes leave their weeks in the index, which is harmless.
+Hence the one hard rule: **turn the read bound on only once the index is complete.**
+
+**The bound applies only while `spanColumnsNonNullable` is also `true`**
+(`DatabaseAnalyticsDataModelConfig#spanWeeksReadBounded`), because the legacy `spans` stores `id_at` as a 32-bit
+`DateTime` that wraps ids dated past 2106 into another week. Note what that means for this runbook:
+`spanColumnsNonNullable` turns `true` **before** the `EXCHANGE`, and stays `true` after a stage B/C promote until its
+revert lands. In both windows `spans` is the legacy table, so a live `spanWeeksReadEnabled = true` would bound it and
+hide every far-future-id span. **`spanWeeksReadEnabled` therefore stays `false` until after the `EXCHANGE`, and goes
+back to `false` with any stage B/C rollback.**
+
+### Registration: `span_weeks_mv`
+
+`span_weeks_mv` (migration 000138) registers each span's `(project, trace, week)` as part of its insert into `spans`,
+so a span is indexed by the time its insert returns, on the replica that took it. The shard's other replicas fetch the
+index row and the span through separate replication queues, so a bounded read on one of them can miss a just-written
+span until its index row arrives. There is no flag for the view: a leftover
+`ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED` from earlier releases is ignored and can be dropped.
+
+**The view is bound to the name `spans`, not to the table behind it.** Every step of this runbook leaves it on whatever
+then carries that name, without re-creating it:
+
+| step | `spans` is then | the view |
+|---|---|---|
+| before the `EXCHANGE`; after stage A, B or C | the original | on `spans` |
+| `EXCHANGE`; `--unwrap-only` | the successor | on `spans` |
+| wrap | the `Distributed` wrapper over `spans_local` | on `spans` (inserts through the wrapper register) |
+
+`spans_pre_cutover_backup`, `spans_local`, `spans_post_rollback_backup` and the shadow never carry it.
+`SpansLocalV2CutoverTest#spanWeeksViewFollowsTheSpansNameInEveryTopology` pins this for every row above.
+
+**Nothing the cutover copies needs registering again.** `backfill.sh` and `delta_replay.sh` copy into `spans_local_v2`,
+around the name, so they register nothing. `reconcile.sh` writes into the live table: through `spans` (the view
+registers its rows again, harmlessly), or around it into `spans_local` on a wrapped estate. Neither needs to register
+anything: every row they copy was first written through `spans`, under the same id, and a span's week comes from its id
+rather than from the table holding it. So the index stays valid across the cutover, every rollback stage and a retry,
+and none of them calls for a span weeks backfill. What does bypass the view is a **partition import**
+(`ATTACH`/`REPLACE`/`MOVE PARTITION` into `spans`) or a write straight into a table behind the name; around one,
+re-plan the backfill and handle the read flag (see "Re-planning" below).
+
+**Single shard only.** `span_weeks` is a replicated table, not wrapped: the view writes to the shard of the node that
+received the insert, and reads use the local table. That is complete on one shard, the only topology the wrap
+targets today; sharding `spans` across more needs `span_weeks` distributed too.
+
+### The span weeks backfill
+
+The view only registers spans inserted after migration 000138; the backfill registers the ones written before it.
+
+- **Enable** `databaseAnalyticsDataModel.spanWeeksBackfillEnabled`
+  (env `ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED`). Like every flag here it is read at startup, so it needs a
+  rolling restart to take effect, and another to switch off.
+- **What it does.** The first step plans: it tiles the span ids into chunks of `weeksPerChunk` weeks, from the Monday of
+  the install date (the first project's `created_at`) to the Monday of the plan's own week, with the first chunk open
+  below (older, past-dated and non-v7 ids) and the last open above (the current week and any later id). The plan lives
+  in the state database's `span_weeks_backfill_chunks` table (MySQL migration 000106). Each later step backfills the
+  oldest pending chunk with one `INSERT INTO span_weeks ... SELECT ... FROM spans` and marks it done. A Redis lock held
+  for a whole `interval` makes that **at most one chunk per interval across the cluster**, however many instances
+  tick. It resumes across restarts, and re-registering a week is harmless, so a retried chunk is too.
+- **Duration.** At least the chunk count × `interval`: roughly `(weeks since install ÷ weeksPerChunk + 2) × interval`.
+- **The plan must postdate migration 000138.** The view is what covers spans inserted after the plan, so a plan taken
+  before it (an install that enabled the backfill on a release without the view) can miss spans written between a
+  chunk's run and the view's creation. Compare `SELECT MIN(created_at) FROM span_weeks_backfill_chunks` (MySQL) with
+  `SELECT DATEEXECUTED FROM default.DATABASECHANGELOG WHERE ID = '000138_create_span_weeks_mv'` (ClickHouse), minding
+  each server's timezone. If the plan is older, re-plan.
+
+Tuning, under `spanWeeksBackfill` (under Helm, set the env vars through `component.backend.env`; the chart templates
+only the two flags):
+
+| setting | env | default | what it controls |
+|---|---|---|---|
+| `interval` | `SPAN_WEEKS_BACKFILL_INTERVAL` | `5m` | how often a step starts, and how long the lock is held. Must exceed `queryTimeout` — the backend refuses to start otherwise |
+| `queryTimeout` | `SPAN_WEEKS_BACKFILL_QUERY_TIMEOUT` | `4m` | ClickHouse `max_execution_time` for one chunk. Keep it under ~90 × `httpHeadersProgressIntervalMs` (270s at the default 3s), past which the driver fails the statement as a connection error |
+| `maxThreads` | `SPAN_WEEKS_BACKFILL_MAX_THREADS` | `4` | ClickHouse threads one chunk may use |
+| `weeksPerChunk` | `SPAN_WEEKS_BACKFILL_WEEKS_PER_CHUNK` | `4` | weeks of span ids per chunk. **Read only when the plan is taken**, so set it before enabling |
+| `lockWaitTime` | `SPAN_WEEKS_BACKFILL_LOCK_WAIT_TIME` | `1s` | how long a step waits for the lock before skipping its tick |
+
+**Monitoring.** The job logs:
+
+- `Span weeks backfill planned '<n>' chunks from week '<first>' to '<last>'` — once, on the first step;
+- `Span weeks backfilled '<rows>' rows for ids from week '<from>' to '<to>' in '<ms>' ms` — per chunk;
+- `Span weeks backfill step failed, retrying on the next tick` — with the exception, per failed attempt.
+
+No line marks completion: once every chunk is done the job stops taking steps. Progress and completion come from the
+state database:
+
+```sql
+SELECT COUNT(*) AS chunks, COUNT(backfilled_at) AS done,
+       MIN(CASE WHEN backfilled_at IS NULL THEN from_week END) AS next_from_week
+FROM span_weeks_backfill_chunks;
+```
+
+The load on ClickHouse is in `system.query_log` under `log_comment LIKE 'backfill_span_weeks%'` (duration, rows read,
+memory).
+
+**Complete** means `chunks > 0 AND done = chunks` in the query above. A finished plan never gains chunks, so it stays
+complete; the job then costs one state-database read per tick, and `spanWeeksBackfillEnabled` can be turned off at the
+next convenient restart.
+
+**Failures.** A failed chunk — a timeout, a ClickHouse or MySQL error — stays pending and is retried every interval,
+indefinitely, logging each attempt. A chunk that keeps hitting `queryTimeout` needs more time or threads within the
+bounds above, or a re-plan with a smaller `weeksPerChunk`.
+
+**Re-planning** (a plan older than the view, a smaller `weeksPerChunk`, or a partition import to cover): turn
+`spanWeeksBackfillEnabled` off on every instance, `DELETE FROM span_weeks_backfill_chunks`, adjust the tuning, and turn
+it back on. The next step plans afresh and re-registers every range, which takes as long as the first backfill. Delete
+**all** the rows, never only the pending ones: a plan whose every remaining chunk is done reads as complete.
+
+Whatever its cause, a re-plan voids what `spanWeeksReadEnabled` rests on, a complete plan. If the flag is on, turn it
+off in the rollout that turns the backfill off (for a partition import, before the import: the bound hides imported
+spans from the moment they land), and back on once the new plan is complete and the spot-check below returns `0` on a
+few of the projects involved.
+
+### Where it sits relative to the cutover
+
+The backfill reads whatever `spans` is, and the weeks it writes depend only on span ids, so it is correct before, during
+or after the cutover. **Run it to completion before `backfill.sh` starts**, for two reasons: it competes with the copy
+for I/O, and finishing first lets the read bound go on as soon as the `EXCHANGE` lands. If it overlaps the window
+anyway, nothing breaks; watch it with the rest of the load (see "Monitoring and abort criteria").
+
+The flags, in order:
+
+1. **The release carrying migrations 000132, 000133 and 000138 is deployed.** From then on, the view registers every
+   new span.
+2. **`spanWeeksBackfillEnabled = true`**, rolled out; wait for completion; optionally back to `false`.
+3. **The cutover**, with `spanWeeksReadEnabled` still `false`: the `spanColumnsNonNullable` rollout before the
+   `EXCHANGE` must not carry it (see above).
+4. **`spanWeeksReadEnabled = true`, after the `EXCHANGE`**, as its own rolling restart. The `EXCHANGE` is what makes
+   it safe; wait until ["When the cutover is done"](#when-the-cutover-is-done) holds as well, because a failed
+   reconciliation usually ends in a stage B/C rollback, which would then have to revert it. Before it, spot-check a few
+   large, long-lived projects for spans the index does not hold — the check must return `0`:
+
+   ```sql
+   SELECT count()
+   FROM (
+       SELECT DISTINCT workspace_id, project_id, trace_id,
+           toUInt32(toYYYYMMDD(toDate32(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'))
+               - toIntervalDay(toDayOfWeek(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'), 1)))) AS id_week
+       FROM <database>.spans
+       WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+   ) AS s
+   LEFT ANTI JOIN (
+       SELECT workspace_id, project_id, trace_id, id_week
+       FROM <database>.span_weeks
+       WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>' AND is_deleted = 0
+   ) AS w USING (workspace_id, project_id, trace_id, id_week);
+   ```
+
+   It reads every span of the project, so keep it to a few projects. `SpansLocalV2CutoverTest` runs the same query,
+   including against a span written around the name, which it must find.
+
+On rollback, see ["Rollback"](#rollback): stages B and C revert `spanWeeksReadEnabled` with `spanColumnsNonNullable`,
+the un-wrap leaves it alone, and the index itself needs nothing on any path.
+
 ## Prerequisites (do not start without these)
 
 1. **24h UUIDv7 ingestion validation** live long enough that no un-validated future-dated ids land in newly ingested
@@ -427,9 +611,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    retention note above first.
 8. **Sufficient free disk, sized from the DESTINATION** — see ["Blocker 1"](#blocker-1--disk-headroom), which is the
    single hardest prerequisite here and the one the traces runbook cannot lend us. Run `estimate.sh` and read its
-   headroom verdict; `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the source size
-   (defaults 1.35 and 0.381). **A pass with under 3 TiB of margin is
-   a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
+   headroom verdict; on a fresh start `backfill.sh` aborts below `--min-free-factor` × `--dest-compression-ratio` × the
+   source size (defaults 1.35 and 0.420), and a resume is sized from the remaining work. **A pass with under 3 TiB of
+   margin is a warning, not a green light** — both drivers say so, and the Go/No-Go asks for the headroom decision as a number.
    On tiered storage this whole-node floor is necessary but not sufficient — validate per-volume (hot) headroom too,
    since new parts land hot before they tier, and `backfill.sh` refuses a tiered policy without
    `--confirm-tiered-headroom`.
@@ -516,7 +700,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     any response carrying a span with usage fails to serialise. **Confirm the deployed build carries the fix**, and
     assert it positively after the swap — read a trace that has a root span, and check the root span comes back with no
     parent and the page `total` equals the number of items returned.
-19. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
+19. **Span weeks backfill complete, and `spanWeeksReadEnabled` held `false`** — see
+    ["The span weeks index"](#the-span-weeks-index-span_weeks). The release carrying migrations 000132, 000133 and
+    000138 is deployed; the span weeks backfill, planned after 000138, has every chunk done; and
+    `spanWeeksReadEnabled` is `false` on every instance and stays out of the `spanColumnsNonNullable` rollout. The copy
+    does not depend on the index — an unfinished backfill only delays the read bound — but a running one competes with
+    `backfill.sh` for I/O.
+20. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
 
 ## The sequence
 
@@ -990,7 +1180,9 @@ The tail is still worth running tightly, because its length is what decides how 
 
 1. **Roll out `spanColumnsNonNullable = true` to every backend instance**
    (["The one rolling restart"](#the-one-rolling-restart-spancolumnsnonnullable), and the flip's own note below). Do it
-   while there is slack, not between the final delta and the `EXCHANGE`.
+   while there is slack, not between the final delta and the `EXCHANGE`. Keep `spanWeeksReadEnabled` `false` in this
+   rollout: with both on, reads are bounded against the legacy table (see
+   ["The span weeks index"](#the-span-weeks-index-span_weeks)).
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step before the swap, and **record the
@@ -1959,6 +2151,9 @@ cutover as complete only when all of these hold.
 Until the first box is ticked the cutover has lost writes, whether or not anything has noticed: they are in the parked
 backup, not in the live table. `finalize.sh` is the point at which that stops being recoverable.
 
+Once these hold, the span weeks read bound can go on: step 4 of
+["Where it sits relative to the cutover"](#where-it-sits-relative-to-the-cutover).
+
 ## Rollback
 
 The full, ready-to-run rollback — including the **reverse deletion replay** so deletes don't resurrect — is pre-written
@@ -2046,9 +2241,10 @@ Pick the stage by how far the cutover got:
   `spans`, park the now-displaced successor as `spans_post_rollback_backup`, then the reverse replay. (Guarded: aborts
   if `spans` is `Distributed` — use C.)
 - **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts> UTC'
-  --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
-  `RENAME` promotes the original (`spans_pre_cutover_backup`) back to `spans` and parks the successor as
-  `spans_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `spans` is `Distributed`.)
+  --confirm-retention-paused --accept-post-cutover-write-loss`. One atomic `RENAME` rotates the `Distributed` wrapper
+  out to `spans_dist_old`, promotes the original (`spans_pre_cutover_backup`) back to `spans` and parks the successor as
+  `spans_post_rollback_backup`; then the data-less ex-wrapper is dropped and the reverse replay runs. (Guarded: aborts
+  unless `spans` is `Distributed`.)
   **Set `databaseAnalyticsDataModel.spansDistributedWrapEnabled` back to `false` before backends resume** — Stage C
   makes `spans` a `MergeTree` again and parks `spans_local`, so a still-`true` flag would send `SpanDAO` deletes at
   the missing `spans_local`. This is the inverse of the flip that enabled the wrap (see "HARD PREREQUISITE for the
@@ -2126,11 +2322,11 @@ Running the bounded form afterwards is not wrong, only weaker — it stops short
 
 ### Un-wrap: reversing sharding without reversing the cutover
 
-Stage C is the *only* other statement that touches the wrap, and it bundles four actions — drop the wrapper, promote the
-parked original, park the successor, reverse-replay. That is right when the successor is suspect and disproportionate
-when it isn't: the wrapper holds **no data**, yet stage C abandons a validated backfill, makes post-cutover writes
-non-live, runs the guard-less reverse replay, reverts to the unpartitioned original, and leaves the sentinel/`duration`
-repair to do. `--unwrap-only` reverses just the sharding half.
+Stage C is the *only* other statement that touches the wrap, and it bundles four actions — retire the wrapper, promote
+the parked original, park the successor, reverse-replay. That is right when the successor is suspect and
+disproportionate when it isn't: the wrapper holds **no data**, yet stage C abandons a validated backfill, makes
+post-cutover writes non-live, runs the guard-less reverse replay, reverts to the unpartitioned original, and leaves the
+sentinel/`duration` repair to do. `--unwrap-only` reverses just the sharding half.
 
 | | stage B | stage C | `--unwrap-only` |
 |---|---|---|---|
@@ -2139,6 +2335,7 @@ repair to do. `--unwrap-only` reverses just the sharding half.
 | Runs the guard-less reverse replay | Yes | Yes | **No — not needed** |
 | Sentinel + `duration` repair afterwards | Yes | Yes | **No** |
 | Flags to revert | 1 + repair | 2 + repair | **1** |
+| `spanWeeksReadEnabled`, if on | Revert | Revert | **Keep** |
 | Needs `spans_pre_cutover_backup` | Yes | Yes | **No** |
 | Available after `finalize.sh` | No | No | **Yes** |
 | Re-backfill needed to go forward again | Only if the parked copy is not reused (see "Retrying the cutover") | Same | **No — never left the cutover** |
@@ -2169,7 +2366,8 @@ ingestion-side setting covers it: quiesce traffic or take a maintenance window. 
 `--confirm-maintenance` asserts.
 
 `spanColumnsNonNullable` stays `true`: the live table is still the partitioned, sentinel-schema successor, which is
-precisely what that flag asserts. Only stage B/C revert it, because only they restore the unpartitioned original.
+precisely what that flag asserts. Only stage B/C revert it, because only they restore the unpartitioned original. The
+same holds for `spanWeeksReadEnabled`, and `span_weeks_mv` stays on `spans`, so the index stays complete.
 Partition pruning needs no attention in either direction — it carries no flag at all; see
 "Span-delete partition pruning needs no flip at all".
 
@@ -2270,7 +2468,11 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    each instance restarts — exactly like the forward rollout before the EXCHANGE. Until the restart completes, the app
    keeps binding sentinels (epoch/NaN) and using sentinel-based absent-value logic against the now-Nullable column,
    mixing sentinel and `null` representations: not a hard write failure, but inconsistent absent-value
-   reads/filters/sorts.
+   reads/filters/sorts. **Revert `spanWeeksReadEnabled` to `false` in the same rollout** if it was on: until it lands,
+   reads are bounded against the restored original, which hides spans whose ids are dated past 2106 (nothing is lost),
+   and leaving it `true` would repeat that on a retry's pre-`EXCHANGE` rollout (see
+   ["The span weeks index"](#the-span-weeks-index-span_weeks)). The index itself needs nothing: its rows stay valid
+   for the restored original.
 2. **Repair the sentinels written into the original** (see the caveats under "The `spanColumnsNonNullable` flip").
    Those rows carry `end_time = epoch` / `ttft = NaN` where the original's convention is `NULL`, and — because the
    original's `duration` expression epoch-guards `start_time` but checks `end_time` for NULL alone — a large **negative**
@@ -2337,9 +2539,9 @@ Treat a stage B/C rollback as complete only when all of these hold:
       **exits non-zero**, and names the `--reverse-replay-only` command to re-run. The replay is idempotent and the
       check repeats after it.
 - [ ] **Flags reverted and the restart landed on every instance** — `spanColumnsNonNullable`, plus
-      `spansDistributedWrapEnabled` if the wrap had been applied. Those are the only two — partition pruning is
-      unconditional and has no flag. Verify positively, not by absence of errors: absent `end_time`/`ttft` must read back
-      as `null`.
+      `spansDistributedWrapEnabled` if the wrap had been applied and `spanWeeksReadEnabled` if it had been turned on.
+      Those are the only three — partition pruning is unconditional and has no flag. Verify positively, not by absence
+      of errors: absent `end_time`/`ttft` must read back as `null`.
 - [ ] **Sentinel repair applied** — `--sentinel-repair-only` printed `Sentinel postcondition OK` and **exited zero**,
       **and the window passed is the one the flag was live in, in UTC**. The gate is `sentinel_end_time`,
       `sentinel_ttft` and `stale_duration` all at `0` *inside that window*; a residual `duration < 0` count elsewhere is
@@ -2394,8 +2596,9 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    you to set `spanColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
    successor back under `spans`, which needs it `true` and needs every backend instance restarted to pick it up (it
    comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
-   writes keep succeeding. Nothing else needs flipping: no ingestion-path config change is involved, and span-delete
-   partition pruning carries no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
+   writes keep succeeding. `spanWeeksReadEnabled` stays `false` until after the retry's `EXCHANGE`, as on the first run.
+   Nothing else needs flipping: no ingestion-path config change is involved, and span-delete partition pruning carries
+   no flag, so the retry's `EXCHANGE` needs no pruning step in either direction — see
    "Span-delete partition pruning needs no flip at all". The retry's own final-delta→`EXCHANGE` gap and swap skew
    carry the same write exposure as the first run — see "The final cutover window".
 5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor, marker included (the
@@ -2727,28 +2930,39 @@ and escalate rather than passing it — arbitrary is not the same as benign.
 
 **Feasibility at scale.** `spans` is unpartitioned and `created_at` is not in its sorting key, so a week's window is
 narrowed only by the `created_at` minmax skip index, granule by granule — and a granule whose rows span many weeks is
-read again by every week it touches. The default walk, one query per week, therefore reads the source several times
-over, and on a full-size estate that is the whole of its cost: storage-bound, with CPU largely idle. Raising
+read again by every week it touches. Under `FINAL`, `use_skip_indexes_if_final_exact_mode` (on by default on servers
+that have it) also re-reads the key neighbours of every selected granule, which can widen one week to most of both
+tables. The default walk, one query per week, therefore reads the estate up to once per week, and each `confirm-keys`
+re-check of a differing week costs up to another full read; on a full-size estate that is the whole of its cost:
+storage-bound, with CPU largely idle. Raising
 `max_threads` does not help a read that is waiting on the volume.
 
 - `--single-pass` reads the range **once** and reports every week's verdict from that read (`000005`'s `compare-weeks`
   block): the same fingerprint, normalization and per-week output, so it is exact, not a sample, and a week that differs
   is resolved on its own window exactly as in the walk. The one difference is in `FINAL`'s favour: a wider read sees
   more of each key's versions, so a superseded-version artifact the walk reports as `OK — superseded-version artifact`
-  may read plain `OK`. The old side's `GROUP BY` covers every key in the range; it is streamed in sorting-key order
-  (`optimize_aggregation_in_order`), so memory is held per key prefix rather than per estate, with
-  `max_bytes_before_external_group_by` as the spill bound. `--batch-weeks N` splits the range into queries of N weeks —
-  resumable at batch granularity, at the cost of re-reading what the batches share. It stays off by default until its
-  runtime is measured on prod-test against the walk's; `--estimate-only` shows the two modes' estimated reads
-  beforehand.
+  may read plain `OK`. The old side's `GROUP BY` covers every key in the range, bounded by
+  `max_bytes_before_external_group_by` (4 GB). Past it, the state of every key in the range spills to the server's
+  temporary path, about 70 bytes per key compressed in a local measurement, written and read back once: a small fraction
+  of the table read, but held all at once where the walk holds one week's, and covered by neither `--io-budget-pct` nor
+  the estimate. Check the temporary path's free space against it before the run. The block sets
+  `optimize_aggregation_in_order = 0`: that `GROUP BY` shares only a key prefix with the source's sorting key, and
+  in-order aggregation under `FINAL` ran on one thread, several times slower than the walk. `--batch-weeks N` splits the
+  range into queries of N weeks — resumable at batch granularity and holding one batch's spill, but each batch can cost
+  up to a full read of both tables, so use as few as resuming and the temporary path allow. In a local volume test it
+  returned the walk's verdict lines in a fraction of the walk's time; the walk stays the default, and `--estimate-only`
+  shows the two modes' estimated reads beforehand.
 - `--coverage PCT` compares PCT% of the rows: those created in the first `36 × PCT` seconds of every UTC hour. The slice
   is a condition on `created_at` alone, so it selects the *same* rows on both sides, every week and every hour is
   represented, and — unlike a hash of the `id` — the skip index can drop granules lying wholly outside it, so the read
-  shrinks with the coverage. Two properties to read it by, both printed by the driver: the **bias** — each project counts
-  in proportion to its activity inside the slices, so traffic periodic on the hour is over- or under-represented; and
-  the **floor** — a granule whose `created_at` spans more than an hour (a quiet project, non-time-ordered trace ids) is
-  read whatever the coverage, so runtime falls with the coverage only as far as the estate's granules are narrow. The
-  estimate printed before the run shows how far that is on a given estate. On server versions that have
+  shrinks as far as the granules allow. Two properties to read it by, both printed by the driver: the **bias** — each
+  project counts in proportion to its activity inside the slices, so traffic periodic on the hour is over- or
+  under-represented; and the **floor** — a granule whose `created_at` spans more than an hour is read whatever the
+  coverage. On the source that is a quiet project's or a non-time-ordered trace's granule; on `spans_local_v2`, whose
+  granules are cut at 40 MiB (`index_granularity_bytes`), it is most granules, so the destination's read barely
+  shrinks. **Runtime therefore does not fall in proportion to the coverage**: use `--coverage` to sample every week
+  cheaply on the source side, not as a cost lever for the whole compare. The estimate printed before the run shows how
+  far the read falls on a given estate. On server versions that have
   `use_skip_indexes_if_final_exact_mode`, the driver disables it for a coverage run: under `FINAL` it re-reads the key
   neighbours of every granule the skip index selects, which for slices scattered across the table is nearly all of it.
   A slice can then surface a superseded version on one side, which `confirm-keys` resolves as usual.
@@ -2904,8 +3118,9 @@ below, alongside the other driver guards, rather than in a suite that drives SQL
 So the cutover rehearsal is what covers the drivers: their argument validation, their topology guards, and the
 `verify.sh` behaviours worth separating from the rest because they decide a *verdict*
 rather than reject an argument — and a wrong verdict from a fidelity gate is the failure this whole procedure exists to
-avoid. The rehearsal is also where the compare modes get their **measured runtimes** on a prod-test-sized estate —
-walk, `--single-pass`, and `--coverage` at 1%, 10% and 50% — which the Go/No-Go's fidelity item records:
+avoid. The rehearsal is also where the gate's compare gets its **measured cost** on a production-sized estate — the
+walk's and `--single-pass`'s runtime, and the single pass's temporary-disk use — which the Go/No-Go's fidelity item
+records:
 
 - refusing to report `PASSED` when the bounds selected **no** window, or when every window it compared was empty on
   both sides (a pass over nothing would be vacuous);
@@ -2997,14 +3212,25 @@ here — `--with-wrap` and `--wrap-only` must both refuse without `--confirm-mai
 be made at all), and `--settle-timeout` must refuse a leading zero as well as anything outside 0–7200. Keep that last
 check **lexical**, on the digit count, rather than turning it into a numeric comparison: bash arithmetic wraps silently
 past 2^63 instead of erroring, and a wrapped value is negative, so it both passes a `<=` test and leaves the gate's poll
-count negative — which skips every sample and passes the gate without reading replication at all.
+count negative — which skips every sample and passes the gate without reading replication at all. In both
+`backfill.sh` and `estimate.sh`, `--dest-compression-ratio` must refuse 0 and anything above 1.0 (such a value is
+almost certainly the inverse, source / destination, ratio), and `--min-free-factor` must refuse anything between 0 and
+1, including `0.0`: its negative margin would pass the gate short of the projection and silently disable the per-week
+floor.
 
 **Four `backfill.sh` guards are new for spans and have no traces counterpart, so they need exercising explicitly:**
 
-- **the destination-relative headroom gate.** Confirm it refuses below the requirement, that its abort message names
-  the levers and explicitly rules out lowering the flag, and that the thin-margin WARNING fires between the requirement
-  and +3 TiB. Also confirm `--dest-compression-ratio` above 1.0 is refused — that direction would make a conservative
-  gate optimistic, which is the one thing this parameter must never do;
+- **the destination-relative headroom gate.** Confirm it refuses below the requirement (a large `--min-free-factor`
+  forces that locally), that its abort message names the levers, rules out lowering the flag and says `0` also
+  disables the per-week floor, and that the thin-margin WARNING fires between the requirement and +3 TiB. Repeat on a
+  **resume**: stop a backfill with `--to-week`, resume it with `--from-week`, and confirm it logs `Capacity (resume)`
+  crediting what `spans_local_v2` holds, that a forced abort gives the resume form of the message, and that
+  `--from-week` over an empty destination still sizes as a fresh start. Resumed with `--dest-compression-ratio 0.01`,
+  the projection falls below what the destination holds: confirm it logs the WARNING that the destination already holds
+  the whole projection and that the gate requires only the margin. Confirm the measured ratio is logged after every
+  week, that the run stopped by `--to-week` labels its final reading a mid-run sample while the run reaching the last
+  week labels it the completion figure, and that `estimate.sh` then notes the destination holds data and prints the
+  measured ratio. Confirm `--from-week` past `--to-week` is refused;
 - **`reconcile.sh`'s reverse usage-range precheck.** Plant a `usage` value above `2^31` in the parked successor and
   confirm the reverse direction REFUSES rather than importing it wrapped, and that `--report-only` reports it rather
   than staying silent.
@@ -3042,6 +3268,11 @@ Watch these for the whole backfill→EXCHANGE window; wire alerts before startin
   remains visible only in this log-watch. So it is an early-warning signal, not a silent hole: treat repeated failures as
   an abort signal until capture is healthy, and treat **any** `captureDeletions` failure observed from the last verify
   through the reconciliation as a swap-gating signal.
+- **The span weeks backfill, if it is still running** — its `Span weeks backfill step failed` log lines, and its
+  queries in `system.query_log` under `log_comment LIKE 'backfill_span_weeks%'`. It is load, not a correctness risk to
+  the cutover; prerequisite 19 has it finish first, as it competes with `backfill.sh` for I/O and the read bound can
+  then go on right after the `EXCHANGE`. Stopping it mid-window takes a rolling restart. See
+  ["The span weeks backfill"](#the-span-weeks-backfill).
 
 **Roles.** Name an operator (runs the scripts), an independent observer (watches the dashboards), and the person with
 authority to call a rollback. **Abort thresholds** (decide the numbers up front): free disk below the per-volume alarm,
@@ -3159,6 +3390,10 @@ these is working the wrong problem.
       correctly (`input_format_null_as_default` converts the `null` bind to the sentinel) and logs nothing — it just
       serves wrong absent-value reads/filters/sorts. Revert plan to `false` ready for rollback, **plus** the pre-swap
       sentinel/`duration` repair (see "Rolling back the `spanColumnsNonNullable` flip").
+- [ ] **Span weeks: backfill complete, read bound held back** — `span_weeks_backfill_chunks` has every chunk done
+      and its plan postdates migration 000138; `spanWeeksReadEnabled` is `false` fleet-wide and absent from the pre-`EXCHANGE` rollout; its
+      post-`EXCHANGE` rollout is planned, preceded by the unindexed-spans spot-check on a few projects, and its revert
+      is part of the stage B/C rollback's flag rollout. See ["The span weeks index"](#the-span-weeks-index-span_weeks).
 - [ ] **Schema-parity guards green** — `cutoverCopiesEveryBaseColumn` and `successorMaterializedColumnsMatchSource` pass
       on the release, so the cutover copies every base column of `spans` and the two tables' base and materialized
       columns match.
@@ -3171,9 +3406,11 @@ these is working the wrong problem.
       `--batch-weeks`) reports the same per-week verdicts from one read and satisfies the gate exactly as the weekly
       walk does; and the gate may be **resumed** on a pinned `--anchor` — a run labelled `RESUMED at week N …` together
       with the earlier run's log on the same anchor verifying weeks `[0..N-1]` is one compare, provided no
-      `delta_replay.sh` ran between the two runs. Use whichever the Go/No-Go's measured
-      runtimes make affordable, run it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the
-      ETA printed before the run and the runtime measured after it. Reserve coverage/ranged runs for follow-up confidence
+      `delta_replay.sh` ran between the two runs. Prefer `--single-pass`, which reads each table once, where the
+      server's temporary path holds its spill (see "Feasibility at scale"; otherwise `--batch-weeks` or the walk); run
+      it under `--io-budget-pct` on a live estate, and record the mode, the anchor, the ETA printed before the run, the
+      runtime measured after it and, for a single pass, its temporary-disk use (`ExternalAggregationCompressedBytes` in
+      `system.query_log`, by the driver's `log_comment`). Reserve coverage/ranged runs for follow-up confidence
       *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh`, and read the result for what it can be
       under live traffic: windows bound on `created_at`, so spans updated after the last delta read differ inside their
       own week and a clean `PASSED` is not generally obtainable. The gate passes when every `genuinely_differing_keys`

@@ -9,7 +9,7 @@ One source folder, two packages:
 | npm `opik-genui` (`js/`) | `js/src/` | Opik frontend, Ollie console |
 | Python `opik-genui` (`python/`) | the guidance and versions that `npm run build` emits into `python/src/opik_genui/data/` | Ollie backend, opik-mcp |
 
-Neither package is published yet. The Opik frontend will build against `js/` in this repository; Ollie and opik-mcp will pin released versions once the packages ship with the Opik release jobs.
+Both packages are published by the Opik release, in one job and with the Opik version, so a version of one always matches the same version of the other. The Opik frontend builds against `js/` in this repository; Ollie and opik-mcp pin released versions.
 
 ## Work on it
 

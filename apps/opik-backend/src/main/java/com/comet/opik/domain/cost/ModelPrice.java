@@ -73,7 +73,7 @@ public record ModelPrice(
                 .inputAudioTokenPrice(BigDecimal.ZERO)
                 .outputAudioTokenPrice(BigDecimal.ZERO)
                 .outputReasoningTokenPrice(BigDecimal.ZERO)
-                .calculator(SpanCostCalculator::defaultCost)
+                .calculator(SpanCostCalculator.DEFAULT_COST_CALCULATOR)
                 .promptTiers(List.of());
     }
 
@@ -92,6 +92,16 @@ public record ModelPrice(
     public BigDecimal effectiveCacheCreationInputTokenPrice(int totalPromptTokens) {
         return applicableTier(totalPromptTokens, PromptTier::cacheCreationInputTokenPrice)
                 .orElse(cacheCreationInputTokenPrice);
+    }
+
+    public boolean isPricedPerUnit() {
+        return calculator == SpanCostCalculator.AUDIO_SPEECH_CALCULATOR
+                || calculator == SpanCostCalculator.VIDEO_GENERATION_CALCULATOR;
+    }
+
+    public boolean hasTokenPrices() {
+        return inputPrice.signum() > 0 || outputPrice.signum() > 0 || cacheCreationInputTokenPrice.signum() > 0
+                || cacheReadInputTokenPrice.signum() > 0;
     }
 
     public BigDecimal effectiveCacheReadInputTokenPrice(int totalPromptTokens) {

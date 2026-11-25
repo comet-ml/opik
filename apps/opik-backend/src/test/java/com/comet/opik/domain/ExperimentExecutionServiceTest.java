@@ -22,6 +22,8 @@ import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.TestSuiteConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,6 +51,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +63,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -103,6 +108,8 @@ class ExperimentExecutionServiceTest {
     @Mock
     private LockService lockService;
 
+    private final OrganizationResolver organizationResolver = FixedOrganizationResolver.none();
+
     private ExperimentExecutionService service;
 
     @BeforeEach
@@ -113,12 +120,12 @@ class ExperimentExecutionServiceTest {
                 experimentService, cancellationService, datasetService, datasetItemService,
                 datasetVersionService,
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService,
-                featureFlags, lockService);
+                featureFlags, lockService, organizationResolver);
 
         lenient().when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
         lenient().when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
-        lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
+        lenient().when(itemPublisher.publish(any(), any(), any())).thenReturn(Mono.empty());
         lenient().when(itemPublisher.startTrackingRun(any(), anyBoolean())).thenReturn(Mono.empty());
         // An empty queue, so only the tests that fill it see the run refused.
         lenient().when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(0L));
@@ -197,6 +204,80 @@ class ExperimentExecutionServiceTest {
     }
 
     @Nested
+    @DisplayName("Organization")
+    class Organization {
+
+        private final String organizationId = UUID.randomUUID().toString();
+        private final AtomicBoolean publishLockHeld = new AtomicBoolean();
+        private final AtomicInteger lookupsUnderThePublishLock = new AtomicInteger();
+
+        @BeforeEach
+        void setUp() {
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+            when(lockService.bestEffortLock(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+                Mono<?> action = invocation.getArgument(1);
+                return Mono.fromRunnable(() -> publishLockHeld.set(true))
+                        .then(action)
+                        .doFinally(signal -> publishLockHeld.set(false));
+            });
+        }
+
+        @Test
+        @DisplayName("publishes the run with its organization, looked up once and before the publish lock")
+        void publishesWithTheOrganizationLookedUpBeforeThePublishLock() {
+            var resolver = resolverWatchingThePublishLock(Mono.just(organizationId));
+            service = serviceWith(resolver);
+
+            executeRequest(request());
+
+            verify(itemPublisher).publish(any(UUID.class), any(), eq(organizationId));
+            assertThat(resolver.lookups()).isOne();
+            assertThat(lookupsUnderThePublishLock).hasValue(0);
+        }
+
+        @Test
+        @DisplayName("publishes without an organization when none is known, after a single lookup")
+        void publishesWithoutAnOrganizationWhenNoneIsKnown() {
+            var resolver = resolverWatchingThePublishLock(Mono.empty());
+            service = serviceWith(resolver);
+
+            executeRequest(request());
+
+            verify(itemPublisher).publish(any(UUID.class), any(), isNull());
+            assertThat(resolver.lookups()).isOne();
+            assertThat(lookupsUnderThePublishLock).hasValue(0);
+        }
+
+        private FixedOrganizationResolver resolverWatchingThePublishLock(Mono<String> organizationId) {
+            return new FixedOrganizationResolver(Mono.defer(() -> {
+                if (publishLockHeld.get()) {
+                    lookupsUnderThePublishLock.incrementAndGet();
+                }
+                return organizationId;
+            }));
+        }
+
+        private ExperimentExecutionService serviceWith(OrganizationResolver resolver) {
+            return new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), new ExperimentExecutionConfig(),
+                    promptService, featureFlags, lockService, resolver);
+        }
+
+        private ExperimentExecutionRequest request() {
+            return ExperimentExecutionRequest.builder()
+                    .datasetName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+        }
+    }
+
+    @Nested
     @DisplayName("Empty dataset")
     class EmptyDataset {
 
@@ -216,7 +297,7 @@ class ExperimentExecutionServiceTest {
                             "Dataset 'test-dataset' has no items in the selected version. Add items to it before running an experiment");
 
             verify(experimentService, never()).create(any(Experiment.class));
-            verify(itemPublisher, never()).publish(any(), any());
+            verify(itemPublisher, never()).publish(any(), any(), any());
         }
     }
 
@@ -738,7 +819,7 @@ class ExperimentExecutionServiceTest {
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
                     new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
-                    lockService);
+                    lockService, organizationResolver);
 
             stubDatasetItems(IntStream.range(0, 501)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -757,7 +838,7 @@ class ExperimentExecutionServiceTest {
                     .hasMessageContaining("more than")
                     .hasMessageContaining("1,000");
 
-            verify(itemPublisher, never()).publish(any(), any());
+            verify(itemPublisher, never()).publish(any(), any(), any());
 
             // Nothing written at all. The variants are planned with ids of our own and only persisted
             // once the run is one we will accept, so a refusal leaves no experiments behind rather
@@ -779,7 +860,7 @@ class ExperimentExecutionServiceTest {
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build());
 
-            verify(itemPublisher).publish(any(), any());
+            verify(itemPublisher).publish(any(), any(), any());
         }
 
         // The bound belongs to the stream, which every workspace shares. A run small enough on its
@@ -793,7 +874,7 @@ class ExperimentExecutionServiceTest {
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
                     new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
-                    lockService);
+                    lockService, organizationResolver);
 
             stubDatasetItems(IntStream.range(0, 400)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -830,7 +911,7 @@ class ExperimentExecutionServiceTest {
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
                     new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
-                    lockService);
+                    lockService, organizationResolver);
 
             stubDatasetItems(IntStream.range(0, 300)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -847,7 +928,7 @@ class ExperimentExecutionServiceTest {
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build());
 
-            verify(itemPublisher).publish(any(), any());
+            verify(itemPublisher).publish(any(), any(), any());
         }
 
         // Admitting right up to the length the stream is trimmed to is what lets a race destroy
@@ -862,7 +943,7 @@ class ExperimentExecutionServiceTest {
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
                     new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
-                    lockService);
+                    lockService, organizationResolver);
 
             stubDatasetItems(IntStream.range(0, 200)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -888,7 +969,7 @@ class ExperimentExecutionServiceTest {
         // run — a 429 inviting a retry, for a run whose experiments are already marked failed.
         @Test
         void reportAPublishThatFailedOnRedisAsAFailure() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new RedisException("connection reset")));
             stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
             when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
@@ -1224,7 +1305,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void markTheRunFailedWhenPublishingStopsPartway() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request()))
@@ -1243,7 +1324,7 @@ class ExperimentExecutionServiceTest {
         // purged. Marking the run is what stops a consumer calling a provider for work already lost.
         @Test
         void stopConsumersWorkingOnWhatDidGetPublished() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
@@ -1255,7 +1336,7 @@ class ExperimentExecutionServiceTest {
         // are discarded regardless, and a counter that is gone reads as a run that drained.
         @Test
         void keepTheClaimWhenTheRunCannotBeMarkedFailed() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(experimentService.update(any(UUID.class), any()))
                     .thenReturn(Mono.error(new IllegalStateException("clickhouse is down")));
@@ -1283,7 +1364,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void discardTheCountersSoNothingHoldsAnUnreachableTotal() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
@@ -1295,7 +1376,7 @@ class ExperimentExecutionServiceTest {
         // cannot report the run complete over the failure.
         @Test
         void leaveTheFailureAloneWhenSomethingElseOwnsTheEnding() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(false));
 
@@ -1306,7 +1387,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void carryOnAbortingWhenOneRecordCannotBeMarked() {
-            when(itemPublisher.publish(any(), any()))
+            when(itemPublisher.publish(any(), any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(experimentService.update(any(UUID.class), any()))
                     .thenReturn(Mono.error(new IllegalStateException("persistence is down")));
@@ -1361,7 +1442,7 @@ class ExperimentExecutionServiceTest {
                         order.add("created");
                         return UUID.randomUUID();
                     }));
-            when(itemPublisher.publish(any(UUID.class), any()))
+            when(itemPublisher.publish(any(UUID.class), any(), any()))
                     .thenReturn(Mono.fromRunnable(() -> order.add("published")));
 
             executeRequest(singlePromptRequest());
@@ -1478,7 +1559,7 @@ class ExperimentExecutionServiceTest {
                     .build());
 
             var captor = ArgumentCaptor.forClass(List.class);
-            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), any());
             assertThat((List<ExperimentItemToProcess>) captor.getValue())
                     .isNotEmpty()
                     .allSatisfy(message -> assertThat(message.versionHash()).isEqualTo("the-latest-hash"));
@@ -1687,7 +1768,7 @@ class ExperimentExecutionServiceTest {
             executeRequest(buildRequest(ruleIds, null));
 
             var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
-            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), any());
 
             assertThat(captor.getValue())
                     .isNotEmpty()
@@ -1715,7 +1796,7 @@ class ExperimentExecutionServiceTest {
             executeRequest(request);
 
             var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
-            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), any());
             return captor.getValue();
         }
 
@@ -1758,7 +1839,7 @@ class ExperimentExecutionServiceTest {
         @SuppressWarnings("unchecked")
         private List<ExperimentItemToProcess> capturePublishedMessages() {
             var captor = ArgumentCaptor.forClass(List.class);
-            verify(itemPublisher).publish(any(UUID.class), captor.capture());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), any());
             return (List<ExperimentItemToProcess>) captor.getValue();
         }
 
