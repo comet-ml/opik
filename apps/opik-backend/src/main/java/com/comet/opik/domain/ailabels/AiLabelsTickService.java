@@ -354,7 +354,10 @@ public class AiLabelsTickService {
      * out of the response) until {@code deadline} or {@code loadMaxRows}. Their rows are written as one insert per
      * table, and only then are the jobs marked loaded, so a crash in between means they load again. The check of the
      * written rows for deleted traces starts no query after {@code tickEnd}, and caps each query's time limit at the
-     * time left.
+     * time left. It is bounded by the tick's end and not by the sweep's share, so on a slow ClickHouse it can take the
+     * time this tick's sweep and submit would use. That is accepted: a job the check did not reach stays submitted,
+     * keeps its bytes in flight and loads again next tick, which costs the next tick more than a sweep that starts one
+     * tick late.
      */
     void pollAndLoad(Instant deadline, Instant tickEnd) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());

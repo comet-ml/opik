@@ -2184,13 +2184,18 @@ class TraceDAOImpl implements TraceDAO {
      * <p>
      * {@code <partition>} is interpolated, not bound: {@code IN PARTITION {p:UInt32}} is a ClickHouse syntax error. Safe
      * because the value is always a {@code long} from {@link WeeklyPartitions}.
+     * <p>
+     * {@code lightweight_deletes_sync = 2} is the server default, set here so the delete returns only once every
+     * replica applied it whatever the profile says. The ai-labels check for deleted traces
+     * ({@code AiLabelsDAO#findLiveTraceIds}) relies on it: with a lower value it can read the trace as live on a
+     * replica that has not applied the delete, and keep rows the cascade no longer finds.
      */
     private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
             DELETE FROM <traces_mutation_table>
             <if(partition)>IN PARTITION <partition><endif>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 2
             ;
             """;
 

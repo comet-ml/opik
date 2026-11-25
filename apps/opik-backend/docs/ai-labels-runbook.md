@@ -79,7 +79,8 @@ Before the tick checked for deleted traces, a trace deleted while its jobs were 
 `ai_labels` and `ai_label_status` rows. The Topics vectors tick could then write `topic_vectors` and
 `topic_vector_status` rows for it, and a topic could be assigned to its vector in `trace_topics`. The steps below
 delete those rows once, one weekly partition at a time: every statement reads one partition of the table it cleans,
-and only the `traces` rows of the trace ids in it. Do not run them while a `traces` cutover or backfill is in
+and only the `traces` rows of the trace ids in it, from the same week of `traces`. The five tables and `traces` take
+their week from the trace id, so a trace and its rows are always in the same week. Do not run them while a `traces` cutover or backfill is in
 progress, when `traces` can miss rows that are live.
 
 1. List the workspaces and the weeks (partitions) that have rows in any of the five tables:
@@ -107,6 +108,7 @@ progress, when `traces` can miss rows that are live.
      AND (workspace_id, project_id, trace_id) NOT IN (
        SELECT workspace_id, project_id, id FROM traces
        WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
          AND id IN (SELECT trace_id FROM <table>
                     WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
    SETTINGS max_memory_usage = 2147483648;
@@ -121,6 +123,7 @@ progress, when `traces` can miss rows that are live.
      AND (workspace_id, project_id, trace_id) NOT IN (
        SELECT workspace_id, project_id, id FROM traces
        WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
          AND id IN (SELECT trace_id FROM <table>
                     WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
    SETTINGS lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1, max_memory_usage = 2147483648;
