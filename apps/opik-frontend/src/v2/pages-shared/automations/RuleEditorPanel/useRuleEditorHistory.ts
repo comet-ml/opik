@@ -14,6 +14,8 @@ import {
   isDerivedField,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
+// Inputs inside the scope use the form history. Inputs inside an ignored element
+// keep their own text until blur or Enter, so they keep the browser undo.
 export const RULE_HISTORY_SCOPE_ATTRIBUTE = "data-rule-history";
 export const RULE_HISTORY_IGNORE_ATTRIBUTE = "data-rule-history-ignore";
 
@@ -36,9 +38,11 @@ type TypingGroup = {
   endedWord: boolean;
 };
 
+// Derived fields are recalculated from the prompt, so they are not user changes.
 const getTrackedValues = ({ values }: EditorSnapshot) =>
   omit(values, DERIVED_FIELDS);
 
+// All values as one text, used to find what was typed or deleted.
 const collectText = (value: unknown): string[] =>
   isObjectLike(value)
     ? Object.values(value as object).flatMap(collectText)
@@ -47,6 +51,7 @@ const collectText = (value: unknown): string[] =>
 const getContentText = (snapshot: EditorSnapshot) =>
   collectText(getTrackedValues(snapshot)).join("\n");
 
+// The text between the common start and the common end of the two texts.
 const getInsertedText = (previous: string, next: string) => {
   let start = 0;
   while (start < previous.length && previous[start] === next[start]) start++;
@@ -71,6 +76,7 @@ const getHistoryCommand = (event: KeyboardEvent) => {
   return null;
 };
 
+// Focus on a button or on the page body still uses the form history.
 const isOutsideHistoryScope = (element: Element | null) => {
   const isEditable =
     element instanceof HTMLInputElement ||
@@ -112,6 +118,8 @@ const useRuleEditorHistory = (
     [form, autoNameRef],
   );
 
+  // Silent changes make no step. The previous flag is restored, so a silent call
+  // inside another one keeps the outer call silent.
   const runSilently = useCallback((change: () => void) => {
     const wasSilent = isSilentRef.current;
     isSilentRef.current = true;
@@ -122,6 +130,7 @@ const useRuleEditorHistory = (
     }
   }, []);
 
+  // One step for the whole action, even when the values do not change (a tab switch).
   const recordAction = useCallback(
     (action: () => void) => {
       const before = currentRef.current ?? takeSnapshot();
@@ -134,6 +143,7 @@ const useRuleEditorHistory = (
     [takeSnapshot, runSilently],
   );
 
+  // Changes that are not user actions, for example the submit preparation.
   const withoutHistory = useCallback(
     (change: () => void) => {
       runSilently(change);
@@ -151,6 +161,7 @@ const useRuleEditorHistory = (
 
   const restore = useCallback(
     (snapshot: EditorSnapshot) => {
+      // Set only the changed fields, so unchanged inputs keep their state.
       const current = form.getValues();
       const changedFields = (
         Object.keys(snapshot.values) as (keyof EvaluationRuleFormType)[]
@@ -191,6 +202,8 @@ const useRuleEditorHistory = (
       if (isSilentRef.current || !name || isDerivedField(name)) return;
       const previous = currentRef.current;
       const next = takeSnapshot();
+      // A nested update (the rule name copied into the main score) sends a second
+      // event with no new content.
       if (previous && isSameContent(previous, next)) return;
 
       // Changes made in one event (e.g. a model and its config) run in one task;
@@ -201,6 +214,8 @@ const useRuleEditorHistory = (
         isSameTaskRef.current = false;
       });
 
+      // Text is grouped by word. Numbers are grouped by pause, so a slider drag is
+      // one step. Each switch click is one step.
       const value = form.getValues(name);
       const isText = !isNumber(value) && !isBoolean(value);
       const previousText = previous ? getContentText(previous) : "";
@@ -208,6 +223,8 @@ const useRuleEditorHistory = (
       const isDeleting = nextText.length < previousText.length;
       const now = Date.now();
       const group = typingGroupRef.current;
+      // A field change splits text steps only when one side is not text, because
+      // typing in the name can send events for the name or for the main score.
       const startsStep =
         !isSameTask &&
         (!group ||
