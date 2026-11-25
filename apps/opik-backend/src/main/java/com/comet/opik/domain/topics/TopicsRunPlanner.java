@@ -131,20 +131,6 @@ public class TopicsRunPlanner {
     }
 
     /**
-     * Queues the project's nightly update for {@code night} now, by hand, and returns its run id
-     * ({@link TopicsNightPass#byHand}).
-     *
-     * @throws ConflictException           when the workspace is not opted in at stage {@code nightly} or later, the
-     *                                     project is gone or has no list, its list already covers the night, its
-     *                                     window has too few vectors, or it has a run in flight
-     * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
-     *                                     again
-     */
-    public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return nightPass.byHand(workspaceId, projectId, night, this::queueByHand);
-    }
-
-    /**
      * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
      * workspace comes from the Reactor context.
      *

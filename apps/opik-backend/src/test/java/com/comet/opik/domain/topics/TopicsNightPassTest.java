@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -34,7 +33,6 @@ import java.util.function.Function;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -105,7 +103,6 @@ class TopicsNightPassTest {
         });
         workspaceService = mock(TopicWorkspaceService.class);
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of(WORKSPACE_ID));
-        when(workspaceService.reaches(WORKSPACE_ID, TopicsStage.NIGHTLY)).thenReturn(true);
         queue = planned -> {
             queued.add(planned);
             return Mono.just(ID_GENERATOR.generateId());
@@ -272,34 +269,5 @@ class TopicsNightPassTest {
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of());
         assertThat(plan(IN_BUDGET, 2)).isZero();
         verify(projectDAO).findNightDue(anyCollection(), any());
-    }
-
-    @Test
-    @DisplayName("a night by hand queues the project's nightly update with its count; it is refused with a 409 when "
-            + "the workspace is below stage nightly, the project has no list, its list covers the night, its window is small, or it has a "
-            + "run in flight")
-    void nightByHand() {
-        var built = listed(500L);
-        var noList = listed(500L);
-        rows.put(noList, row(noList).listRunId(null).build());
-        var saved = listed(500L);
-        rows.put(saved, row(saved).windowUntil(NIGHT_START).build());
-        var small = listed(50L);
-
-        assertThat(pass.byHand(WORKSPACE_ID, built, NIGHT, queue).block()).isNotNull();
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(WORKSPACE_ID, built,
-                TopicProject.RunMode.UPDATE, NIGHT, 500));
-
-        for (var refused : List.of(noList, saved, small)) {
-            assertThatThrownBy(() -> pass.byHand(WORKSPACE_ID, refused, NIGHT, queue).block())
-                    .isInstanceOf(ConflictException.class);
-        }
-        assertThatThrownBy(() -> pass.byHand(WORKSPACE_ID, built, NIGHT, planned -> Mono.empty()).block())
-                .isInstanceOf(ConflictException.class);
-        when(workspaceService.reaches(WORKSPACE_ID, TopicsStage.NIGHTLY)).thenReturn(false);
-        assertThatThrownBy(() -> pass.byHand(WORKSPACE_ID, built, NIGHT, queue).block())
-                .isInstanceOf(ConflictException.class);
-        assertThat(queued).hasSize(1);
-        verify(projectDAO, never()).markLooked(anyString(), any(), any());
     }
 }

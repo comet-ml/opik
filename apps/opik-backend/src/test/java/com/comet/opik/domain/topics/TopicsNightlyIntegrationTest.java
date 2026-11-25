@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -21,7 +20,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -56,7 +54,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The night pass of the planner as a black box, against real MySQL, ClickHouse and Redis, with opik-inference's
@@ -224,35 +221,7 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a night by hand queues the project's nightly update and a pod saves it; it is refused (409) while "
-            + "the run is in flight, once the night is saved, and for a project with no list")
-    void nightByHand() {
-        var workspaceId = enabledWorkspace();
-        var projectId = builtYesterday(workspaceId);
-        var listless = ID_GENERATOR.generateId();
-        data.seed(workspaceId, listless, 0, FIXTURE.size(), todayStart());
-        stubAnswer(emptyNaming());
-
-        var runId = planner.nightByHand(workspaceId, projectId, today()).block();
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
-                .isInstanceOf(ConflictException.class);
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, listless, today()).block())
-                .isInstanceOf(ConflictException.class);
-
-        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
-                        .isEqualTo(runId));
-        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
-                        .isNotEqualTo(TopicProject.RunStatus.RUNNING).isNotEqualTo(TopicProject.RunStatus.QUEUED));
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
-                .isInstanceOf(ConflictException.class);
-        assertThat(data.topicProject(projectId).lastNight()).isNull();
-    }
-
-    @Test
-    @DisplayName("a workspace listed at stage vectors gets no nightly update, and is refused one by hand (409); one "
-            + "listed at nightly gets its update")
+    @DisplayName("a workspace listed at stage vectors gets no nightly update; one listed at nightly gets its update")
     void stageBeforeNightlyIsSkipped() {
         var atNightly = enabledWorkspace();
         var projectId = builtYesterday(atNightly);
@@ -272,9 +241,6 @@ class TopicsNightlyIntegrationTest {
 
         assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.UPDATE);
         assertThat(data.topicProject(skipped)).isEqualTo(before);
-        assertThatThrownBy(() -> planner.nightByHand(vectorsOnly, skipped, today()).block())
-                .isInstanceOfSatisfying(ConflictException.class, error -> assertThat(
-                        ((ErrorMessage) error.getResponse().getEntity()).getMessage()).contains("not opted in"));
     }
 
     /** A project with a list from a real discovery run for yesterday, its labels complete. */
