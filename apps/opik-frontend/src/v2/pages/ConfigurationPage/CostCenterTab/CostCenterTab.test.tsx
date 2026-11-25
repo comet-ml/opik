@@ -93,6 +93,26 @@ const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch, listState } =
     };
   });
 
+// The real CodeMirror editor does not mount under this environment (a duplicate
+// @codemirror/state breaks its instanceof checks), so a textarea stands in for it.
+vi.mock("@uiw/react-codemirror", () => ({
+  default: ({
+    value,
+    onChange,
+    placeholder,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+  }) => (
+    <textarea
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 vi.mock("@/api/model-prices/useModelPrices", () => ({
   default: () => ({
     data: listState.current ?? LIST,

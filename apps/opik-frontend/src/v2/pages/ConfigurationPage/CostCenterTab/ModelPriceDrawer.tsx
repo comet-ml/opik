@@ -62,6 +62,7 @@ import {
 } from "./format";
 import useSaveModelPrices from "./useSaveModelPrices";
 import PriceFormula from "./PriceFormula";
+import WarningCallout from "./WarningCallout";
 
 export type DrawerTarget = {
   entry?: CatalogEntry;
@@ -566,9 +567,8 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
           </div>
         )}
         {changedElsewhere && (
-          <div
+          <WarningCallout
             role="status"
-            className="comet-body-s rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
             data-testid="model-price-changed-elsewhere"
           >
             <p>
@@ -576,7 +576,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                 ? `Someone else removed this model's organization price (version ${changedElsewhere.version}). Saving adds it back with the values below.`
                 : `Someone else saved version ${changedElsewhere.version} while you were editing. Their prices are loaded below and your changes are kept on top. Review them before saving.`}
             </p>
-          </div>
+          </WarningCallout>
         )}
         {isNew && (
           <div className="grid grid-cols-2 gap-3">
@@ -904,17 +904,14 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         )}
 
         {warnings.length > 0 && (
-          <div
-            className="comet-body-s space-y-1 rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
-            data-testid="model-price-warnings"
-          >
-            <p className="comet-body-s-accented">Check these before saving</p>
+          <WarningCallout data-testid="model-price-warnings">
+            <p className="comet-body-xs-accented">Check these before saving</p>
             <ul className="list-disc space-y-1 pl-5">
               {warnings.map((warning, i) => (
                 <li key={i}>{warning.message}</li>
               ))}
             </ul>
-          </div>
+          </WarningCallout>
         )}
         {canEdit && (
           <Alert variant="callout" size="sm">

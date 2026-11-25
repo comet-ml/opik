@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from "react";
-import copy from "clipboard-copy";
-import { Check, ChevronRight, Copy, FileUp, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { EditorView } from "@codemirror/view";
+import { jsonLanguage } from "@codemirror/lang-json";
 import { Sheet, SheetContent, SheetDescription, SheetTopBar } from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import { Textarea } from "@/ui/textarea";
-import { cn } from "@/lib/utils";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
+import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
+import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
+import TimelineStep from "@/shared/TimelineStep/TimelineStep";
+import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
-import { Alert, AlertDescription } from "@/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 import {
   BuiltInPrice,
   ModelPriceList,
@@ -23,6 +26,8 @@ import {
   upsertMany,
 } from "@/lib/model-prices";
 import useSaveModelPrices from "./useSaveModelPrices";
+import ExpandableHint from "./ExpandableHint";
+import WarningCallout from "./WarningCallout";
 
 type BatchUpdateDrawerProps = {
   open: boolean;
@@ -45,7 +50,6 @@ const EXAMPLE = `{
   }
 }`;
 
-const INSTALL = "npx skills add comet-ml/opik-skills -g --all";
 const ASK =
   "Upload the model prices in ./acme-llm-contract.xlsx to my Opik organization. Include custom price fields. Show me what will change and any errors, then ask me to confirm before saving.";
 
@@ -64,75 +68,6 @@ type Preview = {
   warnings: string[];
 };
 
-const CopyTextButton: React.FC<{ text: string }> = ({ text }) => {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  return (
-    <Button
-      variant="outline"
-      size="2xs"
-      className="shrink-0 bg-background"
-      onClick={() => copy(text).then(() => setCopied(true))}
-    >
-      {copied ? (
-        <Check className="mr-1 size-3" />
-      ) : (
-        <Copy className="mr-1 size-3" />
-      )}
-      {copied ? "Copied" : "Copy"}
-    </Button>
-  );
-};
-
-const CodeLine: React.FC<{ text: string }> = ({ text }) => (
-  <div className="flex items-center gap-2 rounded-md bg-muted py-1.5 pl-3 pr-1.5">
-    <code className="comet-code min-w-0 flex-1 truncate" title={text}>
-      {text}
-    </code>
-    <CopyTextButton text={text} />
-  </div>
-);
-
-const Disclosure: React.FC<{
-  label: string;
-  open: boolean;
-  onToggle: () => void;
-}> = ({ label, open, onToggle }) => (
-  <button
-    type="button"
-    className="comet-body-xs inline-flex items-center gap-1 text-muted-slate hover:text-foreground"
-    aria-expanded={open}
-    onClick={onToggle}
-  >
-    <ChevronRight
-      className={cn("size-3.5 transition-transform", open && "rotate-90")}
-    />
-    {label}
-  </button>
-);
-
-const Step: React.FC<{
-  number: number;
-  title: string;
-  children: React.ReactNode;
-}> = ({ number, title, children }) => (
-  <li className="space-y-2">
-    <p className="comet-body-s-accented flex items-center gap-2">
-      <span className="comet-body-xs-accented flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
-        {number}
-      </span>
-      {title}
-    </p>
-    <div className="pl-7">{children}</div>
-  </li>
-);
-
 const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   open,
   setOpen,
@@ -144,10 +79,9 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview>();
-  const [isFormatOpen, setIsFormatOpen] = useState(false);
-  const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
   const [tab, setTab] = useState("upload");
+  const theme = useCodemirrorTheme({ editable: true });
 
   const requestClose = () => {
     if (text.trim()) {
@@ -247,13 +181,11 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
             current prices.
           </SheetDescription>
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList variant="segmented" className="w-fit">
-              <TabsTrigger value="upload" variant="segmented">
-                <FileUp className="mr-1.5 size-3.5" />
+            <TabsList variant="segmented-primary" className="w-fit">
+              <TabsTrigger value="upload" variant="segmented-primary">
                 Upload or paste JSON or CSV
               </TabsTrigger>
-              <TabsTrigger value="skill" variant="segmented">
-                <Sparkles className="mr-1.5 size-3.5" />
+              <TabsTrigger value="skill" variant="segmented-primary">
                 Use the Opik skill
               </TabsTrigger>
             </TabsList>
@@ -271,20 +203,27 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 or paste
                 <span className="h-px flex-1 bg-border" />
               </div>
-              <Textarea
-                className="min-h-[200px] placeholder:text-light-slate"
-                placeholder={EXAMPLE}
-                spellCheck={false}
-                value={text}
-                onChange={(event) => changeText(event.target.value)}
-              />
-              <Disclosure
-                label="File format"
-                open={isFormatOpen}
-                onToggle={() => setIsFormatOpen((value) => !value)}
-              />
-              {isFormatOpen && (
-                <p className="comet-body-xs text-muted-slate">
+              <div className="max-h-80 overflow-y-auto rounded-md border">
+                <CodeMirror
+                  theme={theme}
+                  value={text}
+                  onChange={changeText}
+                  minHeight="200px"
+                  extensions={[
+                    EditorView.lineWrapping,
+                    ...(text.trimStart().startsWith("{") ? [jsonLanguage] : []),
+                  ]}
+                  placeholder={EXAMPLE}
+                  basicSetup={{
+                    lineNumbers: false,
+                    foldGutter: false,
+                    highlightActiveLine: false,
+                    highlightSelectionMatches: false,
+                  }}
+                />
+              </div>
+              <ExpandableHint label="File format">
+                <p>
                   An object keyed by model name, in LiteLLM&apos;s format.
                   Prices are dollars per token:{" "}
                   <code>input_cost_per_token</code>,{" "}
@@ -307,7 +246,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   <code>priced_like</code> for an alias, like{" "}
                   <code>gpt-4o on openai</code>. Other columns are ignored.
                 </p>
-              )}
+              </ExpandableHint>
               {parseErrors.length > 0 && (
                 <Alert variant="destructive" size="sm">
                   <AlertDescription size="sm">
@@ -331,35 +270,31 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 </Alert>
               )}
               {described && preview && (
-                <div
-                  className="comet-body-s space-y-2 rounded-md border p-3"
-                  data-testid="batch-preview"
-                >
-                  <p className="comet-body-s-accented">{summary}</p>
-                  <ul className="list-disc pl-5 text-muted-slate">
-                    {described.created.map((line, i) => (
-                      <li key={`c${i}`}>Added {line}</li>
-                    ))}
-                    {described.updated.map((line, i) => (
-                      <li key={`u${i}`}>Changed {line}</li>
+                <Alert variant="callout" size="sm" data-testid="batch-preview">
+                  <AlertTitle size="sm">{summary}</AlertTitle>
+                  <AlertDescription size="sm">
+                    <ul className="list-disc space-y-1 pl-5">
+                      {described.created.map((line, i) => (
+                        <li key={`c${i}`}>Added {line}</li>
+                      ))}
+                      {described.updated.map((line, i) => (
+                        <li key={`u${i}`}>Changed {line}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {preview && preview.warnings.length > 0 && (
+                <WarningCallout data-testid="batch-preview-warnings">
+                  <p className="comet-body-xs-accented">
+                    Check these before saving
+                  </p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {preview.warnings.map((warning, i) => (
+                      <li key={i}>{warning}</li>
                     ))}
                   </ul>
-                  {preview.warnings.length > 0 && (
-                    <div
-                      className="rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
-                      data-testid="batch-preview-warnings"
-                    >
-                      <p className="comet-body-s-accented">
-                        Check these before saving
-                      </p>
-                      <ul className="list-disc pl-5">
-                        {preview.warnings.map((warning, i) => (
-                          <li key={i}>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                </WarningCallout>
               )}
             </TabsContent>
             <TabsContent value="skill" className="mt-4 space-y-4">
@@ -368,37 +303,46 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 table—directly from Claude Code, Codex or Cursor. Review and
                 confirm changes in your agent.
               </p>
-              <ol className="space-y-4">
-                <Step number={1} title="Install the Opik skills once">
-                  <CodeLine text={INSTALL} />
-                </Step>
-                <Step number={2} title="Ask Claude Code, Codex or Cursor">
-                  <CodeLine text={ASK} />
-                </Step>
-                <Step number={3} title="The skill then">
-                  <ul className="comet-body-xs list-disc space-y-1 pl-5 text-foreground">
-                    {SKILL_STEPS.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ul>
-                </Step>
-              </ol>
-              <div className="space-y-2">
-                <Disclosure
-                  label="Skill instructions"
-                  open={isSkillOpen}
-                  onToggle={() => setIsSkillOpen((value) => !value)}
-                />
-                {isSkillOpen && (
-                  <p className="comet-body-xs pl-5 text-muted-slate">
-                    The skill uses the same organization price list as this
-                    page. It reads the list and its version, sends your changes
-                    as a dry run to show what would change, and saves with that
-                    version only after you confirm. If someone saved in between,
-                    the save is refused and the skill reads the list again.
-                  </p>
-                )}
+              <div className="flex flex-col">
+                <TimelineStep number={1}>
+                  <div className="flex flex-col gap-2.5">
+                    <h4 className="comet-body-s-accented">
+                      Install the Opik skills once
+                    </h4>
+                    <CodeSnippet
+                      title="Terminal"
+                      code={INSTALL_OPIK_SKILLS_COMMAND}
+                    />
+                  </div>
+                </TimelineStep>
+                <TimelineStep number={2}>
+                  <div className="flex flex-col gap-2.5">
+                    <h4 className="comet-body-s-accented">
+                      Ask Claude Code, Codex or Cursor
+                    </h4>
+                    <CodeSnippet title="Prompt" code={ASK} />
+                  </div>
+                </TimelineStep>
+                <TimelineStep number={3} isLast>
+                  <div className="flex flex-col gap-2.5">
+                    <h4 className="comet-body-s-accented">The skill then</h4>
+                    <ul className="comet-body-xs list-disc space-y-1 pl-5">
+                      {SKILL_STEPS.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </TimelineStep>
               </div>
+              <ExpandableHint label="Skill instructions">
+                <p>
+                  The skill uses the same organization price list as this page.
+                  It reads the list and its version, sends your changes as a dry
+                  run to show what would change, and saves with that version
+                  only after you confirm. If someone saved in between, the save
+                  is refused and the skill reads the list again.
+                </p>
+              </ExpandableHint>
             </TabsContent>
           </Tabs>
         </div>
