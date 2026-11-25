@@ -230,6 +230,43 @@ class TestItemResolutionPathSelection:
             filter_string="tags contains 'eval'",
         )
 
+    def test_empty_checkpoint_ids__forwarded_as_empty_selection(self):
+        """A checkpoint with zero resolved ids is a real "select nothing" set.
+
+        It must reach the dataset stream as ``[]``, not ``None``: collapsing it
+        to ``None`` is what made a resume replay the whole dataset.
+        """
+        context = _make_context(
+            items_to_stream=[],
+            candidate_dataset_item_ids=[],
+        )
+        empty_new_result = _evaluation_result_from([], context.experiment)
+
+        with (
+            mock.patch.object(
+                evaluator.resume_module, "prepare_resume_context", return_value=context
+            ),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=empty_new_result
+            ) as mock_evaluate_task,
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+        ):
+            evaluator.evaluate_resume("exp-1", task=lambda _: {"output": "x"})
+
+        context.dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+            nb_samples=None,
+            dataset_item_ids=[],
+            batch_size=mock.ANY,
+            filter_string=None,
+        )
+        call_kwargs = mock_evaluate_task.call_args.kwargs
+        assert list(call_kwargs["items_iter"]) == []
+        assert call_kwargs["total_items"] == 0
+
 
 class TestMergeWithPreviouslyCompleted:
     def test_no_previous_items__returns_only_new_test_results(self):

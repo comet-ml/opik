@@ -65,7 +65,7 @@ def stream_dataset_items(
     should_retrieve_more_items = True
     items_yielded = 0
     dataset_items_ids_left: Optional[Set[str]] = (
-        set(dataset_item_ids) if dataset_item_ids else None
+        set(dataset_item_ids) if dataset_item_ids is not None else None
     )
     _conflicting_keys_warned = False
 
