@@ -480,12 +480,43 @@ export class ExperimentsPage {
    * a different failure from any a caller is asserting, and a misleading one.
    *
    * Both triggers, so a strip that rendered half of itself fails here.
+   *
+   * There is a THIRD state the count alone cannot tell from a slow strip, and
+   * it is the one worth naming: `ExperimentsPage` renders the strip only inside
+   * the `isEmpty` false branch, where `isEmpty` is
+   * `!isExistencePending && (existenceData?.total ?? 0) === 0`. An existence
+   * query that ERRORS resolves pending to false with no data, so the page
+   * settles on the "No experiments yet" empty state and no amount of waiting
+   * will ever produce a strip. Observed while reviewing this suite against a
+   * local stack that was 500ing under load: every tab assertion burned its full
+   * budget and then reported "there is no tab strip", which reads as the tab
+   * split having broken rather than as the page never having been given a row
+   * count. So the empty state is read back on failure and said out loud.
    */
   async waitForTabStrip(): Promise<void> {
-    await expect(
-      this.page.getByRole('tab'),
-      'the Experiments tab strip (skeletoned until the starting tab resolves)',
-    ).toHaveCount(Object.keys(EXPERIMENTS_TABS).length, { timeout: 30_000 });
+    try {
+      await expect(
+        this.page.getByRole('tab'),
+        'the Experiments tab strip (skeletoned until the starting tab resolves)',
+      ).toHaveCount(Object.keys(EXPERIMENTS_TABS).length, { timeout: 30_000 });
+    } catch (err) {
+      // Only to attribute a failure that has already happened — never to
+      // suppress one. Whatever this finds, the original error is what throws if
+      // the empty state is not what is showing.
+      if (await this.page.getByText('No experiments yet').isVisible().catch(() => false)) {
+        throw new Error(
+          'ExperimentsPage.waitForTabStrip: the page is showing its "No experiments yet" empty ' +
+            'state, which renders INSTEAD of the tab strip — so the strip was never going to ' +
+            'appear and the wait above is not the failure. The page had no experiment count to ' +
+            'go by: either the project genuinely holds none (check the fixture seeded this ' +
+            'project and not another), or the existence query failed, which the page cannot ' +
+            'distinguish from a total of 0. Check the backend answered ' +
+            'GET /v1/private/experiments for this project at all.',
+          { cause: err },
+        );
+      }
+      throw err;
+    }
   }
 
   /**
