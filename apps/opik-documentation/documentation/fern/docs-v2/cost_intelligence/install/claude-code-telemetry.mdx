@@ -1,0 +1,186 @@
+---
+headline: Install with Claude Code telemetry export
+og:description: Collect Claude Code usage for Cost Intelligence with
+  configuration only. Claude Code sends its own telemetry to Opik, with nothing
+  to install on the developer's machine.
+og:site_name: Opik Documentation
+og:title: Install with Claude Code telemetry export - Opik
+title: Telemetry export (no install)
+---
+
+This path installs nothing. Claude Code can export its own telemetry, and with the settings below it sends that telemetry straight to Opik. You deliver one block of settings, the same way you deliver any other Claude Code managed setting.
+
+Choose it when you cannot install the [plugin](/cost-intelligence/install/mdm) or the [macOS app](/cost-intelligence/install/macos-app) on your developers' machines, or when you want the same rollout on macOS, Linux and Windows.
+
+It covers Claude Code only, and it collects less than the other paths. Read [what this path does not do](#what-this-path-does-not-do) before you choose it.
+
+## How it works
+
+Claude Code sends an event to Opik when each model call starts and when it ends. The two events carry the request and the reply. Opik works out the cost breakdown from them on the server and stores the result in your AI Spend workspace.
+
+<Warning>
+  On this path the request and reply of every model call are sent to Opik, so
+  that the breakdown can be computed. With content capture off, which is the
+  default, Opik keeps the counts and discards the text. On the plugin and the
+  macOS app the breakdown is computed on the device, and no prompt or response
+  text leaves it unless content capture is on.
+</Warning>
+
+## Before you start
+
+Check that you have:
+
+- **Access to your organization's AI Spend workspace** in Opik, to create the enrollment token.
+- **A way to deliver Claude Code managed settings**: your MDM, or the Claude admin console.
+- **The work email of each user**, if your developers do not sign in to Claude Code with a claude.ai account. See [who the usage is reported under](#who-the-usage-is-reported-under).
+
+## Set it up
+
+<Steps>
+
+### Create an enrollment token
+
+In Opik, open your AI Spend workspace and go to **Enrollment tokens**, then select **Create token**. Copy the token right away: it starts with `opik_cipx_et_`, and that dialog is the only time it is shown in full.
+
+One token serves the whole fleet. Usage sent with it lands in the workspace the token was created in.
+
+### Prepare the settings
+
+Start from this template. Replace the token, and replace the address if you self-host Opik:
+
+```json wordWrap
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://www.comet.com/opik/api/v1/private/ai-spend/otel/claude-code",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=<enrollment token>",
+    "OTEL_LOG_RAW_API_BODIES": "1",
+    "CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH": "100000000",
+    "OTEL_METRICS_INCLUDE_REPOSITORY": "1",
+    "OTEL_METRICS_INCLUDE_VERSION": "1",
+    "OTEL_METRICS_INCLUDE_ENTRYPOINT": "1",
+    "CLAUDE_CODE_TETHER_LIVE": "0"
+  }
+}
+```
+
+Every line is needed. [The settings in detail](#the-settings-in-detail) says what each one does.
+
+<Warning>
+  The file holds the enrollment token and is readable by every user of the
+  device, because Claude Code runs as the logged-in user and must be able to
+  read it. The token can only send usage into your workspace. It cannot read
+  anything back.
+</Warning>
+
+### Deliver it
+
+Deliver the file exactly as you would the plugin's settings. The two ways are the same as for the plugin, and those pages have the commands:
+
+- **With your MDM**, as a drop-in next to any managed settings you already push. Follow [Plugin with MDM](/cost-intelligence/install/mdm#what-lands-on-the-device), and name the file `50-opik-telemetry.json`. This lets you choose which devices get it, so you can start with one team.
+- **In the Claude admin console**, as managed settings. Follow [Plugin with managed settings](/cost-intelligence/install/managed-settings#apply-it-in-the-admin-console). This applies to every signed-in user in the organization at once.
+
+Claude Code reads managed settings when it starts, so a session that is already running picks them up the next time it is opened.
+
+### Verify
+
+Have one user run a prompt in a new Claude Code session. Then, in Opik, open **Devices** in your AI Spend workspace. Each user appears there once, with the time their usage last arrived.
+
+A user who is missing from the list has not sent anything yet. Claude Code does not report a failed upload to its user, so this page is the check that matters.
+
+</Steps>
+
+## Who the usage is reported under
+
+Opik needs a work email for each user. It takes the first of these that it finds:
+
+1. **The `Cipx-User-Email` header**, when you set one. Add it to the headers line, with the address filled in for each device by your MDM:
+
+   ```json wordWrap
+   "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=<enrollment token>,Cipx-User-Email=<work email>"
+   ```
+
+2. **The email Claude Code reports by itself.** Claude Code reports the address of the claude.ai account its user signed in with.
+
+If neither is present, Opik refuses the upload. Claude Code reports no email when it is used with an API key, Amazon Bedrock or Google Vertex AI, so those devices need the header.
+
+Set the header when you want usage reported under your directory's address whatever account the developer signed in with. The admin console applies one file to every user, so it cannot set a different address for each of them; use your MDM for that.
+
+## Content capture
+
+By default Opik keeps no prompt or response text from this path. To keep it, add `Cipx-Capture-Content=true` to the headers line:
+
+```json wordWrap
+"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=<enrollment token>,Cipx-Capture-Content=true"
+```
+
+The setting applies to the devices that receive that file, so you can turn it on for one group. Claude Code never includes thinking text in its telemetry, so that is not kept even with capture on.
+
+## Replacing the enrollment token
+
+On this path Claude Code sends the enrollment token with every upload. That makes replacing it different from the macOS app:
+
+1. Create the new token.
+2. Deliver the settings again with the new token.
+3. Wait until the old token's device count on the **Enrollment tokens** page reaches zero.
+4. Retire the old token.
+
+<Warning>
+  Retiring a token stops the usage of every user who still sends it, straight
+  away. Macs running the macOS app are not affected, because they use the
+  enrollment token only once.
+</Warning>
+
+To stop one user's usage, revoke that user on the **Devices** page. Usage sent while a user is revoked is not kept.
+
+## What this path does not do
+
+| | Plugin and macOS app | Telemetry export |
+| --- | --- | --- |
+| **Coding agents covered** | Claude Code, Codex, Cursor | Claude Code only |
+| **Cost policies** | Applied to the device from the dashboard | Not applied. Nothing on the device fetches them |
+| **Where the breakdown is computed** | On the device | In Opik, from the uploaded request and reply |
+| **Git branch, commit and change counts** | Collected | Not collected. Only the repository address is |
+| **Plan usage status** | Collected | Not collected |
+| **Usage while the device is offline** | Kept on the device and sent later | Lost |
+
+Run one path on a device, not two. A device that has the plugin or the macOS app as well as these settings reports every call twice.
+
+## The settings in detail
+
+| Setting | What it does |
+| --- | --- |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | Turns Claude Code's telemetry on. |
+| `OTEL_LOGS_EXPORTER`, `OTEL_EXPORTER_OTLP_PROTOCOL` | Send the events over HTTP. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Where to send them: your Opik address followed by `/v1/private/ai-spend/otel/claude-code`. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | The enrollment token, and optionally the email and the content capture switch, separated by commas. |
+| `OTEL_LOG_RAW_API_BODIES` | Includes the request and reply of each model call. Without it there is nothing to break the cost down by. |
+| `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` | Stops Claude Code cutting long requests short. With the default, most requests arrive incomplete and cannot be read. |
+| `OTEL_METRICS_INCLUDE_REPOSITORY` | Adds the repository address. |
+| `OTEL_METRICS_INCLUDE_VERSION`, `OTEL_METRICS_INCLUDE_ENTRYPOINT` | Add the Claude Code version, and whether a session was interactive. |
+| `CLAUDE_CODE_TETHER_LIVE` | Makes Claude Code send each request in full. Without it most of each request is missing from the telemetry, and its cost shows up as unattributed. |
+
+## Remove
+
+Remove the settings file, or the managed settings in the admin console. Claude Code stops sending telemetry the next time it starts. There is nothing else on the device to clean up.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Data, privacy and security"
+    icon="fa-regular fa-shield-check"
+    href="/cost-intelligence/data-privacy-security"
+  >
+    What is collected on each path, and what is never kept.
+  </Card>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Turn the data into a lower bill.
+  </Card>
+</CardGroup>

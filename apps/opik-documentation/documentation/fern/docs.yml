@@ -1082,6 +1082,9 @@ navigation:
           - page: macOS app with MDM
             path: ./docs-v2/cost_intelligence/install/macos-app.mdx
             slug: macos-app
+          - page: Telemetry export (no install)
+            path: ./docs-v2/cost_intelligence/install/claude-code-telemetry.mdx
+            slug: claude-code-telemetry
       - page: Data, privacy and security
         path: ./docs-v2/cost_intelligence/data-privacy-security.mdx
         slug: data-privacy-security
