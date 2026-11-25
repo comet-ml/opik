@@ -120,12 +120,18 @@ jobs:
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-tests.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
   
   langchain_legacy_tests:
     needs: [init_environment]
     if: contains(fromJSON('["langchain_legacy", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-legacy-tests.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
   
   llama_index_tests:
     needs: [init_environment]
@@ -207,12 +213,18 @@ jobs:
     if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-crewai-v0-tests.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   crewai_v1_tests:
     needs: [init_environment]
     if: contains(fromJSON('["crewai_v1", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-crewai-v1-tests.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
   
   genai_tests:
     needs: [init_environment]
@@ -246,6 +258,9 @@ jobs:
     if: contains(fromJSON('["bedrock", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-bedrock-tests.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   litellm_tests:
     needs: [init_environment]
