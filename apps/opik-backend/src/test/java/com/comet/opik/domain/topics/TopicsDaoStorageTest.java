@@ -829,7 +829,7 @@ class TopicsDaoStorageTest {
             TopicsTestData.startRun(dao, workspaceId, runningProject, runningRun, TopicProject.RunMode.DISCOVERY,
                     NIGHT);
             dao.ensureRow(workspaceId, droppedProject);
-            dao.queue(workspaceId, droppedProject, droppedRun, TopicProject.RunMode.LABELS, NIGHT);
+            dao.queue(workspaceId, droppedProject, droppedRun, TopicProject.RunMode.DISCOVERY, NIGHT);
             return List.of(
                     dao.dropQueued(workspaceId, queuedProject, queuedRun, TopicProject.CancelReason.PROJECT_DELETED,
                             now)
@@ -854,19 +854,56 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("a labelling pass never counts toward the discovery run's retry wait, and its save keeps that count")
+    @DisplayName("a run is queued only on a row that fits its mode: a discovery run needs no saved list, a labelling "
+            + "pass a saved list whose labels are not complete, a nightly update a saved list")
+    void queueFitsTheMode() {
+        var workspaceId = newId().toString();
+        var listless = newId();
+        var listed = newId();
+        var buildRun = newId();
+
+        var moves = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.ensureRow(workspaceId, listless);
+            TopicsTestData.startRun(dao, workspaceId, listed, buildRun, TopicProject.RunMode.DISCOVERY, NIGHT);
+            dao.saveList(workspaceId, listed, null, buildRun, NIGHT, NIGHT,
+                    new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL);
+            dao.markSaved(workspaceId, listed, buildRun, NIGHT);
+            var refused = List.of(
+                    dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.LABELS, NIGHT),
+                    dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.UPDATE, NIGHT),
+                    dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.DISCOVERY, NIGHT));
+            dao.markLabelsComplete(workspaceId, listed, buildRun);
+            var labelsComplete = dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.LABELS, NIGHT);
+            return List.of(refused.get(0), refused.get(1), refused.get(2), labelsComplete,
+                    dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.UPDATE, NIGHT),
+                    dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.DISCOVERY, NIGHT));
+        });
+
+        assertThat(moves).containsExactly(0, 0, 0, 0, 1, 1);
+    }
+
+    @Test
+    @DisplayName("a labelling pass never counts toward the retry wait of the project's runs, and its save keeps that "
+            + "count")
     void labellingPassesDoNotCount() {
         var workspaceId = newId().toString();
         var projectId = newId();
         var buildRun = newId();
+        var updateRun = newId();
         var failedPass = newId();
         var abandonedPass = newId();
         var savedPass = newId();
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, projectId, buildRun, TopicProject.RunMode.DISCOVERY, NIGHT);
-            dao.markFailed(workspaceId, projectId, buildRun, NIGHT.plusSeconds(1), TopicProject.RunError.LLM_ERROR);
+            TopicsTestData.startRun(dao, workspaceId, projectId, buildRun, TopicProject.RunMode.DISCOVERY,
+                    NIGHT.minusSeconds(10));
+            dao.saveList(workspaceId, projectId, null, buildRun, NIGHT.minusSeconds(5), NIGHT,
+                    new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL);
+            dao.markSaved(workspaceId, projectId, buildRun, NIGHT.minusSeconds(5));
+            TopicsTestData.startRun(dao, workspaceId, projectId, updateRun, TopicProject.RunMode.UPDATE, NIGHT);
+            dao.markFailed(workspaceId, projectId, updateRun, NIGHT.plusSeconds(1), TopicProject.RunError.LLM_ERROR);
             TopicsTestData.startRun(dao, workspaceId, projectId, failedPass, TopicProject.RunMode.LABELS,
                     NIGHT.plusSeconds(10));
             dao.markFailed(workspaceId, projectId, failedPass, NIGHT.plusSeconds(11), TopicProject.RunError.INTERNAL);

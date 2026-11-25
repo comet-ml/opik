@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.topics.TopicsBackfillGate.State;
-import com.comet.opik.domain.topics.TopicsDiscoveryCandidates.Candidate;
 import com.comet.opik.infrastructure.TopicsConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,7 +11,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -96,23 +94,5 @@ class TopicsBackfillGateTest {
         assertThat(TopicsBackfillGate.waited(project().vectorsCheckedAt(ago(49)).build(), NOW))
                 .isEqualTo(Duration.ofHours(49));
         assertThat(TopicsBackfillGate.waited(project().build(), NOW)).isEqualTo(Duration.ZERO);
-    }
-
-    @Test
-    @DisplayName("the candidates take one project of each workspace in turn, in the workspaces' order")
-    void roundRobin() {
-        var a1 = candidate("a", 900);
-        var a2 = candidate("a", 800);
-        var a3 = candidate("a", 700);
-        var b1 = candidate("b", 100);
-        var c1 = candidate("c", 500);
-        var c2 = candidate("c", 400);
-
-        assertThat(TopicsDiscoveryCandidates.roundRobin(List.of(List.of(a1, a2, a3), List.of(b1), List.of(c1, c2))))
-                .containsExactly(a1, b1, c1, a2, c2, a3);
-    }
-
-    private static Candidate candidate(String workspaceId, long vectors) {
-        return Candidate.builder().workspaceId(workspaceId).projectId(UUID.randomUUID()).vectors(vectors).build();
     }
 }

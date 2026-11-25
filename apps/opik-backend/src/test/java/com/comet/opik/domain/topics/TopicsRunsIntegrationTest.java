@@ -59,10 +59,13 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 /**
  * Topics runs across pods as a black box: the planner ({@link TopicsRunPlanner}) queues runs on {@code topic_projects}
@@ -479,8 +482,9 @@ class TopicsRunsIntegrationTest {
     }
 
     /**
-     * Fixture: the project's last trace time, which trace ingestion writes; no API sets it, and seeding traces that
-     * old would take them out of the window too.
+     * Fixture: moves the project's last trace time back. No API can: trace ingestion writes it from the trace's time and
+     * only ever moves it forward. Old traces would not do either, as this test needs the project's vectors in the
+     * window with its last trace time before the window, to show that time alone keeps the project out.
      */
     private void lastTraceAt(UUID projectId, Instant at) {
         template.inTransaction(WRITE, handle -> handle.execute(
@@ -488,12 +492,15 @@ class TopicsRunsIntegrationTest {
     }
 
     /**
-     * Fixture: ends every run an earlier test left in flight, so none takes a slot of {@code topics.runs.maxInFlight}.
-     * Only the planner and the pods end runs, and an earlier test's run may still be queued for a pod.
+     * Ends every run an earlier test left in flight, so none takes a slot of {@code topics.runs.maxInFlight}: with no
+     * workspace opted in, each plan cancels them as the planner does for an opt-out, and the pods or the planner end
+     * the cancelled ones.
      */
     private void endRunsInFlight() {
-        template.inTransaction(WRITE, handle -> handle.execute("UPDATE topic_projects SET run_status = 'failed' "
-                + "WHERE run_status IN ('queued', 'running', 'cancelling')"));
+        Awaitility.await().atMost(WAIT).pollInterval(Duration.ofMillis(500)).until(() -> {
+            planner.plan(Instant.now()).block();
+            return store.findInFlight().block().isEmpty();
+        });
     }
 
     /** The planner's window end: tomorrow (UTC). */
@@ -566,6 +573,42 @@ class TopicsRunsIntegrationTest {
         assertThat(store.heartbeat(message(workspaceId, saved, savedRun)).block()).isTrue();
         assertThat(store.heartbeat(message(workspaceId, cancelled, cancelledRun)).block()).isFalse();
         assertThat(store.heartbeat(message(workspaceId, saved, TopicsTestData.newId())).block()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure")
+    void stopMidRunRequeues(RedissonReactiveClient redisson, @Jit TopicsRunService runService,
+            @Jit TopicWindowLabelService labelService) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        // The model answers after the stop: the run is mid-call when its pod stops.
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
+                60_000)));
+        // A pod of its own, on a stream of its own, so the app's subscriber does not take the run.
+        var runs = spy(opikConfig.getTopics().getRuns());
+        doReturn("topics-runs-stop-" + UUID.randomUUID()).when(runs).getStreamName();
+        var config = spy(opikConfig.getTopics());
+        doReturn(runs).when(config).getRuns();
+        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner);
+        pod.start();
+        try {
+            var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
+            new TopicsRunPublisher(redisson, config).publish(TopicsRunMessage.builder().runId(runId)
+                    .workspaceId(workspaceId).projectId(projectId).mode(TopicProject.RunMode.DISCOVERY)
+                    .night(tomorrow()).windowTraces(FIXTURE.size()).build()).block();
+            Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(wireMock.findAll(
+                    postRequestedFor(urlEqualTo(GENERATE_PATH)))).isNotEmpty());
+            assertThat(data.topicProject(projectId).runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+
+            pod.stop();
+
+            assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
+                    .runId(runId).runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.QUEUED)
+                    .build());
+        } finally {
+            pod.stop();
+        }
     }
 
     private static TopicsRunMessage message(String workspaceId, UUID projectId, UUID runId) {

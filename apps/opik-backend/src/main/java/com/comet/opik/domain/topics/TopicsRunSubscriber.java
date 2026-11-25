@@ -4,6 +4,7 @@ import com.comet.opik.api.resources.v1.events.BaseRedisSubscriber;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +16,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runs the Topics runs the planner queued ({@link TopicsRunPlanner}), {@code topics.runs.consumerBatchSize} at a time
@@ -33,13 +31,13 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
 
     private static final String METRICS_NAMESPACE = "opik";
     private static final String METRICS_BASE_NAME = "topics_runs";
+    private static final String RUN_USER = "topics-runs";
 
     private final TopicsConfig config;
     private final TopicRunStore store;
     private final TopicsRunService runService;
     private final TopicWindowLabelService labelService;
     private final TopicsRunPlanner planner;
-    private final Map<UUID, TopicsRunMessage> running = new ConcurrentHashMap<>();
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
@@ -63,21 +61,9 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
 
     @Override
     public void stop() {
-        if (!config.isEnabled()) {
-            return;
+        if (config.isEnabled()) {
+            super.stop();
         }
-        // Before the base stop cancels the runs: a cancelled run's own failure write then finds the row queued.
-        running.values().forEach(message -> {
-            try {
-                log.info("Topics run '{}' requeued '{}', project '{}', its pod stops", message.runId(),
-                        store.requeue(message).block(config.getRuns().getRequeueWait().toJavaDuration()),
-                        message.projectId());
-            } catch (RuntimeException exception) {
-                log.warn("Topics run '{}' not requeued, project '{}'; the planner records it abandoned",
-                        message.runId(), message.projectId(), exception);
-            }
-        });
-        super.stop();
     }
 
     @Override
@@ -93,19 +79,21 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                     }
                     log.info("Topics run '{}' claimed, workspace '{}', project '{}', mode '{}'", message.runId(),
                             message.workspaceId(), message.projectId(), message.mode().getValue());
-                    running.put(message.runId(), message);
                     return store.resolveWorkspace(message.workspaceId())
-                            .flatMap(workspace -> run(message, workspace, deadline))
+                            .flatMap(workspace -> run(message, deadline)
+                                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspace.id())
+                                            .put(RequestContext.WORKSPACE_NAME, workspace.name())
+                                            .put(RequestContext.USER_NAME, RUN_USER)))
                             .takeUntilOther(stopped(message))
                             // A backstop: the run ends itself by its deadline, and the planner cancels it after.
                             .timeout(limit.plus(config.getRuns().getAbandonGrace().toJavaDuration()),
                                     Mono.defer(() -> fail(message, RunError.TIMEOUT)))
                             .then(Mono.defer(() -> store.endCancelled(message.workspaceId(), message.projectId(),
                                     message.runId())))
-                            .doOnNext(code -> code.ifPresent(value -> log.info(
-                                    "Topics run '{}' stopped, project '{}', code '{}'", message.runId(),
-                                    message.projectId(), value.getValue())))
-                            .doFinally(signal -> running.remove(message.runId()));
+                            .doOnNext(code -> log.info("Topics run '{}' stopped, project '{}', code '{}'",
+                                    message.runId(), message.projectId(), code.getValue()))
+                            // Only the pod's stop cancels a run from outside: give it back to the queue.
+                            .doOnCancel(() -> requeueOnStop(message));
                 })
                 .onErrorResume(error -> {
                     log.error("Topics run '{}' ended with an error, project '{}'; the planner settles its row",
@@ -113,6 +101,18 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                     return Mono.empty();
                 })
                 .then();
+    }
+
+    /** Blocks the stop until the row is queued again, so the next pod's claim does not wait for the abandon. */
+    private void requeueOnStop(TopicsRunMessage message) {
+        try {
+            log.info("Topics run '{}' requeued '{}', project '{}', its pod stops", message.runId(),
+                    store.requeue(message).block(config.getRuns().getRequeueWait().toJavaDuration()),
+                    message.projectId());
+        } catch (RuntimeException exception) {
+            log.warn("Topics run '{}' not requeued, project '{}'; the planner records it abandoned",
+                    message.runId(), message.projectId(), exception);
+        }
     }
 
     /** How long a run of {@code mode} may last: its deadline is the claim plus this. */
@@ -129,23 +129,29 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 .plus(run.getInsertSlack().toJavaDuration());
     }
 
-    private Mono<Void> run(TopicsRunMessage message, TopicsMetrics.Workspace workspace, Instant deadline) {
-        return switch (message.mode()) {
+    /** The run's workspace, which the subscriber puts in the Reactor context. */
+    private static Mono<TopicsMetrics.Workspace> workspace() {
+        return Mono.deferContextual(ctx -> Mono.just(new TopicsMetrics.Workspace(
+                ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.WORKSPACE_NAME))));
+    }
+
+    private Mono<Void> run(TopicsRunMessage message, Instant deadline) {
+        return workspace().flatMap(workspace -> switch (message.mode()) {
             case DISCOVERY -> runService.discover(message.runId(), workspace, message.projectId(), message.night(),
                     message.windowTraces())
                     .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
                     // A build saved after its project was deleted is discarded: nothing is left to label. When the
                     // check fails, the labelling run is queued, and the planner cancels it if the project is gone.
-                    .filterWhen(outcome -> store.projectExists(message.workspaceId(), message.projectId())
-                            .onErrorReturn(true))
+                    .filterWhen(outcome -> store.projectExists(message.projectId()).onErrorReturn(true))
                     // The saved list's labelling pass is a run of its own: one place keeps it apart from a build.
                     .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
                             .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
                             .build()))
                     .then();
             case LABELS -> label(message, workspace, deadline);
-            case UPDATE -> throw new IllegalStateException("no handler for run mode '%s'".formatted(message.mode()));
-        };
+            case UPDATE -> Mono.error(
+                    new IllegalStateException("no handler for run mode '%s'".formatted(message.mode())));
+        });
     }
 
     /**
@@ -159,7 +165,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         return labelService.labelWindow(workspace, message.projectId(), passDeadline, LabelTrigger.RESUME)
                 .flatMap(outcome -> outcome == LabelPassOutcome.FAILED
                         ? fail(message, RunError.INTERNAL)
-                        : store.endLabels(message).then());
+                        : store.endLabels(message.projectId(), message.runId()).then());
     }
 
     private Mono<Void> fail(TopicsRunMessage message, RunError code) {

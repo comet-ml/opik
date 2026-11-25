@@ -55,7 +55,12 @@ public interface TopicProjectDAO {
     @SqlUpdate("INSERT IGNORE INTO topic_projects (workspace_id, project_id) VALUES (:workspaceId, :projectId)")
     void ensureRow(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
-    /** Queues {@code runId} on the project's row, which must exist. 0 when the project has a run in flight. */
+    /**
+     * Queues {@code runId} on the project's row, which must exist. 0 when the project has a run in flight, or its row
+     * no longer fits the mode: a discovery run needs no saved list, a labelling pass a saved list with its labels not
+     * complete, and a nightly update a saved list. The planner reads the rows before it queues, so a run that saved
+     * the project in between makes this 0 instead of a run that fails at its save.
+     */
     @SqlUpdate("""
             UPDATE topic_projects
             SET run_id = :runId, run_mode = :mode, run_status = 'queued', run_queued_at = :now, run_started_at = NULL,
@@ -63,6 +68,11 @@ public interface TopicProjectDAO {
                 run_error_code = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             AND (run_status IS NULL OR run_status IN ('saved', 'failed'))
+            AND CASE :mode
+                WHEN 'discovery' THEN list_run_id IS NULL
+                WHEN 'labels' THEN list_run_id IS NOT NULL AND labels_complete = FALSE
+                ELSE list_run_id IS NOT NULL
+            END
             """)
     int queue(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId, @Bind("runId") UUID runId,
             @Bind("mode") TopicProject.RunMode mode, @Bind("now") Instant now);

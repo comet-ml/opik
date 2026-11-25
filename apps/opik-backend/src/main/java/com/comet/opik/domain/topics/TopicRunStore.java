@@ -5,6 +5,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -17,7 +18,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -59,20 +59,19 @@ class TopicRunStore {
     }
 
     /**
-     * Queues a run of the project, creating its row when it has none. Empty when the project has a run in flight: the
-     * row is the only lock, so of two callers one queues and the other gets empty.
+     * Queues a run of the project, creating its row when it has none, and returns its id. Empty when the project has a
+     * run in flight, or its row no longer fits the mode ({@link TopicProjectDAO#queue}): the row is the only lock, so
+     * of two callers one queues and the other gets empty.
      */
-    Mono<Optional<UUID>> queue(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull TopicProject.RunMode mode) {
-        return jdbi(() -> {
-            var runId = idGenerator.generateId();
-            int queued = template.inTransaction(WRITE, handle -> {
-                var projectDAO = handle.attach(TopicProjectDAO.class);
-                projectDAO.ensureRow(workspaceId, projectId);
-                return projectDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
-            });
-            return queued == 1 ? Optional.of(runId) : Optional.empty();
-        });
+    Mono<UUID> queue(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull TopicProject.RunMode mode) {
+        var runId = idGenerator.generateId();
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            projectDAO.ensureRow(workspaceId, projectId);
+            return projectDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
+        }))
+                .filter(queued -> queued == 1)
+                .map(queued -> runId);
     }
 
     /** {@code queued -> running} until {@code deadline}. False when another pod claimed it, or it was cancelled. */
@@ -105,15 +104,13 @@ class TopicRunStore {
      * {@code cancelling -> failed}, once the run has stopped, and counts it in {@code topics.runs}. Empty when it was
      * not cancelling: it ended, or was requeued.
      */
-    Mono<Optional<RunError>> endCancelled(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+    Mono<RunError> endCancelled(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
         return jdbi(() -> template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             return dao.endCancelled(workspaceId, projectId, runId, Instant.now()) == 1
-                    ? dao.findRunError(workspaceId, projectId, runId)
-                    : Optional.<RunError>empty();
-        })).flatMap(code -> code.isPresent()
-                ? countFailed(workspaceId, code.get()).thenReturn(code)
-                : Mono.just(code));
+                    ? dao.findRunError(workspaceId, projectId, runId).orElse(null)
+                    : null;
+        })).flatMap(code -> countFailed(workspaceId, code).thenReturn(code));
     }
 
     /** {@code queued -> failed} with {@code cancelled}: its project or workspace left. */
@@ -165,10 +162,13 @@ class TopicRunStore {
         }
     }
 
-    /** {@code running -> saved} for a labelling pass, which has no save transaction of its own. */
-    Mono<Boolean> endLabels(@NonNull TopicsRunMessage message) {
-        return write(dao -> dao.markSaved(message.workspaceId(), message.projectId(), message.runId(),
-                Instant.now()));
+    /**
+     * {@code running -> saved} for a labelling pass, which has no save transaction of its own. The workspace comes from
+     * the Reactor context.
+     */
+    Mono<Boolean> endLabels(@NonNull UUID projectId, @NonNull UUID runId) {
+        return Mono.deferContextual(ctx -> write(dao -> dao.markSaved(ctx.get(RequestContext.WORKSPACE_ID),
+                projectId, runId, Instant.now())));
     }
 
     /** True when the project's attempt is still {@code runId} and a pod claimed it, even if it was requeued since. */
@@ -221,9 +221,9 @@ class TopicRunStore {
      * saves a project that has no list: if another run saved the project anyway, the save is a conflict. A run that is no
      * longer {@code running} (failed by its timeout, cancelled, abandoned or requeued) rolls the save back.
      *
-     * <p>The project's row is not locked. After the commit the save reads it: when the project is gone, the run's topics
-     * are deleted and the result is false, so the caller skips the {@code trace_topics} insert. A delete that commits
-     * after that read leaves the topics to the daily sweep of deleted projects.
+     * <p>The project's row is not locked. After the commit, one delete removes the run's topics if the project is gone
+     * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until the discovery job's
+     * sweep of deleted projects deletes them.
      */
     Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
         return jdbi(() -> {
@@ -251,35 +251,41 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .flatMap(saved -> keepIfProjectExists(run));
+                .flatMap(saved -> keepIfProjectExists(run, !topics.isEmpty()));
     }
 
-    /** Whether the project is still in {@code projects}. */
-    Mono<Boolean> projectExists(@NonNull String workspaceId, @NonNull UUID projectId) {
-        return jdbi(() -> exists(workspaceId, projectId));
+    /** Whether the project is still in {@code projects}. The workspace comes from the Reactor context. */
+    Mono<Boolean> projectExists(@NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> jdbi(() -> !projectService
+                .findByIds(ctx.<String>get(RequestContext.WORKSPACE_ID), Set.of(projectId)).isEmpty()));
     }
 
-    private boolean exists(String workspaceId, UUID projectId) {
-        return !projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty();
-    }
-
-    /** False, after deleting the run's topics, when the project was deleted during the run. */
-    private Mono<Boolean> keepIfProjectExists(TopicRun run) {
-        return jdbi(() -> {
-            boolean exists = exists(run.workspaceId(), run.projectId());
-            if (!exists) {
-                int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                        .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
-                log.warn("Topics run '{}' saved after its project was deleted, project '{}': its result is discarded, "
-                        + "topics deleted '{}'", run.runId(), run.projectId(), deleted);
-            }
-            return exists;
-        }).onErrorResume(error -> {
-            // The run is saved: a failed check leaves a deleted project's topics to the sweep.
-            log.warn("Topics run '{}' could not check its project after the save, project '{}'", run.runId(),
-                    run.projectId(), error);
-            return Mono.just(true);
-        });
+    /**
+     * True when the project still exists, so the caller inserts the run's {@code trace_topics}. One delete decides it:
+     * it removes the run's topics only when the project is gone, so a project deleted at any point before it loses its
+     * topics. False, so the insert is skipped, when the project was deleted, when the check failed after its deadlock
+     * retries, or when the run saved no topics (the delete cannot tell then). Skipping leaves the labels incomplete: the
+     * labelling pass labels the window if the project is still there, and the planner cancels it if it is not.
+     */
+    private Mono<Boolean> keepIfProjectExists(TopicRun run, boolean savedTopics) {
+        if (!savedTopics) {
+            return Mono.just(false);
+        }
+        return jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .deleteTopicsOfMissingProject(run.workspaceId(), run.projectId())))
+                .retryWhen(RetryUtils.handleOnDeadLocks())
+                .map(deleted -> {
+                    if (deleted > 0) {
+                        log.warn("Topics run '{}' saved after its project was deleted, project '{}': its result is "
+                                + "discarded, topics deleted '{}'", run.runId(), run.projectId(), deleted);
+                    }
+                    return deleted == 0;
+                })
+                .onErrorResume(error -> {
+                    log.warn("Topics run '{}' could not check its project after the save, project '{}'; the labelling "
+                            + "pass labels its window", run.runId(), run.projectId(), error);
+                    return Mono.just(false);
+                });
     }
 
     /**

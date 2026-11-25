@@ -511,7 +511,7 @@ class TopicsRunServiceTest {
 
     /** Queues and claims a discovery run, as the planner and a pod's subscriber do. */
     private UUID start() {
-        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block().orElseThrow();
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
         var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
                 .mode(TopicProject.RunMode.DISCOVERY).night(NIGHT).windowTraces(FIXTURE.size()).build();
         assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();

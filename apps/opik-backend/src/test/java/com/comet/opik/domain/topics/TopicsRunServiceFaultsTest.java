@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
-import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
@@ -33,7 +32,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -98,8 +96,6 @@ class TopicsRunServiceFaultsTest {
         when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         projectService = mock(ProjectService.class);
-        when(projectService.findByIds(workspaceId, Set.of(projectId)))
-                .thenReturn(List.of(Project.builder().id(projectId).name("p").build()));
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));

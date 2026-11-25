@@ -448,7 +448,10 @@ public class TopicsConfig {
         @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
         private Duration heartbeatInterval;
 
-        /** A run whose heartbeat is older than this lost its pod, and is recorded {@code abandoned}. */
+        /**
+         * A run whose heartbeat is older than this lost its pod, and is recorded {@code abandoned}. At least three
+         * heartbeat intervals, so a slow or failed beat or two does not abandon a healthy run.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 1, unit = TimeUnit.HOURS)
@@ -479,9 +482,9 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.runs.abandonGrace must be above topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
+        @AssertTrue(message = "topics.runs.abandonGrace must be at least 3 times topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
             return abandonGrace == null || heartbeatInterval == null
-                    || abandonGrace.toMilliseconds() > heartbeatInterval.toMilliseconds();
+                    || abandonGrace.toMilliseconds() >= 3 * heartbeatInterval.toMilliseconds();
         }
     }
 

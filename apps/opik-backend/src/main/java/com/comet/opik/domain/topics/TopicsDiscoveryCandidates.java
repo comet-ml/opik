@@ -24,9 +24,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -89,12 +90,14 @@ class TopicsDiscoveryCandidates {
     }
 
     /** The project's row as the planner reads it, empty when a discovery run cannot be queued for it. */
-    Mono<Optional<ListlessProject>> findListless(@NonNull String workspaceId, @NonNull UUID projectId,
+    Mono<ListlessProject> findListless(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night) {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findListless(List.of(workspaceId), windowFrom(night))))
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(rows -> rows.stream().filter(row -> row.projectId().equals(projectId)).findFirst());
+                .flatMapIterable(rows -> rows)
+                .filter(row -> row.projectId().equals(projectId))
+                .next();
     }
 
     static Duration retryDelay(@NonNull List<Duration> delays, int failures) {
@@ -109,33 +112,39 @@ class TopicsDiscoveryCandidates {
         return !project.runFinishedAt().plus(retryDelay(delays, project.failedRuns())).isAfter(now);
     }
 
-    /**
-     * Of the listless projects, by workspace, those whose retry is due and whose gate is open. A workspace with
-     * projects whose gate timed out closed (a stale workspace, or a backfill past {@code backfillMaxWait} with too few
-     * vectors) is logged once.
-     */
+    /** A listless project whose retry is due, with its backfill gate's state. */
+    private record Gated(ListlessProject project, TopicsBackfillGate.State state) {
+    }
+
+    /** Of the listless projects, by workspace, those whose retry is due and whose gate is open. */
     private Map<String, List<UUID>> open(List<ListlessProject> listless, Instant now) {
-        var open = new LinkedHashMap<String, List<UUID>>();
-        var overdue = new LinkedHashMap<String, List<ListlessProject>>();
-        for (var project : listless) {
-            if (!retryDue(config.getDiscovery().retryDelays(), project, now)) {
-                continue;
-            }
-            var state = backfillGate.discoveryGate(project, now);
-            if (state.isOpen()) {
-                open.computeIfAbsent(project.workspaceId(), key -> new ArrayList<>()).add(project.projectId());
-            } else if (state == TopicsBackfillGate.State.TIMED_OUT_WAITING) {
-                overdue.computeIfAbsent(project.workspaceId(), key -> new ArrayList<>()).add(project);
-            }
-        }
-        overdue.forEach((workspaceId, projects) -> log.warn(
-                "Topics discovery runs held back: the vectors tick stopped checking the workspace, or a backfill ran "
-                        + "past topics.discovery.backfillMaxWait '{}' with too few traces embedded, workspace '{}', "
-                        + "projects '{}', longest wait seconds '{}'",
-                config.getDiscovery().getBackfillMaxWait(), workspaceId, projects.size(),
-                projects.stream().map(project -> TopicsBackfillGate.waited(project, now)).max(Comparator.naturalOrder())
-                        .orElse(Duration.ZERO).toSeconds()));
-        return open;
+        var gated = listless.stream()
+                .filter(project -> retryDue(config.getDiscovery().retryDelays(), project, now))
+                .map(project -> new Gated(project, backfillGate.discoveryGate(project, now)))
+                .toList();
+        logOverdue(gated, now);
+        return gated.stream()
+                .filter(gate -> gate.state().isOpen())
+                .collect(Collectors.groupingBy(gate -> gate.project().workspaceId(), LinkedHashMap::new,
+                        Collectors.mapping(gate -> gate.project().projectId(), Collectors.toList())));
+    }
+
+    /**
+     * Logs once per workspace the projects whose gate timed out closed: a stale workspace, or a backfill past
+     * {@code backfillMaxWait} with too few vectors.
+     */
+    private void logOverdue(List<Gated> gated, Instant now) {
+        gated.stream()
+                .filter(gate -> gate.state() == TopicsBackfillGate.State.TIMED_OUT_WAITING)
+                .collect(Collectors.groupingBy(gate -> gate.project().workspaceId(), LinkedHashMap::new,
+                        Collectors.mapping(Gated::project, Collectors.toList())))
+                .forEach((workspaceId, projects) -> log.warn(
+                        "Topics discovery runs held back: the vectors tick stopped checking the workspace, or a "
+                                + "backfill ran past topics.discovery.backfillMaxWait '{}' with too few traces "
+                                + "embedded, workspace '{}', projects '{}', longest wait seconds '{}'",
+                        config.getDiscovery().getBackfillMaxWait(), workspaceId, projects.size(),
+                        projects.stream().map(project -> TopicsBackfillGate.waited(project, now))
+                                .max(Comparator.naturalOrder()).orElse(Duration.ZERO).toSeconds()));
     }
 
     /**
@@ -171,18 +180,13 @@ class TopicsDiscoveryCandidates {
                 .collectMap(TopicWindowDAO.ProjectCount::projectId, TopicWindowDAO.ProjectCount::traces);
     }
 
-    /** One project of each workspace in turn, in the workspaces' order. */
-    static List<Candidate> roundRobin(@NonNull List<List<Candidate>> byWorkspace) {
-        var result = new ArrayList<Candidate>();
-        int longest = byWorkspace.stream().mapToInt(List::size).max().orElse(0);
-        for (int i = 0; i < longest; i++) {
-            for (var candidates : byWorkspace) {
-                if (i < candidates.size()) {
-                    result.add(candidates.get(i));
-                }
-            }
-        }
-        return result;
+    /** One item of each list in turn, in the lists' order; a shorter list drops out when it runs out. */
+    static <T> List<T> roundRobin(@NonNull List<List<T>> lists) {
+        int longest = lists.stream().mapToInt(List::size).max().orElse(0);
+        return IntStream.range(0, longest)
+                .boxed()
+                .flatMap(i -> lists.stream().filter(list -> i < list.size()).map(list -> list.get(i)))
+                .toList();
     }
 
     private long countSeconds() {

@@ -40,14 +40,12 @@ class TopicsRunReconciler {
             @NonNull LocalDate night, @NonNull Instant now) {
         var enabled = Set.copyOf(enabledWorkspaces);
         return Flux.fromIterable(runs)
-                .concatMap(run -> settle(run, enabled, night, now)
+                .filterWhen(run -> settle(run, enabled, night, now)
                         .onErrorResume(error -> {
                             log.warn("Topics run '{}' not reconciled, project '{}', status '{}'", run.runId(),
                                     run.projectId(), run.runStatus().getValue(), error);
                             return Mono.just(true);
-                        })
-                        .filter(inFlight -> inFlight)
-                        .map(inFlight -> run))
+                        }))
                 .collectList();
     }
 
@@ -78,7 +76,8 @@ class TopicsRunReconciler {
             }
             // Its pod died before it ended the run: end it as that pod would have.
             case CANCELLING -> run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)
-                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).map(Optional::isEmpty)
+                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).hasElement()
+                            .map(ended -> !ended)
                     : Mono.just(true);
             case SAVED, FAILED -> Mono.just(false);
         };

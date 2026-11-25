@@ -2947,8 +2947,8 @@ topics:
     #  running (cancelled) stops the run. At most 5m
     heartbeatInterval: ${TOPICS_RUNS_HEARTBEAT_INTERVAL:-20s}
     #  Default: 60s
-    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. Above
-    #  heartbeatInterval, at most 1h
+    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. At
+    #  least 3 times heartbeatInterval, so one or two slow beats do not abandon a healthy run; at most 1h
     abandonGrace: ${TOPICS_RUNS_ABANDON_GRACE:-60s}
     #  Default: 10m
     #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
