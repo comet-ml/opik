@@ -3,8 +3,11 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
@@ -27,6 +30,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -37,6 +41,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,7 +71,7 @@ class OnlineScorePublisherTest {
         var publisher = createPublisher(config);
 
         var message = podamFactory.manufacturePojo(String.class);
-        publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.LLM_AS_JUDGE).block();
+        publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.LLM_AS_JUDGE, null).block();
 
         await().untilAsserted(() -> {
             var streamAddParams = captureStreamAddParams();
@@ -82,7 +87,7 @@ class OnlineScorePublisherTest {
         var publisher = createPublisher(config);
 
         var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-        publisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE).block();
+        publisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE, null).block();
 
         await().untilAsserted(() -> {
             var streamAddParams = captureStreamAddParams();
@@ -117,7 +122,8 @@ class OnlineScorePublisherTest {
                     .build();
 
             publisher.enqueueThreadMessage(threadIds, rule, UUID.randomUUID(),
-                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class)).block();
+                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class), null)
+                    .block();
 
             var published = capturePayloads(TraceThreadToScoreLlmAsJudge.class);
             assertThat(published)
@@ -147,7 +153,8 @@ class OnlineScorePublisherTest {
                     .build();
 
             publisher.enqueueThreadMessage(threadIds, rule, UUID.randomUUID(),
-                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class)).block();
+                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class), null)
+                    .block();
 
             var published = capturePayloads(TraceThreadToScoreUserDefinedMetricPython.class);
             assertThat(published).hasSize(threadCount);
@@ -172,7 +179,8 @@ class OnlineScorePublisherTest {
                     .build();
 
             publisher.enqueueThreadMessage(List.of(), rule, UUID.randomUUID(),
-                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class)).block();
+                    podamFactory.manufacturePojo(String.class), podamFactory.manufacturePojo(String.class), null)
+                    .block();
 
             verify(stream, never()).add(any());
         }
@@ -194,6 +202,147 @@ class OnlineScorePublisherTest {
         }
     }
 
+    @Nested
+    @DisplayName("The organization a message carries")
+    class OrganizationStampingTests {
+
+        private final String organizationId = UUID.randomUUID().toString();
+        private final String workspaceId = UUID.randomUUID().toString();
+        private final String userName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+        @Test
+        @DisplayName("Thread messages carry the organization they are enqueued with")
+        void threadMessagesCarryTheGivenOrganization() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var rule = threadRule();
+            var projectId = UUID.randomUUID();
+            var threadIds = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+
+            publisher.enqueueThreadMessage(threadIds, rule, projectId, workspaceId, userName, organizationId).block();
+
+            assertThat(capturePayloads()).containsExactlyElementsOf(threadIds.stream()
+                    .map(threadId -> expectedThreadMessage(threadId, rule, projectId))
+                    .toList());
+        }
+
+        @Test
+        @DisplayName("The rule id overload passes the organization on")
+        void ruleIdOverloadPassesTheOrganizationOn() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var rule = threadRule();
+            var projectId = UUID.randomUUID();
+            var threadId = UUID.randomUUID().toString();
+            doReturn(rule).when(automationRuleEvaluatorService).findById(rule.getId(), Set.of(projectId), workspaceId);
+
+            publisher.enqueueThreadMessage(List.of(threadId), rule.getId(), projectId, workspaceId, userName,
+                    organizationId).block();
+
+            assertThat(capturePayloads()).containsExactly(expectedThreadMessage(threadId, rule, projectId));
+        }
+
+        @Test
+        @DisplayName("Keeps the organization a message already carries")
+        void keepsTheMessagesOwnOrganization() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage().toBuilder().organizationId(UUID.randomUUID().toString()).build();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE,
+                    organizationId).block();
+
+            assertThat(capturePayloads()).containsExactly(message);
+        }
+
+        @Test
+        @DisplayName("Stamps the organization over a blank one")
+        void stampsTheOrganizationOverABlankOne() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage().toBuilder().organizationId("   ").build();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE,
+                    organizationId).block();
+
+            assertThat(capturePayloads()).containsExactly(message.toBuilder().organizationId(organizationId).build());
+        }
+
+        @Test
+        @DisplayName("Enqueues without an organization when none is known")
+        void enqueuesWithoutAnOrganizationWhenNoneIsKnown() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE, null)
+                    .block();
+
+            assertThat(capturePayloads()).containsExactly(message);
+        }
+
+        @Test
+        @DisplayName("Stamps only the messages that can carry an organization")
+        void stampsOnlyTheMessagesThatCanCarryOne() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            var span = podamFactory.manufacturePojo(SpanToScoreLlmAsJudge.class);
+            var spanPython = podamFactory.manufacturePojo(SpanToScoreUserDefinedMetricPython.class);
+            var thread = threadMessage();
+            var tracePython = podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class);
+            var threadPython = podamFactory.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class);
+
+            publisher.enqueueMessage(List.of(span, spanPython, thread, tracePython, threadPython),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, organizationId).block();
+
+            assertThat(captureAllPayloads()).containsExactly(span, spanPython,
+                    thread.toBuilder().organizationId(organizationId).build(), tracePython, threadPython);
+        }
+
+        private List<Object> captureAllPayloads() {
+            ArgumentCaptor<StreamAddParams<Object, Object>> captor = ArgumentCaptor.forClass(StreamAddParams.class);
+            verify(stream, atLeastOnce()).add(captor.capture());
+            return captor.getAllValues().stream()
+                    .map(params -> params.getEntries().get(OnlineScoringConfig.PAYLOAD_FIELD))
+                    .toList();
+        }
+
+        private AutomationRuleEvaluatorTraceThreadLlmAsJudge threadRule() {
+            return AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                    .id(UUID.randomUUID())
+                    .name(podamFactory.manufacturePojo(String.class))
+                    .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+                    .build();
+        }
+
+        private TraceThreadToScoreLlmAsJudge expectedThreadMessage(String threadId,
+                AutomationRuleEvaluatorTraceThreadLlmAsJudge rule, UUID projectId) {
+            return TraceThreadToScoreLlmAsJudge.builder()
+                    .threadIds(List.of(threadId))
+                    .ruleId(rule.getId())
+                    .projectId(projectId)
+                    .code(rule.getCode())
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .organizationId(organizationId)
+                    .build();
+        }
+
+        private TraceThreadToScoreLlmAsJudge threadMessage() {
+            return TraceThreadToScoreLlmAsJudge.builder()
+                    .threadIds(List.of(UUID.randomUUID().toString()))
+                    .ruleId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .build();
+        }
+
+        private List<TraceThreadToScoreLlmAsJudge> capturePayloads() {
+            ArgumentCaptor<StreamAddParams<Object, Object>> captor = ArgumentCaptor.forClass(StreamAddParams.class);
+            verify(stream, atLeastOnce()).add(captor.capture());
+            return captor.getAllValues().stream()
+                    .map(params -> params.getEntries().get(OnlineScoringConfig.PAYLOAD_FIELD))
+                    .map(TraceThreadToScoreLlmAsJudge.class::cast)
+                    .toList();
+        }
+    }
+
     private OnlineScorePublisher createPublisher(OnlineScoringConfig onlineScoringConfig) {
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
         return createPublisherWithoutStreamStubs(onlineScoringConfig);
@@ -202,8 +351,8 @@ class OnlineScorePublisherTest {
     /** For the cases that assert nothing is ever added — strict stubbing rejects an unused {@code add} stub. */
     private OnlineScorePublisher createPublisherWithoutStreamStubs(OnlineScoringConfig onlineScoringConfig) {
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
-        return new OnlineScorePublisherImpl(
-                onlineScoringConfig, serviceTogglesConfig, redisClient, automationRuleEvaluatorService);
+        return new OnlineScorePublisherImpl(onlineScoringConfig, serviceTogglesConfig, redisClient,
+                automationRuleEvaluatorService);
     }
 
     private StreamAddParams<Object, Object> captureStreamAddParams() {

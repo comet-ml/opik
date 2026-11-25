@@ -963,6 +963,8 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    topics_day_counts: PT5M
+    topics_vector_counts: PT1M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1114,6 +1116,10 @@ topics:
     namingDeadline: 30s
     verifyDeadline: 60s
     readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
     read:
@@ -1121,7 +1127,7 @@ topics:
       maxMemoryUsage: 1073741824
       maxThreads: 2
       priority: 100
-      maxBlockSize: 8192
+      maxBlockSize: 1024
       countSlice: 1d
   algorithm:
     minGroups: 30

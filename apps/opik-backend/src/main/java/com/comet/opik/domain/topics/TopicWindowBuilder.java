@@ -39,7 +39,7 @@ final class TopicWindowBuilder {
     void add(TopicWindowDAO.WindowRow row) {
         read++;
         var text = TopicText.pythonStrip(row.text());
-        if (text.isEmpty() || row.vector().length != D) {
+        if (text.isEmpty() || !TopicEmbedding.usable(row.vector())) {
             skipped++;
             return;
         }

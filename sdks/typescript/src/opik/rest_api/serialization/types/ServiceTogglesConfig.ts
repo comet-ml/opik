@@ -14,6 +14,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     spanUserDefinedMetricPythonEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
     guardrailsValidationsEnabled: core.serialization.boolean(),
+    guardrailsTrainingEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
@@ -39,6 +40,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     eventBridgeAlertsEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
     customChartsEnabledForWorkspace: core.serialization.boolean().optional(),
+    topicsEnabled: core.serialization.boolean().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -49,6 +51,7 @@ export declare namespace ServiceTogglesConfig {
         spanUserDefinedMetricPythonEnabled: boolean;
         guardrailsEnabled: boolean;
         guardrailsValidationsEnabled: boolean;
+        guardrailsTrainingEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
@@ -74,5 +77,6 @@ export declare namespace ServiceTogglesConfig {
         eventBridgeAlertsEnabled: boolean;
         defaultPageSize?: number | null;
         customChartsEnabledForWorkspace?: boolean | null;
+        topicsEnabled?: boolean | null;
     }
 }

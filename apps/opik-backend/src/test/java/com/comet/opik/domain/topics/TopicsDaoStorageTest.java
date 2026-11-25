@@ -181,14 +181,19 @@ class TopicsDaoStorageTest {
                 .hasSize(BUILT);
 
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxRowsToRead());
+        var maxBlockSize = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxBlockSize());
         assertThat(data.queryGuards("topics:count_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
         // The count's memory bound rests on these two.
         assertThat(data.queryLogSettings("topics:count_window", workspaceId, "optimize_aggregation_in_order",
                 "max_block_size"))
-                .containsExactly(List.of("1", "8192"));
+                .containsExactly(List.of("1", maxBlockSize));
         assertThat(data.queryGuards("topics:read_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "", "120"));
+        // The read's memory is mostly the vector column, read in blocks of this size.
+        assertThat(data.queryLogSettings("topics:read_window", workspaceId, "optimize_read_in_order",
+                "max_block_size"))
+                .containsExactly(List.of("0", maxBlockSize));
     }
 
     @Test

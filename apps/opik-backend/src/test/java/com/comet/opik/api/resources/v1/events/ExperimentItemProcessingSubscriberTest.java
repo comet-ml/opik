@@ -10,6 +10,7 @@ import com.comet.opik.domain.ExperimentItemLedger.Outcome;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -114,6 +116,41 @@ class ExperimentItemProcessingSubscriberTest {
                 .allExperimentIds(allExperimentIds)
                 .testSuite(false)
                 .build();
+    }
+
+    @Test
+    @DisplayName("should run the item under the organization its message carries")
+    void runItemUnderTheMessagesOrganization() {
+        var experimentId = UUID.randomUUID();
+        var message = buildMessage(experimentId).toBuilder().organizationId("organization-1").build();
+        var organizationId = new AtomicReference<String>();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(message)).thenReturn(Mono.deferContextual(ctx -> {
+            organizationId.set(ctx.getOrDefault(RequestContext.ORGANIZATION_ID, null));
+            return Mono.empty();
+        }));
+
+        subscriber.processEvent(message, ENTRY).block();
+
+        assertThat(organizationId.get()).isEqualTo("organization-1");
+    }
+
+    @Test
+    @DisplayName("should run an item from before organizations without one")
+    void runItemWithoutAnOrganization() {
+        var experimentId = UUID.randomUUID();
+        var message = buildMessage(experimentId);
+        var hasOrganization = new AtomicReference<Boolean>();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(message)).thenReturn(Mono.deferContextual(ctx -> {
+            hasOrganization.set(ctx.hasKey(RequestContext.ORGANIZATION_ID));
+            return Mono.empty();
+        }));
+
+        subscriber.processEvent(message, ENTRY).block();
+
+        assertThat(hasOrganization.get()).isFalse();
+        verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.OK);
     }
 
     @Test

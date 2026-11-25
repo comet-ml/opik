@@ -10,7 +10,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -25,8 +24,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
- * A run's writes: its attempt on the project's {@code topic_projects} row (start, fail), the save transaction and the
- * {@code trace_topics} insert after it. MySQL calls are blocking JDBI, each wrapped once on a bounded-elastic thread.
+ * A run's MySQL state and its {@code trace_topics} writes: its attempt on the project's {@code topic_projects} row
+ * (start, fail), the save transaction, the saved list the labelling pass reads and marks complete, and the
+ * {@code trace_topics} insert both the run and the pass use. MySQL calls are blocking JDBI, each wrapped once on a
+ * bounded-elastic thread.
  */
 @Slf4j
 @Singleton
@@ -162,33 +163,49 @@ class TopicRunStore {
     }
 
     /**
-     * Inserts the saved run's trace topics. A transient error is retried up to {@code topics.run.insertRetries}
-     * times (a repeat writes the same rows, one per trace); any other fails at once. Counted by result. Each attempt
-     * stops after {@code topics.run.readTimeout}; the timeouts and backoffs run on {@code compute}. False when it
-     * still failed: the labelling pass gives the window's traces their topics.
+     * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass. A transient error is
+     * retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per trace); any other
+     * fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
      */
-    Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics,
-            @NonNull Scheduler compute) {
+    Mono<Void> insertTraceTopics(@NonNull TopicsMetrics.Workspace workspace, @NonNull List<TraceTopic> rows) {
+        if (rows.isEmpty()) {
+            return Mono.empty();
+        }
         var backoff = runConfig.getInsertBackoff().toJavaDuration();
-        return traceTopicsDAO.insert(traceTopics)
-                .timeout(runConfig.getReadTimeout().toJavaDuration(), compute)
+        return traceTopicsDAO.insert(rows)
+                .timeout(runConfig.getReadTimeout().toJavaDuration())
                 .retryWhen(RetryUtils.handleClickHouseErrors(runConfig.getInsertRetries(), backoff,
                         backoff.multipliedBy(1L << runConfig.getInsertRetries()))
-                        .scheduler(compute)
-                        .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
-                                + "project '{}', attempt '{}'", run.runId(), run.projectId(),
+                        .doBeforeRetry(signal -> log.warn("Topics retries a trace_topics insert, run '{}', project "
+                                + "'{}', attempt '{}'", rows.getFirst().runId(), rows.getFirst().projectId(),
                                 signal.totalRetries() + 2, signal.failure())))
-                .map(__ -> {
-                    metrics.saved(run.workspace(), "trace_topics", traceTopics.size());
-                    metrics.traceTopicsInsert(run.workspace(), true);
-                    return true;
+                .doOnSuccess(__ -> {
+                    metrics.saved(workspace, "trace_topics", rows.size());
+                    metrics.traceTopicsInsert(workspace, true);
                 })
-                .onErrorResume(exception -> {
-                    metrics.traceTopicsInsert(run.workspace(), false);
-                    log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
-                            + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
-                    return Mono.just(false);
-                });
+                .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
+                .then();
+    }
+
+    /** The project's saved list: its row and its topics, read in one transaction so they are of the same save. */
+    record SavedList(@NonNull TopicProject project, @NonNull List<Topic> topics) {
+    }
+
+    /** The project's saved list, or empty when it has none. */
+    Mono<SavedList> readSaved(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> {
+            var project = handle.attach(TopicProjectDAO.class).findProjects(workspaceId, List.of(projectId)).stream()
+                    .findFirst()
+                    .filter(found -> found.listRunId() != null && found.windowUntil() != null);
+            return project.map(found -> new SavedList(found,
+                    handle.attach(TopicDAO.class).findByProject(workspaceId, projectId))).orElse(null);
+        }));
+    }
+
+    /** Sets {@code labels_complete} for the run, only while the project still names it; false when it no longer does. */
+    Mono<Boolean> markLabelsComplete(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+        return jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+                .markLabelsComplete(workspaceId, projectId, runId)) > 0);
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {
