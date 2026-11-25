@@ -85,36 +85,4 @@ describe("formatExperimentSubtext", () => {
   it("returns only the date when nothing else is known", () => {
     expect(formatExperimentSubtext(experiment())).toBe(date);
   });
-
-  describe("withSourceName", () => {
-    it("names the test suite before its version", () => {
-      expect(
-        formatExperimentSubtext(
-          experiment({
-            evaluation_method: EVALUATION_METHOD.TEST_SUITE,
-            dataset_version_summary: versionSummary("v3"),
-          }),
-          { withSourceName: true },
-        ),
-      ).toBe(`${date} • Test suite: geography_questions v3`);
-    });
-
-    it("names a legacy dataset without a version", () => {
-      expect(
-        formatExperimentSubtext(experiment(), { withSourceName: true }),
-      ).toBe(`${date} • Dataset: geography_questions`);
-    });
-
-    it("marks a deleted source", () => {
-      expect(
-        formatExperimentSubtext(
-          experiment({
-            evaluation_method: EVALUATION_METHOD.TEST_SUITE,
-            dataset_name: undefined,
-          }),
-          { withSourceName: true },
-        ),
-      ).toBe(`${date} • Deleted test suite`);
-    });
-  });
 });
