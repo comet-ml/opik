@@ -32,7 +32,7 @@ const getMixedItemSourcesTooltip = (experiments: Experiment[]) => {
 };
 
 type ExperimentsActionsPanelsProps = {
-  experiments: Experiment[];
+  experiments?: Experiment[];
   onTagsAdded?: () => void;
   buttonVariant?: "outline" | "ghostInverted";
   buttonSize?: ButtonProps["size"];
@@ -41,7 +41,7 @@ type ExperimentsActionsPanelsProps = {
 const ExperimentsActionsPanel: React.FunctionComponent<
   ExperimentsActionsPanelsProps
 > = ({
-  experiments,
+  experiments = [],
   onTagsAdded,
   buttonVariant = "outline",
   buttonSize = "sm",
@@ -55,7 +55,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
-  const disabled = !experiments?.length;
+  const disabled = !experiments.length;
   const hasMixedItemSources = experiments.some(
     (e) => e.dataset_id !== experiments[0].dataset_id,
   );

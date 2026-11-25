@@ -47,7 +47,7 @@ vi.mock("@/api/datasets/useExperimentsList", () => ({
 }));
 
 const renderPanel = (
-  experiments: Experiment[],
+  experiments: Experiment[] | undefined,
   canCreateExperiments = true,
   props: Partial<React.ComponentProps<typeof ExperimentsActionsPanel>> = {},
 ) =>
@@ -77,6 +77,14 @@ describe("ExperimentsActionsPanel Compare button", () => {
     renderPanel([]);
 
     expect(getCompareButton()).toBeDisabled();
+  });
+
+  it("renders with every action disabled when experiments is undefined", () => {
+    renderPanel(undefined);
+
+    expect(getCompareButton()).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Manage tags" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
   });
 
   it("opens the comparable-experiments picker when one experiment is selected", () => {
