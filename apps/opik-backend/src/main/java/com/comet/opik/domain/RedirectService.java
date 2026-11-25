@@ -49,6 +49,7 @@ class RedirectServiceImpl implements RedirectService {
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
 
     private static final String API_SEGMENT = "/api";
+    private static final String UNEXPECTED_OPIK_URL = "Unexpected Opik URL in path parameter";
     // Zero or more segments of unreserved or percent-encoded characters, such as "" or "/opik"
     private static final Pattern FRONTEND_BASE_PATH = Pattern
             .compile("(/(?!\\.{1,2}(?:/|$))(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)*");
@@ -118,11 +119,11 @@ class RedirectServiceImpl implements RedirectService {
         String path = rawPath(opikUrl);
         int apiIndex = apiSegmentIndex(path);
         if (apiIndex < 0) {
-            throw new BadRequestException("Unexpected Opik URL in path parameter");
+            throw new BadRequestException(UNEXPECTED_OPIK_URL);
         }
         String basePath = path.substring(0, apiIndex);
         if (!FRONTEND_BASE_PATH.matcher(basePath).matches()) {
-            throw new BadRequestException("Unexpected Opik URL in path parameter");
+            throw new BadRequestException(UNEXPECTED_OPIK_URL);
         }
         return basePath;
     }
@@ -131,7 +132,7 @@ class RedirectServiceImpl implements RedirectService {
         try {
             return Optional.ofNullable(new URI(opikUrl).getRawPath()).orElse("");
         } catch (URISyntaxException exception) {
-            throw new BadRequestException("Unexpected Opik URL in path parameter");
+            throw new BadRequestException(UNEXPECTED_OPIK_URL, exception);
         }
     }
 
