@@ -127,21 +127,13 @@ const CostCenterTab: React.FC = () => {
         id: "type",
         field: "type",
         label: "Type",
-        kind: "query-builder",
+        kind: "single-select",
         columnType: COLUMN_TYPE.string,
-        operators: ["="],
-        defaultOperator: "=",
-        operatorLabels: IS_LABEL,
-        hideOperatorInSummary: true,
-        addLabel: "Add type",
-        value: {
-          placeholder: "Select a type…",
-          optionsHeading: "Types",
-          options: chipOptionsValue({
-            items: CATALOG_TYPES.map((type) => CATALOG_TYPE_LABELS[type]),
-            isLoading: false,
-          }),
-        },
+        operator: "=",
+        options: CATALOG_TYPES.map((type) => ({
+          value: type,
+          label: CATALOG_TYPE_LABELS[type],
+        })),
       },
       {
         id: "input_price",

@@ -415,15 +415,29 @@ describe("CostCenterTab", () => {
           field: "type",
           type: "string",
           operator: "=",
-          value: "Custom",
+          value: "custom",
         },
       ]);
       renderTab(ADMIN);
 
       expect(shownModels()).toEqual(["acme-llama-70b", "team-model"]);
-      expect(screen.getByTestId("filter-chip-type")).toHaveTextContent(
+      expect(screen.getByRole("button", { name: /^Type/ })).toHaveTextContent(
         "Custom",
       );
+    });
+
+    it("picks a type from the Type chip list", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.pointerDown(
+        screen.getByRole("button", { name: /^Type/ }),
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Override" }),
+      );
+
+      await waitFor(() => expect(shownModels()).toEqual(["gpt-4o"]));
     });
 
     it("finds models with no provider through the Any provider option", () => {
