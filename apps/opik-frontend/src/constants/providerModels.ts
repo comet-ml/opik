@@ -27,12 +27,24 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 6.2 Astra",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_6_2_ASTRA_HEALTHCARE,
+      label: "GPT 6.2 Astra Healthcare",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_6_2_SOL,
       label: "GPT 6.2 Sol",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_6_2_SOL_HEALTHCARE,
+      label: "GPT 6.2 Sol Healthcare",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
       label: "GPT 6.1 Sol",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_6_1_SOL_HEALTHCARE,
+      label: "GPT 6.1 Sol Healthcare",
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_6_1_TERRA,
@@ -41,6 +53,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
       label: "GPT 6 Astra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_6_ASTRA_HEALTHCARE,
+      label: "GPT 6 Astra Healthcare",
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
@@ -406,10 +422,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4.1-flash-1017",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
-      label: "dots-studio/dots-3-note-preview:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ELORIAN_GLIMPSE,
       label: "elorian/glimpse",
     },
@@ -730,16 +742,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-large-4-0",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3,
-      label: "mistralai/mistral-medium-3",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_5,
       label: "mistralai/mistral-medium-3-5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_1,
-      label: "mistralai/mistral-medium-3.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_NEMO,
@@ -784,18 +788,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONDREAM_MOONDREAM3_1_9B_A2B,
       label: "moondream/moondream3.1-9b-a2b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
-      label: "moonshotai/kimi-k2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_0905,
-      label: "moonshotai/kimi-k2-0905",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_THINKING,
-      label: "moonshotai/kimi-k2-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_5,
@@ -1487,8 +1479,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "undi95/remm-slerp-l2-13b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_MINI_4_5,
+      label: "upstage/solar-mini-4-5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_MINI4,
       label: "upstage/solar-mini4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO_4_CONTRIBUTOR,
+      label: "upstage/solar-pro-4-contributor",
     },
     {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO4,
@@ -1523,12 +1523,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.7",
     },
     {
-      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
-      label: "xiaomi/mimo-v2.5",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_FLASH,
       label: "xiaomi/mimo-v2.6-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_FLASH_MOPD,
+      label: "xiaomi/mimo-v2.6-flash-mopd",
     },
     {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_PRO,
@@ -1783,6 +1783,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_NEON,
       label: "Gemini 4 Neon",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_NEON_CYBER_PERMISSIVE,
+      label: "Gemini 4 Neon Cyber Permissive",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
