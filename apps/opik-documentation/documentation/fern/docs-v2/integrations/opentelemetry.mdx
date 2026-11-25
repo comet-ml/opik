@@ -231,7 +231,7 @@ Opik picks the project of each span in this order:
 
 1. The `opik.project_name` attribute of the span
 2. The `opik.project_name` attribute of the resource of the span
-3. The `opik.project_name` attribute of the nearest ancestor span in the same export request
+3. The project of the nearest ancestor span in the same export request, from the span or its resource
 4. The `projectName` header
 5. The `Default Project`
 
