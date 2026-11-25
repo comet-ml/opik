@@ -3,6 +3,7 @@ import {
   CellContext,
   ColumnDef,
   ColumnPinningState,
+  ColumnSizingState,
   ColumnSort,
   OnChangeFn,
   RowPinningState,
@@ -123,6 +124,8 @@ type PricesTableProps = {
   entries: CatalogEntry[];
   selectedColumns: string[];
   columnsOrder: string[];
+  columnsWidth: ColumnSizingState;
+  onColumnsWidthChange: OnChangeFn<ColumnSizingState>;
   sortDirection: "asc" | "desc";
   onSortDirectionChange: (direction: "asc" | "desc") => void;
   pinnedKeys: string[];
@@ -136,6 +139,8 @@ const PricesTable: React.FC<PricesTableProps> = ({
   entries,
   selectedColumns,
   columnsOrder,
+  columnsWidth,
+  onColumnsWidthChange,
   sortDirection,
   onSortDirectionChange,
   pinnedKeys,
@@ -182,6 +187,11 @@ const PricesTable: React.FC<PricesTableProps> = ({
       onRowClick={onOpen}
       activeRowId={activeKey}
       sortConfig={{ enabled: true, sorting, setSorting }}
+      resizeConfig={{
+        enabled: true,
+        columnSizing: columnsWidth,
+        onColumnResize: onColumnsWidthChange,
+      }}
       pinningConfig={{ rowPinning, setRowPinning }}
       columnPinning={COLUMN_PINNING}
       noData={<DataTableNoMatchingData onClearFilters={onClearFilters} />}

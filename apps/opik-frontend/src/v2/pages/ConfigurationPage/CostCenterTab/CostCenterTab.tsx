@@ -51,6 +51,7 @@ const PAGE_SIZES = [25, 50, 100];
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
 const SELECTED_COLUMNS_KEY = "cost-center:selected-columns";
 const COLUMNS_ORDER_KEY = "cost-center:columns-order";
+const COLUMNS_WIDTH_KEY = "cost-center:columns-width";
 const IS_LABEL = { "=": "is" } as const;
 
 const CostCenterTab: React.FC = () => {
@@ -186,6 +187,9 @@ const CostCenterTab: React.FC = () => {
     COLUMNS_ORDER_KEY,
     { defaultValue: DEFAULT_COLUMNS_ORDER },
   );
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(COLUMNS_WIDTH_KEY, { defaultValue: {} });
   const isPinned = useCallback(
     (entry: CatalogEntry) => pinnedSet.has(entry.key),
     [pinnedSet],
@@ -341,6 +345,8 @@ const CostCenterTab: React.FC = () => {
         entries={pageEntries}
         selectedColumns={selectedColumns}
         columnsOrder={columnsOrder}
+        columnsWidth={columnsWidth}
+        onColumnsWidthChange={setColumnsWidth}
         sortDirection={sortDirection}
         onSortDirectionChange={resetPage(setSortDirection)}
         pinnedKeys={pinned}
