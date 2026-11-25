@@ -430,7 +430,9 @@ back to `false` with any stage B/C rollback.**
 ### Registration: `span_weeks_mv`
 
 `span_weeks_mv` (migration 000138) registers each span's `(project, trace, week)` as part of its insert into `spans`,
-so a span is indexed by the time its insert returns. There is no flag for it: a leftover
+so a span is indexed by the time its insert returns, on the replica that took it. The shard's other replicas fetch the
+index row and the span through separate replication queues, so a bounded read on one of them can miss a just-written
+span until its index row arrives. There is no flag for the view: a leftover
 `ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED` from earlier releases is ignored and can be dropped.
 
 **The view is bound to the name `spans`, not to the table behind it.** Every step of this runbook leaves it on whatever
@@ -3268,7 +3270,8 @@ Watch these for the whole backfill→EXCHANGE window; wire alerts before startin
   through the reconciliation as a swap-gating signal.
 - **The span weeks backfill, if it is still running** — its `Span weeks backfill step failed` log lines, and its
   queries in `system.query_log` under `log_comment LIKE 'backfill_span_weeks%'`. It is load, not a correctness risk to
-  the cutover; prerequisite 19 has it finish first because switching it off takes a rolling restart. See
+  the cutover; prerequisite 19 has it finish first, as it competes with `backfill.sh` for I/O and the read bound can
+  then go on right after the `EXCHANGE`. Stopping it mid-window takes a rolling restart. See
   ["The span weeks backfill"](#the-span-weeks-backfill).
 
 **Roles.** Name an operator (runs the scripts), an independent observer (watches the dashboards), and the person with
