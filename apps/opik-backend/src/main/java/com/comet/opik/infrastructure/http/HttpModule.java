@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.http;
 
+import com.comet.opik.infrastructure.InferenceConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Provides;
@@ -8,8 +9,11 @@ import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.jackson.Jackson;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.net.URI;
 
 public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
 
@@ -25,8 +29,17 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
      */
     @Provides
     @Singleton
-    public Client client(@Config("jerseyClient") JerseyClientConfiguration config) {
-        return buildClient(new DestinationGuardJerseyClientBuilder(environment()), config);
+    public Client client(@Config("jerseyClient") JerseyClientConfiguration config,
+            @Config("inference") InferenceConfig inference) {
+        var builder = new DestinationGuardJerseyClientBuilder(environment());
+        var client = buildClient(builder, config);
+        HttpClientPoolMetrics.publish(builder.connectionManager(), inferenceHost(inference));
+        return client;
+    }
+
+    /** The host the pool's opik-inference route goes to, or null when no feature is set to call it. */
+    private static String inferenceHost(InferenceConfig inference) {
+        return StringUtils.isBlank(inference.getUrl()) ? null : URI.create(inference.getUrl()).getHost();
     }
 
     /**
