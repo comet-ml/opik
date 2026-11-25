@@ -58,6 +58,14 @@ public class TopicWorkspaceService {
                         .orElse(false);
     }
 
+    /** The {@link #enabledWorkspaceIds} whose listed stage is {@code stage} or a later one. */
+    public List<String> enabledWorkspaceIds(@NonNull TopicsStage stage) {
+        var stages = config.enabledWorkspaceStages();
+        return enabledWorkspaceIds().stream()
+                .filter(workspaceId -> stages.get(workspaceId).includes(stage))
+                .toList();
+    }
+
     /** True when the workspace {@link #isEnabled} and its listed stage is {@code stage} or a later one. */
     public boolean reaches(@NonNull String workspaceId, @NonNull TopicsStage stage) {
         var listed = config.enabledWorkspaceStages().get(workspaceId);

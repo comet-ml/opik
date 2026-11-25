@@ -42,6 +42,14 @@ public interface TopicDAO {
             """)
     List<Topic> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
+    /** Deletes the project's topics only when the project is no longer in {@code projects}; 0 when it still is. */
+    @SqlUpdate("""
+            DELETE FROM topics
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            AND NOT EXISTS (SELECT 1 FROM projects WHERE id = :projectId AND workspace_id = :workspaceId)
+            """)
+    int deleteTopicsOfMissingProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);

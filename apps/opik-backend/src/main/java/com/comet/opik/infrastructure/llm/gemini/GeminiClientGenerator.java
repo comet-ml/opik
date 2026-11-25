@@ -67,6 +67,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
             LlmAsJudgeModelParameters modelParameters) {
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
+                .maxRetries(llmProviderClientConfig.getJudgeMaxRetries())
                 .apiKey(config.apiKey())
                 .httpClientBuilder(httpClientBuilders.builder())
                 .logRequests(llmProviderClientConfig.getLogRequests())

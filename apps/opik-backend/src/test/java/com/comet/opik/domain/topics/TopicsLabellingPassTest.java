@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -173,8 +174,9 @@ class TopicsLabellingPassTest {
 
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
-        var pass = labelService.labelWindow(workspace(workspaceId), projectId,
-                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RUN).block();
+        var pass = labelService.labelWindow(projectId,
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RUN)
+                .contextWrite(TopicsTestData.context(workspace(workspaceId))).block();
 
         assertThat(pass).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
@@ -197,8 +199,9 @@ class TopicsLabellingPassTest {
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId))).isEqualTo(expected);
 
         var rowsBefore = data.traceTopics(workspaceId, projectId).size();
-        var again = labelService.labelWindow(workspace(workspaceId), projectId,
-                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME).block();
+        var again = labelService.labelWindow(projectId,
+                Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME)
+                .contextWrite(TopicsTestData.context(workspace(workspaceId))).block();
 
         assertThat(again).isEqualTo(LabelPassOutcome.COMPLETE);
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
@@ -222,7 +225,8 @@ class TopicsLabellingPassTest {
         spreadData.seed(workspaceId, projectId, 0, 40);
         int sliceTraces = 20;
 
-        var window = windowDAO.countAndBounds(workspaceId, projectId, from(), to(), sliceTraces, 60).block();
+        var window = windowDAO.countAndBounds(projectId, from(), to(), sliceTraces, 60)
+                .contextWrite(TopicsTestData.context(workspaceId)).block();
 
         var created = Stream.concat(TRACES.createdAt().stream(), SPREAD_TRACES.createdAt().subList(0, 40).stream())
                 .sorted().toList();
@@ -276,7 +280,8 @@ class TopicsLabellingPassTest {
         doReturn(run).when(topics).getRun();
 
         var window = new TopicWindowDAO(connectionFactory, topics)
-                .countAndBounds(workspaceId, projectId, from(), to(), sliceTraces, 60).block();
+                .countAndBounds(projectId, from(), to(), sliceTraces, 60)
+                .contextWrite(TopicsTestData.context(workspaceId)).block();
 
         // The k-th trace in creation order, from 1, was created (k - 1) / 3 seconds after the window's start.
         assertThat(window.traces()).isEqualTo(traces);
@@ -408,8 +413,9 @@ class TopicsLabellingPassTest {
                 .isEqualTo(LabelPassOutcome.CUT);
         assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(PAGE);
 
-        var cancelled = service.labelWindow(workspace(workspaceId), projectId,
+        var cancelled = service.labelWindow(projectId,
                 Instant.now().plus(Duration.ofMinutes(5)), LabelTrigger.RESUME)
+                .contextWrite(TopicsTestData.context(workspace(workspaceId)))
                 .timeout(Duration.ofSeconds(3)).onErrorResume(
                         error -> Mono.empty())
                 .block();
@@ -430,9 +436,9 @@ class TopicsLabellingPassTest {
 
         // Every page of a slice is its first page again.
         var stuck = spy(windowDAO);
-        doAnswer(invocation -> windowDAO.readUnlabelled(workspaceId, projectId, runId, invocation.getArgument(3),
-                invocation.getArgument(4), "", invocation.getArgument(6), invocation.getArgument(7)))
-                .when(stuck).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
+        doAnswer(invocation -> windowDAO.readUnlabelled(projectId, runId, invocation.getArgument(2),
+                invocation.getArgument(3), "", invocation.getArgument(5), invocation.getArgument(6)))
+                .when(stuck).readUnlabelled(any(), any(), any(), any(), any(), anyInt(), anyLong());
         // Inserts write nothing, so the stuck read returns the same traces on every page.
         var noopInserts = spy(traceTopicsDAO);
         doReturn(Mono.just(0L)).when(noopInserts).insert(any());
@@ -444,11 +450,11 @@ class TopicsLabellingPassTest {
         // Every page is full of traces the slice never had.
         var next = new AtomicLong();
         var endless = spy(windowDAO);
-        doAnswer(invocation -> Flux.range(0, invocation.<Integer>getArgument(6))
+        doAnswer(invocation -> Flux.range(0, invocation.<Integer>getArgument(5))
                 .map(i -> new TopicWindowDAO.WindowVector(new UUID(0x7000_0000_0000_7000L
-                        + (next.incrementAndGet() << 16), 0x8000_0000_0000_0000L), invocation.getArgument(3),
+                        + (next.incrementAndGet() << 16), 0x8000_0000_0000_0000L), invocation.getArgument(2),
                         TopicsTestData.unit(0))))
-                .when(endless).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
+                .when(endless).readUnlabelled(any(), any(), any(), any(), any(), anyInt(), anyLong());
 
         assertThat(
                 label(service(endless, noopInserts), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
@@ -475,7 +481,7 @@ class TopicsLabellingPassTest {
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
+            TopicsTestData.startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     savedAt.minus(Duration.ofMinutes(1)));
             projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
@@ -539,7 +545,8 @@ class TopicsLabellingPassTest {
 
     private LabelPassOutcome label(TopicWindowLabelService service, String workspaceId, UUID projectId,
             Instant deadline) {
-        return service.labelWindow(workspace(workspaceId), projectId, deadline, LabelTrigger.RUN).block();
+        return service.labelWindow(projectId, deadline, LabelTrigger.RUN)
+                .contextWrite(TopicsTestData.context(workspace(workspaceId))).block();
     }
 
     private static TopicsMetrics.Workspace workspace(String workspaceId) {
@@ -550,7 +557,7 @@ class TopicsLabellingPassTest {
     private TopicWindowLabelService service(TopicWindowDAO windowDAO, TraceTopicsDAO traceTopicsDAO) {
         var metrics = TopicsMetricsReader.metrics(InMemoryMetricReader.create());
         var store = new TopicRunStore(opikConfig.getTopics(), template, traceTopicsDAO, mock(ProjectService.class),
-                ID_GENERATOR, metrics);
+                ID_GENERATOR, metrics, mock(WorkspaceNameService.class));
         return new TopicWindowLabelService(opikConfig.getTopics(), windowDAO, store, metrics, algorithm);
     }
 

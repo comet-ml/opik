@@ -269,10 +269,9 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: audit
   #  Default: 10s
@@ -822,6 +821,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: 2
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: 0
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -1122,6 +1125,7 @@ topics:
     labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
+    insertSlack: 30s
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824
@@ -1129,6 +1133,29 @@ topics:
       priority: 100
       maxBlockSize: 1024
       countSlice: 1d
+  discovery:
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: 1h,6h,1d
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 2
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
+    planInterval: 5m
+    leaseSlack: 1m
+    requeueWait: 5s
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1169,6 +1196,8 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
+    sweepInterval: 24h
+    sweepTimeout: 1m
 
 # Python evaluator configuration
 pythonEvaluator:

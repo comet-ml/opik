@@ -14,6 +14,7 @@ import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicProjectDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -33,9 +34,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -104,16 +106,27 @@ public class TopicsReadTestUtils {
                 .toList();
     }
 
-    /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces as a Helm change would. */
+    /**
+     * Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces without a stage, as a Helm change would.
+     */
     public void optIn(String workspaceId) {
+        optIn(workspaceId, TopicsStage.ALL);
+    }
+
+    /** As {@link #optIn(String)}, listed as {@code id:stage}. The other listed workspaces keep their stage. */
+    public void optIn(String workspaceId, TopicsStage stage) {
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;
         });
         var topics = opikConfig.getTopics();
-        var listed = new TreeSet<>(topics.enabledWorkspaceIds());
-        listed.add(workspaceId);
-        topics.setEnabledWorkspaces(String.join(",", listed));
+        var listed = new TreeMap<>(topics.enabledWorkspaceStages());
+        listed.put(workspaceId, stage);
+        topics.setEnabledWorkspaces(listed.entrySet().stream()
+                .map(entry -> entry.getValue() == TopicsStage.ALL
+                        ? entry.getKey()
+                        : entry.getKey() + ":" + entry.getValue().configName())
+                .collect(Collectors.joining(",")));
     }
 
     public Invocation.Builder request(Caller caller, UUID projectId) {
@@ -137,11 +150,25 @@ public class TopicsReadTestUtils {
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         var runDAO = handle.attach(TopicProjectDAO.class);
-        runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
-                savedAt.minus(Duration.ofMinutes(5)));
+        startRun(handle, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
         runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
         runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+    }
+
+    /**
+     * Starts run {@code runId} at {@code startedAt} as the queue does: queued, then claimed by a pod. It is a nightly
+     * update when the project has a list, else a discovery run.
+     */
+    public static void startRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant startedAt) {
+        var runDAO = handle.attach(TopicProjectDAO.class);
+        runDAO.ensureRow(workspaceId, projectId);
+        var listed = runDAO.findProjects(workspaceId, List.of(projectId)).getFirst().listRunId() != null;
+        var mode = listed ? TopicProject.RunMode.UPDATE : TopicProject.RunMode.DISCOVERY;
+        if (runDAO.queue(workspaceId, projectId, runId, mode, startedAt) != 1
+                || runDAO.claim(workspaceId, projectId, runId, startedAt, startedAt.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
     }
 
     private static float[] unit() {
