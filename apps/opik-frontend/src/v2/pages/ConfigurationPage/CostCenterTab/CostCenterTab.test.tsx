@@ -778,27 +778,26 @@ describe("CostCenterTab", () => {
       expect(onProvider).toHaveFocus();
     });
 
-    it("shows how a call is priced, with the prices that will be used", () => {
+    it("shows the cost formula with the prices that will be used", () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o");
       expect(screen.queryByTestId("price-formula")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Cost of a call" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "How the cost is calculated" }),
+      );
       const formula = screen.getByTestId("price-formula");
-      expect(formula).toHaveTextContent("Input tokens (not cached) × $2.00");
-      expect(formula).toHaveTextContent("+ Output tokens × $10.00 (built-in)");
       expect(formula).toHaveTextContent(
-        "+ Cache read tokens × $1.25 (built-in)",
+        "cost=Tin·Pin+Tout·Pout+Tcr·Pcr+Tcw·Pcw1,000,000",
       );
-      expect(formula).toHaveTextContent(
-        "+ Cache write tokens × $2.00 (input price)",
-      );
+      expect(formula).toHaveTextContent(/Pin\s*\$2\.00\s*input tokens/);
+      expect(formula).toHaveTextContent(/Pout\s*\$10\.00 \(built-in\)/);
+      expect(formula).toHaveTextContent(/Pcr\s*\$1\.25 \(built-in\)/);
+      expect(formula).toHaveTextContent(/Pcw\s*\$2\.00 \(input price\)/);
 
       fireEvent.change(priceInput("Input"), { target: { value: "3" } });
-      expect(formula).toHaveTextContent("Input tokens (not cached) × $3.00");
-      expect(formula).toHaveTextContent(
-        "+ Cache write tokens × $3.00 (input price)",
-      );
+      expect(formula).toHaveTextContent(/Pin\s*\$3\.00\s*input tokens/);
+      expect(formula).toHaveTextContent(/Pcw\s*\$3\.00 \(input price\)/);
     });
 
     it("prices a new model's empty fields at $0 or the input price", () => {
@@ -806,12 +805,12 @@ describe("CostCenterTab", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
       fireEvent.change(priceInput("Input"), { target: { value: "1" } });
-      fireEvent.click(screen.getByRole("button", { name: "Cost of a call" }));
-      const formula = screen.getByTestId("price-formula");
-      expect(formula).toHaveTextContent("+ Output tokens × $0 (no price)");
-      expect(formula).toHaveTextContent(
-        "+ Cache read tokens × $1.00 (input price)",
+      fireEvent.click(
+        screen.getByRole("button", { name: "How the cost is calculated" }),
       );
+      const formula = screen.getByTestId("price-formula");
+      expect(formula).toHaveTextContent(/Pout\s*\$0 \(no price\)/);
+      expect(formula).toHaveTextContent(/Pcr\s*\$1\.00 \(input price\)/);
     });
 
     it("says which cache prices fall back to the input price", () => {

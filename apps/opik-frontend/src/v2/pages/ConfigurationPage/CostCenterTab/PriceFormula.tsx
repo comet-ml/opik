@@ -1,4 +1,5 @@
 import React from "react";
+import { Lightbulb } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -7,19 +8,18 @@ import {
 } from "@/ui/accordion";
 import {
   BuiltInPrice,
-  PRICE_FIELDS,
   PriceField,
   canonicalPrice,
   isDecimal,
 } from "@/lib/model-prices";
 import { formatPrice } from "./format";
 
-const TOKENS: Record<PriceField, string> = {
-  input_price: "Input tokens (not cached)",
-  output_price: "Output tokens",
-  cache_read_price: "Cache read tokens",
-  cache_write_price: "Cache write tokens",
-};
+const TERMS: { field: PriceField; sub: string; tokens: string }[] = [
+  { field: "input_price", sub: "in", tokens: "input tokens, not cached" },
+  { field: "output_price", sub: "out", tokens: "output tokens" },
+  { field: "cache_read_price", sub: "cr", tokens: "cache read tokens" },
+  { field: "cache_write_price", sub: "cw", tokens: "cache write tokens" },
+];
 
 type Term = { price?: string; source?: string };
 
@@ -45,6 +45,16 @@ const termOf = (
   return { source: "no price" };
 };
 
+const Variable: React.FC<{ letter: string; sub: string }> = ({
+  letter,
+  sub,
+}) => (
+  <msub>
+    <mi>{letter}</mi>
+    <mtext>{sub}</mtext>
+  </msub>
+);
+
 type PriceFormulaProps = {
   prices: Partial<Record<PriceField, string>>;
   builtIn?: BuiltInPrice;
@@ -53,30 +63,68 @@ type PriceFormulaProps = {
 const PriceFormula: React.FC<PriceFormulaProps> = ({ prices, builtIn }) => (
   <Accordion type="single" collapsible>
     <AccordionItem value="formula" className="border-b-0">
-      <AccordionTrigger className="comet-body-s-accented h-8 px-0 py-0 text-foreground">
-        Cost of a call
+      {/* The icon sits in a span: the trigger rotates every svg directly inside it. */}
+      <AccordionTrigger className="comet-body-xs h-auto justify-start gap-1 px-0 py-0 text-muted-slate hover:text-foreground [&>svg]:size-3.5">
+        <span className="flex items-center gap-1">
+          <Lightbulb className="size-3.5 shrink-0" />
+          How the cost is calculated
+        </span>
       </AccordionTrigger>
       <AccordionContent className="pb-0 pt-2">
         <div
-          className="comet-body-xs space-y-1 rounded-md border border-border p-3 text-muted-slate"
+          className="comet-body-xs space-y-3 rounded-md border border-border p-3 text-muted-slate"
           data-testid="price-formula"
         >
-          {PRICE_FIELDS.map((field, index) => {
-            const { price, source } = termOf(field, prices, builtIn);
-            return (
-              <p key={field}>
-                {index > 0 && "+ "}
-                {TOKENS[field]} ×{" "}
-                <span className="text-foreground">
-                  {price ? formatPrice(price) : "$0"}
-                </span>
-                {source && ` (${source})`}
-              </p>
-            );
-          })}
-          <p className="pt-1">
-            Prices are per 1M tokens, so the sum is divided by 1,000,000.
-          </p>
+          <math display="block" className="text-base text-foreground">
+            <mrow>
+              <mtext>cost</mtext>
+              <mo>=</mo>
+              <mfrac>
+                <mrow>
+                  {TERMS.map(({ sub }, index) => (
+                    <React.Fragment key={sub}>
+                      {index > 0 && <mo>+</mo>}
+                      <Variable letter="T" sub={sub} />
+                      <mo>·</mo>
+                      <Variable letter="P" sub={sub} />
+                    </React.Fragment>
+                  ))}
+                </mrow>
+                <mn>1,000,000</mn>
+              </mfrac>
+            </mrow>
+          </math>
+          <div className="space-y-1">
+            <p>
+              <math className="text-foreground">
+                <mi>T</mi>
+              </math>{" "}
+              is the number of tokens in a call,{" "}
+              <math className="text-foreground">
+                <mi>P</mi>
+              </math>{" "}
+              the price per 1M tokens:
+            </p>
+            <div className="grid grid-cols-[auto_auto_1fr] items-baseline gap-x-3 gap-y-1">
+              {TERMS.map(({ field, sub, tokens }) => {
+                const { price, source } = termOf(field, prices, builtIn);
+                return (
+                  <React.Fragment key={field}>
+                    <math className="text-foreground">
+                      <Variable letter="P" sub={sub} />
+                    </math>
+                    <span>
+                      <span className="text-foreground">
+                        {price ? formatPrice(price) : "$0"}
+                      </span>
+                      {source && ` (${source})`}
+                    </span>
+                    <span>{tokens}</span>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </AccordionContent>
     </AccordionItem>
