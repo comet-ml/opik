@@ -14,7 +14,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * customer with no opt-in and no announcement. The three vectors are the three
  * things a regen can do to a row, and the seed carries one of each:
  *
- *   openrouter/deepseek/deepseek-v4-pro-0813   re-priced in BOTH directions  $8.19
+ *   openrouter/deepseek/deepseek-v4-pro-0813   re-priced, twice over         $4.551
  *   openrouter/z-ai/glm-5.1                    re-priced upward              $5.80
  *   openrouter/xiaomi/mimo-v2.5-pro            row removed, label removed    nothing
  *
@@ -35,13 +35,19 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * the server's own lookup against the shipped price file rather than something
  * the seed asserted back to itself.
  *
- * The deepseek row is the load-bearing vector. Its input rate fell about 7x
- * while its output rate DOUBLED, so there is no single multiplier that turns the
- * old amount into the new one: a build that shipped a stale copy of the file,
- * read the previous release's rates, or fell through to the undated
- * `deepseek/deepseek-v4-pro` row lands on a different number in one direction or
- * the other. A row re-priced in one direction alone — which glm-5.1 is — cannot
- * discriminate that, which is why both are here.
+ * The deepseek row is the load-bearing vector. Its two rates are two orders of
+ * magnitude apart in the table 2.3.4 ships ($0.111/M in, $4.44/M out), and every
+ * wrong lookup available lands on a different figure: 9733's own rates give
+ * $8.19, the release before them $5.28, and a fall-through to the undated
+ * `deepseek/deepseek-v4-pro` row gives $3.84. A row re-priced in one direction
+ * alone — which glm-5.1 is — cannot discriminate that, which is why both are
+ * here.
+ *
+ * That it has now moved TWICE is itself the point the fixture header makes: the
+ * amount was re-pinned from $8.19 to $4.551 during the 2.3.4 release pass,
+ * because opik#9773's regen shipped inside this release. The figures were
+ * checked against the price file at the version bump before the pin changed, and
+ * the backend was found right rather than regressed.
  *
  * The de-listed row is the mirror of it, and its two assertions pull in opposite
  * directions on purpose: it must be attributed NO cost, and it must still be
@@ -426,7 +432,7 @@ test.describe(
           // Matched as the node whose OWN text is the amount rather than as the
           // cell's full text content: where the Ollie assistant bridge is up —
           // staging is — this cell also holds the hover "Explain" trigger, so
-          // its text content reads "$13.99Explain" and a whole-cell match fails
+          // its text content reads "$10.35Explain" and a whole-cell match fails
           // for a reason that has nothing to do with the cost.
           await expect(
             cell.getByText(displayedCost(traceCost!), { exact: true }),
