@@ -28,10 +28,8 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
     @Singleton
     public Client client(@Config("jerseyClient") JerseyClientConfiguration config,
             @Config("inference") InferenceConfig inference) {
-        var builder = new DestinationGuardJerseyClientBuilder(environment());
-        var client = buildClient(builder, config);
-        HttpClientPoolMetrics.publish(builder.connectionManager(), inference.getUrl());
-        return client;
+        return buildClient(new DestinationGuardJerseyClientBuilder(environment(),
+                pool -> HttpClientPoolMetrics.publish(pool, inference.getUrl())), config);
     }
 
     /**

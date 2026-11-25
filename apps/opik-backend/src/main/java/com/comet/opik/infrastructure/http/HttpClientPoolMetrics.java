@@ -49,23 +49,25 @@ public class HttpClientPoolMetrics {
 
     static void publish(@NonNull Meter meter, @NonNull PoolingHttpClientConnectionManager pool, String inferenceUrl) {
         var inferenceTarget = target(inferenceUrl);
-        meter.gaugeBuilder(MAX).ofLongs()
+        var max = meter.gaugeBuilder(MAX).ofLongs()
                 .setDescription("Connections the shared HTTP client's pool may hold: in all, and on the route to "
                         + "opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach(
-                        (route, stats) -> measurement.record(stats.getMax(), Attributes.of(ROUTE, route))));
-        meter.gaugeBuilder(CONNECTIONS).ofLongs()
+                .buildObserver();
+        var connections = meter.gaugeBuilder(CONNECTIONS).ofLongs()
                 .setDescription("Pooled connections by state, leased (running a request) or available (idle): in all, "
                         + "and on the route to opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach((route, stats) -> {
-                    measurement.record(stats.getLeased(), Attributes.of(ROUTE, route, STATE, LEASED));
-                    measurement.record(stats.getAvailable(), Attributes.of(ROUTE, route, STATE, AVAILABLE));
-                }));
-        meter.gaugeBuilder(PENDING).ofLongs()
+                .buildObserver();
+        var pending = meter.gaugeBuilder(PENDING).ofLongs()
                 .setDescription("Requests waiting for a free connection in the shared HTTP client's pool: in all, and "
                         + "on the route to opik-inference")
-                .buildWithCallback(measurement -> stats(pool, inferenceTarget).forEach(
-                        (route, stats) -> measurement.record(stats.getPending(), Attributes.of(ROUTE, route))));
+                .buildObserver();
+        // one read of the pool per collection, so a route's max, connections and pending are from the same moment
+        meter.batchCallback(() -> stats(pool, inferenceTarget).forEach((route, stats) -> {
+            max.record(stats.getMax(), Attributes.of(ROUTE, route));
+            connections.record(stats.getLeased(), Attributes.of(ROUTE, route, STATE, LEASED));
+            connections.record(stats.getAvailable(), Attributes.of(ROUTE, route, STATE, AVAILABLE));
+            pending.record(stats.getPending(), Attributes.of(ROUTE, route));
+        }), max, connections, pending);
     }
 
     /**

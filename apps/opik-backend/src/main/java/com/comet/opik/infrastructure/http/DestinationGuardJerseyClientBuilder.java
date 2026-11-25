@@ -4,7 +4,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.httpclient5.InstrumentedHttpClientConnectionManager;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
-import com.google.common.base.Preconditions;
 import io.dropwizard.client.ConfiguredCloseableHttpClient;
 import io.dropwizard.client.DropwizardApacheConnector;
 import io.dropwizard.client.HttpClientBuilder;
@@ -16,37 +15,41 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.glassfish.jersey.client.ClientRequest;
 import org.glassfish.jersey.client.ClientResponse;
 
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Builds the shared client so a request carrying {@link DestinationGuardDnsResolver#PROPERTY} connects only to
  * addresses that guard approved, and closing its response ends the connection instead of reading the rest of the body.
  * Requests without it behave as before. An internal client can set a {@link DestinationGuard.Mode#RELAXED} guard only
- * to get that close, see {@code InferenceClient}. It also keeps the connection pool the parent builds, which the parent
- * otherwise hands only to the client, so {@link HttpClientPoolMetrics} can read it.
+ * to get that close, see {@code InferenceClient}. It also hands the connection pool the parent builds, which the parent
+ * otherwise gives only to the client, to a callback, so {@link HttpClientPoolMetrics} can read it.
  */
 public class DestinationGuardJerseyClientBuilder extends JerseyClientBuilder {
 
     private final DestinationGuardDnsResolver resolver = new DestinationGuardDnsResolver();
-    private final AtomicReference<PoolingHttpClientConnectionManager> connectionManager = new AtomicReference<>();
     private boolean chunkedEncodingEnabled;
 
-    public DestinationGuardJerseyClientBuilder(@NonNull Environment environment) {
+    /**
+     * @param onPool called with the client's connection pool, once configured, when the client is built
+     */
+    public DestinationGuardJerseyClientBuilder(@NonNull Environment environment,
+            @NonNull Consumer<PoolingHttpClientConnectionManager> onPool) {
         super(environment);
         // before using(...): the parent forwards those settings to the Apache builder it holds at the time
-        setApacheHttpClientBuilder(new PoolKeepingHttpClientBuilder(environment));
+        setApacheHttpClientBuilder(new PoolHandingHttpClientBuilder(environment, onPool));
+        using(resolver);
+    }
+
+    public DestinationGuardJerseyClientBuilder(@NonNull MetricRegistry metricRegistry,
+            @NonNull Consumer<PoolingHttpClientConnectionManager> onPool) {
+        super(metricRegistry);
+        setApacheHttpClientBuilder(new PoolHandingHttpClientBuilder(metricRegistry, onPool));
         using(resolver);
     }
 
     public DestinationGuardJerseyClientBuilder(@NonNull MetricRegistry metricRegistry) {
-        super(metricRegistry);
-        setApacheHttpClientBuilder(new PoolKeepingHttpClientBuilder(metricRegistry));
-        using(resolver);
-    }
-
-    /** The built client's connection pool. */
-    public PoolingHttpClientConnectionManager connectionManager() {
-        return Preconditions.checkNotNull(connectionManager.get(), "the client is not built yet");
+        this(metricRegistry, pool -> {
+        });
     }
 
     @Override
@@ -56,21 +59,27 @@ public class DestinationGuardJerseyClientBuilder extends JerseyClientBuilder {
         return super.using(configuration);
     }
 
-    private class PoolKeepingHttpClientBuilder extends HttpClientBuilder {
+    private static class PoolHandingHttpClientBuilder extends HttpClientBuilder {
 
-        PoolKeepingHttpClientBuilder(Environment environment) {
+        private final Consumer<PoolingHttpClientConnectionManager> onPool;
+
+        PoolHandingHttpClientBuilder(Environment environment, Consumer<PoolingHttpClientConnectionManager> onPool) {
             super(environment);
+            this.onPool = onPool;
         }
 
-        PoolKeepingHttpClientBuilder(MetricRegistry metricRegistry) {
+        PoolHandingHttpClientBuilder(MetricRegistry metricRegistry,
+                Consumer<PoolingHttpClientConnectionManager> onPool) {
             super(metricRegistry);
+            this.onPool = onPool;
         }
 
         @Override
         protected InstrumentedHttpClientConnectionManager configureConnectionManager(
                 InstrumentedHttpClientConnectionManager manager) {
-            connectionManager.set(manager);
-            return super.configureConnectionManager(manager);
+            var configured = super.configureConnectionManager(manager);
+            onPool.accept(configured);
+            return configured;
         }
     }
 

@@ -7,6 +7,7 @@ import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.LongPointData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import jakarta.ws.rs.client.Client;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -61,12 +62,8 @@ class HttpClientPoolMetricsTest {
     void reportsTotalsAndTheInferenceRoute() {
         var reader = InMemoryMetricReader.create();
         var config = TestConfigUtils.loadConfigTest().getJerseyClient();
-        var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry());
-        builder.using(executor);
 
-        try (var client = HttpModule.buildClient(builder, config)) {
-            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), url("localhost"));
-
+        try (var client = client(reader, url("localhost"))) {
             // the pool has not seen the route yet: nothing in use, and the per-route limit as its max
             assertThat(gauge(reader, MAX, INFERENCE_ROUTE, null)).isEqualTo(config.getMaxConnectionsPerRoute());
             assertThat(gauge(reader, CONNECTIONS, INFERENCE_ROUTE, AVAILABLE)).isZero();
@@ -88,12 +85,9 @@ class HttpClientPoolMetricsTest {
     @DisplayName("leaves another port on the opik-inference host out of its route")
     void leavesAnotherPortOutOfTheInferenceRoute() {
         var reader = InMemoryMetricReader.create();
-        var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry());
-        builder.using(executor);
 
-        try (var client = HttpModule.buildClient(builder, TestConfigUtils.loadConfigTest().getJerseyClient())) {
-            // opik-inference on the default port, and a call to the same host on WireMock's
-            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), "http://localhost");
+        // opik-inference on the default port, and a call to the same host on WireMock's
+        try (var client = client(reader, "http://localhost")) {
             assertThat(client.target(url("localhost")).request().get(String.class)).isEqualTo("ok");
 
             assertThat(gauge(reader, CONNECTIONS, ALL_ROUTES, AVAILABLE)).isEqualTo(1);
@@ -105,16 +99,19 @@ class HttpClientPoolMetricsTest {
     @DisplayName("names no route when no feature is set to call opik-inference")
     void namesNoRouteWithoutAnInferenceHost() {
         var reader = InMemoryMetricReader.create();
-        var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry());
-        builder.using(executor);
 
-        try (var client = HttpModule.buildClient(builder, TestConfigUtils.loadConfigTest().getJerseyClient())) {
-            HttpClientPoolMetrics.publish(meter(reader), builder.connectionManager(), null);
-
+        try (var client = client(reader, null)) {
             assertThat(points(reader, CONNECTIONS).map(point -> point.getAttributes().get(ROUTE)))
                     .isNotEmpty()
                     .containsOnly(ALL_ROUTES);
         }
+    }
+
+    /** A client built as the shared one is, publishing its pool's metrics to the reader. */
+    private Client client(InMemoryMetricReader reader, String inferenceUrl) {
+        var builder = new DestinationGuardJerseyClientBuilder(new MetricRegistry(),
+                pool -> HttpClientPoolMetrics.publish(meter(reader), pool, inferenceUrl));
+        return HttpModule.buildClient(builder.using(executor), TestConfigUtils.loadConfigTest().getJerseyClient());
     }
 
     private String url(String host) {
