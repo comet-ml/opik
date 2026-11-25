@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
+import com.comet.opik.infrastructure.inference.BatchGenerateItem;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.experimental.UtilityClass;
 
@@ -32,7 +33,9 @@ class Verifier {
                 .prompt(TopicPrompts.verify(task, prompts, config.getVerifyTopicExamples(),
                         config.getVerifyGroupExamples()))
                 .schema(task.schema())
-                .maxTokens(task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size())
+                // Capped at what the inference service takes, or a night with many pairs fails its call.
+                .maxTokens(Math.min(BatchGenerateItem.MAX_MAX_TOKENS,
+                        task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size()))
                 .build();
         return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
     }

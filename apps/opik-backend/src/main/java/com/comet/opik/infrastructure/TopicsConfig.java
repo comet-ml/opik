@@ -153,6 +153,18 @@ public class TopicsConfig {
             return nightlyFrequent <= nightlyExamples;
         }
 
+        /** Verify shows a topic's examples from the ones naming picked for it. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyTopicExamples must not be above nightlyTopicExamples") public boolean isVerifyTopicExamplesOrdered() {
+            return verifyTopicExamples <= nightlyTopicExamples;
+        }
+
+        /** Verify shows a group's examples from the ones its summary picked. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyGroupExamples must not be above nightlyExamples") public boolean isVerifyGroupExamplesOrdered() {
+            return verifyGroupExamples <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;

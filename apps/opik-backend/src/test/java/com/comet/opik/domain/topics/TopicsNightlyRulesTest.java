@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -81,6 +82,19 @@ class TopicsNightlyRulesTest {
                     });
 
             assertThat(verdicts).containsOnly(Map.entry(0, false));
+        }
+
+        @Test
+        @DisplayName("the budget stops at the inference service's max_tokens limit, however many pairs there are")
+        void budgetCapped() {
+            // 60 + 25 x 200 is 5060: above the 4096 the service takes, so the call would be rejected.
+            var many = IntStream.range(0, 200)
+                    .mapToObj(i -> new TopicPrompts.VerifyPair(prompt(0, 0.1), group(i, 30, 0.9))).toList();
+
+            drive(Verifier.ask("verify_naming", many, TASKS.verify(), CONFIG), (tag, prompt, schema, maxTokens) -> {
+                assertThat(maxTokens).isEqualTo(4096);
+                return json("{\"answers\": []}");
+            });
         }
 
         @Test
@@ -169,6 +183,20 @@ class TopicsNightlyRulesTest {
             if (name != null) {
                 assertThat(state.topic(topic).getName()).isEqualTo(name);
             }
+        }
+
+        @Test
+        @DisplayName("a new topic's definition is stored on one line and capped, as the prompts show it")
+        void definitionStoredOnOneLine() {
+            var state = state(0, topic("A"));
+            // 500: the definition cap, as a literal so that a change to the constant fails this test.
+            var definition = "Asks about\\n  the weather. " + "d".repeat(600);
+            force(state, List.of(group(0, 60, 0.95)), topics(state), new LinkedHashMap<>(), 10,
+                    named(Map.of("naming", newTopics(
+                            "{\"name\": \"Weather\", \"definition\": \"" + definition + "\", \"clusters\": [0]}"))));
+
+            assertThat(state.topic(1).getDefinition()).hasSize(500).startsWith("Asks about the weather. ddd")
+                    .doesNotContain("\n");
         }
 
         @Test
@@ -454,6 +482,95 @@ class TopicsNightlyRulesTest {
                     CONFIG.getNightlyTopicExamples());
 
             return topics.getFirst().examples();
+        }
+
+        @ParameterizedTest(name = "seed {0}")
+        @ValueSource(longs = {1, 2, 3, 4, 5})
+        @DisplayName("each live topic's shares and examples are those of merging its members on their own")
+        void sameAsMergingEachTopic(long seed) {
+            var random = new Random(seed);
+            int n = 3_000;
+            int d = 8;
+            var topics = new NightTopic[6];
+            for (int t = 0; t < topics.length; t++) {
+                var prototypes = new float[1 + random.nextInt(3)][];
+                for (int p = 0; p < prototypes.length; p++) {
+                    prototypes[p] = unitVector(random, d);
+                }
+                topics[t] = topic("T" + t, prototypes);
+            }
+            var state = state(1, topics);
+            state.retire(4, RetiredReason.LOW_SHARE);
+            var texts = new String[n];
+            var rows = new float[n * d];
+            var before = new int[n];
+            var recent = new boolean[n];
+            for (int i = 0; i < n; i++) {
+                // Few distinct texts, so texts repeat within a topic and across topics.
+                texts[i] = "q" + random.nextInt(300);
+                System.arraycopy(unitVector(random, d), 0, rows, i * d, d);
+                // Topic 5 gets no trace; Other and a held trace are not a topic's.
+                int draw = random.nextInt(7);
+                before[i] = draw == 5 ? TopicAlgorithm.OTHER : draw == 6 ? -3 : draw;
+                recent[i] = random.nextBoolean();
+            }
+            var createdAt = new Instant[n];
+            Arrays.fill(createdAt, WINDOW_DAY);
+            var window = NightWindow.builder().texts(texts).vectors(rows).createdAt(createdAt)
+                    .from(Instant.parse("2026-09-20T00:00:00Z")).night(NIGHT_START).dimensions(d).build();
+            int examples = CONFIG.getNightlyTopicExamples();
+
+            var actual = NightlyUpdate.liveTopics(state, window, before, recent, examples);
+
+            assertThat(actual).hasSize(5).isEqualTo(mergedPerTopic(state, window, before, recent, examples));
+            assertThat(actual.getLast().examples()).isEmpty();
+        }
+
+        /** The live topics as {@link IntentMerger} merges each one's members, copied with their vectors. */
+        private static List<LiveTopic> mergedPerTopic(NightState state, NightWindow window, int[] before,
+                boolean[] recent, int examples) {
+            int n = window.size();
+            int d = window.dimensions();
+            int recentTotal = 0;
+            for (boolean r : recent) {
+                recentTotal += r ? 1 : 0;
+            }
+            var out = new ArrayList<LiveTopic>();
+            for (int t : state.live()) {
+                var topic = state.topic(t);
+                int finalT = t;
+                var members = IntStream.range(0, n).filter(i -> before[i] == finalT).toArray();
+                int recentCount = (int) Arrays.stream(members).filter(i -> recent[i]).count();
+                var picked = List.<String>of();
+                if (members.length > 0) {
+                    var merged = IntentMerger.merge(window.texts(members), window.rows(members), d);
+                    var sims = new double[merged.size()];
+                    for (int u = 0; u < sims.length; u++) {
+                        sims[u] = Double.NEGATIVE_INFINITY;
+                        for (var prototype : topic.getPrototypes()) {
+                            sims[u] = Math.max(sims[u], VectorMath.dot(merged.vectors(), u * d, prototype, 0, d));
+                        }
+                    }
+                    picked = GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0,
+                            merged.size(), merged.weights(), sims, examples, examples);
+                }
+                out.add(new LiveTopic(t, topic.getName(), topic.getDefinition(), (double) members.length / n,
+                        (double) recentCount / Math.max(1, recentTotal), picked));
+            }
+            return out;
+        }
+
+        private static float[] unitVector(Random random, int d) {
+            var vector = new float[d];
+            double norm = 0;
+            for (int j = 0; j < d; j++) {
+                vector[j] = (float) random.nextGaussian();
+                norm += vector[j] * vector[j];
+            }
+            for (int j = 0; j < d; j++) {
+                vector[j] /= (float) Math.sqrt(norm);
+            }
+            return vector;
         }
     }
 
