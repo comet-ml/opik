@@ -11,6 +11,7 @@ import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@DisplayName("trace delete cascade: topic vectors")
+@DisplayName("trace delete cascade: topic vectors and trace topics")
 class TraceDeletedListenerTopicVectorsTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
@@ -41,6 +42,7 @@ class TraceDeletedListenerTopicVectorsTest {
     private final AiLabelsDAO aiLabelsDAO = mock(AiLabelsDAO.class);
     private final AiLabelStatusDAO aiLabelStatusDAO = mock(AiLabelStatusDAO.class);
     private final TopicVectorsDAO topicVectorsDAO = mock(TopicVectorsDAO.class);
+    private final TraceTopicsDAO traceTopicsDAO = mock(TraceTopicsDAO.class);
     private final List<String> deleted = new CopyOnWriteArrayList<>();
 
     private TraceDeletedListener listener;
@@ -54,18 +56,19 @@ class TraceDeletedListenerTopicVectorsTest {
         when(aiLabelsDAO.deleteByTraceIds(traceIds, projectId)).thenReturn(record("ai_labels"));
         when(aiLabelStatusDAO.deleteByTraceIds(traceIds, projectId)).thenReturn(record("ai_label_status"));
         when(topicVectorsDAO.deleteByTraceIds(traceIds, projectId)).thenReturn(record("topic_vectors"));
+        when(traceTopicsDAO.deleteByTraceIds(traceIds, projectId)).thenReturn(record("trace_topics"));
         when(spanService.deleteByTraceIds(traceIds, projectId)).thenReturn(record("spans"));
         listener = new TraceDeletedListener(feedbackScoreService, commentService, attachmentService, spanService,
-                aiLabelsDAO, aiLabelStatusDAO, topicVectorsDAO);
+                aiLabelsDAO, aiLabelStatusDAO, topicVectorsDAO, traceTopicsDAO);
     }
 
     @Test
     @DisplayName("the vectors are deleted after the status rows, so a tick that writes a vector later finds the "
-            + "status gone")
+            + "status gone; the trace topics go after the vectors")
     void order() {
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "trace_topics", "spans");
     }
 
     @Test
@@ -76,7 +79,7 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("topic_vectors", "spans");
+        assertThat(deleted).containsExactly("topic_vectors", "trace_topics", "spans");
     }
 
     @Test
@@ -87,7 +90,18 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "trace_topics", "spans");
+    }
+
+    @Test
+    @DisplayName("a failed trace topics delete still deletes the rest")
+    void traceTopicsDeleteFails() {
+        when(traceTopicsDAO.deleteByTraceIds(traceIds, projectId))
+                .thenReturn(Mono.error(new IllegalStateException("down")));
+
+        listener.onTracesDeleted(event());
+
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "spans");
     }
 
     private Mono<Void> record(String table) {

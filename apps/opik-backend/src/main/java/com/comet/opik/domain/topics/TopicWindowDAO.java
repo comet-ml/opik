@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 /**
  * A topic run's reads of {@code topic_vectors}, the {@link TopicEmbedding#SUMMARY_TASK} rows: how many traces some
@@ -77,9 +79,10 @@ public class TopicWindowDAO {
      *
      * <p>The bounds come from numbering the live traces in creation order, not from an array of all their times: the
      * sort spills to disk past {@code max_bytes_before_external_sort}, an eighth of the memory guard, and the frame of
-     * one row lets the numbering drop each block once it is read. So the memory follows the guard, not the window: at
-     * 30 million traces 84 MiB, where sorting an array of every time took 1.5 GiB. The ratio setting is off, as it
-     * would override the byte limit.
+     * one row lets the numbering drop each block once it is read. The ratio setting is off, as it would override the
+     * byte limit. What still grows with the window is the per-trace {@code GROUP BY trace_id} before the numbering,
+     * about 12 MiB per million live traces: 376 MiB at 30 million under the 1 GiB guard, so the guard is reached again
+     * at about 70 to 80 million (extrapolated).
      */
     private static final String COUNT_AND_BOUNDS = """
             SELECT max(n) AS traces,
@@ -258,10 +261,19 @@ public class TopicWindowDAO {
                         .build()));
     }
 
-    /** The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}. */
-    public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
+    /**
+     * The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}, in the
+     * workspace of the Reactor context.
+     */
+    public Mono<WindowBounds> countAndBounds(@NonNull UUID projectId, @NonNull Instant from, @NonNull Instant to,
+            int sliceTraces, long maxExecutionSeconds) {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
+        return makeMonoContextAware((userName, workspaceId) -> countAndBounds(workspaceId, projectId, from, to,
+                sliceTraces, maxExecutionSeconds));
+    }
+
+    private Mono<WindowBounds> countAndBounds(String workspaceId, UUID projectId, Instant from, Instant to,
+            int sliceTraces, long maxExecutionSeconds) {
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
         var guards = config.getRun().getRead();
@@ -294,10 +306,16 @@ public class TopicWindowDAO {
 
     /**
      * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
-     * are more, in no particular order.
+     * are more, in no particular order, in the workspace of the Reactor context.
      */
-    public Flux<WindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
+    public Flux<WindowRow> readWindow(@NonNull UUID projectId, @NonNull Instant from, @NonNull Instant to, int limit,
+            long maxExecutionSeconds) {
+        return makeFluxContextAware((userName, workspaceId) -> readWindow(workspaceId, projectId, from, to, limit,
+                maxExecutionSeconds));
+    }
+
+    private Flux<WindowRow> readWindow(String workspaceId, UUID projectId, Instant from, Instant to, int limit,
+            long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit));
         withGuards(template, config.getRun().getRead(), maxExecutionSeconds);
@@ -314,11 +332,17 @@ public class TopicWindowDAO {
     }
 
     /**
-     * One page of {@link #READ_UNLABELLED}; {@code after} is a trace id, or the empty string for the slice's start.
+     * One page of {@link #READ_UNLABELLED} in the workspace of the Reactor context; {@code after} is a trace id, or the
+     * empty string for the slice's start.
      */
-    public Flux<WindowVector> readUnlabelled(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull UUID runId, @NonNull Instant from, @NonNull Instant to, @NonNull String after, int limit,
-            long maxExecutionSeconds) {
+    public Flux<WindowVector> readUnlabelled(@NonNull UUID projectId, @NonNull UUID runId, @NonNull Instant from,
+            @NonNull Instant to, @NonNull String after, int limit, long maxExecutionSeconds) {
+        return makeFluxContextAware((userName, workspaceId) -> readUnlabelled(workspaceId, projectId, runId, from, to,
+                after, limit, maxExecutionSeconds));
+    }
+
+    private Flux<WindowVector> readUnlabelled(String workspaceId, UUID projectId, UUID runId, Instant from,
+            Instant to, String after, int limit, long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_UNLABELLED, "topics:read_unlabelled", workspaceId, null,
                 "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit));
         withGuards(template, config.getRun().getRead(), maxExecutionSeconds);

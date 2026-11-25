@@ -69,36 +69,37 @@ public class TopicsRunService {
     }
 
     /**
-     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
-     * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
-     * one cancelled by its subscriber is failed with {@code timeout} too.
+     * Makes the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context. The save leaves the
+     * labels incomplete. Never errors: a failure is recorded on the run and returned. A run that outlasts {@code
+     * topics.run.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber is
+     * failed with {@code timeout} too.
      */
-    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
-            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces) {
-        return start(runId, workspace, projectId, night, run -> run(run, windowTraces));
+    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
+            long windowTraces) {
+        return asRun(runId, projectId, night, run -> run(run, windowTraces));
     }
 
     /**
      * Updates the project's saved topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces: the window read, the saved list read ({@link TopicRunStore#readList}),
-     * the algorithm's steps ({@link #update}), the save ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics}
-     * insert. Never errors: a failure is recorded on the run and returned, and the previous list stays. The same time
-     * limit and cancel as {@link #discover}. A save that leaves no live topic deletes them all and clears the project's
-     * list, so a later discovery run makes a new one; it inserts no {@code trace_topics}. As for a discovery run, the
-     * labelling pass is the caller's.
+     * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context: the window read, the
+     * saved list read ({@link TopicRunStore#readList}), the algorithm's steps ({@link #update}), the save
+     * ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics} insert. Never errors: a failure is recorded on
+     * the run and returned, and the previous list stays. The same time limit and cancel as {@link #discover}. A save
+     * that leaves no live topic deletes them all and clears the project's list, so a later discovery run makes a new
+     * one; it inserts no {@code trace_topics}.
      */
-    Mono<TopicRunOutcome> nightlyUpdate(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
-            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces) {
-        return start(runId, workspace, projectId, night, run -> nightly(run, night, windowTraces));
+    Mono<TopicRunOutcome> nightlyUpdate(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
+            long windowTraces) {
+        return asRun(runId, projectId, night, run -> nightly(run, night, windowTraces));
     }
 
-    /** Does the run's {@code work}; a run cancelled by its subscriber is failed with {@code timeout}. */
-    private Mono<TopicRunOutcome> start(UUID runId, TopicsMetrics.Workspace workspace, UUID projectId,
-            LocalDate night, Function<TopicRun, Mono<TopicRunOutcome>> work) {
-        var run = TopicRun.of(runId, workspace.id(), workspace.name(), projectId, night,
-                config.getRun().getWindowDays());
-        return Mono.usingWhen(Mono.just(run), work, started -> Mono.empty(), (started, error) -> Mono.empty(),
+    /** Runs {@code work} as the claimed run, in the workspace of the Reactor context; a cancel fails it as timeout. */
+    private Mono<TopicRunOutcome> asRun(UUID runId, UUID projectId, LocalDate night,
+            Function<TopicRun, Mono<TopicRunOutcome>> work) {
+        var runs = TopicsMetrics.Workspace.fromContext().map(workspace -> TopicRun.of(runId, workspace.id(),
+                workspace.name(), projectId, night, config.getRun().getWindowDays()));
+        return Mono.usingWhen(runs, work, started -> Mono.empty(), (started, error) -> Mono.empty(),
                 outcomes::cancelled);
     }
 
@@ -356,7 +357,7 @@ public class TopicsRunService {
 
     /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
     private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
-        return timed(run, phase, Mono.fromCallable(step).subscribeOn(Schedulers.parallel()));
+        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(Schedulers.parallel());
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */

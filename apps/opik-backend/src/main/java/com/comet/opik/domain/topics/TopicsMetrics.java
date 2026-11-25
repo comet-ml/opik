@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -11,6 +12,7 @@ import io.opentelemetry.api.metrics.Meter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
@@ -29,6 +31,12 @@ public class TopicsMetrics {
 
     /** The workspace a metric is recorded for. */
     public record Workspace(@NonNull String id, @NonNull String name) {
+
+        /** The workspace of a run, which its subscriber puts in the Reactor context. */
+        public static Mono<Workspace> fromContext() {
+            return Mono.deferContextual(ctx -> Mono.just(new Workspace(ctx.get(RequestContext.WORKSPACE_ID),
+                    ctx.get(RequestContext.WORKSPACE_NAME))));
+        }
     }
 
     private static final AttributeKey<String> WORKSPACE_ID = stringKey("workspace_id");

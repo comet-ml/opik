@@ -1122,6 +1122,7 @@ topics:
     labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
+    insertSlack: 30s
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824
@@ -1129,6 +1130,29 @@ topics:
       priority: 100
       maxBlockSize: 1024
       countSlice: 1d
+  discovery:
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: 1h,6h,1d
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 2
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
+    planInterval: 5m
+    leaseSlack: 1m
+    requeueWait: 5s
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1169,6 +1193,7 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
+    sweepInterval: 24h
 
 # Python evaluator configuration
 pythonEvaluator:
