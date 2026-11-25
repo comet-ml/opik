@@ -31,8 +31,8 @@ import java.util.UUID;
 
 /**
  * Queues a project's topics run by hand instead of waiting for the leader's next plan: its first build, or its nightly
- * update for one night. Internal and cross-workspace, so it is reachable only from inside the cluster: like the other {@code /v1/internal} resources it is
- * not authenticated by {@code AuthFilter}. For the runbook.
+ * update for one night. Internal and cross-workspace, so it is reachable only from inside the cluster: like the other
+ * {@code /v1/internal} resources it is not authenticated by {@code AuthFilter}. For the runbook.
  */
 @Path("/v1/internal/topics")
 @Produces(MediaType.APPLICATION_JSON)

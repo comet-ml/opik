@@ -714,6 +714,7 @@ decision and leaves `last_night` as it is. When the night's own pass reaches the
 | `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
 | `409` | The nightly update is off, the workspace is not opted in, the project has no list, its list already covers the night, the window has too few vectors, or a run is in flight. The body's message says which. |
 | `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
+| `503` | The run could not be started, so nothing is queued. Try again. |
 
 There is no endpoint for a whole night. A night that a pod restart or a short budget cut off goes on at the next
 plan while the budget lasts; after it, the projects left run the next night, first.
