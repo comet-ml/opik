@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.topics.TopicProject.RunMode;
@@ -10,7 +9,6 @@ import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.lifecycle.Managed;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -22,15 +20,9 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
@@ -48,9 +40,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * that day. From the night's start until {@code topics.nightly.budget} after it, each plan decides on the projects the
  * night has not looked at yet ({@code last_night} before the night) and that have no run in flight. A project is
  * skipped when it is deleted, its list already covers the night, or its last {@code topics.nightly.pauseFailures}
- * runs failed within {@code topics.nightly.pauseNights} nights. Then, while slots are free, the rest are counted one by
- * one in {@link #queueOrder}: one under {@code topics.run.minVectors} is skipped, one whose count fails is left for the
- * next night, and the others are queued with their count. A project with a run in flight waits for a later plan. No
+ * runs failed within {@code topics.nightly.pauseNights} nights ({@link NightTriage}). Then, while slots are free, the
+ * rest are counted one by one in {@link NightTriage#queueOrder}: one under {@code topics.run.minVectors} is skipped,
+ * one whose count fails is left for the next night, and the others are queued with their count. A project with a run in flight waits for a later plan. No
  * project is queued after the budget: the first plan after it records every project the night did not look at as not
  * reached.
  *
@@ -89,16 +81,6 @@ class TopicsNightPass implements Managed {
         this.workspaceNames = workspaceNames;
         this.projectService = projectService;
         this.lockService = lockService;
-    }
-
-    /** A project the night counts and may queue. */
-    @Builder(toBuilder = true)
-    record NightCandidate(@NonNull String workspaceId, @NonNull UUID projectId, Instant windowUntil) {
-    }
-
-    /** A plan's read of the night: the candidates in {@link #queueOrder}, and the skips that need no count. */
-    record NightDue(@NonNull List<NightCandidate> candidates,
-            @NonNull Map<NightSkipReason, List<TopicProjectKey>> skipped) {
     }
 
     /**
@@ -188,55 +170,22 @@ class TopicsNightPass implements Managed {
 
     /**
      * The projects of the workspaces with a saved list, not looked at tonight and with no run in flight: the ones to
-     * count, in {@link #queueOrder}, and the ones skipped without a count.
+     * count, in {@link NightTriage#queueOrder}, and the ones skipped without a count.
      */
-    private NightDue due(TopicsNight night, Collection<String> workspaceIds) {
+    private NightTriage.NightDue due(TopicsNight night, Collection<String> workspaceIds) {
         var rows = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date()));
+        var existing = new HashSet<TopicProjectKey>();
+        rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId,
+                Collectors.mapping(TopicProject::projectId, Collectors.toSet())))
+                .forEach((workspaceId, projectIds) -> projectService.findByIds(workspaceId, projectIds)
+                        .forEach(project -> existing.add(new TopicProjectKey(workspaceId, project.id()))));
         var nightly = config.getNightly();
-        var pausedSince = night.date().minusDays(nightly.getPauseNights()).atStartOfDay(ZoneOffset.UTC).toInstant();
-        var skipped = new EnumMap<NightSkipReason, List<TopicProjectKey>>(NightSkipReason.class);
-        var due = new ArrayList<NightCandidate>();
-        rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId))
-                .forEach((workspaceId, listed) -> {
-                    // A deleted project keeps its rows until the sweep: run only projects that exist.
-                    var existing = projectService.findByIds(workspaceId, listed.stream().map(TopicProject::projectId)
-                            .collect(Collectors.toSet())).stream().map(Project::id).collect(Collectors.toSet());
-                    for (var row : listed) {
-                        skipReason(row, existing, night, nightly.getPauseFailures(), pausedSince).ifPresentOrElse(
-                                reason -> skipped.computeIfAbsent(reason, key -> new ArrayList<>())
-                                        .add(new TopicProjectKey(workspaceId, row.projectId())),
-                                () -> due.add(NightCandidate.builder().workspaceId(workspaceId)
-                                        .projectId(row.projectId()).windowUntil(row.windowUntil()).build()));
-                    }
-                });
-        due.sort(queueOrder());
-        return new NightDue(due, skipped);
-    }
-
-    /** Why the night skips the project without counting its window; empty when it counts it. */
-    private static Optional<NightSkipReason> skipReason(TopicProject row, Set<UUID> existing, TopicsNight night,
-            int pauseFailures, Instant pausedSince) {
-        if (!existing.contains(row.projectId())) {
-            return Optional.of(NightSkipReason.DELETED);
-        }
-        if (covers(row, night.windowTo())) {
-            return Optional.of(NightSkipReason.ALREADY_SAVED);
-        }
-        return paused(row, pauseFailures, pausedSince) ? Optional.of(NightSkipReason.PAUSED) : Optional.empty();
-    }
-
-    /**
-     * Whether the project's last {@code failures} runs or more failed in a row, the latest started at or after
-     * {@code since}. A run whose pod died counts once the planner's reconciler records it {@code abandoned}, which each
-     * plan does before its night pass.
-     */
-    static boolean paused(@NonNull TopicProject row, int failures, @NonNull Instant since) {
-        return row.failedRuns() >= failures && row.runStartedAt() != null && !row.runStartedAt().isBefore(since);
+        return NightTriage.triage(rows, existing, night, nightly.getPauseFailures(), nightly.getPauseNights());
     }
 
     /** Counts the project's window and queues it; true when it queued it. */
-    private Mono<Boolean> countAndQueue(NightCandidate candidate, TopicsNight night,
+    private Mono<Boolean> countAndQueue(NightTriage.NightCandidate candidate, TopicsNight night,
             Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var key = new TopicProjectKey(candidate.workspaceId(), candidate.projectId());
         return candidates.windowVectors(candidate.workspaceId(), candidate.projectId(), night.date())
@@ -307,20 +256,6 @@ class TopicsNightPass implements Managed {
                             night.date(), night.start(), counts.looked(), counts.notReached());
                 })
                 .then();
-    }
-
-    /** Whether the saved list's window already ends at or after {@code windowTo}: the night would count it twice. */
-    private static boolean covers(TopicProject row, Instant windowTo) {
-        return row.windowUntil() != null && !row.windowUntil().isBefore(windowTo);
-    }
-
-    /**
-     * The night's queue, stalest first: the oldest {@code window_until}, so a project a night did not reach goes first
-     * the next night. A project with no {@code window_until} sorts first; among equals, by project id.
-     */
-    static Comparator<NightCandidate> queueOrder() {
-        return Comparator.comparing(NightCandidate::windowUntil, Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(NightCandidate::projectId);
     }
 
     /**
