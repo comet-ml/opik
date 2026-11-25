@@ -28,6 +28,24 @@ describe("Opik client config", () => {
     }).toThrow("OPIK_API_KEY is not set");
   });
 
+  it("should treat the comet.com apex host as cloud", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://comet.com/api";
+    process.env.OPIK_API_KEY = "";
+
+    expect(() => {
+      new Opik();
+    }).toThrow("OPIK_API_KEY is not set");
+  });
+
+  it("should not treat other hosts ending in comet.com as cloud", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://mycomet.com/api";
+    process.env.OPIK_API_KEY = "";
+
+    expect(() => {
+      new Opik();
+    }).not.toThrow();
+  });
+
   it("should load trackDisable from the OPIK_TRACK_DISABLE env var", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";

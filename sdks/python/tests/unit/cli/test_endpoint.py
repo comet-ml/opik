@@ -1,3 +1,4 @@
+import re
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -83,7 +84,7 @@ class TestEndpoint:
         )
         assert result.exit_code != 0
         assert "Could not connect to Opik backend" in result.output
-        assert "https://api.test/" in result.output
+        assert re.search(r"https://api\.test/", result.output)
         assert "Run: opik configure" in result.output
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)

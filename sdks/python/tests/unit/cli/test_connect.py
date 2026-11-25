@@ -1,3 +1,4 @@
+import re
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -74,7 +75,7 @@ class TestConnect:
         result = runner.invoke(cli, ["connect", "--project", "my-proj"])
         assert result.exit_code != 0
         assert "Could not connect to Opik backend" in result.output
-        assert "https://api.test/" in result.output
+        assert re.search(r"https://api\.test/", result.output)
         assert "Run: opik configure" in result.output
 
     @patch("opik.cli.local_runner._run.RunnerTUI")
