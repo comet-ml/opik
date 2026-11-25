@@ -472,29 +472,31 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
       </SheetDescription>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <ColoredTag
-            label={CATALOG_TYPE_LABELS[type]}
-            variant={TYPE_TAG_VARIANT[type]}
-            tooltip={TYPE_DESCRIPTIONS[type]}
-            size="default"
-          />
-          <ColoredTag label={providerLabel} size="default" />
-          {entry?.mode && (
+        {!isNew && (
+          <div className="flex flex-wrap items-center gap-1.5">
             <ColoredTag
-              label={MODE_LABELS[entry.mode] ?? entry.mode}
+              label={CATALOG_TYPE_LABELS[type]}
+              variant={TYPE_TAG_VARIANT[type]}
+              tooltip={TYPE_DESCRIPTIONS[type]}
               size="default"
             />
-          )}
-          {lastUpdatedAt && (
-            <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
-              <div className="comet-body-s ml-auto flex items-center gap-1 text-foreground">
-                <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
-                {lastUpdatedAt}
-              </div>
-            </TooltipWrapper>
-          )}
-        </div>
+            <ColoredTag label={providerLabel} size="default" />
+            {entry?.mode && (
+              <ColoredTag
+                label={MODE_LABELS[entry.mode] ?? entry.mode}
+                size="default"
+              />
+            )}
+            {lastUpdatedAt && (
+              <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
+                <div className="comet-body-s ml-auto flex items-center gap-1 text-foreground">
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {lastUpdatedAt}
+                </div>
+              </TooltipWrapper>
+            )}
+          </div>
+        )}
         {changedElsewhere && (
           <div
             role="status"

@@ -716,6 +716,19 @@ describe("CostCenterTab", () => {
   });
 
   describe("editing one model", () => {
+    it("shows no type or provider tags while adding a new model", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.change(screen.getByLabelText("Provider"), {
+        target: { value: "acme" },
+      });
+
+      const drawer = screen.getByRole("dialog");
+      expect(within(drawer).queryByText("Custom")).toBeNull();
+      expect(within(drawer).queryByText("acme", { exact: true })).toBeNull();
+    });
+
     it("closes on the first Escape from the first focused control", async () => {
       renderTab(ADMIN);
 
