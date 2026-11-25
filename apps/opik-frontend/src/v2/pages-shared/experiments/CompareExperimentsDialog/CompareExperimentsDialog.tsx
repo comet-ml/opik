@@ -5,20 +5,20 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Loader from "@/shared/Loader/Loader";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import { formatDate } from "@/lib/date";
+import { formatExperimentSubtext } from "@/v2/pages-shared/experiments/formatExperimentSubtext";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import { Label } from "@/ui/label";
 import { createFilter } from "@/lib/filters";
 
 const DEFAULT_SIZE = 5;
@@ -90,27 +90,25 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
       return (
         <label
           key={e.id}
-          className="flex cursor-pointer flex-col gap-0.5 py-2.5 pl-3 pr-4"
+          className="flex cursor-pointer flex-col gap-0.5 rounded p-1"
         >
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={checked}
-                onCheckedChange={() =>
-                  setSelectedExperimentsIds((ids) => {
-                    return checked
-                      ? ids.filter((id) => id !== e.id)
-                      : [...ids, e.id];
-                  })
-                }
-                aria-label="Select experiment"
-                className="mt-0.5"
-              />
-              <span className="comet-body-s-accented truncate">{e.name}</span>
-            </div>
-            <div className="comet-body-s truncate pl-6 text-light-slate">
-              {formatDate(e.created_at)}
-            </div>
+          <div className="flex h-5 items-center gap-1.5">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={() =>
+                setSelectedExperimentsIds((ids) => {
+                  return checked
+                    ? ids.filter((id) => id !== e.id)
+                    : [...ids, e.id];
+                })
+              }
+              aria-label="Select experiment"
+              className="mx-0.5"
+            />
+            <span className="comet-body-s truncate">{e.name}</span>
+          </div>
+          <div className="comet-body-xs break-words pl-[26px] text-light-slate">
+            {formatExperimentSubtext(e)}
           </div>
         </label>
       );
@@ -119,23 +117,29 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>Compare experiments</DialogTitle>
+          <DialogTitle>Add to compare</DialogTitle>
+          <DialogDescription className="text-muted-slate">
+            Compare experiments to understand how changes impact performance.
+          </DialogDescription>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <ExplainerDescription
-            className="mb-4"
-            {...EXPLAINERS_MAP[
-              EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
-            ]}
-          />
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-          ></SearchInput>
-          <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
+          <div className="flex flex-col gap-1">
+            <Label
+              htmlFor="compare-experiments-search"
+              className="px-0.5 pb-0.5"
+            >
+              Search experiments
+            </Label>
+            <SearchInput
+              id="compare-experiments-search"
+              searchText={search}
+              setSearchText={setSearch}
+              placeholder="Search"
+            ></SearchInput>
+          </div>
+          <div className="mt-3 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
             {renderListItems()}
           </div>
           {total > DEFAULT_SIZE && (
@@ -150,7 +154,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="border-t pt-4">
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
