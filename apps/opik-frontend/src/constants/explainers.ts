@@ -329,7 +329,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_is_a_model_alias]: {
     id: EXPLAINER_ID.what_is_a_model_alias,
     description:
-      "An alias has no prices of its own. It uses another model's price, so a renamed or fine-tuned model is billed like the model it points to.",
+      "Alias uses another model's price, so a renamed or fine-tuned model is billed like the model it points to.",
   },
   [EXPLAINER_ID.what_does_the_test_suite_do_here]: {
     id: EXPLAINER_ID.what_does_the_test_suite_do_here,
