@@ -2,7 +2,7 @@ import os
 
 from setuptools import find_packages, setup
 
-project_urls = {"Source code": "https://github.com/comet-ml/opik"}
+project_urls = {"Repository": "https://github.com/comet-ml/opik"}
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 version = os.environ.get("VERSION")

@@ -70,6 +70,7 @@ class _FailingHttpxClient:
 def _dataset_item(index: int) -> Dict[str, Any]:
     compare = {
         "id": f"experiment-item-{index}",
+        "experiment_id": "some-experiment-id",
         "trace_id": f"trace-{index}",
         "dataset_item_id": f"dataset-item-{index}",
         "input": None,
@@ -102,6 +103,39 @@ def _read(total: int, **kwargs: Any) -> Dict[str, Any]:
         "requested_sizes": datasets_client.requested_sizes,
         "requested_pages": datasets_client.requested_pages,
     }
+
+
+def test_find_experiment_items_for_dataset__experiment_id_is_carried_on_each_item():
+    result = _read(total=3, max_results=3)
+
+    assert [item.experiment_id for item in result["items"]] == [
+        "some-experiment-id"
+    ] * 3
+
+
+@pytest.mark.parametrize("bad", [3, True, [], {}])
+def test_find_experiment_items_for_dataset__non_string_experiment_id_does_not_parse(
+    bad,
+):
+    datasets_client = _RecordingHttpxClient(total=1)
+    page = {"content": [_dataset_item(0)], "total": 1}
+    page["content"][0]["experiment_items"][0]["experiment_id"] = bad
+    body = json.dumps(page)
+    datasets_client.request = lambda path, *, method, params: types.SimpleNamespace(
+        status_code=200, content=body.encode("utf-8"), text=body, headers={}
+    )
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=datasets_client)
+    )
+
+    with pytest.raises(exceptions.OpikException, match="`experiment_id` is a"):
+        rest_operations.find_experiment_items_for_dataset(
+            rest_client=rest_client,
+            dataset_id="some-dataset-id",
+            experiment_ids=["some-experiment-id"],
+            truncate=False,
+            max_results=1,
+        )
 
 
 def test_find_experiment_items_for_dataset__default_page_size_is_2000():

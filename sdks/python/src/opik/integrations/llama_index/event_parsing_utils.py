@@ -149,7 +149,16 @@ def get_usage_data(
     # although we could try to use TokenCountingHandler.
     # However, TokenCountingHandler currently also supports only OpenAI models.
 
-    if "openai" not in Settings.llm.class_name().lower():
+    try:
+        llm_class_name = Settings.llm.class_name()
+    except Exception:
+        LOGGER.debug(
+            "Could not resolve LlamaIndex Settings.llm, skipping token usage",
+            exc_info=True,
+        )
+        return llm_usage_info
+
+    if "openai" not in llm_class_name.lower():
         return llm_usage_info
 
     response: Optional[ChatResponse] = payload.get(
