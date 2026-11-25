@@ -88,6 +88,7 @@ const useRuleEditorHistory = (
   autoNameRef: React.MutableRefObject<string>,
 ) => {
   const [isPickingTemplate, setIsPickingTemplateState] = useState(false);
+  // State re-renders the tabs; the ref gives snapshots the new value in the same call.
   const isPickingTemplateRef = useRef(false);
   const pastRef = useRef<EditorSnapshot[]>([]);
   const futureRef = useRef<EditorSnapshot[]>([]);
@@ -192,6 +193,8 @@ const useRuleEditorHistory = (
       const next = takeSnapshot();
       if (previous && isSameContent(previous, next)) return;
 
+      // Changes made in one event (e.g. a model and its config) run in one task;
+      // the flag resets in a microtask, so they become one undo step.
       const isSameTask = isSameTaskRef.current;
       isSameTaskRef.current = true;
       queueMicrotask(() => {
@@ -247,6 +250,8 @@ const useRuleEditorHistory = (
       if (command === "undo") step(pastRef.current, futureRef.current);
       else step(futureRef.current, pastRef.current);
     };
+    // Capture on window so Cmd+Z reaches the form history before editors such as
+    // the prompt editor run their own undo, wherever focus is in the panel.
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [form, step]);
