@@ -13,7 +13,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
@@ -95,7 +94,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -116,11 +114,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -931,7 +927,7 @@ class TopicVectorsTickTest {
             var meter = InMemoryMetricReader.create();
             var tick = tickWith(arrival(meter));
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             var billing = topic(workspaceId, projectId, 0, intent(0));
             var refunds = topic(workspaceId, projectId, 1, intent(333));
             saveList(workspaceId, projectId, List.of(billing, refunds), null);
@@ -941,21 +937,15 @@ class TopicVectorsTickTest {
 
             assertThat(result.written()).isEqualTo(3);
             assertThat(result.skipped()).isEmpty();
-            var createdAt = tables.vectors(workspaceId, traceIds).stream()
-                    .collect(Collectors.toMap(TopicVector::traceId, TopicVector::traceCreatedAt));
             assertThat(arrivalRows(workspaceId, projectId))
-                    .extracting(TraceTopic::traceId, TraceTopic::topicId, TraceTopic::source, TraceTopic::runId,
-                            TraceTopic::traceCreatedAt)
-                    .containsExactlyInAnyOrder(
-                            tuple(traceIds.get(0), billing.id(), TraceTopic.Source.ARRIVAL, null,
-                                    createdAt.get(traceIds.get(0))),
-                            tuple(traceIds.get(1), refunds.id(), TraceTopic.Source.ARRIVAL, null,
-                                    createdAt.get(traceIds.get(1))),
-                            tuple(traceIds.get(2), TraceTopic.OTHER, TraceTopic.Source.ARRIVAL, null,
-                                    createdAt.get(traceIds.get(2))));
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), billing.id(),
+                            traceIds.get(1), refunds.id(),
+                            traceIds.get(2), TraceTopic.OTHER)));
+            // The tick's own name lookup: in tests the name is the id.
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
                     workspaceId,
-                    "workspace_name", "name-" + workspaceId)).isEqualTo(2);
+                    "workspace_name", workspaceId)).isEqualTo(2);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "other", "workspace_id",
                     workspaceId))
                     .isEqualTo(1);
@@ -971,8 +961,8 @@ class TopicVectorsTickTest {
             var meter = InMemoryMetricReader.create();
             var tick = tickWith(arrival(meter));
             var workspaceId = enabledWorkspace();
-            var noList = UUID.randomUUID();
-            var otherOnly = UUID.randomUUID();
+            var noList = ID_GENERATOR.generateId();
+            var otherOnly = ID_GENERATOR.generateId();
             saveList(workspaceId, otherOnly, List.of(), others(intent(0)));
             labelIntents(workspaceId, noList, List.of(intent(0), intent(5), intent(10)));
             labelIntents(workspaceId, otherOnly, List.of(intent(0), intent(5)));
@@ -994,7 +984,7 @@ class TopicVectorsTickTest {
             assertThat(cosine(intent(1), intent(0))).isGreaterThanOrEqualTo(0.95);
             assertThat(cosine(intent(150), intent(0))).isBetween(0.75, 0.95);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             var billing = topic(workspaceId, projectId, 0, intent(0));
             saveList(workspaceId, projectId, List.of(billing), others(intent(1), intent(150)));
             var traceIds = labelIntents(workspaceId, projectId, List.of(intent(1), intent(150)));
@@ -1002,16 +992,16 @@ class TopicVectorsTickTest {
             assertThat(tickService.tick(Instant.now()).block().written()).isEqualTo(2);
 
             assertThat(arrivalRows(workspaceId, projectId))
-                    .extracting(TraceTopic::traceId, TraceTopic::topicId)
-                    .containsExactlyInAnyOrder(tuple(traceIds.get(0), billing.id()),
-                            tuple(traceIds.get(1), TraceTopic.OTHER));
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), billing.id(),
+                            traceIds.get(1), TraceTopic.OTHER)));
         }
 
         @Test
         @DisplayName("with topics.arrival.enabled off, the vectors are written and no arrival row is")
         void flagOff() {
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
             var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5)));
             opikConfig.getTopics().getArrival().setEnabled(false);
@@ -1029,7 +1019,7 @@ class TopicVectorsTickTest {
             var meter = InMemoryMetricReader.create();
             var tick = tickWith(arrival(meter));
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             var first = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(500)));
             assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
             assertThat(countTraceTopicRows(workspaceId)).isZero();
@@ -1041,8 +1031,9 @@ class TopicVectorsTickTest {
             assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(2);
 
             assertThat(arrivalRows(workspaceId, projectId))
-                    .extracting(TraceTopic::traceId, TraceTopic::topicId)
-                    .containsExactlyInAnyOrder(tuple(second.get(0), billing.id()), tuple(second.get(1), billing.id()));
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            second.get(0), billing.id(),
+                            second.get(1), billing.id())));
             assertThat(countTraceTopicRows(workspaceId)).isEqualTo(2);
             assertThat(first).doesNotContainAnyElementsOf(second);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "no_prototypes",
@@ -1051,7 +1042,7 @@ class TopicVectorsTickTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {TopicsArrivalService.READ, TopicsArrivalService.INSERT, TopicsArrivalService.ASSIGN})
+        @ValueSource(strings = {"read", "insert", "assign"})
         @DisplayName("a failing step (the saved lists read, the trace_topics insert, or anything else) leaves the "
                 + "vectors written and the tick's counts as they were; it is counted once by phase and error type, and "
                 + "arrival stops for the rest of the tick")
@@ -1067,14 +1058,14 @@ class TopicVectorsTickTest {
             });
             var meter = InMemoryMetricReader.create();
             var arrival = switch (phase) {
-                case TopicsArrivalService.READ -> arrival(meter, failingTemplate, traceTopicsDAO, algorithm);
-                case TopicsArrivalService.INSERT -> arrival(meter, template, failingDAO, algorithm);
+                case "read" -> arrival(meter, failingTemplate, traceTopicsDAO, algorithm);
+                case "insert" -> arrival(meter, template, failingDAO, algorithm);
                 default -> arrival(meter, template, traceTopicsDAO, failingAlgorithm);
             };
             var tick = tickWith(arrival);
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
             var traceIds = labelIntents(workspaceId, projectId,
                     List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
@@ -1093,9 +1084,8 @@ class TopicVectorsTickTest {
                         assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
                     });
             switch (phase) {
-                case TopicsArrivalService.READ ->
-                    verify(failingTemplate, times(1)).inTransaction(any(TxConfig.class), any());
-                case TopicsArrivalService.INSERT -> verify(failingDAO, times(1)).insert(any());
+                case "read" -> verify(failingTemplate, times(1)).inTransaction(any(TxConfig.class), any());
+                case "insert" -> verify(failingDAO, times(1)).insert(any());
                 default -> verify(failingAlgorithm, times(1)).labeller(any(), any());
             }
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
@@ -1116,7 +1106,7 @@ class TopicVectorsTickTest {
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
             var traceIds = labelIntents(workspaceId, projectId,
                     List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
@@ -1157,7 +1147,7 @@ class TopicVectorsTickTest {
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
             var traceIds = labelIntents(workspaceId, projectId,
                     List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
@@ -1195,7 +1185,7 @@ class TopicVectorsTickTest {
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(3));
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
             var traceIds = labelIntents(workspaceId, projectId,
                     List.of(intent(0), intent(5), intent(10), intent(15), intent(20), intent(25)));
@@ -1231,7 +1221,7 @@ class TopicVectorsTickTest {
             config().setEmbedConcurrency(1);
             var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
             for (var workspaceId : workspaceIds) {
-                var projectId = UUID.randomUUID();
+                var projectId = ID_GENERATOR.generateId();
                 saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
                 labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10), intent(15)));
             }
@@ -1263,7 +1253,7 @@ class TopicVectorsTickTest {
             // 2s in all: the read takes about 1.3s, so about 0.7s is left for the insert.
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             var billing = topic(workspaceId, projectId, 0, intent(0));
             saveList(workspaceId, projectId, List.of(billing), null);
             var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10)));
@@ -1271,9 +1261,10 @@ class TopicVectorsTickTest {
             assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
 
             assertThat(arrivalRows(workspaceId, projectId))
-                    .extracting(TraceTopic::traceId, TraceTopic::topicId)
-                    .containsExactlyInAnyOrder(tuple(traceIds.get(0), billing.id()),
-                            tuple(traceIds.get(1), billing.id()), tuple(traceIds.get(2), billing.id()));
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), billing.id(),
+                            traceIds.get(1), billing.id(),
+                            traceIds.get(2), billing.id())));
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
                     workspaceId))
                     .isEqualTo(3);
@@ -1285,7 +1276,7 @@ class TopicVectorsTickTest {
         @DisplayName("arrival writes what the bound algorithm's labeller returns, made from the project's saved topics "
                 + "and known-Other vectors, and builds no rule of its own")
         void anotherAlgorithm() {
-            var topicId = UUID.randomUUID();
+            var topicId = ID_GENERATOR.generateId();
             var otherAlgorithm = mock(TopicAlgorithm.class);
             when(otherAlgorithm.labeller(any(), any())).thenReturn(vectors -> {
                 var topics = new UUID[vectors.size()];
@@ -1294,7 +1285,7 @@ class TopicVectorsTickTest {
             });
             var tick = tickWith(arrival(InMemoryMetricReader.create(), template, traceTopicsDAO, otherAlgorithm));
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
+            var projectId = ID_GENERATOR.generateId();
             var older = topic(workspaceId, projectId, 0, intent(0));
             var newer = topic(workspaceId, projectId, 1, intent(250));
             var otherVectors = others(intent(500));
@@ -1303,9 +1294,11 @@ class TopicVectorsTickTest {
 
             assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
 
-            assertThat(arrivalRows(workspaceId, projectId)).extracting(TraceTopic::traceId, TraceTopic::topicId)
-                    .containsExactlyInAnyOrder(tuple(traceIds.get(0), topicId), tuple(traceIds.get(1), topicId),
-                            tuple(traceIds.get(2), topicId));
+            assertThat(arrivalRows(workspaceId, projectId))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), topicId,
+                            traceIds.get(1), topicId,
+                            traceIds.get(2), topicId)));
             // The labeller gets the project's topics as saved, in (born, id) order, and its known-Other vectors.
             verify(otherAlgorithm).labeller(List.of(older, newer), otherVectors);
         }
@@ -1319,13 +1312,13 @@ class TopicVectorsTickTest {
             var noAlgorithm = mock(TopicAlgorithm.class);
             var meter = InMemoryMetricReader.create();
             var arrival = arrival(meter, noTemplate, dao, noAlgorithm).tick();
-            var workspaceId = UUID.randomUUID().toString();
+            var workspaceId = ID_GENERATOR.generateId().toString();
             var vectors = IntStream.range(0, 3)
                     .mapToObj(i -> TopicVector.builder()
                             .workspaceId(workspaceId)
-                            .projectId(UUID.randomUUID())
+                            .projectId(ID_GENERATOR.generateId())
                             .task(TopicEmbedding.SUMMARY_TASK)
-                            .traceId(UUID.randomUUID())
+                            .traceId(ID_GENERATOR.generateId())
                             .traceCreatedAt(Instant.now())
                             .taskVersion(1)
                             .embedModel(TopicEmbedding.MODEL)
@@ -1335,7 +1328,8 @@ class TopicVectorsTickTest {
                             .build())
                     .toList();
 
-            arrival.label(workspaceId, vectors, Instant.now().plusMillis(500)).block();
+            arrival.label(TopicVectorsMetrics.Workspace.unnamed(workspaceId), vectors,
+                    TickBudget.of(Instant.now(), Duration.ofMillis(500), Clock.systemUTC())).block();
 
             verifyNoInteractions(noTemplate, dao, noAlgorithm);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
@@ -1453,11 +1447,8 @@ class TopicVectorsTickTest {
 
     private TopicsArrivalService arrival(InMemoryMetricReader meter, TransactionTemplate transactions,
             TraceTopicsDAO rows, TopicAlgorithm labelling) {
-        var names = mock(WorkspaceNameService.class);
-        when(names.nameOrId(anyString())).thenAnswer(invocation -> "name-" + invocation.getArgument(0));
-        return new TopicsArrivalService(opikConfig.getTopics(), transactions, rows, labelling, names,
-                TopicsMetricsReader.meter(meter),
-                Clock.systemUTC());
+        return new TopicsArrivalService(opikConfig.getTopics(), transactions, rows, labelling,
+                new TopicsArrivalMetrics(TopicsMetricsReader.meter(meter)));
     }
 
     /** The tick as Guice builds it, with {@code arrival} in place of the bound arrival service. */
@@ -1500,7 +1491,7 @@ class TopicVectorsTickTest {
     /** A live topic with one prototype at the stub vector of {@code text}, born {@code night} days after 2026-01-01. */
     private static Topic topic(String workspaceId, UUID projectId, int night, String text) {
         return Topic.builder()
-                .id(UUID.randomUUID())
+                .id(ID_GENERATOR.generateId())
                 .workspaceId(workspaceId)
                 .projectId(projectId)
                 .name("topic " + night)
@@ -1518,7 +1509,7 @@ class TopicVectorsTickTest {
 
     /** Saves a first build's list for the project, as the run's save writes it: all arrival reads of a list. */
     private void saveList(String workspaceId, UUID projectId, List<Topic> topics, PrototypeVectors otherVectors) {
-        var runId = UUID.randomUUID();
+        var runId = ID_GENERATOR.generateId();
         var savedAt = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicProjectDAO.class);
@@ -1551,12 +1542,32 @@ class TopicVectorsTickTest {
                         .traceId(UUID.fromString(row.get("trace_id", String.class)))
                         .traceCreatedAt(row.get("trace_created_at", Instant.class))
                         .topicId(UUID.fromString(row.get("topic_id", String.class)))
-                        .source(TraceTopic.Source.valueOf(row.get("source", String.class).toUpperCase()))
+                        .source(source(row.get("source", String.class)))
                         .runId(Optional.ofNullable(row.get("run_id", String.class)).map(UUID::fromString)
                                 .orElse(null))
                         .build()))
                 .collectList())
                 .block();
+    }
+
+    private static TraceTopic.Source source(String value) {
+        return Arrays.stream(TraceTopic.Source.values()).filter(source -> source.getValue().equals(value))
+                .findFirst().orElseThrow();
+    }
+
+    /** The arrival row of each trace, with the trace's created time as its vector holds it. */
+    private List<TraceTopic> expectedArrivalRows(String workspaceId, UUID projectId, Map<UUID, UUID> topicOfTrace) {
+        return tables.vectors(workspaceId, List.copyOf(topicOfTrace.keySet())).stream()
+                .map(vector -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(vector.traceId())
+                        .traceCreatedAt(vector.traceCreatedAt())
+                        .topicId(topicOfTrace.get(vector.traceId()))
+                        .source(TraceTopic.Source.ARRIVAL)
+                        .runId(null)
+                        .build())
+                .toList();
     }
 
     private long countTraceTopicRows(String workspaceId) {

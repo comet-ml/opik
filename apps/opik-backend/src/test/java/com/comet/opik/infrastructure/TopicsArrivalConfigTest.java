@@ -18,20 +18,20 @@ class TopicsArrivalConfigTest {
 
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
-    static Stream<Arguments> arrivalTimeouts() {
+    static Stream<Arguments> minStepTimes() {
         return Stream.of(
-                arguments("config-test.yml", Duration.seconds(5), List.of()),
-                arguments("1s", Duration.seconds(1), List.of()),
-                arguments("60s", Duration.seconds(60), List.of()),
-                arguments("under 1s", Duration.milliseconds(999), List.of("timeout")),
-                arguments("over 60s", Duration.seconds(61), List.of("timeout")));
+                arguments("below the timeout", Duration.seconds(1), Duration.seconds(5), List.of()),
+                arguments("equal to the timeout", Duration.seconds(5), Duration.seconds(5), List.of()),
+                arguments("above the timeout", Duration.seconds(6), Duration.seconds(5),
+                        List.of("minStepTimeValid")));
     }
 
-    @ParameterizedTest(name = "topics.arrival.timeout {0}")
-    @MethodSource("arrivalTimeouts")
-    void arrivalTimeoutBounds(String description, Duration timeout, List<String> expectedViolations) {
+    @ParameterizedTest(name = "topics.arrival.minStepTime {0}")
+    @MethodSource("minStepTimes")
+    void minStepTimeNotAboveTimeout(String description, Duration minStepTime, Duration timeout,
+            List<String> expectedViolations) {
         var arrival = TestConfigUtils.loadConfigTest().getTopics().getArrival();
-        assertThat(arrival.isEnabled()).isTrue();
+        arrival.setMinStepTime(minStepTime);
         arrival.setTimeout(timeout);
 
         var violations = VALIDATOR.validate(arrival).stream()

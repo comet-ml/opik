@@ -1000,7 +1000,6 @@ class TopicsNightlyIntegrationTest {
                 && runId.equals(event.getArgumentArray()[0]);
     }
 
-    /** The trace_topics rows the run wrote. */
     /**
      * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
      * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
@@ -1026,6 +1025,7 @@ class TopicsNightlyIntegrationTest {
         }
     }
 
+    /** The trace_topics rows the run wrote. */
     private List<TraceTopic> labels(String workspaceId, UUID projectId, UUID runId) {
         return data.traceTopics(workspaceId, projectId).stream()
                 .filter(row -> runId.equals(row.runId())).toList();
