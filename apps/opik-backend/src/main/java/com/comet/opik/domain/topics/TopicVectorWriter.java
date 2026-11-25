@@ -50,7 +50,7 @@ class TopicVectorWriter {
                         .map(VectorKey::of)
                         .collect(Collectors.toUnmodifiableSet());
         var projectIds = candidates.stream().map(Candidate::projectId).collect(Collectors.toUnmodifiableSet());
-        return arrival.read(workspace, projectIds, budget, steps).flatMap(read -> {
+        return arrival.loadLabellers(workspace, projectIds, budget, steps).flatMap(read -> {
             // concatMap writes the chunks one after another, so only one thread at a time touches it.
             var latest = new AtomicReference<>(read);
             return embedder.embed(workspace, candidates, budget)

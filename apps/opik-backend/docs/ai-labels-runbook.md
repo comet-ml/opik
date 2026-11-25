@@ -703,7 +703,7 @@ labelling pass uses. Code: `TopicsArrivalService`, called from `TopicVectorWrite
 and in the backfill phase.
 
 Only a workspace listed at stage `arrival` or later in `TOPICS_ENABLED_WORKSPACES` gets arrival rows (`<id>:arrival`,
-`<id>:nightly`, `<id>:ui`, or the id alone). The tick checks the stage once per workspace per tick.
+`<id>:nightly`, `<id>:ui`, or the id alone). The tick reads the listed stages once per tick.
 
 ### What it writes
 
@@ -742,7 +742,8 @@ vectors and runs go on, and its traces get no arrival row. To stop it everywhere
 - Arrival is best effort. A failure is logged and counted. The tick writes and counts its vectors as without arrival.
 - Any failure stops arrival for the workspace for the rest of the tick: the read, the insert, or the labelling. The
   traces of its later chunks count as `after_failure`. The next run labels them. Other workspaces go on.
-- A failed stage check is logged (`Topic arrival stage check failed`) and the workspace gets no arrival that tick.
+- A failed read of the listed stages is logged (`Topic arrival stage read failed`), and no workspace gets arrival that
+  tick. The vectors go on.
 - A shutdown is not a failure. It cancels the tick, its arrival steps included.
 - The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
   before the tick's deadline. A step (the read, or the labelling and insert of one chunk) that would start with less

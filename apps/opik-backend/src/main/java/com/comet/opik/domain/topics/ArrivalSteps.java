@@ -22,7 +22,8 @@ import java.util.UUID;
 record ArrivalSteps(boolean on, @NonNull Set<UUID> read, @NonNull Map<UUID, TopicLabeller> labellers,
         @NonNull Duration spent, boolean stopped) {
 
-    static final ArrivalSteps OFF = new ArrivalSteps(false, Set.of(), Map.of(), Duration.ZERO, false);
+    static final ArrivalSteps OFF = ArrivalSteps.builder().on(false).read(Set.of()).labellers(Map.of())
+            .spent(Duration.ZERO).stopped(false).build();
 
     static final ArrivalSteps STARTED = OFF.toBuilder().on(true).build();
 

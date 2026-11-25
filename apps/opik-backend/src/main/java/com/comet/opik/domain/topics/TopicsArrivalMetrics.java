@@ -41,8 +41,8 @@ class TopicsArrivalMetrics {
                         + "the tick; the next run labels those traces")
                 .build();
         this.duration = meter.histogramBuilder("topics.arrival.duration_seconds").setUnit("s")
-                .setDescription("Wall time of the arrival step after one vectors insert, by workspace; steps that "
-                        + "do not start are not recorded")
+                .setDescription("Wall time of each arrival step (a saved lists read, or the labelling and insert "
+                        + "after one vectors write), by workspace; steps that do not start are not recorded")
                 .build();
     }
 

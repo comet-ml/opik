@@ -5,6 +5,7 @@ import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -50,7 +51,7 @@ import java.util.stream.Collectors;
  * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
  *
  * <p>In both phases, each written chunk's traces get their topic on arrival ({@link TopicsArrivalService}), for a
- * workspace listed at the arrival stage or a later one, checked once per workspace per tick.
+ * workspace listed at the arrival stage or a later one, read once per tick.
  *
  * <p>A workspace is read only with time left for the read and one embed call, so the tick never spends its budget
  * reading what it cannot embed. ClickHouse alone says which traces have no vector: every read is the done statuses less
@@ -73,7 +74,6 @@ public class TopicVectorsTickService {
     private final @NonNull TopicVectorBackfiller backfiller;
     private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
-    private final @NonNull TopicsArrivalService arrival;
 
     /**
      * Fails with {@link IllegalStateException} when ai-labels has no {@code trace_summary} task: no tick can run, so the
@@ -106,7 +106,8 @@ public class TopicVectorsTickService {
         return Mono.fromCallable(() -> {
             var workspaceIds = workspaces.enabledWorkspaceIds();
             return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds),
-                    pass ? workspaces.vectorsLongWindowReads(workspaceIds) : Map.of());
+                    pass ? workspaces.vectorsLongWindowReads(workspaceIds) : Map.of(),
+                    arrivalWorkspaceIds());
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> backfiller.discover(enabled.workspaceIds(), backfillLowerBound,
@@ -122,7 +123,8 @@ public class TopicVectorsTickService {
                                                     : readFrom(lowerBound, enabled.watermarks().get(workspaceId),
                                                             vectors.getWatermarkOverlap().toJavaDuration()),
                                                     start),
-                                            longWindow, longWindow ? missedBefore : null, budget);
+                                            longWindow, longWindow ? missedBefore : null, budget,
+                                            enabled.arrivalWorkspaceIds().contains(workspaceId));
                                 }, vectors.getEmbedConcurrency())
                                 .collectList()
                                 .flatMap(visits -> finish(visits).flatMap(fresh -> {
@@ -135,7 +137,20 @@ public class TopicVectorsTickService {
     }
 
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks,
-            @NonNull Map<String, Instant> longWindowReads) {
+            @NonNull Map<String, Instant> longWindowReads, @NonNull Set<String> arrivalWorkspaceIds) {
+    }
+
+    /**
+     * The workspaces listed at the arrival stage or a later one, read once per tick. None when the read fails: no
+     * arrival this tick, and the vectors go on.
+     */
+    private Set<String> arrivalWorkspaceIds() {
+        try {
+            return Set.copyOf(workspaces.enabledWorkspaceIds(TopicsStage.ARRIVAL));
+        } catch (RuntimeException exception) {
+            log.warn("Topic arrival stage read failed, no arrival this tick", exception);
+            return Set.of();
+        }
     }
 
     /** One workspace's read of the statuses written from {@code lowerBound} to the tick's start. */
@@ -161,15 +176,14 @@ public class TopicVectorsTickService {
      * that the pass read the workspace. Without time left for the read, it skips the workspace name lookup too.
      */
     private Mono<Visit> visit(String workspaceId, List<TopicBackfill> undrained, TopicVectorsFind find,
-            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget) {
+            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget, boolean arrival) {
         var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
         if (!budget.hasTimeForRead(embedTimeout)) {
             return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), longWindow, false,
                     ArrivalSteps.OFF));
         }
-        return metrics.workspace(workspaceId).zipWith(arrival.start(workspaceId)).flatMap(started -> {
-            var workspace = started.getT1();
-            var steps = started.getT2();
+        var steps = arrival ? ArrivalSteps.STARTED : ArrivalSteps.OFF;
+        return metrics.workspace(workspaceId).flatMap(workspace -> {
             var vectors = config.getVectors();
             var readableWithout = backfiller.readableWithout(workspaceId, undrained);
             if (readableWithout.isEmpty()) {

@@ -273,19 +273,12 @@ class TopicVectorBackfillerTest {
         when(setup.metrics.workspace(any()))
                 .thenAnswer(invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
         var tick = new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
-                setup.writer, setup.backfiller, pass, setup.metrics, arrivalOff());
+                setup.writer, setup.backfiller, pass, setup.metrics);
 
         tick.tick(start).block();
 
         verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
         verify(pass).finish(start, true);
-    }
-
-    /** Topic on arrival off for every workspace. */
-    private static TopicsArrivalService arrivalOff() {
-        var arrival = mock(TopicsArrivalService.class);
-        when(arrival.start(any())).thenReturn(Mono.just(ArrivalSteps.OFF));
-        return arrival;
     }
 
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */

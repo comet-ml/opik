@@ -1,9 +1,9 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +31,8 @@ import java.util.stream.Collectors;
  * project's topics and the list's known-Other vectors. A workspace's turn reads the saved lists of its read's projects
  * once, before their embed calls ({@link TopicRunStore#readSavedLists}). A project with no saved list, or a list with
  * no topic, has no labeller: its traces get no row and wait for the project's next run. The labelling runs on
- * {@link Schedulers#parallel()}. Only a workspace listed at the {@link TopicsStage#ARRIVAL} stage or a later one gets
- * rows.
+ * {@link Schedulers#parallel()}. Only a workspace listed at the arrival stage or a later one gets rows: the
+ * vectors tick gives the others {@link ArrivalSteps#OFF}.
  *
  * <p>Every vector it gets has a non-blank text and {@link TopicEmbedding#DIMENSIONS} values, because the tick wrote
  * it, and its trace was live after the write. So nothing is filtered before the labeller.
@@ -58,32 +58,20 @@ import java.util.stream.Collectors;
 class TopicsArrivalService {
 
     private final @NonNull @Config("topics") TopicsConfig config;
-    private final @NonNull TopicWorkspaceService workspaces;
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicAlgorithm algorithm;
     private final @NonNull TopicsArrivalMetrics metrics;
 
     /**
-     * Once per workspace and tick: the steps of a workspace listed at the arrival stage or a later one, else off. A
-     * failed check is off.
-     */
-    Mono<ArrivalSteps> start(@NonNull String workspaceId) {
-        return Mono.fromCallable(() -> workspaces.reaches(workspaceId, TopicsStage.ARRIVAL)
-                ? ArrivalSteps.STARTED
-                : ArrivalSteps.OFF)
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(exception -> {
-                    log.warn("Topic arrival stage check failed, no arrival this tick, workspace '{}'", workspaceId,
-                            exception);
-                    return Mono.just(ArrivalSteps.OFF);
-                });
-    }
-
-    /**
      * Reads the saved lists of those of {@code projectIds} not read yet this tick, in one read-only transaction, and
-     * asks the algorithm for each list's labeller. A failed read stops arrival for the workspace.
+     * asks the algorithm for each list's labeller.
+     *
+     * @return {@code steps} with those projects read and their labellers; unchanged when arrival is off or stopped,
+     *         every project is read already, or less than {@code topics.arrival.minStepTime} is left; stopped when the
+     *         read fails
      */
-    Mono<ArrivalSteps> read(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull Collection<UUID> projectIds,
+    Mono<ArrivalSteps> loadLabellers(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull Collection<UUID> projectIds,
             @NonNull TickBudget budget, @NonNull ArrivalSteps steps) {
         var toRead = projectIds.stream().filter(projectId -> !steps.read().contains(projectId)).distinct().toList();
         if (!steps.on() || steps.stopped() || toRead.isEmpty()) {
@@ -140,7 +128,6 @@ class TopicsArrivalService {
         var clock = budget.clock();
         var until = clock.instant().plus(left);
         return timed(workspace, steps, Mono.fromCallable(() -> rows(steps.labellers(), read))
-                .subscribeOn(Schedulers.parallel())
                 .flatMap(labelled -> {
                     metrics.labelled(workspace, ArrivalOutcome.NO_PROTOTYPES, labelled.noPrototypes());
                     var rest = Duration.between(clock.instant(), until);
@@ -157,7 +144,9 @@ class TopicsArrivalService {
                     log.warn("Topic arrival failed, arrival stops for the workspace this tick, workspace '{}', "
                             + "vectors '{}'", workspace.id(), read.size(), exception);
                     return Mono.just(stop(workspace, steps, ArrivalPhase.ASSIGN, exception));
-                }));
+                }))
+                // Outside the timer: the step's duration leaves out the wait for a parallel thread.
+                .subscribeOn(Schedulers.parallel());
     }
 
     private Mono<ArrivalSteps> insert(TopicVectorsMetrics.Workspace workspace, Labelled labelled, Duration left,
@@ -237,10 +226,11 @@ class TopicsArrivalService {
                 }
             }
         }
-        return new Labelled(rows, topics, other, noPrototypes);
+        return Labelled.builder().rows(rows).topics(topics).other(other).noPrototypes(noPrototypes).build();
     }
 
     /** One chunk's rows, with the count of traces per outcome: topic, other, and no_prototypes (no row). */
+    @Builder(toBuilder = true)
     private record Labelled(List<TraceTopic> rows, int topics, int other, int noPrototypes) {
     }
 }

@@ -36,6 +36,7 @@ import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -93,6 +94,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -120,6 +122,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -1223,6 +1226,24 @@ class TopicVectorsTickTest {
         }
 
         @Test
+        @DisplayName("a failed read of the arrival stages writes no arrival row that tick; the vectors go on")
+        void stageReadFails() {
+            var failing = spy(workspaceService);
+            doThrow(new IllegalStateException("stages down")).when(failing)
+                    .enabledWorkspaceIds(TopicsStage.ARRIVAL);
+            var tick = tickWith(arrival(InMemoryMetricReader.create()), failing);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(2);
+
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(2);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+        }
+
+        @Test
         @DisplayName("each tick reads the saved lists again: a list saved between two ticks labels the second tick's "
                 + "traces, and no trace gets a second row")
         void secondTick() {
@@ -1287,12 +1308,8 @@ class TopicVectorsTickTest {
             assertThat(countTraceTopicRows(workspaceId)).isZero();
             // The read comes before the embed, so its failure leaves all 5 traces untried. Chunks of 2: an insert or a
             // labelling fails on the first chunk, and the other 3 traces are not tried.
-            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).singleElement()
-                    .satisfies(point -> {
-                        assertThat(point.get("phase")).isEqualTo(phase);
-                        assertThat(point.get("error_type")).isEqualTo("IllegalStateException");
-                        assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-                    });
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, phase, "IllegalStateException"));
             switch (phase) {
                 case "read" -> verify(failingRead, times(1)).readSavedLists(any(), any());
                 case "insert" -> verify(failingInsert, times(1)).insertTraceTopics(any(), any());
@@ -1326,11 +1343,8 @@ class TopicVectorsTickTest {
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
             // Chunks of 2: the first chunk's insert is cut about 2s after its step started; the other two do not try.
-            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).singleElement()
-                    .satisfies(point -> {
-                        assertThat(point.get("phase")).isEqualTo("insert");
-                        assertThat(point.get("error_type")).isEqualTo("TimeoutException");
-                    });
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, "insert", "TimeoutException"));
             // The read's step and the cut labelling step.
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.duration_seconds")).isBetween(1.8, 5.0);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
@@ -1359,11 +1373,8 @@ class TopicVectorsTickTest {
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
             assertThat(countTraceTopicRows(workspaceId)).isZero();
-            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).singleElement()
-                    .satisfies(point -> {
-                        assertThat(point.get("phase")).isEqualTo("read");
-                        assertThat(point.get("error_type")).isEqualTo("TimeoutException");
-                    });
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, "read", "TimeoutException"));
             verify(hanging, times(1)).readSavedLists(any(), any());
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.duration_seconds")).singleElement()
                     .satisfies(point -> assertThat(point.value()).isLessThan(3.0));
@@ -1527,7 +1538,7 @@ class TopicVectorsTickTest {
             var budget = TickBudget.of(Instant.now(), Duration.ofMillis(500), Clock.systemUTC());
             var projectIds = vectors.stream().map(TopicVector::projectId).toList();
 
-            var steps = arrival.read(workspace, projectIds, budget, ArrivalSteps.STARTED)
+            var steps = arrival.loadLabellers(workspace, projectIds, budget, ArrivalSteps.STARTED)
                     .flatMap(read -> arrival.label(workspace, vectors, budget, read)).block();
 
             assertThat(steps).isEqualTo(ArrivalSteps.STARTED);
@@ -1647,21 +1658,35 @@ class TopicVectorsTickTest {
 
     private TopicsArrivalService arrival(InMemoryMetricReader meter, TopicRunStore runStore,
             TopicAlgorithm labelling) {
-        return new TopicsArrivalService(opikConfig.getTopics(), workspaceService, runStore, labelling,
+        return new TopicsArrivalService(opikConfig.getTopics(), runStore, labelling,
                 new TopicsArrivalMetrics(TopicsMetricsReader.meter(meter)));
     }
 
     /** The tick as Guice builds it, with {@code arrival} in place of the bound arrival service. */
     private TopicVectorsTickService tickWith(TopicsArrivalService arrival) {
+        return tickWith(arrival, workspaceService);
+    }
+
+    private TopicVectorsTickService tickWith(TopicsArrivalService arrival, TopicWorkspaceService workspaces) {
         var arrivalWriter = new TopicVectorWriter(vectorsDAO, embedder, vectorsMetrics, arrival);
         var arrivalBackfiller = new TopicVectorBackfiller(opikConfig.getTopics(), vectorsDAO, backfillService,
                 arrivalWriter, vectorsMetrics);
-        return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
-                vectorsDAO, taskRegistry, arrivalWriter, arrivalBackfiller, longWindowPass, vectorsMetrics, arrival);
+        return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaces,
+                vectorsDAO, taskRegistry, arrivalWriter, arrivalBackfiller, longWindowPass, vectorsMetrics);
+    }
+
+    /** One failed arrival step of the workspace, as {@code topics.arrival.failures} records it. */
+    private static TopicsMetricsReader.Point failure(String workspaceId, String phase, String errorType) {
+        return new TopicsMetricsReader.Point(1, Attributes.builder()
+                .put("workspace_id", workspaceId)
+                .put("workspace_name", workspaceId)
+                .put("phase", phase)
+                .put("error_type", errorType)
+                .build());
     }
 
     /** The bound store, with one method answered by {@code answer}. */
-    private TopicRunStore storeWith(java.util.function.Consumer<TopicRunStore> stub) {
+    private TopicRunStore storeWith(Consumer<TopicRunStore> stub) {
         var spied = spy(store);
         stub.accept(spied);
         return spied;
