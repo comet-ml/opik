@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -435,9 +436,10 @@ class TopicRunStore {
         if (projectIds.isEmpty()) {
             return Mono.just(List.of());
         }
-        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> new SavedRows(
-                handle.attach(TopicProjectDAO.class).findProjects(workspaceId, projectIds),
-                handle.attach(TopicDAO.class).findByProjects(workspaceId, projectIds))))
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> SavedRows.builder()
+                .projects(handle.attach(TopicProjectDAO.class).findProjects(workspaceId, projectIds))
+                .topics(handle.attach(TopicDAO.class).findByProjects(workspaceId, projectIds))
+                .build()))
                 .map(rows -> {
                     var topics = rows.topics().stream().collect(Collectors.groupingBy(Topic::projectId));
                     return rows.projects().stream()
@@ -448,7 +450,8 @@ class TopicRunStore {
                 });
     }
 
-    private record SavedRows(List<TopicProject> projects, List<Topic> topics) {
+    @Builder(toBuilder = true)
+    private record SavedRows(@NonNull List<TopicProject> projects, @NonNull List<Topic> topics) {
     }
 
     private static boolean hasSavedList(TopicProject project) {
