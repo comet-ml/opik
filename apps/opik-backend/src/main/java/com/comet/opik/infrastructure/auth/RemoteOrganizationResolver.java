@@ -5,9 +5,9 @@ import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Denied;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Found;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Lookup;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.NoOrganization;
+import com.comet.opik.infrastructure.db.HasValue;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.RetryUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.inject.OutOfScopeException;
 import com.google.inject.ProvisionException;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -22,6 +22,7 @@ import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,26 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
     private static final AttributeKey<String> ANSWER_KEY = AttributeKey.stringKey("answer");
 
+    @Getter
+    @RequiredArgsConstructor
+    private enum AnswerSource implements HasValue {
+        FRESH_ENTRY("fresh_entry"),
+        STALE_ENTRY("stale_entry"),
+        FAILURE_MARKER("failure_marker"),
+        COMET("comet");
+
+        private final String value;
+    }
+
+    @Getter
+    @RequiredArgsConstructor
+    private enum CometCallResult implements HasValue {
+        SUCCESS("success"),
+        ERROR("error");
+
+        private final String value;
+    }
+
     @Builder(toBuilder = true)
     private record Caller(@NonNull String workspaceId, @NonNull String workspaceName,
             @NonNull CometCredentials credentials, @NonNull ContextView context) {
@@ -69,13 +90,15 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private final ConcurrentMap<String, SharedLookup> lookupsInFlight = new ConcurrentHashMap<>();
     private final Meter meter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE);
     private final LongCounter answers = meter.counterBuilder("%s_answers_total".formatted(METRIC_NAMESPACE))
-            .setDescription("Organization answers for requests with Comet credentials, by workspace and source: "
-                    + "fresh_entry, stale_entry (served while it is refreshed in the background), failure_marker "
-                    + "(none until the retry window ends) or comet (waited for a lookup, shared or its own)")
+            .setDescription("""
+                    Organization answers for requests with Comet credentials, by workspace and source: fresh_entry, \
+                    stale_entry (served while it is refreshed in the background), failure_marker (none until the \
+                    retry window ends) or comet (waited for a lookup, shared or its own)""")
             .build();
     private final LongCounter cometCalls = meter.counterBuilder("%s_comet_calls_total".formatted(METRIC_NAMESPACE))
-            .setDescription("Organization lookups sent to Comet, by workspace and result: success with its answer "
-                    + "(found / no_organization / denied), or error with its error_type")
+            .setDescription("""
+                    Organization lookups sent to Comet, by workspace and result: success with its answer \
+                    (found / no_organization / denied), or error with its error_type""")
             .build();
 
     @Override
@@ -145,9 +168,9 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     private Mono<String> fromCache(WorkspaceOrganizationCache.Entry entry, Caller caller) {
         if (entry.isFresh(cache.now())) {
-            countAnswer(caller, "fresh_entry");
+            countAnswer(caller, AnswerSource.FRESH_ENTRY);
         } else {
-            countAnswer(caller, "stale_entry");
+            countAnswer(caller, AnswerSource.STALE_ENTRY);
             refreshInBackground(caller);
         }
         return Mono.justOrEmpty(entry.organizationId());
@@ -168,7 +191,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private Mono<String> lookUp(Caller caller) {
         return cache.failedRecently(caller.workspaceId())
                 .flatMap(failed -> {
-                    countAnswer(caller, failed ? "failure_marker" : "comet");
+                    countAnswer(caller, failed ? AnswerSource.FAILURE_MARKER : AnswerSource.COMET);
                     return failed
                             ? Mono.<String>empty()
                             : lookupFor(caller, false).flatMap(RemoteOrganizationResolver::organizationOf);
@@ -217,17 +240,12 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     private Mono<Lookup> ask(Caller caller) {
         return client.fetch(caller.credentials(), caller.workspaceName())
-                .doOnNext(lookup -> countCometCall(caller, "success", ANSWER_KEY, switch (lookup) {
-                    case Found found -> "found";
-                    case NoOrganization noOrganization -> "no_organization";
-                    case Denied denied -> "denied";
-                }))
+                .doOnNext(lookup -> countCometAnswer(caller, lookup))
                 .flatMap(lookup -> remember(caller.workspaceId(), lookup).thenReturn(lookup))
                 .onErrorResume(cometFailed -> {
                     logCometFailed(ORGANIZATION_LOOKUP, caller.workspaceId(), cometFailed);
-                    countCometCall(caller, "error", ErrorMetricsResolver.ERROR_TYPE_KEY,
-                            ErrorMetricsResolver.errorType(cometFailed));
-                    var delay = isCometDown(cometFailed)
+                    countCometError(caller, cometFailed);
+                    var delay = WorkspaceOrganizationClient.isCometDown(cometFailed)
                             ? cache.retryLater(caller.workspaceId())
                             : cache.refreshLater(caller.workspaceId());
                     return delay.onErrorResume(error -> {
@@ -237,12 +255,27 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                 });
     }
 
-    private void countAnswer(Caller caller, String source) {
-        answers.add(1, workspaceAttributes(caller).put(SOURCE_KEY, source).build());
+    private void countAnswer(Caller caller, AnswerSource source) {
+        answers.add(1, workspaceAttributes(caller).put(SOURCE_KEY, source.getValue()).build());
     }
 
-    private void countCometCall(Caller caller, String result, AttributeKey<String> detailKey, String detail) {
-        cometCalls.add(1, workspaceAttributes(caller).put(RESULT_KEY, result).put(detailKey, detail).build());
+    private void countCometAnswer(Caller caller, Lookup lookup) {
+        var answer = switch (lookup) {
+            case Found found -> "found";
+            case NoOrganization noOrganization -> "no_organization";
+            case Denied denied -> "denied";
+        };
+        cometCalls.add(1, workspaceAttributes(caller)
+                .put(RESULT_KEY, CometCallResult.SUCCESS.getValue())
+                .put(ANSWER_KEY, answer)
+                .build());
+    }
+
+    private void countCometError(Caller caller, Throwable error) {
+        cometCalls.add(1, workspaceAttributes(caller)
+                .put(RESULT_KEY, CometCallResult.ERROR.getValue())
+                .put(ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error))
+                .build());
     }
 
     private static AttributesBuilder workspaceAttributes(Caller caller) {
@@ -253,20 +286,6 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     private static Mono<String> organizationOf(Lookup lookup) {
         return lookup instanceof Found found ? Mono.just(found.organizationId()) : Mono.empty();
-    }
-
-    /**
-     * Only a failure of Comet itself is remembered for a workspace with no entry: a 5xx, or Comet not reached in time.
-     * Any other 4xx, or a body that can't be read, may be specific to the one call, and remembering it would leave the
-     * workspace without an organization on every pod for the retry window.
-     */
-    private static boolean isCometDown(Throwable error) {
-        return switch (error) {
-            case RetryUtils.RetryableHttpException unavailable -> true;
-            case WebApplicationException unexpected -> unexpected.getResponse().getStatus() >= 500;
-            case ProcessingException notRead -> !(notRead.getCause() instanceof JsonProcessingException);
-            default -> false;
-        };
     }
 
     /**
