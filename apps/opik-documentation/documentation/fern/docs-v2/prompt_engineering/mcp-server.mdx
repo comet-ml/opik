@@ -29,7 +29,8 @@ other coding agent:
 <Note>
   The Cursor and VS Code buttons connect to Opik Cloud. On a dedicated or
   self-hosted Comet deployment, such as `https://<company>.comet-hosted.com`, run
-  `uvx opik mcp configure --local-server` or copy the config from
+  the command below instead: it uses your deployment's hosted server when it runs
+  one, and the local server otherwise. To write the config by hand, see
   [Self-hosted and dedicated deployments](/mcp-server/advanced-setup#self-hosted-and-dedicated-deployments).
 </Note>
 
@@ -65,8 +66,8 @@ no Opik SDK:
   </Step>
   <Step title="Try with your agent">
     Assistants read their configuration at startup, so **start a new session**
-    before trying anything. On Opik Cloud, complete the browser sign-in when your
-    client prompts for it, then ask your assistant to confirm the connection:
+    before trying anything. If your client asks you to sign in, complete it in the
+    browser, then ask your assistant to confirm the connection:
 
     ```text title="Check it worked" wordWrap
     List my Opik projects.

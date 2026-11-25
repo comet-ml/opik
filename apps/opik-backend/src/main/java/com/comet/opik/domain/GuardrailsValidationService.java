@@ -19,6 +19,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +48,7 @@ public interface GuardrailsValidationService {
 /**
  * Turns each check into decision questions, sends them through the shared {@link InferenceClient} in as few decide
  * calls as fit, run in parallel, and applies the server-side thresholds. The check path has no other engine: if the
- * decision service cannot answer, every check reports an error and passes (FR-7, fail open).
+ * decision service cannot answer, the request fails with 503 and no verdict is given (fail closed).
  */
 @Slf4j
 @Singleton
@@ -60,8 +61,11 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     static final Duration DECIDE_DEADLINE = Duration.ofSeconds(5);
     /** Room past the service's deadline for its answer to arrive, or for a quick retry of an overloaded call. */
     static final Duration CLIENT_MARGIN = Duration.ofSeconds(1);
-    /** What a check that could not run reports. The cause is logged, not returned: it may name internal hosts. */
-    static final String FAIL_OPEN_MESSAGE = "Guardrail check unavailable; it passed without running";
+    /**
+     * What a caller is told when the checks could not run. The cause is attached for the log and the error metric, not
+     * returned: it may name internal hosts.
+     */
+    static final String UNAVAILABLE_MESSAGE = "Guardrail checks are unavailable, retry later";
 
     private final @NonNull InferenceClient inferenceClient;
     private final @NonNull OpikConfiguration configuration;
@@ -86,9 +90,9 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                     .flatMapIterable(response -> response.result().answers().entrySet())
                     .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                     .map(answers -> toResponse(rules, rule -> rule.evaluate(answers, thresholds)))
-                    .onErrorResume(error -> {
-                        log.warn("Guardrails check failed open on workspaceId '{}'", workspaceId, error);
-                        return Mono.just(toResponse(rules, Rule::failOpen));
+                    .onErrorMap(error -> {
+                        log.warn("Guardrails check failed closed on workspaceId '{}'", workspaceId, error);
+                        return new ServiceUnavailableException(UNAVAILABLE_MESSAGE, (Long) null, error);
                     });
         });
     }
@@ -174,10 +178,6 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         Map<String, Question> questions();
 
         ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds);
-
-        default ValidationResult failOpen() {
-            return result(true, JsonUtils.createObjectNode().put("error", FAIL_OPEN_MESSAGE), FAIL_OPEN_MESSAGE);
-        }
 
         default ValidationResult result(boolean passed, ObjectNode details, String error) {
             return ValidationResult.builder()

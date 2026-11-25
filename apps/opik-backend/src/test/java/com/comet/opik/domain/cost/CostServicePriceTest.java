@@ -2,6 +2,7 @@ package com.comet.opik.domain.cost;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -11,6 +12,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -21,6 +23,10 @@ class CostServicePriceTest {
     private static final String GATEWAY_HOST = "llm-gateway.example.com";
     private static final JsonNode HALF_A_DOLLAR_METADATA = new ObjectMapper().valueToTree(
             Map.of("cost", Map.of("currency", "USD", "total_cost", 0.5)));
+
+    private static String customName() {
+        return "aide-" + RandomStringUtils.secure().nextAlphanumeric(32).toLowerCase(Locale.ROOT);
+    }
 
     private static CustomModelPrice fixed(String modelName, String provider, String inputPerMillion,
             String outputPerMillion) {
@@ -146,8 +152,10 @@ class CostServicePriceTest {
 
     @Test
     void priceOfAnAliasToAModelPricedPerUnitBillsItsUnits() {
-        var priced = CostService.price("aide-voice", "openai", Map.of("input_characters", 1000), null,
-                layers(alias("aide-voice", "openai", "tts-1", "openai")));
+        String aliasName = customName();
+
+        var priced = CostService.price(aliasName, "openai", Map.of("input_characters", 1000), null,
+                layers(alias(aliasName, "openai", "tts-1", "openai")));
 
         assertPriced(priced, new PricedCost(new BigDecimal("0.015"), CostSource.ORGANIZATION));
     }
@@ -155,11 +163,12 @@ class CostServicePriceTest {
     @ParameterizedTest
     @ValueSource(strings = {"openai", "azure", "github_copilot"})
     void priceOfAnAnyProviderAliasUsesItsTargetUnderTheSpansProvider(String spanProvider) {
+        String aliasName = customName();
         var builtIn = CostService.price("gpt-5-mini", spanProvider, usage(1000, 0, 500), null,
                 PriceLayers.BUILT_IN_ONLY);
 
-        var priced = CostService.price("aide-mini", spanProvider, usage(1000, 0, 500), null,
-                layers(alias("aide-mini", CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+        var priced = CostService.price(aliasName, spanProvider, usage(1000, 0, 500), null,
+                layers(alias(aliasName, CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
                         CustomModelPrice.SPAN_PROVIDER)));
 
         assertThat(builtIn.source()).isEqualTo(CostSource.BUILT_IN);
@@ -168,8 +177,10 @@ class CostServicePriceTest {
 
     @Test
     void priceOfAnAnyProviderAliasIsNothingUnderAProviderWithoutTheTarget() {
-        var priced = CostService.price("aide-mini", "anthropic", usage(1000, 0, 500), null,
-                layers(alias("aide-mini", CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+        String aliasName = customName();
+
+        var priced = CostService.price(aliasName, "anthropic", usage(1000, 0, 500), null,
+                layers(alias(aliasName, CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
                         CustomModelPrice.SPAN_PROVIDER)));
 
         assertPriced(priced, new PricedCost(BigDecimal.ZERO, CostSource.NONE));

@@ -17,6 +17,7 @@ import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
+import { GuardrailModelsClient } from "./api/resources/guardrailModels/client/Client.js";
 import { GuardrailPoliciesClient } from "./api/resources/guardrailPolicies/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
 import { InsightsViewsClient } from "./api/resources/insightsViews/client/Client.js";
@@ -40,6 +41,7 @@ import { ServiceTogglesClient } from "./api/resources/serviceToggles/client/Clie
 import { SpansClient } from "./api/resources/spans/client/Client.js";
 import { SystemAnalyticsQueriesClient } from "./api/resources/systemAnalyticsQueries/client/Client.js";
 import { SystemUsageClient } from "./api/resources/systemUsage/client/Client.js";
+import { TopicsClient } from "./api/resources/topics/client/Client.js";
 import { TracesClient } from "./api/resources/traces/client/Client.js";
 import { ViewsClient } from "./api/resources/views/client/Client.js";
 import { WelcomeWizardClient } from "./api/resources/welcomeWizard/client/Client.js";
@@ -81,6 +83,7 @@ export class OpikApiClient {
     protected _environments: EnvironmentsClient | undefined;
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
+    protected _guardrailModels: GuardrailModelsClient | undefined;
     protected _guardrailPolicies: GuardrailPoliciesClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
     protected _insightsViews: InsightsViewsClient | undefined;
@@ -100,6 +103,7 @@ export class OpikApiClient {
     protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
     protected _spans: SpansClient | undefined;
+    protected _topics: TopicsClient | undefined;
     protected _traces: TracesClient | undefined;
     protected _views: ViewsClient | undefined;
     protected _welcomeWizard: WelcomeWizardClient | undefined;
@@ -191,6 +195,10 @@ export class OpikApiClient {
         return (this._feedbackDefinitions ??= new FeedbackDefinitionsClient(this._options));
     }
 
+    public get guardrailModels(): GuardrailModelsClient {
+        return (this._guardrailModels ??= new GuardrailModelsClient(this._options));
+    }
+
     public get guardrailPolicies(): GuardrailPoliciesClient {
         return (this._guardrailPolicies ??= new GuardrailPoliciesClient(this._options));
     }
@@ -265,6 +273,10 @@ export class OpikApiClient {
 
     public get spans(): SpansClient {
         return (this._spans ??= new SpansClient(this._options));
+    }
+
+    public get topics(): TopicsClient {
+        return (this._topics ??= new TopicsClient(this._options));
     }
 
     public get traces(): TracesClient {

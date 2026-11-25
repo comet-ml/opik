@@ -27,6 +27,7 @@ import org.redisson.config.Config;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -112,7 +113,7 @@ class OnlineScorePublisherIntegrationTest {
         var rule = llmRule();
         var projectId = idGenerator.generateId();
 
-        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
+        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user", null).block();
 
         // The resolved-rule overload must never reach the rule service; without this the bare mock would
         // return null, the ruleId overload would map that to an empty Mono, and the test would still pass.
@@ -154,7 +155,7 @@ class OnlineScorePublisherIntegrationTest {
         var projectId = idGenerator.generateId();
         var rule = pythonRule();
 
-        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
+        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user", null).block();
 
         verifyNoInteractions(automationRuleEvaluatorService);
 
@@ -174,6 +175,20 @@ class OnlineScorePublisherIntegrationTest {
                 .as("the Python payload needs the same per-entry granularity as the LLM one")
                 .hasSize(threadIds.size());
         assertThat(written).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    @DisplayName("The organization a judge message carries survives the stream codec")
+    void enqueueThreadMessageKeepsTheOrganizationThroughTheCodec() {
+        var organizationId = UUID.randomUUID().toString();
+        var publisher = newPublisher();
+        var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix());
+
+        publisher.enqueueThreadMessage(threadIds, llmRule(), idGenerator.generateId(), UUID.randomUUID().toString(),
+                RandomStringUtils.secure().nextAlphanumeric(10), organizationId).block();
+
+        assertThat(readStream()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                .containsExactly(organizationId, organizationId);
     }
 
     private AutomationRuleEvaluatorTraceThreadLlmAsJudge llmRule() {

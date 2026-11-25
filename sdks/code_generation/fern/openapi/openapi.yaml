@@ -74,6 +74,8 @@ tags:
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
+- name: Guardrail models
+  description: Guardrail models a workspace trains on its own labelled data
 - name: Guardrail policies
   description: Workspace guardrail policy resources
 - name: Guardrails
@@ -113,6 +115,8 @@ tags:
   description: Service Toggles resources
 - name: Spans
   description: Span related resources
+- name: Topics
+  description: Project topics and internal topics operations
 - name: Traces
   description: Trace related resources
 - name: Views
@@ -4760,6 +4764,508 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/models/{id}/runs/{runId}/cancel:
+    post:
+      tags:
+      - Guardrail models
+      summary: Cancel guardrail model training run
+      description: Cancel a training run that is queued or running. Cancelling a cancelled
+        run again changes nothing and answers 204 too
+      operationId: cancelGuardrailTrainingRun
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrail\
+            \ model training is not enabled for this deployment, or guardrails are\
+            \ not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Training run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: The run has already completed or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/models:
+    get:
+      tags:
+      - Guardrail models
+      summary: Find guardrail models
+      description: "Find the workspace's guardrail models, each with its serving run\
+        \ and its latest run"
+      operationId: findGuardrailModels
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter models by name (partial match, case insensitive)"
+      - name: usable_only
+        in: query
+        schema:
+          type: boolean
+          description: "Only the models with a serving run, the ones a rule can use"
+          default: false
+      - name: latest_run_status
+        in: query
+        schema:
+          type: string
+          description: Filter models by their latest run's status
+          enum:
+          - queued
+          - running
+          - completed
+          - failed
+          - cancelled
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Guardrail model page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailModelPage"
+        "403":
+          description: "Guardrail model training is not enabled for this deployment,\
+            \ or guardrails are not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Guardrail models
+      summary: Create guardrail model
+      description: Create a guardrail model and start its first training run from
+        a labelled JSONL file
+      operationId: createGuardrailModel
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - description
+              - file
+              - name
+              type: object
+              properties:
+                name:
+                  maxLength: 255
+                  minLength: 0
+                  type: string
+                description:
+                  maxLength: 1000
+                  minLength: 0
+                  type: string
+                file:
+                  type: object
+                  description: "JSON Lines in UTF-8, one {\"text\": \"...\", \"label\"\
+                    : \"yes\" | \"no\"} object per line, yes meaning the text violates.\
+                    \ The deployment sets the limits; by default 20 to 50,000 rows,\
+                    \ at least 5 per label, up to 12,000 characters each, 50 MB"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/guardrails/models/{id}"
+        "400":
+          description: "Bad Request: the training data's problems, each line's with\
+            \ its number"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrail\
+            \ model training is not enabled for this deployment, or guardrails are\
+            \ not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: A model with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/models/{id}:
+    get:
+      tags:
+      - Guardrail models
+      summary: Get guardrail model by id
+      description: Get a guardrail model with its serving run and its latest run
+      operationId: getGuardrailModelById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Guardrail model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailModel"
+        "403":
+          description: "Guardrail model training is not enabled for this deployment,\
+            \ or guardrails are not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Guardrail model not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Guardrail models
+      summary: Delete guardrail model
+      description: Delete a guardrail model and its runs
+      operationId: deleteGuardrailModel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrail\
+            \ model training is not enabled for this deployment, or guardrails are\
+            \ not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: A policy rule uses the model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      tags:
+      - Guardrail models
+      summary: Update guardrail model
+      description: Update a guardrail model's description; its name never changes
+      operationId: updateGuardrailModel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardrailModelUpdate"
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrail\
+            \ model training is not enabled for this deployment, or guardrails are\
+            \ not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Guardrail model not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/models/{id}/runs:
+    get:
+      tags:
+      - Guardrail models
+      summary: Find guardrail model training runs
+      description: "Find a guardrail model's training runs, newest first"
+      operationId: findGuardrailTrainingRuns
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Training run page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailTrainingRunPage"
+        "403":
+          description: "Guardrail model training is not enabled for this deployment,\
+            \ or guardrails are not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Guardrail model not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Guardrail models
+      summary: Retrain guardrail model
+      description: Start a new training of the model from a labelled JSONL file; the
+        serving run keeps serving until the new one completes
+      operationId: retrainGuardrailModel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - file
+              type: object
+              properties:
+                file:
+                  type: object
+                  description: "JSON Lines in UTF-8, one {\"text\": \"...\", \"label\"\
+                    : \"yes\" | \"no\"} object per line, yes meaning the text violates.\
+                    \ The deployment sets the limits; by default 20 to 50,000 rows,\
+                    \ at least 5 per label, up to 12,000 characters each, 50 MB"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/guardrails/models/{id}/runs/{runId}"
+        "400":
+          description: "Bad Request: the training data's problems, each line's with\
+            \ its number"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrail\
+            \ model training is not enabled for this deployment, or guardrails are\
+            \ not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Guardrail model not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: The model has a run in flight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/models/{id}/runs/{runId}:
+    get:
+      tags:
+      - Guardrail models
+      summary: Get guardrail model training run by id
+      description: Get one training run of a guardrail model
+      operationId: getGuardrailTrainingRunById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Training run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailTrainingRun"
+        "403":
+          description: "Guardrail model training is not enabled for this deployment,\
+            \ or guardrails are not enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Training run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/guardrails/policies:
     get:
       tags:
@@ -8977,6 +9483,79 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/topics:
+    get:
+      tags:
+      - Topics
+      summary: Get a project's topics
+      description: "The project's topics over the window, the last topics.run.windowDays\
+        \ UTC days (default 30), today included: per topic its count, share, rank\
+        \ and a daily series, plus Other's daily series. Counts can be up to 5 minutes\
+        \ old. status is disabled when the workspace is not opted in to topics, collecting\
+        \ while the project has no topics yet, too_large when a ClickHouse read hit\
+        \ a rows, bytes or memory guard (a retry answers the same, so do not retry),\
+        \ and ready otherwise. Fields of other states are omitted."
+      operationId: getProjectTopics
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: "The project's topics, or status too_large when a read hit\
+            \ a size guard"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTopics"
+        "400":
+          description: No project_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: The project is not in the workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Topics are off
+        "503":
+          description: "ClickHouse is busy: a read hit its time guard or topics.read.budget;\
+            \ retry after Retry-After"
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              style: simple
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/threads/{id}/comments:
     post:
       tags:
@@ -16037,6 +16616,8 @@ components:
           enum:
           - passed
           - failed
+        dataset_item_data:
+          $ref: "#/components/schemas/JsonNode"
     ExperimentRunSummary:
       type: object
       properties:
@@ -16793,6 +17374,8 @@ components:
           enum:
           - passed
           - failed
+        dataset_item_data:
+          $ref: "#/components/schemas/JsonNode"
       readOnly: true
     ExperimentRunSummary_Compare:
       type: object
@@ -19905,6 +20488,149 @@ components:
           type: number
         min:
           type: number
+    GuardrailModel:
+      required:
+      - created_at
+      - created_by
+      - description
+      - id
+      - last_updated_at
+      - last_updated_by
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          description: "Unique in the workspace, ignoring case; never changes"
+        description:
+          type: string
+          description: "What the model flags: the question its adapter is trained\
+            \ and served on"
+        serving_run:
+          $ref: "#/components/schemas/GuardrailTrainingRun"
+        latest_run:
+          $ref: "#/components/schemas/GuardrailTrainingRun"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    GuardrailModelPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardrailModel"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        sortable_by:
+          type: array
+          items:
+            type: string
+    GuardrailTrainingRun:
+      required:
+      - attempt
+      - created_at
+      - created_by
+      - id
+      - last_updated_at
+      - last_updated_by
+      - model_id
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        model_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - queued
+          - running
+          - completed
+          - failed
+          - cancelled
+        status_message:
+          type: string
+          description: Why the run ended failed or cancelled; null otherwise
+          readOnly: true
+        attempt:
+          type: integer
+          description: "Which attempt of one training the run is, 1 for the first"
+          format: int32
+          readOnly: true
+        finished_at:
+          type: string
+          description: "When the run reached completed, failed or cancelled; null\
+            \ while it is in flight"
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    GuardrailTrainingRunPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardrailTrainingRun"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    GuardrailModelUpdate:
+      required:
+      - description
+      type: object
+      properties:
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
     GuardrailPolicy:
       required:
       - name
@@ -23524,6 +24250,7 @@ components:
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
+      - guardrailsTrainingEnabled
       - guardrailsValidationsEnabled
       - modelPricesEnabled
       - ollamaProviderEnabled
@@ -23551,6 +24278,8 @@ components:
         guardrailsEnabled:
           type: boolean
         guardrailsValidationsEnabled:
+          type: boolean
+        guardrailsTrainingEnabled:
           type: boolean
         opikAIEnabled:
           type: boolean
@@ -23604,6 +24333,9 @@ components:
           type: integer
           format: int32
         customChartsEnabledForWorkspace:
+          type: boolean
+          readOnly: true
+        topicsEnabled:
           type: boolean
           readOnly: true
     SpanBatchUpdate:
@@ -24197,6 +24929,136 @@ components:
           type: boolean
           description: Whether the project has at least one matching entity for the
             given scope
+    Attempt:
+      type: object
+      properties:
+        status:
+          type: string
+          description: "running: the run started and has not ended. failed: it ended\
+            \ without saving"
+          enum:
+          - running
+          - failed
+      description: "collecting only: the project's newest run when it is running or\
+        \ failed; omitted when it saved or there is none. The runbook's 'Reading topics'\
+        \ section tells the collecting cases apart"
+    DayCount:
+      type: object
+      properties:
+        day:
+          type: string
+          description: A UTC date
+          format: date
+        count:
+          type: integer
+          description: Traces created on the day
+          format: int64
+      description: "One entry per day of the window, oldest first, today last"
+    OtherStats:
+      type: object
+      properties:
+        series:
+          type: array
+          description: "One entry per day of the window, oldest first, today last"
+          items:
+            $ref: "#/components/schemas/DayCount"
+      description: "ready only: the traces per day with no topic, or with a topic\
+        \ that is no longer live. Add it to the topics' series for the project's total\
+        \ per day"
+    ProjectTopics:
+      type: object
+      properties:
+        status:
+          type: string
+          description: "disabled: the workspace is not opted in to topics. collecting:\
+            \ the project has no topics yet. ready: topics with counts. too_large:\
+            \ the project has too many traces in the window to count; a retry answers\
+            \ the same"
+          enum:
+          - disabled
+          - collecting
+          - ready
+          - too_large
+        today:
+          type: string
+          description: "The UTC date of the request, the window's last day"
+          format: date
+        window_from:
+          type: string
+          description: "The window's first UTC day, inclusive"
+          format: date
+        last_run_at:
+          type: string
+          description: When the project's last saved run (a discovery run or a nightly
+            update) finished; omitted before the first one
+          format: date-time
+        attempt:
+          $ref: "#/components/schemas/Attempt"
+        vectors_in_window:
+          type: integer
+          description: "collecting only: traces with a vector in the window"
+          format: int64
+        min_vectors:
+          type: integer
+          description: "collecting only: traces with a vector the discovery run needs"
+          format: int64
+        total_traces:
+          type: integer
+          description: "ready only: traces with a topic in the window, Other included"
+          format: int64
+        labelled_from:
+          type: string
+          description: "ready only: the first day in the window with a labelled trace;\
+            \ earlier days are 0 because nothing was labelled. Omitted when the window\
+            \ has none"
+          format: date
+        topics:
+          type: array
+          description: The live topics in rank order; empty unless ready
+          items:
+            $ref: "#/components/schemas/TopicStats"
+        other:
+          $ref: "#/components/schemas/OtherStats"
+    TopicStats:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "The topic id, the value the traces filter uses"
+          format: uuid
+        name:
+          type: string
+          description: The topic's name
+        definition:
+          type: string
+          description: What the topic's traces are about
+        born:
+          type: string
+          description: "The UTC date the topic was made: for a discovery run's topics,\
+            \ the day the run started"
+          format: date
+        is_new:
+          type: boolean
+          description: "Born after the project's discovery run, in the last 7 days"
+        count:
+          type: integer
+          description: Traces of the topic in the window
+          format: int64
+        share:
+          type: number
+          description: "count / total_traces, from 0 to 1, not rounded"
+          format: double
+        rank:
+          type: integer
+          description: "1-based: topics by count, most first, then the earlier born,\
+            \ then the id"
+          format: int32
+        series:
+          type: array
+          description: "One entry per day of the window, oldest first, today last"
+          items:
+            $ref: "#/components/schemas/DayCount"
+      description: The live topics in rank order; empty unless ready
     TraceBatchUpdate:
       required:
       - ids

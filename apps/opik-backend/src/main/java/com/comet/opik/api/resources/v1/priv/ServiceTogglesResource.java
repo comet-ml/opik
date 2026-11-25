@@ -1,14 +1,18 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -27,6 +31,8 @@ import lombok.extern.slf4j.Slf4j;
 public class ServiceTogglesResource {
 
     private final @NonNull OpikConfiguration config;
+    private final @NonNull TopicWorkspaceService topicWorkspaces;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
     @Operation(operationId = "getServiceToggles", summary = "Get Service Toggles", description = "Get Service Toggles", responses = {
@@ -34,7 +40,28 @@ public class ServiceTogglesResource {
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles)))
+                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles))
+                        .withTopicsEnabled(isTopicsEnabled()))
                 .build();
+    }
+
+    /**
+     * The same rule as the topics read API: topics on, and the caller's workspace eligible at the {@code ui} stage.
+     * Otherwise the API answers 501 or status disabled. The eligibility check reads MySQL only for a workspace the Helm
+     * list has at that stage. A failed read turns topics off for this response, so the other toggles still load.
+     */
+    private boolean isTopicsEnabled() {
+        if (!config.getTopics().isEnabled()) {
+            return false;
+        }
+        var workspaceId = requestContext.get().getWorkspaceId();
+        try {
+            return topicWorkspaces.reaches(workspaceId, TopicsStage.UI);
+        } catch (RuntimeException exception) {
+            // No stack trace: during an outage every toggles request lands here.
+            log.warn("Failed to read topics eligibility for workspace '{}', topics_enabled is false: {}", workspaceId,
+                    exception.toString());
+            return false;
+        }
     }
 }

@@ -53,17 +53,15 @@ class SpanJsonRowMapper {
      *                           have been migrated off {@code Nullable} to their sentinels.
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive leaves the column
      *                           out so its DDL default applies, matching the binder's {@code bindNull}.
+     * @param streamPayloads     {@code databaseAnalytics.streamPayloads}: false writes {@code input} / {@code output}
+     *                           and their slim copies as escaped strings (the string path).
      * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
      *                           Resolved AND formatted once per batch by the caller, so a
      *                           batch-invariant value is not reformatted per row.
      */
     ObjectNode toJsonRow(@NonNull Span span, @NonNull String userName, @NonNull String workspaceId,
             @NonNull String nowForBatch, @NonNull BigDecimal cost, @NonNull String costVersion,
-            boolean nonNullableColumns, int truncationSize) {
-
-        // Computed once: each is also the input to its *_slim counterpart below.
-        String inputValue = TruncationUtils.toJsonString(span.input());
-        String outputValue = TruncationUtils.toJsonString(span.output());
+            boolean nonNullableColumns, int truncationSize, boolean streamPayloads) {
 
         var node = JsonUtils.createObjectNode();
 
@@ -85,8 +83,19 @@ class SpanJsonRowMapper {
             node.putNull("end_time");
         }
 
-        node.put("input", inputValue);
-        node.put("output", outputValue);
+        // Streamed: each with its *_slim column, written from the node when the row is serialized. Otherwise escaped
+        // strings, each slim copy reparsed from its full string.
+        if (streamPayloads) {
+            JsonRowValues.putJsonWithSlim(node, "input", "input_slim", span.input());
+            JsonRowValues.putJsonWithSlim(node, "output", "output_slim", span.output());
+        } else {
+            String inputValue = TruncationUtils.toJsonString(span.input());
+            String outputValue = TruncationUtils.toJsonString(span.output());
+            node.put("input", inputValue);
+            node.put("output", outputValue);
+            node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+            node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+        }
         // toString(), not toJsonString() -- see the class javadoc. Matches the binder.
         node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
         node.put("model", StringUtils.defaultIfBlank(span.model(), ""));
@@ -111,8 +120,6 @@ class SpanJsonRowMapper {
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);
-        node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-        node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {

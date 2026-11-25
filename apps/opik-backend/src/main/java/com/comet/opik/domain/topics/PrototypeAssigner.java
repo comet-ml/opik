@@ -16,6 +16,9 @@ import java.util.stream.Stream;
  */
 public class PrototypeAssigner {
 
+    /** A trace with no prototype at {@code minCosine} or more has no winner. */
+    static final int NO_WINNER = -1;
+
     private final float[] prototypes;
     private final int[] owners;
     private final int dimensions;
@@ -55,22 +58,59 @@ public class PrototypeAssigner {
 
     /** The owner per trace: a topic index or {@link TopicAlgorithm#OTHER}. */
     public int[] assign(@NonNull float[] vectors) {
-        Preconditions.checkArgument(vectors.length % dimensions == 0, "vectors must be whole rows");
-        return IntStream.range(0, vectors.length / dimensions).map(i -> nearest(vectors, i)).toArray();
+        return owners(winners(vectors));
     }
 
-    /** The owner of trace {@code i}'s nearest prototype; {@link TopicAlgorithm#OTHER} below {@code minCosine}. */
-    private int nearest(float[] vectors, int i) {
-        int best = -1;
-        double bestCosine = Double.NEGATIVE_INFINITY;
-        for (int p = 0; p < owners.length; p++) {
-            double cosine = VectorMath.dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
-            if (cosine > bestCosine) {
-                bestCosine = cosine;
-                best = p;
+    /**
+     * The winning prototype per trace: its index in prototype order (the topic prototypes in the given order, then
+     * {@link #keptOther}), or {@link #NO_WINNER} below {@code minCosine}.
+     */
+    int[] winners(@NonNull float[] vectors) {
+        Preconditions.checkArgument(vectors.length % dimensions == 0, "vectors must be whole rows");
+        int n = vectors.length / dimensions;
+        var out = new int[n];
+        var cosines = new double[2];
+        int count = owners.length;
+        for (int i = 0; i < n; i++) {
+            int best = NO_WINNER;
+            double bestCosine = Double.NEGATIVE_INFINITY;
+            int p = 0;
+            // Two prototypes per pass read each trace value once; dot2's cosines are dot's bit for bit.
+            for (; p + 1 < count; p += 2) {
+                VectorMath.dot2(vectors, i * dimensions, prototypes, p * dimensions, (p + 1) * dimensions, dimensions,
+                        cosines);
+                if (cosines[0] > bestCosine) {
+                    bestCosine = cosines[0];
+                    best = p;
+                }
+                if (cosines[1] > bestCosine) {
+                    bestCosine = cosines[1];
+                    best = p + 1;
+                }
             }
+            if (p < count) {
+                double cosine = VectorMath.dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
+                if (cosine > bestCosine) {
+                    bestCosine = cosine;
+                    best = p;
+                }
+            }
+            out[i] = bestCosine < minCosine ? NO_WINNER : best;
         }
-        return best < 0 || bestCosine < minCosine ? TopicAlgorithm.OTHER : owners[best];
+        return out;
+    }
+
+    /** The owner per winner: a topic index, or {@link TopicAlgorithm#OTHER} for a known-Other prototype or no winner. */
+    int[] owners(@NonNull int[] winners) {
+        var out = new int[winners.length];
+        for (int i = 0; i < winners.length; i++) {
+            out[i] = winners[i] == NO_WINNER ? TopicAlgorithm.OTHER : owners[winners[i]];
+        }
+        return out;
+    }
+
+    int prototypeCount() {
+        return owners.length;
     }
 
     /** How many known-Other prototypes the gate left out. */

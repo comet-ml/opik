@@ -45,6 +45,7 @@ class TopicVectorsMetrics {
     private final LongCounter embedFailures;
     private final LongCounter readFailures;
     private final LongCounter workspacesNotRead;
+    private final LongCounter longWindowMissed;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
 
@@ -64,17 +65,25 @@ class TopicVectorsMetrics {
                         + "workspace")
                 .build();
         this.readFailures = meter.counterBuilder("topics.vectors.read.failures_total")
-                .setDescription("Window reads that failed, by phase, workspace and error type")
+                .setDescription("Reads that failed, by phase: find (one workspace's window read), discover (one "
+                        + "workspace's project discovery) or backfill (one project's window read), workspace and error "
+                        + "type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read_total")
-                .setDescription("Enabled workspaces a tick did not read because its budget ran out, by workspace")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
+                        + "ran out, or the workspace has more projects in backfill than the read can leave out")
+                .build();
+        this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed_total")
+                .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
+                        + "rows the short window missed, by workspace; should stay near zero")
                 .build();
         this.embedDuration = meter.histogramBuilder("topics.vectors.embed.duration_seconds").setUnit("s")
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Time one tick spent in each phase, summed over its workspaces: find (window reads), "
-                        + "embed (embed calls and writes)")
+                .setDescription("Time one tick spent in each phase: discover (project discovery), find (workspace "
+                        + "reads, summed over workspaces), embed (their embed calls and writes, summed over "
+                        + "workspaces), backfill (project reads, embed calls and writes)")
                 .build();
     }
 
@@ -115,6 +124,12 @@ class TopicVectorsMetrics {
         }
     }
 
+    void longWindowMissed(@NonNull Workspace workspace, int vectors) {
+        if (vectors > 0) {
+            longWindowMissed.add(vectors, workspace.attributes());
+        }
+    }
+
     void readFailure(@NonNull String phase, @NonNull Workspace workspace, @NonNull Throwable error) {
         readFailures.add(1, workspace.attributes().toBuilder().put(stringKey("phase"), phase)
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
@@ -128,7 +143,7 @@ class TopicVectorsMetrics {
         return Attributes.builder().put(WORKSPACE_ID_KEY, workspaceId).put(WORKSPACE_NAME_KEY, workspaceName);
     }
 
-    /** A tick's total time in one phase: {@code find} for its window reads, {@code embed} for the embed calls and writes. */
+    /** A tick's time in one phase. */
     void phase(@NonNull String phase, @NonNull Duration duration) {
         phaseDuration.record(duration.toNanos() / 1e9, Attributes.of(stringKey("phase"), phase));
     }

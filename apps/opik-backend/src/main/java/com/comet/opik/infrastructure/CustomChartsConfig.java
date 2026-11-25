@@ -29,6 +29,23 @@ public class CustomChartsConfig {
     }
 
     /**
+     * Whether the public Custom Charts endpoints are exposed on top of the feature itself. Off (the default) keeps
+     * them answering 501 while the internal and widget endpoints work as before.
+     *
+     * <p>No getter; read it via {@link #isPublicEndpointsEnabled(ServiceTogglesConfig)}.
+     */
+    @JsonProperty
+    @Getter(AccessLevel.NONE)
+    private boolean publicEndpointsEnabled;
+
+    /**
+     * Whether the public endpoints may be used: Custom Charts is enabled and the public endpoints are switched on.
+     */
+    public boolean isPublicEndpointsEnabled(@NonNull ServiceTogglesConfig serviceToggles) {
+        return isEnabled(serviceToggles) && publicEndpointsEnabled;
+    }
+
+    /**
      * Beyond this many distinct ids in one result, name enrichment resolves none and no row gets a name column,
      * rather than labelling some rows and not others.
      */
