@@ -783,12 +783,14 @@ describe("CostCenterTab", () => {
       );
       fireEvent.blur(provider);
       expect(provider).toHaveValue("");
+      expect(screen.getByText("Empty = any provider")).toBeVisible();
 
       fireEvent.click(screen.getByRole("radio", { name: "Alias" }));
       fireEvent.focus(screen.getByLabelText("On provider"));
       expect(
         await screen.findByRole("option", { name: "The span's own provider" }),
       ).toBeInTheDocument();
+      expect(screen.getByText("Empty = the span's own provider")).toBeVisible();
     });
 
     it("suggests models to alias, narrowed to the chosen provider", async () => {

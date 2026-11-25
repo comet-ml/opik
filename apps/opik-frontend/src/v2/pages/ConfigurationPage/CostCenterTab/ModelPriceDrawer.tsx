@@ -584,6 +584,9 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   setProvider(fromProviderOption(value, ANY_PROVIDER_LABEL));
                 }}
               />
+              <p className="comet-body-xs text-muted-slate">
+                Empty = any provider
+              </p>
             </div>
             {fieldProblems("model").map((problem, i) => (
               <p key={i} className="comet-body-xs col-span-2 text-destructive">
@@ -682,6 +685,9 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   }}
                 />
               )}
+              <p className="comet-body-xs text-muted-slate">
+                Empty = the span&apos;s own provider
+              </p>
             </div>
             {problems
               .filter((problem) => problem.field?.startsWith("alias_of"))
