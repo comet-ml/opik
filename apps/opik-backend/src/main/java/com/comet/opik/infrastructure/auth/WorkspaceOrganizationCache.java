@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBucketReactive;
 import org.redisson.api.RMapReactive;
@@ -30,8 +31,9 @@ import java.util.Map;
  * The whole key expires {@code keptFor} ({@code authentication.organizationCacheStaleTTL}, 60m by default) after the
  * last answer from Comet.
  * <p>
- * When Comet fails for a workspace with no such hash, {@code opik:workspace-organization-failed:<workspaceId>} holds
- * the epoch millis after which Comet is asked again, and expires then. Any answer from Comet removes it.
+ * When Comet itself fails for a workspace with no such hash, {@code opik:workspace-organization-failed:<workspaceId>}
+ * holds the epoch millis after which Comet is asked again, and expires then, at the latest after {@code keptFor}. Any
+ * answer from Comet removes it.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -86,13 +88,21 @@ class WorkspaceOrganizationCache {
     /**
      * Moves only the refresh time: the expiry stays where the last answer from Comet put it, so a stale copy is never
      * kept for longer than {@code keptFor} while Comet keeps failing. With no entry, the failure goes under a key of
-     * its own, so it can never overwrite an answer from Comet nor be read back as one.
+     * its own, so it can never overwrite an answer from Comet nor be read back as one. That key never outlives
+     * {@code keptFor}: one set while another pod saves an answer would otherwise outlive that answer, and then hide
+     * the workspace's organization until it expires.
      */
     Mono<Void> retryLater(@NonNull String workspaceId) {
-        var retryAfter = String.valueOf(now().plus(retryAfterFailure).toEpochMilli());
+        var window = ObjectUtils.min(retryAfterFailure, keptFor);
+        var retryAfter = String.valueOf(now().plus(window).toEpochMilli());
         return map(workspaceId).fastPutIfExists(REFRESH_AFTER, retryAfter)
-                .flatMap(moved -> moved ? Mono.<Void>empty() : failed(workspaceId).set(retryAfter, retryAfterFailure))
+                .flatMap(moved -> moved ? Mono.<Void>empty() : failed(workspaceId).set(retryAfter, window))
                 .then();
+    }
+
+    Mono<Void> refreshLater(@NonNull String workspaceId) {
+        var retryAfter = String.valueOf(now().plus(retryAfterFailure).toEpochMilli());
+        return map(workspaceId).fastPutIfExists(REFRESH_AFTER, retryAfter).then();
     }
 
     Mono<Boolean> failedRecently(@NonNull String workspaceId) {

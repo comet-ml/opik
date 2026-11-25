@@ -472,10 +472,10 @@ authentication:
   organizationCacheStaleTTL: 60m
   # Default: 30s
   # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
-  #   A workspace with no known organization gets none for this time, without asking Comet. Each attempt already
-  #   retries per requestMaxRetries with backoff, so this is the pause between those rounds: shorter notices
-  #   recovery sooner but sends more calls to a failing Comet. Between 1s and 5m, and at most
-  #   organizationCacheStaleTTL.
+  #   When Comet itself fails (a 5xx, or no answer in time), a workspace with no known organization gets none for
+  #   this time, without asking Comet. Each attempt already retries per requestMaxRetries with backoff, so this is
+  #   the pause between those rounds: shorter notices recovery sooner but sends more calls to a failing Comet.
+  #   Between 1s and 5m; a value above organizationCacheStaleTTL is capped at it.
   organizationCacheRetryAfterFailure: 30s
 
 sharedHttpClientHealthCheck:

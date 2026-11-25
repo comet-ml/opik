@@ -223,6 +223,27 @@ class RemoteOrganizationResolverTest {
             assertCometCalls(API_KEY_PATH, 1);
         }
 
+        @Test
+        void staleOrganizationIsRefreshedForACallerWithOtherCredentialsWhenTheSharedRefreshIsDenied() {
+            stubApiKey(organization(organizationId, false));
+            ask();
+            var movedOrganizationId = UUID.randomUUID().toString();
+            var deniedApiKey = UUID.randomUUID().toString();
+            wireMock.server().resetAll();
+            stubApiKey(deniedApiKey, slowly(forbidden()));
+            stubApiKey(organization(movedOrganizationId, false));
+            clock.advance(FRESH_FOR);
+
+            assertThat(lookup(request(CometCredentials.apiKey(deniedApiKey))).block()).isEqualTo(organizationId);
+            await().untilAsserted(() -> assertApiKeyCalls(deniedApiKey, 1));
+            assertThat(ask()).isEqualTo(organizationId);
+
+            await().untilAsserted(() -> assertThat(cachedEntry()).isEqualTo(entry(movedOrganizationId, FRESH_FOR)));
+            assertThat(ask()).isEqualTo(movedOrganizationId);
+            assertApiKeyCalls(deniedApiKey, 1);
+            assertApiKeyCalls(apiKey, 1);
+        }
+
         static Stream<Arguments> answersThatMeanNoOrganization() {
             return Stream.of(
                     arguments("404", given(test -> notFound())),
@@ -242,7 +263,15 @@ class RemoteOrganizationResolverTest {
             assertCometCalls(API_KEY_PATH, 1);
         }
 
-        static Stream<Arguments> failedAnswers() {
+        static Stream<Arguments> cometDown() {
+            return Stream.of(
+                    arguments("a server error", given(test -> serverError())),
+                    arguments("a 502", given(test -> aResponse().withStatus(502))),
+                    arguments("a connection failure",
+                            given(test -> aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))));
+        }
+
+        static Stream<Arguments> failuresOfOneCall() {
             return Stream.of(
                     arguments("another 400 from Comet",
                             given(test -> cometError(400, RandomStringUtils.secure().nextAlphabetic(20)))),
@@ -252,9 +281,12 @@ class RemoteOrganizationResolverTest {
                     arguments("a success without a body", given(test -> aResponse().withStatus(200))),
                     arguments("a success whose body isn't JSON", given(test -> aResponse().withStatus(200)
                             .withHeader("Content-Type", "text/html").withBody("<html>Comet</html>"))),
-                    arguments("a server error", given(test -> serverError())),
-                    arguments("a connection failure",
-                            given(test -> aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))));
+                    arguments("a success whose JSON can't be read", given(test -> aResponse().withStatus(200)
+                            .withHeader("Content-Type", "application/json").withBody("{\"organizationId\": "))));
+        }
+
+        static Stream<Arguments> failedAnswers() {
+            return Stream.concat(cometDown(), failuresOfOneCall());
         }
 
         static Stream<Arguments> denials() {
@@ -264,8 +296,8 @@ class RemoteOrganizationResolverTest {
         }
 
         @ParameterizedTest(name = "{0}")
-        @MethodSource("failedAnswers")
-        void failedAnswerLeavesNoneAndCometIsAskedAgainOnlyAfterTheRetryWindow(String name,
+        @MethodSource("cometDown")
+        void cometDownLeavesNoneAndCometIsAskedAgainOnlyAfterTheRetryWindow(String name,
                 Given<ResponseDefinitionBuilder> answer) {
             stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
 
@@ -281,6 +313,19 @@ class RemoteOrganizationResolverTest {
         }
 
         @ParameterizedTest(name = "{0}")
+        @MethodSource("failuresOfOneCall")
+        void failureOfOneCallLeavesNoneAndTheNextCallerAsksAgain(String name,
+                Given<ResponseDefinitionBuilder> answer) {
+            stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
+
+            assertThat(ask()).isNull();
+
+            assertThat(failureTimeToLive()).isEqualTo(NO_KEY);
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 2);
+        }
+
+        @ParameterizedTest(name = "{0}")
         @MethodSource("denials")
         void denialLeavesNoneAndCometIsAskedAgain(String name, Given<ResponseDefinitionBuilder> denial) {
             stubApiKey(denial.of(RemoteOrganizationResolverTest.this));
@@ -291,12 +336,14 @@ class RemoteOrganizationResolverTest {
             assertCometCalls(API_KEY_PATH, 2);
         }
 
-        @Test
-        void cometErrorKeepsTheStaleOrganizationAndWaitsBeforeAskingAgain() {
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("failedAnswers")
+        void failedAnswerKeepsTheStaleOrganizationAndWaitsBeforeAskingAgain(String name,
+                Given<ResponseDefinitionBuilder> answer) {
             stubApiKey(organization(organizationId, false));
             ask();
             wireMock.server().resetAll();
-            stubApiKey(serverError());
+            stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
             clock.advance(FRESH_FOR);
 
             assertThat(ask()).isEqualTo(organizationId);
@@ -487,6 +534,22 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
+        void callersDeniedForOtherCredentialsShareOneNewLookup() {
+            var deniedApiKey = UUID.randomUUID().toString();
+            stubApiKey(deniedApiKey, slowly(forbidden()));
+            stubApiKey(slowly(organization(organizationId, false)));
+            var denied = lookup(request(CometCredentials.apiKey(deniedApiKey))).toFuture();
+            await().untilAsserted(() -> assertApiKeyCalls(deniedApiKey, 1));
+
+            assertThat(askConcurrently(requestContext))
+                    .isEqualTo(Collections.nCopies(CONCURRENT_LOOKUPS, Optional.of(organizationId)));
+
+            assertThat(denied.join()).isNull();
+            assertApiKeyCalls(deniedApiKey, 1);
+            assertApiKeyCalls(apiKey, 1);
+        }
+
+        @Test
         void callersWithTheDeniedCredentialsShareTheDenial() {
             stubApiKey(slowly(forbidden()));
 
@@ -529,6 +592,19 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
+        void isNeverKeptLongerThanAnAnswer() {
+            var keptForLessThanTheRetryWindow = new WorkspaceOrganizationCache(redissonClient.reactive(), FRESH_FOR,
+                    FRESH_FOR, FRESH_FOR.multipliedBy(2), clock);
+            resolver = new RemoteOrganizationResolver(() -> requestContext, client, keptForLessThanTheRetryWindow,
+                    true);
+            stubApiKey(serverError());
+
+            ask();
+
+            assertThat(failureTimeToLive()).isBetween(1L, FRESH_FOR.toMillis());
+        }
+
+        @Test
         void noOrganizationAnswerIsAnEntryKeptForTheStaleTime() {
             stubApiKey(notFound());
 
@@ -540,7 +616,7 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
-        void neverOverwritesAnAnswerSavedWhileCometWasFailing() {
+        void keepsAnAnswerSavedMeanwhileAndRefreshesItAfterTheRetryWindow() {
             stubApiKey(slowly(serverError()));
             var failing = lookup(requestContext).toFuture();
             await().untilAsserted(() -> assertCometCalls(API_KEY_PATH, 1));
@@ -574,7 +650,7 @@ class RemoteOrganizationResolverTest {
             wireMock.server().resetAll();
             stubApiKey(organization(organizationId, false));
 
-            // A stale TTL shorter than the retry window lets the saved answer expire while the window is still open
+            // The saved answer expiring must not bring the failure back
             entryMap().delete();
 
             assertThat(failureTimeToLive()).isEqualTo(NO_KEY);
@@ -877,7 +953,7 @@ class RemoteOrganizationResolverTest {
 
     private static final class MovableClock extends Clock {
 
-        private Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        private volatile Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
         void advance(Duration duration) {
             now = now.plus(duration);
