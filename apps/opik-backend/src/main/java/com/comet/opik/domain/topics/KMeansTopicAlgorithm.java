@@ -45,9 +45,10 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         // both known: the inference service rejects a call above its limit, so every such night would fail.
         int verifyMaxTokens = Verifier.maxTokens(tasks.verify(), config, config.getNightlyMaxGroups());
         Preconditions.checkState(verifyMaxTokens <= BatchGenerateItem.MAX_MAX_TOKENS,
-                "the verify call's max_tokens '%s' (max_tokens of topics/tasks/verify.yaml + "
-                        + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) must be at most '%s'",
-                verifyMaxTokens, BatchGenerateItem.MAX_MAX_TOKENS);
+                "the verify call's max_tokens (max_tokens of topics/tasks/verify.yaml + "
+                        + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) is above the limit, "
+                        + "limit '%s', max_tokens '%s'",
+                BatchGenerateItem.MAX_MAX_TOKENS, verifyMaxTokens);
     }
 
     @Override
