@@ -25,6 +25,7 @@ import {
 } from "@/shared/DataTable/utils";
 import PriceRowActionsCell, { PriceRowActions } from "./PriceRowActionsCell";
 import { convertColumnDataToColumn } from "@/lib/table";
+import { cn } from "@/lib/utils";
 import { COLUMN_PIN_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import {
   ANY_PROVIDER_LABEL,
@@ -67,6 +68,7 @@ const PriceCell = (context: CellContext<CatalogEntry, unknown>) => {
   const field = context.column.id as PriceField;
 
   if (entry.row?.kind === "alias") {
+    const aliasPrice = formatPrice(entry.aliasPrices?.[field]);
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}
@@ -75,11 +77,11 @@ const PriceCell = (context: CellContext<CatalogEntry, unknown>) => {
         <TooltipWrapper
           content={`Priced like ${describeAliasTarget(entry.row)}`}
         >
-          <span className="flex min-w-0 items-center gap-1 text-light-slate">
-            <Link2 className="size-3 shrink-0" />
-            <span className="truncate">
-              {formatPrice(entry.aliasPrices?.[field]) ?? NO_VALUE}
-            </span>
+          <span className="flex min-w-0 items-center gap-1">
+            {aliasPrice && (
+              <Link2 className="size-3 shrink-0 text-light-slate" />
+            )}
+            <span className="truncate">{aliasPrice ?? NO_VALUE}</span>
           </span>
         </TooltipWrapper>
       </CellWrapper>
@@ -224,22 +226,31 @@ const PricesTable: React.FC<PricesTableProps> = ({
     onPinnedKeysChange(functionalUpdate(updater, rowPinning).top ?? []);
 
   return (
-    <DataTable
-      columns={columns}
-      data={entries}
-      getRowId={(entry) => entry.key}
-      onRowClick={onOpen}
-      activeRowId={activeKey}
-      sortConfig={{ enabled: true, sorting, setSorting: onSortingChange }}
-      resizeConfig={{
-        enabled: true,
-        columnSizing: columnsWidth,
-        onColumnResize: onColumnsWidthChange,
-      }}
-      pinningConfig={{ rowPinning, setRowPinning }}
-      columnPinning={COLUMN_PINNING}
-      noData={<DataTableNoMatchingData onClearFilters={onClearFilters} />}
-    />
+    <div
+      className={cn(
+        // The table keeps a gutter in its first and last cells; the icon-only
+        // pin and actions columns drop it so their icons sit mid-cell.
+        "[&_td:first-child_[data-cell-wrapper=true]]:!pl-0",
+        canEdit && "[&_td:last-child_[data-cell-wrapper=true]]:!pr-0",
+      )}
+    >
+      <DataTable
+        columns={columns}
+        data={entries}
+        getRowId={(entry) => entry.key}
+        onRowClick={onOpen}
+        activeRowId={activeKey}
+        sortConfig={{ enabled: true, sorting, setSorting: onSortingChange }}
+        resizeConfig={{
+          enabled: true,
+          columnSizing: columnsWidth,
+          onColumnResize: onColumnsWidthChange,
+        }}
+        pinningConfig={{ rowPinning, setRowPinning }}
+        columnPinning={COLUMN_PINNING}
+        noData={<DataTableNoMatchingData onClearFilters={onClearFilters} />}
+      />
+    </div>
   );
 };
 
