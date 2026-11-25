@@ -14,13 +14,13 @@ import { Sheet, SheetContent, SheetDescription, SheetTopBar } from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
-import { Tag } from "@/ui/tag";
 import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Alert, AlertDescription } from "@/ui/alert";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
@@ -473,14 +473,18 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
       </SheetDescription>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
         <div className="flex flex-wrap items-center gap-1.5">
-          <TooltipWrapper content={TYPE_DESCRIPTIONS[type]}>
-            <Tag variant={TYPE_TAG_VARIANT[type]}>
-              {CATALOG_TYPE_LABELS[type]}
-            </Tag>
-          </TooltipWrapper>
-          <Tag variant="default">{providerLabel}</Tag>
+          <ColoredTag
+            label={CATALOG_TYPE_LABELS[type]}
+            variant={TYPE_TAG_VARIANT[type]}
+            tooltip={TYPE_DESCRIPTIONS[type]}
+            size="default"
+          />
+          <ColoredTag label={providerLabel} size="default" />
           {entry?.mode && (
-            <Tag variant="gray">{MODE_LABELS[entry.mode] ?? entry.mode}</Tag>
+            <ColoredTag
+              label={MODE_LABELS[entry.mode] ?? entry.mode}
+              size="default"
+            />
           )}
           {lastUpdatedAt && (
             <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
