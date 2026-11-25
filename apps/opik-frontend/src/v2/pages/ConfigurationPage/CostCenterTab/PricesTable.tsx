@@ -205,15 +205,12 @@ const PricesTable: React.FC<PricesTableProps> = ({
         ? [
             generateActionsColumDef<CatalogEntry>({
               cell: PriceRowActionsCell as never,
-              customMeta: {
-                onEdit: onOpen,
-                onRemove,
-              } satisfies PriceRowActions,
+              customMeta: { onRemove } satisfies PriceRowActions,
             }),
           ]
         : []),
     ],
-    [selectedColumns, columnsOrder, canEdit, onOpen, onRemove],
+    [selectedColumns, columnsOrder, canEdit, onRemove],
   );
 
   const rowPinning = useMemo<RowPinningState>(

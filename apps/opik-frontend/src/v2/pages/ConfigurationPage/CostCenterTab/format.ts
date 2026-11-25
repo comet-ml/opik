@@ -34,7 +34,7 @@ export const TYPE_TAG_VARIANT: Record<CatalogType, TagProps["variant"]> = {
 export const TYPE_DESCRIPTIONS: Record<CatalogType, string> = {
   default: "Built-in price from Opik",
   override: "Custom price for an existing model",
-  custom: "Custom model",
+  custom: "Custom model added by your organization",
   alias: "Uses another model's price",
 };
 

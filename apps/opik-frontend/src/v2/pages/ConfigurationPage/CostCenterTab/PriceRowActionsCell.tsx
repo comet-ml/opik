@@ -1,20 +1,13 @@
 import React, { useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, RotateCcw, Trash } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
+import { RotateCcw, Trash } from "lucide-react";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { CatalogEntry } from "@/lib/model-prices";
 
 export type PriceRowActions = {
-  onEdit: (entry: CatalogEntry) => void;
   onRemove: (entry: CatalogEntry) => void;
 };
 
@@ -24,8 +17,10 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const entry = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { onEdit, onRemove } = (custom ?? {}) as PriceRowActions;
+  const { onRemove } = (custom ?? {}) as PriceRowActions;
   const isOverride = entry.type === "override";
+  const actionLabel = isOverride ? "Restore all defaults" : "Delete";
+  const Icon = isOverride ? RotateCcw : Trash;
 
   return (
     <CellWrapper
@@ -53,35 +48,17 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
             confirmText={isOverride ? "Restore all defaults" : "Delete model"}
             confirmButtonVariant="destructive"
           />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="minimal" size="icon" className="-mr-2.5">
-                <span className="sr-only">Actions menu</span>
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => onEdit(entry)}>
-                <Pencil className="mr-2 size-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {isOverride ? (
-                <DropdownMenuItem onClick={() => setIsConfirmOpen(true)}>
-                  <RotateCcw className="mr-2 size-4" />
-                  Restore all defaults
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem
-                  onClick={() => setIsConfirmOpen(true)}
-                  variant="destructive"
-                >
-                  <Trash className="mr-2 size-4" />
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TooltipWrapper content={actionLabel}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-mr-2.5"
+              aria-label={`${actionLabel}: ${entry.model}`}
+              onClick={() => setIsConfirmOpen(true)}
+            >
+              <Icon className="size-4 text-light-slate" />
+            </Button>
+          </TooltipWrapper>
         </>
       )}
     </CellWrapper>

@@ -605,22 +605,18 @@ describe("CostCenterTab", () => {
   });
 
   describe("row actions", () => {
-    const openRowMenu = (model: string) =>
-      fireEvent.pointerDown(
-        within(rowOf(model)).getByRole("button", { name: "Actions menu" }),
-        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
-      );
+    const rowAction = (model: string, name: RegExp) =>
+      within(rowOf(model)).queryByRole("button", { name });
     const sentModels = () =>
       sentRows().map((row: { model: string }) => row.model);
 
-    it("removes a custom model after confirming", async () => {
+    it("deletes a custom model after confirming", async () => {
       mutateAsync.mockImplementation(async ({ dryRun }) =>
         replaceResult(dryRun),
       );
       renderTab(ADMIN);
 
-      openRowMenu("acme-llama-70b");
-      fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+      fireEvent.click(rowAction("acme-llama-70b", /^Delete/)!);
       fireEvent.click(
         await screen.findByRole("button", { name: "Delete model" }),
       );
@@ -631,16 +627,13 @@ describe("CostCenterTab", () => {
       expect(screen.queryByLabelText("Model name")).toBeNull();
     });
 
-    it("restores the defaults of an override from its row menu", async () => {
+    it("restores the defaults of an override from its row", async () => {
       mutateAsync.mockImplementation(async ({ dryRun }) =>
         replaceResult(dryRun),
       );
       renderTab(ADMIN);
 
-      openRowMenu("gpt-4o");
-      fireEvent.click(
-        await screen.findByRole("menuitem", { name: "Restore all defaults" }),
-      );
+      fireEvent.click(rowAction("gpt-4o", /^Restore all defaults/)!);
       fireEvent.click(
         await screen.findByRole("button", { name: "Restore all defaults" }),
       );
@@ -649,23 +642,15 @@ describe("CostCenterTab", () => {
       expect(sentModels()).toEqual(["acme-llama-70b", "team-model"]);
     });
 
-    it("offers no row menu for built-in prices or to read-only users", () => {
+    it("offers no row action for built-in prices or to read-only users", () => {
       const { unmount } = renderTab(ADMIN);
 
-      expect(
-        within(rowOf("gpt-4o-mini")).queryByRole("button", {
-          name: "Actions menu",
-        }),
-      ).toBeNull();
+      expect(rowAction("gpt-4o-mini", /^(Delete|Restore)/)).toBeNull();
 
       unmount();
       renderTab({ canEdit: false, isPending: false, organizationName: "Acme" });
 
-      expect(
-        within(rowOf("acme-llama-70b")).queryByRole("button", {
-          name: "Actions menu",
-        }),
-      ).toBeNull();
+      expect(rowAction("acme-llama-70b", /^Delete/)).toBeNull();
     });
   });
 
