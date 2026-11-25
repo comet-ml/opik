@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+from typing import Optional
 
 import flask
 import pydantic
@@ -27,6 +28,14 @@ _TRAIN_LOCK = threading.Lock()
 
 def _adapters_dir() -> str:
     return os.getenv("OPIK_GUARDRAILS_ADAPTERS_DIR") or "/adapters"
+
+
+def _model_dir(name: str) -> Optional[str]:
+    adapters_dir = os.path.realpath(_adapters_dir())
+    model_dir = os.path.realpath(os.path.join(adapters_dir, name))
+    if not model_dir.startswith(adapters_dir + os.sep):
+        return None
+    return model_dir
 
 
 @guardrails_blueprint.errorhandler(pydantic.ValidationError)
@@ -84,12 +93,12 @@ def validate_combined() -> tuple[flask.Response, int]:
 def train_custom_guardrail() -> tuple[flask.Response, int]:
     request = schemas.CustomGuardrailTrainingRequest(**flask.request.get_json())
 
-    if not _NAME_PATTERN.match(request.name):
+    model_dir = _model_dir(request.name) if _NAME_PATTERN.match(request.name) else None
+    if model_dir is None:
         return flask.jsonify(
             {"error": "Invalid name; use letters, digits, '.', '_' or '-' only"}
         ), 400
 
-    model_dir = os.path.join(_adapters_dir(), request.name)
     status_path = os.path.join(model_dir, "status.json")
 
     # Claim the name atomically: only one thread can pass the checks and write the
@@ -147,10 +156,11 @@ def train_custom_guardrail() -> tuple[flask.Response, int]:
 
 @guardrails_blueprint.route("/custom/train/<name>", methods=["GET"])
 def get_custom_guardrail_training(name: str) -> tuple[flask.Response, int]:
-    if not _NAME_PATTERN.match(name):
+    model_dir = _model_dir(name) if _NAME_PATTERN.match(name) else None
+    if model_dir is None:
         return flask.jsonify({"error": "Invalid name"}), 400
 
-    current = training_status.read(os.path.join(_adapters_dir(), name, "status.json"))
+    current = training_status.read(os.path.join(model_dir, "status.json"))
     if not current:
         return flask.jsonify({"error": f"No training found for '{name}'"}), 404
 
