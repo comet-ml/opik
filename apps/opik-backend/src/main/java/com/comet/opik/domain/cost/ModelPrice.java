@@ -94,6 +94,11 @@ public record ModelPrice(
                 .orElse(cacheCreationInputTokenPrice);
     }
 
+    public boolean isPricedPerUnit() {
+        return calculator == SpanCostCalculator.AUDIO_SPEECH_CALCULATOR
+                || calculator == SpanCostCalculator.VIDEO_GENERATION_CALCULATOR;
+    }
+
     public boolean hasTokenPrices() {
         return inputPrice.signum() > 0 || outputPrice.signum() > 0 || cacheCreationInputTokenPrice.signum() > 0
                 || cacheReadInputTokenPrice.signum() > 0;
