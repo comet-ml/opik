@@ -56,7 +56,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:traces'] },
   () => {
     test(
-      'the trace redirect resolves the workspace itself, echoes one it is given, and refuses a caller with no session',
+      'the trace redirect resolves the workspace itself, echoes one it is given, and does not take it from the caller’s session',
       { tag: ['@cap:traces.sdk-redirect-link'] },
       async ({
         project,
@@ -170,15 +170,42 @@ test.describe(
           expect(result.location, 'a refused request carries no Location').toBeNull();
         });
 
-        await test.step('A valid API key with no session cookie is refused', async () => {
+        await test.step('A caller with no session cookie meets this deployment’s auth wall', async () => {
           // The claim is not "strangers are refused" but "this endpoint answers
           // for a SESSION" — which is what makes the workspace it resolves the
           // session's own, and so what makes the no-param branch meaningful at
           // all. See core/session-redirect.ts for why the API key is sent.
+          //
+          // QA: branched on the deployment because plain `oss` has no auth wall
+          // at ALL — nothing is behind a session or an API key there
+          // (`GET /v1/private/projects` answers 200 to a request carrying no
+          // headers whatsoever), so there is no refusal for this endpoint to
+          // give and a flat 403 assertion fails every OSS run. It was authored
+          // and settled against staging, which does have the wall.
+          //
+          // Both branches are assertions, not a skip: on oss the endpoint must
+          // still answer this session-free caller the SAME Location it gave the
+          // session above, which is the positive form of "the workspace came
+          // from the deployment's own config and not from a cookie" — the very
+          // thing 9742 moved. So the no-param branch stays meaningful on both
+          // targets, each by the route that target actually has.
           const result = await getTraceRedirectWithoutSession({ traceId });
+          if (envConfig.deployment === 'oss') {
+            expect(
+              result.status,
+              `oss has no auth wall, so a session-free caller is still served (body: ${result.body})`,
+            ).toBe(303);
+            expect(
+              result.location,
+              'and is served the same workspace the session was — so the lookup is not session-derived',
+            ).toBe(expected);
+            return;
+          }
+
           expect(
             result.status,
-            `an API-key-only caller is refused (body: ${result.body})`,
+            `an API-key-only caller is refused on a ${envConfig.deployment} deployment ` +
+              `(body: ${result.body})`,
           ).toBe(403);
           expect(result.location, 'a refused caller gets no Location').toBeNull();
         });
