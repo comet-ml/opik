@@ -84,7 +84,10 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
             : [];
 
           return (
-            <div className="flex flex-col gap-1.5 px-2.5 py-2">
+            <div
+              className="flex flex-col gap-1.5 px-2.5 py-2"
+              {...{ [NATIVE_UNDO_ATTRIBUTE]: "" }}
+            >
               <span className="comet-body-xs-accented pl-px text-muted-slate">
                 Filters
               </span>

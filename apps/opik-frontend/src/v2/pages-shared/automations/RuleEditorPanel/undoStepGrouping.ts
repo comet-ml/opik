@@ -40,12 +40,19 @@ const getInsertedText = (previous: string, next: string) => {
   return next.slice(start, next.length - end);
 };
 
-export const describeEdit = (
-  value: unknown,
-  previousText: string,
-  nextText: string,
+type EditChange = {
+  value: unknown;
+  previousText: string;
+  nextText: string;
+  at?: number;
+};
+
+export const describeEdit = ({
+  value,
+  previousText,
+  nextText,
   at = Date.now(),
-): Edit => {
+}: EditChange): Edit => {
   const kind = getEditKind(value);
   const isDeleting = nextText.length < previousText.length;
   const endsWord =

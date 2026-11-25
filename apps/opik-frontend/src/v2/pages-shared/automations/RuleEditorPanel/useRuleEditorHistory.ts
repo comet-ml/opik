@@ -177,11 +177,11 @@ const useRuleEditorHistory = (
         historyRef.current = replacePresent(history, next);
         return;
       }
-      const edit = describeEdit(
-        form.getValues(name),
-        getContentText(history.present),
-        getContentText(next),
-      );
+      const edit = describeEdit({
+        value: form.getValues(name),
+        previousText: getContentText(history.present),
+        nextText: getContentText(next),
+      });
       setHistory(
         startsNewStep(lastEditRef.current, edit)
           ? commit(history, next)
