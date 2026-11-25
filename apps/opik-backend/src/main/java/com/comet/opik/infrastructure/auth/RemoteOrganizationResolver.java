@@ -13,6 +13,7 @@ import com.google.inject.ProvisionException;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Provider;
@@ -237,14 +238,17 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     }
 
     private void countAnswer(Caller caller, String source) {
-        answers.add(1, Attributes.of(ErrorMetricsResolver.WORKSPACE_ID_KEY, caller.workspaceId(),
-                ErrorMetricsResolver.WORKSPACE_NAME_KEY, caller.workspaceName(), SOURCE_KEY, source));
+        answers.add(1, workspaceAttributes(caller).put(SOURCE_KEY, source).build());
     }
 
     private void countCometCall(Caller caller, String result, AttributeKey<String> detailKey, String detail) {
-        cometCalls.add(1, Attributes.of(ErrorMetricsResolver.WORKSPACE_ID_KEY, caller.workspaceId(),
-                ErrorMetricsResolver.WORKSPACE_NAME_KEY, caller.workspaceName(), RESULT_KEY, result, detailKey,
-                detail));
+        cometCalls.add(1, workspaceAttributes(caller).put(RESULT_KEY, result).put(detailKey, detail).build());
+    }
+
+    private static AttributesBuilder workspaceAttributes(Caller caller) {
+        return Attributes.builder()
+                .put(ErrorMetricsResolver.WORKSPACE_ID_KEY, caller.workspaceId())
+                .put(ErrorMetricsResolver.WORKSPACE_NAME_KEY, caller.workspaceName());
     }
 
     private static Mono<String> organizationOf(Lookup lookup) {
