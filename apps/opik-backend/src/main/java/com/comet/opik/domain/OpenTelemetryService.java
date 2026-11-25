@@ -377,25 +377,31 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     }
 
     /**
-     * Valid {@code opik.project_name} span attributes of the batch, so a span with no project of its own or of its
-     * resource goes to the project of its nearest ancestor in the batch. agentgateway sets the attribute on the request
-     * span only, not on its upstream-call child span.
+     * The valid {@code opik.project_name} of each span in the batch, from the span or else its resource, so a span with
+     * no project of its own or of its resource goes to the project of its nearest ancestor in the batch. agentgateway
+     * sets the attribute on the request span only, not on its upstream-call child span.
      */
     private record AncestorProjects(Map<SpanKey, Span> spansById, Map<SpanKey, Optional<String>> resolvedProjects) {
 
         static AncestorProjects of(ExportTraceServiceRequest traceRequest) {
             Map<SpanKey, Span> spansById = new HashMap<>();
             Map<SpanKey, Optional<String>> resolvedProjects = new HashMap<>();
-            traceRequest.getResourceSpansList().stream()
-                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                    .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                    .forEach(span -> {
-                        var key = SpanKey.of(span);
-                        spansById.putIfAbsent(key, span);
-                        OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList())
-                                .filter(OpenTelemetryMapper::isValidProjectName)
-                                .ifPresent(projectName -> resolvedProjects.putIfAbsent(key, Optional.of(projectName)));
-                    });
+            for (var resourceSpans : traceRequest.getResourceSpansList()) {
+                var resourceProjectName = OpenTelemetryMapper
+                        .extractOpikProjectName(resourceSpans.getResource().getAttributesList())
+                        .filter(OpenTelemetryMapper::isValidProjectName);
+                resourceSpans.getScopeSpansList().stream()
+                        .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
+                        .forEach(span -> {
+                            var key = SpanKey.of(span);
+                            spansById.putIfAbsent(key, span);
+                            OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList())
+                                    .filter(OpenTelemetryMapper::isValidProjectName)
+                                    .or(() -> resourceProjectName)
+                                    .ifPresent(projectName -> resolvedProjects.putIfAbsent(key,
+                                            Optional.of(projectName)));
+                        });
+            }
             return resolvedProjects.isEmpty()
                     ? new AncestorProjects(Map.of(), Map.of())
                     : new AncestorProjects(spansById, resolvedProjects);

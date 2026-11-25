@@ -90,6 +90,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -1628,6 +1629,30 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
+        @DisplayName("opik.project_name on the resource of an ancestor: the child joins the ancestor's project and trace")
+        void opikProjectNameOnTheAncestorResourceKeepsTheChildWithItsAncestor() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var resourceProject = "resource-project-" + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var spans = rootAndChild();
+            var request = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .setResource(Resource.newBuilder().addAttributes(projectNameAttribute(resourceProject)))
+                            .addScopeSpans(ScopeSpans.newBuilder().addSpans(spans.getFirst())))
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addSpans(spans.getLast())))
+                    .build();
+
+            sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
+                    "header-project-" + RandomStringUtils.secure().nextAlphanumeric(20), workspaceName, okApikey,
+                    HttpStatus.SC_OK, null);
+
+            assertTraceStoredInProject(spans, resourceProject, workspaceName);
+        }
+
+        @Test
         @DisplayName("opik.project_name on the resource of a child wins over the project of its ancestor")
         void opikProjectNameOnTheChildResourceWinsOverTheAncestor() {
             String workspaceName = UUID.randomUUID().toString();
@@ -1685,6 +1710,7 @@ class OpenTelemetryResourceTest {
                     .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
                     .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
                     .addAttributes(stringAttribute("opik.trace_id", existingTraceId.toString()))
+                    .addAttributes(stringAttribute("opik.span_id", UUID_V7_GENERATOR.generate().toString()))
                     .addAttributes(stringAttribute("opik.parent_span_id", existingSpanId.toString()))
                     .build();
             var child = childOf(parent);
@@ -1716,64 +1742,70 @@ class OpenTelemetryResourceTest {
                     List.of(), 1, 10).content()).extracting(Trace::id).containsExactly(existingTraceId);
         }
 
-        static Stream<Arguments> unmappedAttributesByScope() {
-            return Stream.of(
-                    Arguments.of("agentgateway", true),
-                    Arguments.of(RandomStringUtils.secure().nextAlphanumeric(10), false));
-        }
-
-        @ParameterizedTest
-        @MethodSource("unmappedAttributesByScope")
-        @DisplayName("unmapped attributes go to metadata on agentgateway spans and to input on other spans")
-        void unmappedAttributesByScope(String scopeName, boolean unmappedToMetadata) {
+        @Test
+        @DisplayName("unmapped attributes go to metadata on agentgateway spans and to input on other spans of the same request")
+        void unmappedAttributesByScopeOfEachSpan() {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
 
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(20);
-            var prompt = "[{\"role\":\"user\",\"content\":\"%s\"}]"
-                    .formatted(RandomStringUtils.secure().nextAlphanumeric(20));
-            var model = RandomStringUtils.secure().nextAlphanumeric(10);
-            var route = RandomStringUtils.secure().nextAlphanumeric(10);
-            var path = "/" + RandomStringUtils.secure().nextAlphanumeric(10);
-            var otelSpan = Span.newBuilder()
-                    .setName(RandomStringUtils.secure().nextAlphanumeric(10))
-                    .setTraceId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(16)))
-                    .setSpanId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(8)))
-                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
-                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
-                    .addAttributes(stringAttribute("gen_ai.prompt", prompt))
-                    .addAttributes(stringAttribute("gen_ai.request.model", model))
-                    .addAttributes(stringAttribute("route", route))
-                    .addAttributes(stringAttribute("http.path", path))
-                    .build();
+            var otherScope = RandomStringUtils.secure().nextAlphanumeric(10);
+            var gatewaySpan = spanWithUnmappedAttributes();
+            var otherSpan = spanWithUnmappedAttributes();
             var request = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
                             .addScopeSpans(ScopeSpans.newBuilder()
-                                    .setScope(InstrumentationScope.newBuilder().setName(scopeName))
-                                    .addSpans(otelSpan)))
+                                    .setScope(InstrumentationScope.newBuilder().setName("agentgateway"))
+                                    .addSpans(gatewaySpan))
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .setScope(InstrumentationScope.newBuilder().setName(otherScope))
+                                    .addSpans(otherSpan)))
                     .build();
 
             sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
                     projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
 
+            assertUnmappedAttributesStoredIn(gatewaySpan, true, projectName, workspaceName);
+            assertUnmappedAttributesStoredIn(otherSpan, false, projectName, workspaceName);
+        }
+
+        private Span spanWithUnmappedAttributes() {
+            return Span.newBuilder()
+                    .setName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .setTraceId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(16)))
+                    .setSpanId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(8)))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(stringAttribute("gen_ai.prompt", "[{\"role\":\"user\",\"content\":\"%s\"}]"
+                            .formatted(RandomStringUtils.secure().nextAlphanumeric(20))))
+                    .addAttributes(stringAttribute("gen_ai.request.model",
+                            RandomStringUtils.secure().nextAlphanumeric(10)))
+                    .addAttributes(stringAttribute("route", RandomStringUtils.secure().nextAlphanumeric(10)))
+                    .addAttributes(stringAttribute("http.path", "/" + RandomStringUtils.secure().nextAlphanumeric(10)))
+                    .build();
+        }
+
+        private void assertUnmappedAttributesStoredIn(Span otelSpan, boolean unmappedToMetadata, String projectName,
+                String workspaceName) {
+            var attributes = otelSpan.getAttributesList().stream()
+                    .collect(Collectors.toMap(KeyValue::getKey, attribute -> attribute.getValue().getStringValue()));
             var input = JsonUtils.createObjectNode();
-            input.set("gen_ai.prompt", JsonUtils.getJsonNodeFromString(prompt));
+            input.set("gen_ai.prompt", JsonUtils.getJsonNodeFromString(attributes.get("gen_ai.prompt")));
             var metadata = JsonUtils.createObjectNode();
-            metadata.put("integration", scopeName);
+            metadata.put("integration", "agentgateway");
             var unmappedBucket = unmappedToMetadata ? metadata : input;
-            unmappedBucket.put("route", route);
-            unmappedBucket.put("http.path", path);
+            unmappedBucket.put("route", attributes.get("route"));
+            unmappedBucket.put("http.path", attributes.get("http.path"));
 
             var opikTraceId = opikTraceIdOf(otelSpan);
             var expected = expectedSpan(otelSpan, opikTraceId).toBuilder()
-                    .model(model)
+                    .model(attributes.get("gen_ai.request.model"))
                     .type(SpanType.llm)
                     .input(input)
                     .metadata(metadata)
                     .build();
-            var storedSpans = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName,
-                    okApikey).content();
-            assertThat(storedSpans)
+            assertThat(spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName, okApikey)
+                    .content())
                     .usingRecursiveComparison()
                     .ignoringFields(SpanAssertions.IGNORED_FIELDS)
                     .isEqualTo(List.of(expected));
