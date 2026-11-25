@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -18,8 +17,6 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-
 /**
  * The discovery run's gate and retry wait. With the test config, a workspace is fresh for 2 days (twice
  * {@code longWindowInterval}), the longest backfill wait is 72 hours, and the retry waits are 1h, 6h and 1d.
@@ -30,8 +27,6 @@ class TopicsBackfillGateTest {
     private static final Instant NOW = Instant.now();
     private static final TopicsConfig CONFIG = TestConfigUtils.loadConfigTest().getTopics();
     private static final TopicsBackfillGate GATE = new TopicsBackfillGate(CONFIG);
-    private static final TopicsDiscoveryCandidates CANDIDATES = new TopicsDiscoveryCandidates(CONFIG,
-            mock(TransactionTemplate.class), mock(TopicWindowDAO.class), GATE);
 
     private static ListlessProject.ListlessProjectBuilder project() {
         return ListlessProject.builder().workspaceId(UUID.randomUUID().toString()).projectId(UUID.randomUUID());
@@ -89,7 +84,8 @@ class TopicsBackfillGateTest {
     @MethodSource("retries")
     @DisplayName("a failed discovery run waits 1h, then 6h, then 1d before the next")
     void retryDue(String name, ListlessProject.ListlessProjectBuilder project, boolean due) {
-        assertThat(CANDIDATES.retryDue(project.build(), NOW)).isEqualTo(due);
+        assertThat(TopicsDiscoveryCandidates.retryDue(CONFIG.getDiscovery().retryDelays(), project.build(), NOW))
+                .isEqualTo(due);
     }
 
     @Test

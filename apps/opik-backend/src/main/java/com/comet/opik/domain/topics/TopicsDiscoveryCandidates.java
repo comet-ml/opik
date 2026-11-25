@@ -101,12 +101,11 @@ class TopicsDiscoveryCandidates {
         return delays.get(Math.min(failures, delays.size()) - 1);
     }
 
-    /** Whether the project's last failed discovery run, if any, is older than its retry delay. */
-    boolean retryDue(@NonNull ListlessProject project, @NonNull Instant now) {
+    /** Whether the project's last failed discovery run, if any, is older than its retry delay of {@code delays}. */
+    static boolean retryDue(@NonNull List<Duration> delays, @NonNull ListlessProject project, @NonNull Instant now) {
         if (project.failedRuns() == 0 || project.runFinishedAt() == null) {
             return true;
         }
-        var delays = config.getDiscovery().retryDelays();
         return !project.runFinishedAt().plus(retryDelay(delays, project.failedRuns())).isAfter(now);
     }
 
@@ -119,7 +118,7 @@ class TopicsDiscoveryCandidates {
         var open = new LinkedHashMap<String, List<UUID>>();
         var overdue = new LinkedHashMap<String, List<ListlessProject>>();
         for (var project : listless) {
-            if (!retryDue(project, now)) {
+            if (!retryDue(config.getDiscovery().retryDelays(), project, now)) {
                 continue;
             }
             var state = backfillGate.discoveryGate(project, now);

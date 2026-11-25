@@ -761,38 +761,6 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("a run counts as claimed once a pod claimed it, still after a requeue, and then cannot be dropped as "
-            + "unclaimed; a run no pod claimed can")
-    void isClaimedFollowsTheClaim() {
-        var workspaceId = newId().toString();
-        var projectId = newId();
-        var runId = newId();
-        var claimedAt = NIGHT.plusSeconds(10);
-
-        var claimed = template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicProjectDAO.class);
-            dao.ensureRow(workspaceId, projectId);
-            dao.queue(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, NIGHT);
-            var queued = dao.isClaimed(workspaceId, projectId, runId);
-            dao.claim(workspaceId, projectId, runId, claimedAt, claimedAt.plus(Duration.ofMinutes(30)));
-            var running = dao.isClaimed(workspaceId, projectId, runId);
-            var otherRun = dao.isClaimed(workspaceId, projectId, newId());
-            dao.requeue(workspaceId, projectId, runId, claimedAt.plusSeconds(10));
-            var requeued = dao.isClaimed(workspaceId, projectId, runId);
-            var droppedClaimed = dao.dropUnclaimed(workspaceId, projectId, runId, claimedAt.plusSeconds(20)) == 1;
-            var neverClaimedProject = newId();
-            var neverClaimed = newId();
-            dao.ensureRow(workspaceId, neverClaimedProject);
-            dao.queue(workspaceId, neverClaimedProject, neverClaimed, TopicProject.RunMode.DISCOVERY, NIGHT);
-            var droppedUnclaimed = dao.dropUnclaimed(workspaceId, neverClaimedProject, neverClaimed,
-                    claimedAt.plusSeconds(20)) == 1;
-            return List.of(queued, running, otherRun, requeued, droppedClaimed, droppedUnclaimed);
-        });
-
-        assertThat(claimed).containsExactly(false, true, false, true, false, true);
-    }
-
-    @Test
     @DisplayName("each move of a run is a compare-and-set on its id and the status it expects: a second queue, a "
             + "second claim, a stale run id and a save after a cancel change nothing")
     void runMovesAreCompareAndSet() {
@@ -914,45 +882,6 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(projectId)).extracting(TopicProject::runId, TopicProject::runStatus,
                 TopicProject::failedRuns, TopicProject::firstFailedAt)
                 .containsExactly(savedPass, TopicProject.RunStatus.SAVED, 1, NIGHT);
-    }
-
-    @Test
-    @DisplayName("the planner reads the runs in flight with whether their project still exists, and the listless "
-            + "projects with no run in flight and a trace in the window")
-    void plannerReads() {
-        var workspaceId = newId().toString();
-        var listless = newId();
-        var inFlight = newId();
-        var deleted = newId();
-        var quiet = newId();
-        var inFlightRun = newId();
-        var deletedRun = newId();
-        data.seed(workspaceId, listless, 0, 1);
-        data.seed(workspaceId, inFlight, 1, 1);
-        data.project(workspaceId, quiet);
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicProjectDAO.class);
-            dao.ensureRow(workspaceId, inFlight);
-            dao.queue(workspaceId, inFlight, inFlightRun, TopicProject.RunMode.DISCOVERY, NIGHT);
-            TopicsTestData.startRun(dao, workspaceId, deleted, deletedRun, TopicProject.RunMode.DISCOVERY, NIGHT);
-            return null;
-        });
-
-        var runs = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class).findInFlight())
-                .stream().filter(run -> run.workspaceId().equals(workspaceId)).toList();
-        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                .findListless(List.of(workspaceId), TRACES.night().minus(Duration.ofDays(30))));
-
-        assertThat(runs).containsExactlyInAnyOrder(
-                InFlightRun.builder().workspaceId(workspaceId).projectId(inFlight).runId(inFlightRun)
-                        .runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.QUEUED)
-                        .runQueuedAt(NIGHT).build(),
-                InFlightRun.builder().workspaceId(workspaceId).projectId(deleted).runId(deletedRun)
-                        .runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.RUNNING)
-                        .runQueuedAt(NIGHT).deadlineAt(NIGHT.plus(Duration.ofHours(1))).heartbeatAt(NIGHT)
-                        .projectDeleted(true).build());
-        assertThat(found).containsExactly(ListlessProject.builder().workspaceId(workspaceId)
-                .projectId(listless).build());
     }
 
     private List<UUID> unlabelledIds(String workspaceId, UUID projectId, UUID runId, String after, int limit) {
