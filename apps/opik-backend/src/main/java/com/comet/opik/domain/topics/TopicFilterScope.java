@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * What the SQL of a trace query filtered by topic needs: the project's live topic ids and the query guards of
@@ -12,7 +13,7 @@ import java.util.List;
  * <p>{@link #toString()} prints the number of ids only: a trace search logs its criteria.
  */
 @Builder(toBuilder = true)
-public record TopicFilterScope(@NonNull List<String> liveIds, long maxExecutionSeconds, long maxMemoryUsage) {
+public record TopicFilterScope(@NonNull List<UUID> liveIds, long maxExecutionSeconds, long maxMemoryUsage) {
 
     public TopicFilterScope {
         liveIds = List.copyOf(liveIds);

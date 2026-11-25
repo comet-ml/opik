@@ -1047,22 +1047,25 @@ class TraceDAOImpl implements TraceDAO {
             ), <endif><if(topic_filters)>topic_trace_ids AS (
                 SELECT trace_id
                 FROM (
-                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
-                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
-                    FROM trace_topics
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :topic_project_id
-                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(last_received_id)> AND trace_id \\< :last_received_id
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
-                    GROUP BY trace_id
-                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                    SELECT trace_id, if(topic_id IN :topic_live_ids, topic_id, :topic_other_id) AS topic
+                    FROM (
+                        SELECT trace_id, topic_id, is_deleted
+                        FROM trace_topics
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :topic_project_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                        <if(last_received_id)> AND trace_id \\< :last_received_id
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                        ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id
+                    )
+                    WHERE is_deleted = 0
                 )
                 WHERE <topic_filters>
             ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
@@ -1830,22 +1833,25 @@ class TraceDAOImpl implements TraceDAO {
             ), <endif><if(topic_filters)>topic_trace_ids AS (
                 SELECT trace_id
                 FROM (
-                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
-                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
-                    FROM trace_topics
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :topic_project_id
-                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(last_received_id)> AND trace_id \\< :last_received_id
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
-                    GROUP BY trace_id
-                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                    SELECT trace_id, if(topic_id IN :topic_live_ids, topic_id, :topic_other_id) AS topic
+                    FROM (
+                        SELECT trace_id, topic_id, is_deleted
+                        FROM trace_topics
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :topic_project_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                        <if(last_received_id)> AND trace_id \\< :last_received_id
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                        ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id
+                    )
+                    WHERE is_deleted = 0
                 )
                 WHERE <topic_filters>
             ), <endif><if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -2701,22 +2707,25 @@ class TraceDAOImpl implements TraceDAO {
             ), <endif><if(topic_filters)>topic_trace_ids AS (
                 SELECT trace_id
                 FROM (
-                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
-                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
-                    FROM trace_topics
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :topic_project_id
-                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(last_received_id)> AND trace_id \\< :last_received_id
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
-                    GROUP BY trace_id
-                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                    SELECT trace_id, if(topic_id IN :topic_live_ids, topic_id, :topic_other_id) AS topic
+                    FROM (
+                        SELECT trace_id, topic_id, is_deleted
+                        FROM trace_topics
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :topic_project_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                        <if(last_received_id)> AND trace_id \\< :last_received_id
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                        ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id
+                    )
+                    WHERE is_deleted = 0
                 )
                 WHERE <topic_filters>
             ), <endif><if(spans_partitioned)>
@@ -3194,22 +3203,25 @@ class TraceDAOImpl implements TraceDAO {
             ), <endif><if(topic_filters)>topic_trace_ids AS (
                 SELECT trace_id
                 FROM (
-                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
-                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
-                    FROM trace_topics
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :topic_project_id
-                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(last_received_id)> AND trace_id \\< :last_received_id
-                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
-                    GROUP BY trace_id
-                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                    SELECT trace_id, if(topic_id IN :topic_live_ids, topic_id, :topic_other_id) AS topic
+                    FROM (
+                        SELECT trace_id, topic_id, is_deleted
+                        FROM trace_topics
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :topic_project_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                        <if(last_received_id)> AND trace_id \\< :last_received_id
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                        ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id
+                    )
+                    WHERE is_deleted = 0
                 )
                 WHERE <topic_filters>
             ), <endif><if(spans_partitioned)>

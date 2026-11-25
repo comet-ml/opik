@@ -2913,7 +2913,8 @@ topics:
     #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 10m
     maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
     #  Default: 4294967296 (4 GiB)
-    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
+    #  At most 68719476736 (64 GiB)
     maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time

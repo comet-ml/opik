@@ -137,18 +137,19 @@ public class TopicReadService {
     }
 
     /**
-     * The scope of a trace query filtered by topic; empty with no read without a {@code topic_id} filter. Also empty
-     * where the read API shows no topic: a workspace not enabled for topics, a project with no live topic. Reads
-     * MySQL twice on a bounded elastic thread, with the workspace id from the Reactor context.
+     * The scope of a trace query filtered by topic. Empty, with no read, without a {@code topic_id} filter. Also empty
+     * when the filter can match no trace: topics off, a workspace not opted in to topics or to ai-labels or listed
+     * below the {@code ui} stage, a project with no live topic. Reads MySQL at most twice on a bounded elastic thread,
+     * with the workspace id from the Reactor context.
      */
-    public Mono<Optional<TopicFilterScope>> filterScope(@Nullable List<? extends Filter> filters,
-            @NonNull UUID projectId) {
+    public Mono<TopicFilterScope> filterScope(@Nullable List<? extends Filter> filters, @NonNull UUID projectId) {
         if (filters == null || FilterQueryBuilder.hasField(filters, TraceField.TOPIC_ID).isEmpty()) {
-            return Mono.just(Optional.empty());
+            return Mono.empty();
         }
         return Mono.deferContextual(ctx -> Mono.fromCallable(
                 () -> readFilterScope(ctx.get(RequestContext.WORKSPACE_ID), projectId))
-                .subscribeOn(Schedulers.boundedElastic()));
+                .subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(Mono::justOrEmpty);
     }
 
     private Optional<TopicFilterScope> readFilterScope(String workspaceId, UUID projectId) {
@@ -161,7 +162,7 @@ public class TopicReadService {
             return Optional.empty();
         }
         return Optional.of(TopicFilterScope.builder()
-                .liveIds(live.stream().map(topic -> topic.id().toString()).toList())
+                .liveIds(live.stream().map(Topic::id).toList())
                 .maxExecutionSeconds(config.getFilter().getMaxExecutionTime().toSeconds())
                 .maxMemoryUsage(config.getFilter().getMaxMemoryUsage())
                 .build());

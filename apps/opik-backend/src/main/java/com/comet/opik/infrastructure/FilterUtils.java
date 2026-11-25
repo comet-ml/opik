@@ -12,6 +12,7 @@ import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.topics.TopicFilterScope;
+import com.comet.opik.domain.topics.TraceTopic;
 import com.comet.opik.utils.template.TemplateUtils;
 import io.dropwizard.db.DataSourceFactory;
 import io.r2dbc.spi.Statement;
@@ -246,9 +247,11 @@ public class FilterUtils {
 
     /**
      * The topic filter of a trace query: a subquery that keeps the ids of the project's traces whose topic matches
-     * {@code <topic_filters>}. A trace's topic is its latest {@code trace_topics} row, as in the topics read API's
-     * counts, and a topic that is not live is Other. A trace with no row has no topic, so no operator keeps it,
-     * {@code !=} included. The query's id range bounds the subquery; with none, it reads the project's whole history.
+     * {@code <topic_filters>}. A trace's topic is its latest {@code trace_topics} row, a run row over an arrival row
+     * stamped at the same time, as in the topics read API's counts, and a topic that is not live is Other. A trace
+     * with no row has no topic, so no operator keeps it, {@code !=} included. The subquery reads the rows in sort-key
+     * order and keeps one per trace; the trace read holds the ids that pass as a set, so its memory grows with the
+     * traces that match. The query's id range bounds the subquery; with none, it reads the project's whole history.
      * The scope's guards go to the query's {@code SETTINGS}. With a topic filter and no scope it adds
      * {@code topic_no_match}: the query keeps no trace and its response keeps its shape.
      */
@@ -275,7 +278,8 @@ public class FilterUtils {
         }
         FilterQueryBuilder.bind(statement, filters, FilterStrategy.TOPICS);
         statement.bind("topic_project_id", projectId.toString())
-                .bind("topic_live_ids", scope.liveIds().toArray(String[]::new));
+                .bind("topic_live_ids", scope.liveIds().stream().map(UUID::toString).toArray(String[]::new))
+                .bind("topic_other_id", TraceTopic.OTHER.toString());
     }
 
     // EQUAL only: the pushdown SQL template is hardcoded to `thread_id = :thread_id_pushdown`,

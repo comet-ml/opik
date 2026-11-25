@@ -92,7 +92,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                                 ? enrichedRequest.traceFilters()
                                 : null,
                         projectId)
-                        .map(topicScope -> enrichedRequest.toBuilder().topicScope(topicScope.orElse(null)).build()))
+                        .map(topicScope -> enrichedRequest.toBuilder().topicScope(topicScope).build())
+                        .defaultIfEmpty(enrichedRequest))
                 .flatMap(enrichedRequest -> TopicsReadErrors.busyOnFilterGuard(enrichedRequest.topicScope() != null,
                         getMetricHandler(enrichedRequest.metricType()).apply(projectId, enrichedRequest))
                         .map(dataPoints -> buildResponse(projectId, enrichedRequest, dataPoints)));

@@ -29,7 +29,8 @@ class KpiCardServiceImpl implements KpiCardService {
     public Mono<KpiCardResponse> getKpiCards(@NonNull KpiCardCriteria criteria) {
         return switch (criteria.entityType()) {
             case TRACES -> topicReadService.filterScope(criteria.filters(), criteria.projectId())
-                    .map(topicScope -> criteria.toBuilder().topicScope(topicScope.orElse(null)).build())
+                    .map(topicScope -> criteria.toBuilder().topicScope(topicScope).build())
+                    .defaultIfEmpty(criteria)
                     .flatMap(scoped -> TopicsReadErrors.busyOnFilterGuard(scoped.topicScope() != null,
                             kpiCardDAO.getTraceKpiCards(scoped)));
             case SPANS -> kpiCardDAO.getSpanKpiCards(criteria);

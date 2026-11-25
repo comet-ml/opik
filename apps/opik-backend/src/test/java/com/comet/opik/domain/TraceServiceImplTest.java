@@ -51,7 +51,6 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -124,7 +123,7 @@ class TraceServiceImplTest {
         lenient().when(attachmentStripperService.stripAttachments(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0)); // Return first argument (JsonNode) unchanged
         // No topic filter in these searches: no topic scope
-        lenient().when(topicReadService.filterScope(any(), any())).thenReturn(Mono.just(Optional.empty()));
+        lenient().when(topicReadService.filterScope(any(), any())).thenReturn(Mono.empty());
 
         traceService = newTraceService(databaseAnalyticsDataModelConfig);
     }

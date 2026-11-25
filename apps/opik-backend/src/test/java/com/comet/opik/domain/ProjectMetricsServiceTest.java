@@ -24,10 +24,10 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,6 +39,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectMetricsServiceTest {
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -71,7 +73,7 @@ class ProjectMetricsServiceTest {
         results.add(result("__others__",
                 List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4"))));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
-        when(topicReadService.filterScope(any(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));
+        when(topicReadService.filterScope(any(), eq(projectId))).thenReturn(Mono.empty());
         if (metricType == MetricType.SPAN_COST) {
             when(dao.getSpanCost(eq(projectId), any())).thenReturn(Mono.just(entries));
         } else {
@@ -91,21 +93,21 @@ class ProjectMetricsServiceTest {
     @ParameterizedTest
     @EnumSource(value = MetricType.class, names = {"THREAD_COST", "SPAN_COUNT"})
     void threadAndSpanMetricsIgnoreATopicInTraceFilters(MetricType metricType) {
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         var limit = new RuntimeException(new ClickHouseException(159, "time limit", null));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
         // Strict stubs: the call fails the test if the service passes the trace filters on
-        when(topicReadService.filterScope(isNull(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));
+        when(topicReadService.filterScope(isNull(), eq(projectId))).thenReturn(Mono.empty());
         if (metricType == MetricType.THREAD_COST) {
             when(dao.getThreadCost(eq(projectId), any())).thenReturn(Mono.error(limit));
         } else {
             when(dao.getSpanCount(eq(projectId), any())).thenReturn(Mono.error(limit));
         }
-        var start = Instant.parse("2026-01-01T00:00:00Z");
+        var start = Instant.now().minus(Duration.ofHours(1));
         var request = ProjectMetricRequest.builder().metricType(metricType).interval(TimeInterval.HOURLY)
-                .intervalStart(start).intervalEnd(start.plusSeconds(3600))
+                .intervalStart(start).intervalEnd(start.plus(Duration.ofHours(1)))
                 .traceFilters(List.of(TraceFilter.builder().field(TraceField.TOPIC_ID).operator(Operator.EQUAL)
-                        .value(UUID.randomUUID().toString()).build()))
+                        .value(ID_GENERATOR.generateId().toString()).build()))
                 .build();
         var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper(),
                 topicReadService);

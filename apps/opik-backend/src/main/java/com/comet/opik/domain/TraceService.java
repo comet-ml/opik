@@ -508,11 +508,12 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<TraceSearchCriteria> findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
         return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
-                .flatMap(projectId -> topicReadService.filterScope(criteria.filters(), projectId)
-                        .map(topicScope -> criteria.toBuilder()
-                                .projectId(projectId)
-                                .topicScope(topicScope.orElse(null))
-                                .build()));
+                .flatMap(projectId -> {
+                    var resolved = criteria.toBuilder().projectId(projectId).build();
+                    return topicReadService.filterScope(criteria.filters(), projectId)
+                            .map(topicScope -> resolved.toBuilder().topicScope(topicScope).build())
+                            .defaultIfEmpty(resolved);
+                });
     }
 
     private <T> Mono<T> failWithConflict(String error) {
