@@ -71,6 +71,7 @@ class TopicsNightPassTest {
     private TopicProjectDAO projectDAO;
     private TopicWorkspaceService workspaceService;
     private TopicsDiscoveryCandidates candidates;
+    private ProjectService projectService;
     private TopicsNightPass pass;
 
     @BeforeEach
@@ -92,7 +93,7 @@ class TopicsNightPassTest {
                 .toList());
         when(projectDAO.findProjects(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation
                 .<Collection<UUID>>getArgument(1).stream().map(rows::get).toList());
-        var projectService = mock(ProjectService.class);
+        projectService = mock(ProjectService.class);
         when(projectService.findByIds(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation
                 .<Set<UUID>>getArgument(1).stream().filter(id -> !deleted.contains(id))
                 .map(id -> Project.builder().id(id).name("project").build()).toList());
@@ -274,5 +275,25 @@ class TopicsNightPassTest {
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of());
         assertThat(plan(IN_BUDGET, 2)).isZero();
         verify(projectDAO).findNightDue(anyCollection(), any());
+    }
+
+    @Test
+    @DisplayName("a workspace whose projects cannot be checked is left out and counted as a failed night once; the "
+            + "other workspace's project is queued")
+    void oneWorkspaceFails() {
+        var built = listed(500L);
+        var brokenWorkspace = ID_GENERATOR.generateId().toString();
+        var elsewhere = ID_GENERATOR.generateId();
+        rows.put(elsewhere, row(elsewhere).workspaceId(brokenWorkspace).build());
+        when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of(WORKSPACE_ID,
+                brokenWorkspace));
+        when(projectService.findByIds(eq(brokenWorkspace), any())).thenThrow(new IllegalStateException("MySQL down"));
+
+        assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
+
+        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(WORKSPACE_ID, built,
+                TopicProject.RunMode.UPDATE, NIGHT, 500));
+        assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
+        verify(projectDAO, never()).markLooked(eq(brokenWorkspace), any(), any());
     }
 }

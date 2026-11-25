@@ -21,8 +21,10 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
@@ -115,7 +117,8 @@ class TopicsNightPass implements Managed {
     /**
      * One plan's night pass at {@code now}: queues up to {@code free} nightly updates through {@code queue} and
      * returns how many it queued. Nothing when no night is on or no workspace is listed at stage {@code nightly} or
-     * later. A read that fails is logged and counted as a failed night; the next plan goes on.
+     * later. A read that fails, for every workspace or for one, is logged and counted as a failed night once; the other
+     * workspaces go on, and the next plan reads the failed ones again.
      */
     Mono<Integer> plan(@NonNull Instant now, int free, @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var nightly = config.getNightly();
@@ -145,9 +148,14 @@ class TopicsNightPass implements Managed {
     private Mono<Integer> decide(TopicsNight night, Collection<String> workspaceIds, Instant now, Instant budgetEnd,
             int free, Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         return jdbi(() -> {
-            var due = due(night, workspaceIds);
-            due.skipped().forEach((reason, keys) -> record(night, keys, NightDecision.SKIP, reason));
-            return due.candidates();
+            var read = due(night, workspaceIds);
+            read.failed().forEach((workspaceId, error) -> log.error("Topics night '{}' could not read workspace '{}'; "
+                    + "the next plan reads it again", night.date(), workspaceId, error));
+            if (!read.failed().isEmpty()) {
+                metrics.night(NightOutcome.FAILED, 1);
+            }
+            read.due().skipped().forEach((reason, keys) -> record(night, keys, NightDecision.SKIP, reason));
+            return read.due().candidates();
         })
                 .flatMap(due -> {
                     if (free <= 0 || due.isEmpty()) {
@@ -168,20 +176,34 @@ class TopicsNightPass implements Managed {
                         queued));
     }
 
+    /** A plan's read of the night: the triage of the workspaces it read, and the error of each it could not. */
+    private record NightRead(NightTriage.NightDue due, Map<String, RuntimeException> failed) {
+    }
+
     /**
-     * The projects of the workspaces with a saved list, not looked at tonight and with no run in flight: the ones to
-     * count, in {@link NightTriage#queueOrder}, and the ones skipped without a count.
+     * The projects of the workspaces with a saved list, not looked at tonight and with no run in flight, triaged
+     * ({@link NightTriage}). A workspace whose projects cannot be checked is left out, with its error.
      */
-    private NightTriage.NightDue due(TopicsNight night, Collection<String> workspaceIds) {
+    private NightRead due(TopicsNight night, Collection<String> workspaceIds) {
         var rows = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date()));
         var existing = new HashSet<TopicProjectKey>();
+        var failed = new HashMap<String, RuntimeException>();
         rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId,
                 Collectors.mapping(TopicProject::projectId, Collectors.toSet())))
-                .forEach((workspaceId, projectIds) -> projectService.findByIds(workspaceId, projectIds)
-                        .forEach(project -> existing.add(new TopicProjectKey(workspaceId, project.id()))));
+                .forEach((workspaceId, projectIds) -> {
+                    try {
+                        projectService.findByIds(workspaceId, projectIds)
+                                .forEach(project -> existing.add(new TopicProjectKey(workspaceId, project.id())));
+                    } catch (RuntimeException exception) {
+                        failed.put(workspaceId, exception);
+                    }
+                });
+        var read = rows.stream().filter(row -> !failed.containsKey(row.workspaceId())).toList();
         var nightly = config.getNightly();
-        return NightTriage.triage(rows, existing, night, nightly.getPauseFailures(), nightly.getPauseNights());
+        return new NightRead(
+                NightTriage.triage(read, existing, night, nightly.getPauseFailures(), nightly.getPauseNights()),
+                failed);
     }
 
     /** Counts the project's window and queues it; true when it queued it. */

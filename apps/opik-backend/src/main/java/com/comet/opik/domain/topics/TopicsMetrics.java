@@ -125,8 +125,8 @@ public class TopicsMetrics {
                 .build();
         this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
                 .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, counted by "
-                        + "the one plan that ends the night, or failed for each plan whose read of the night's "
-                        + "projects failed")
+                        + "the one plan that ends the night, or failed once for each plan whose read of the night's "
+                        + "projects failed, for every workspace or for one")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
