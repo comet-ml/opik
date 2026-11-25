@@ -417,6 +417,57 @@ class BaseRedisSubscriberTest {
             assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size());
         }
 
+        @Test
+        void shouldRemoveRetiredMessagesWhenTheRetireHookFailsWithACyclicCauseChain() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
+                    message -> Mono.error(new NullPointerException("Non-retryable"))) {
+                @Override
+                protected Mono<Void> onRetired(String message, Throwable error) {
+                    var first = new IllegalStateException("first");
+                    var second = new IllegalStateException("second", first);
+                    first.initCause(second);
+                    return Mono.error(first);
+                }
+            });
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // A cyclic chain without LeavePendingOnRetireException must terminate and fall back to ack-and-remove
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size());
+        }
+
+        @Test
+        void shouldLeaveRetiredMessagesPendingWhenRequeuePublishFails() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
+                    message -> Mono.error(new NullPointerException("Non-retryable"))) {
+                @Override
+                protected Mono<Void> onRetired(String message, Throwable error) {
+                    return Mono.error(new LeavePendingOnRetireException(new RuntimeException("xadd failed")));
+                }
+            });
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(
+                            () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .during(Duration.ofSeconds(1))
+                    .untilAsserted(() -> {
+                        assertThat(stream.size().block())
+                                .as("a failed re-queue publish must leave the original entry in the stream")
+                                .isEqualTo((long) messages.size());
+                        assertThat(pendingCount())
+                                .as("and it must still be pending for the group")
+                                .isEqualTo((long) messages.size());
+                    });
+        }
+
         /**
          * OPIK-8262. {@code ClientErrorException} used to be matched by class, which made every 4xx permanent
          * — including the statuses that mean "not now" rather than "not ever". That is why
