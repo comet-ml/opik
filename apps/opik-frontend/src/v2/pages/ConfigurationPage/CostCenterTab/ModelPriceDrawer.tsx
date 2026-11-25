@@ -56,6 +56,7 @@ import {
 import {
   MODE_LABELS,
   PRICE_UNIT_SUFFIX,
+  TYPE_DESCRIPTIONS,
   TYPE_TAG_VARIANT,
   formatDay,
 } from "./format";
@@ -461,9 +462,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
           </SheetDescription>
           <div className="flex flex-wrap gap-1.5">
-            <Tag variant={TYPE_TAG_VARIANT[type]}>
-              {CATALOG_TYPE_LABELS[type]}
-            </Tag>
+            <TooltipWrapper content={TYPE_DESCRIPTIONS[type]}>
+              <Tag variant={TYPE_TAG_VARIANT[type]}>
+                {CATALOG_TYPE_LABELS[type]}
+              </Tag>
+            </TooltipWrapper>
             <Tag variant="default">{providerLabel}</Tag>
             {entry?.mode && (
               <Tag variant="gray">{MODE_LABELS[entry.mode] ?? entry.mode}</Tag>

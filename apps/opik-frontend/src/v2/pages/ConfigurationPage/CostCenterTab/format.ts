@@ -31,6 +31,14 @@ export const TYPE_TAG_VARIANT: Record<CatalogType, TagProps["variant"]> = {
   alias: "blue",
 };
 
+export const TYPE_DESCRIPTIONS: Record<CatalogType, string> = {
+  default: "Opik's built-in price. Nobody in your organization has changed it.",
+  override:
+    "Your organization's price for a model Opik already knows. It replaces the built-in price.",
+  custom: "A model Opik has no built-in price for. Your organization added it.",
+  alias: "Priced the same as another model, and follows that model's price.",
+};
+
 export const MODE_LABELS: Record<string, string> = {
   chat: "Chat",
   completion: "Completion",

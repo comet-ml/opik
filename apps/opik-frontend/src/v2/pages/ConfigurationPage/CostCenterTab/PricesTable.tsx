@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { Link2 } from "lucide-react";
 import {
   CellContext,
   ColumnDef,
@@ -13,7 +14,9 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
-import TagCell from "@/shared/DataTableCells/TagCell";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import ColoredTag from "@/shared/ColoredTag/ColoredTag";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { generatePinColumDef } from "@/shared/DataTable/utils";
@@ -21,7 +24,6 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { COLUMN_PIN_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import {
   ANY_PROVIDER_LABEL,
-  CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
   PRICE_FIELDS,
@@ -29,28 +31,58 @@ import {
   PriceField,
   describeAliasTarget,
 } from "@/lib/model-prices";
-import { PRICE_UNIT_SUFFIX, TYPE_TAG_VARIANT, formatPrice } from "./format";
+import {
+  PRICE_UNIT_SUFFIX,
+  TYPE_DESCRIPTIONS,
+  TYPE_TAG_VARIANT,
+  formatPrice,
+} from "./format";
 
 const NO_VALUE = "-";
 const PIN_COLUMN_SIZE = 32;
 
-const TYPE_VARIANT_BY_LABEL = Object.fromEntries(
-  CATALOG_TYPES.map((type) => [
-    CATALOG_TYPE_LABELS[type],
-    TYPE_TAG_VARIANT[type],
-  ]),
-);
+const TypeCell = (context: CellContext<CatalogEntry, unknown>) => {
+  const { type } = context.row.original;
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+    >
+      <ColoredTag
+        label={CATALOG_TYPE_LABELS[type]}
+        variant={TYPE_TAG_VARIANT[type]}
+        tooltip={TYPE_DESCRIPTIONS[type]}
+        size={getCellTagSize(context, TAG_SIZE_MAP)}
+      />
+    </CellWrapper>
+  );
+};
 
 const PriceCell = (context: CellContext<CatalogEntry, unknown>) => {
   const entry = context.row.original;
   const field = context.column.id as PriceField;
-  const text =
-    entry.row?.kind === "alias"
-      ? field === "input_price"
-        ? `Priced like ${describeAliasTarget(entry.row)}`
-        : NO_VALUE
-      : (formatPrice(entry.prices[field]) ?? NO_VALUE);
 
+  if (entry.row?.kind === "alias") {
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        <TooltipWrapper
+          content={`Priced like ${describeAliasTarget(entry.row)}`}
+        >
+          <span className="flex min-w-0 items-center gap-1 text-light-slate">
+            <Link2 className="size-3 shrink-0" />
+            <span className="truncate">
+              {formatPrice(entry.aliasPrices?.[field]) ?? NO_VALUE}
+            </span>
+          </span>
+        </TooltipWrapper>
+      </CellWrapper>
+    );
+  }
+
+  const text = formatPrice(entry.prices[field]) ?? NO_VALUE;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -85,8 +117,7 @@ export const PRICE_COLUMNS: ColumnData<CatalogEntry>[] = [
     label: "Type",
     type: COLUMN_TYPE.category,
     accessorFn: (entry) => CATALOG_TYPE_LABELS[entry.type],
-    cell: TagCell as never,
-    customMeta: { variantMap: TYPE_VARIANT_BY_LABEL },
+    cell: TypeCell as never,
     size: 100,
   },
   ...PRICE_FIELDS.map((field) => ({

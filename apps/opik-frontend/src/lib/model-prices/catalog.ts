@@ -32,6 +32,7 @@ export interface CatalogEntry {
   builtIn?: BuiltInPrice;
   row?: ModelPriceRow;
   prices: Partial<Record<PriceField, string>>;
+  aliasPrices?: Partial<Record<PriceField, string>>;
   lastUpdatedAt?: string;
 }
 
@@ -101,6 +102,24 @@ export const buildCatalog = (
         prices: effectivePrices(builtIn, undefined),
       });
     }
+  });
+  const priced = new Map(
+    entries
+      .filter((entry) => entry.type !== "alias")
+      .map((entry) => [entry.key, entry]),
+  );
+  entries.forEach((entry) => {
+    const target = entry.type === "alias" ? entry.row?.alias_of : undefined;
+    // Without a provider the alias follows each span's own provider, so there
+    // is no single price to show.
+    if (!target?.provider) return;
+    entry.aliasPrices = priced.get(
+      identityOf({
+        model: target.model,
+        provider: target.provider,
+        kind: "fixed",
+      }),
+    )?.prices;
   });
   return entries;
 };

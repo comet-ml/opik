@@ -82,6 +82,24 @@ describe("buildCatalog", () => {
     expect(byModel("acme-llama", "").type).toBe("custom");
     expect(byModel("gpt-5", "bifrost").type).toBe("alias");
     expect(byModel("gpt-5", "bifrost").prices).toEqual({});
+    expect(byModel("gpt-5", "bifrost").aliasPrices).toEqual(
+      byModel("GPT-5", "openai").prices,
+    );
+  });
+
+  it("shows no alias price when the alias follows each span's provider", () => {
+    const [alias] = buildCatalog(
+      [],
+      [
+        {
+          model: "x",
+          provider: "",
+          kind: "alias",
+          alias_of: { model: "gpt-5" },
+        },
+      ],
+    );
+    expect(alias.aliasPrices).toBeUndefined();
   });
 
   it("lists built-in models nobody changed as defaults", () => {

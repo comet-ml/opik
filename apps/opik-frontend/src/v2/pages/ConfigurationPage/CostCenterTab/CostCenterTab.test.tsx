@@ -297,9 +297,8 @@ describe("CostCenterTab", () => {
       expect(
         within(rowOf("acme-llama-70b")).getByText("Any provider"),
       ).toBeVisible();
-      expect(rowOf("team-model")).toHaveTextContent(
-        "Priced like claude-sonnet-4-5",
-      );
+      expect(within(rowOf("team-model")).getByText("$3.00")).toBeVisible();
+      expect(within(rowOf("team-model")).getByText("$15.00")).toBeVisible();
       expect(within(rowOf("team-model")).getByText("Alias")).toBeVisible();
     });
 
