@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jdbi.v3.core.Handle;
@@ -26,15 +27,25 @@ class ModelPriceStore {
 
     private final @NonNull Supplier<UUID> newId;
 
+    @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    private record HistorySnapshot(String model, String provider, String kind, BigDecimal inputPrice,
+    private record HistorySnapshot(String model, String provider, CustomModelPrice.Kind kind, BigDecimal inputPrice,
             BigDecimal outputPrice, BigDecimal cacheReadPrice, BigDecimal cacheWritePrice, String aliasModel,
             String aliasProvider, String note) {
 
         static String jsonOf(ModelPriceRow row) {
-            var snapshot = new HistorySnapshot(row.modelName(), row.provider(), row.kindValue(),
-                    row.inputPerMillion(), row.outputPerMillion(), row.cacheReadPerMillion(),
-                    row.cacheWritePerMillion(), row.aliasModelName(), row.aliasProvider(), row.note());
+            var snapshot = HistorySnapshot.builder()
+                    .model(row.modelName())
+                    .provider(row.provider())
+                    .kind(row.kind())
+                    .inputPrice(row.inputPerMillion())
+                    .outputPrice(row.outputPerMillion())
+                    .cacheReadPrice(row.cacheReadPerMillion())
+                    .cacheWritePrice(row.cacheWritePerMillion())
+                    .aliasModel(row.aliasModelName())
+                    .aliasProvider(row.aliasProvider())
+                    .note(row.note())
+                    .build();
             return JsonUtils.valueToTree(snapshot).toString();
         }
     }
@@ -43,7 +54,7 @@ class ModelPriceStore {
         var dao = handle.attach(ModelPriceDAO.class);
         long version = dao.findList(organizationId).map(ModelPriceDAO.ListHeader::version).orElse(0L);
         List<CustomModelPrice> rows = dao.findRows(organizationId).stream().map(ModelPriceRow::toPrice).toList();
-        return new ModelPriceList(organizationId, version, rows);
+        return ModelPriceList.builder().organizationId(organizationId).version(version).rows(rows).build();
     }
 
     ModelPriceReplaceResult replaceAll(@NonNull Handle handle, @NonNull String organizationId,
@@ -55,7 +66,7 @@ class ModelPriceStore {
         checkExpectedVersion(expectedVersion, current);
         var diff = ModelPriceDiff.of(dao.findRows(organizationId), rows, newId);
         if (diff.isEmpty()) {
-            return new ModelPriceReplaceResult(current, false, diff, List.of());
+            return unsaved(current, diff);
         }
         long version = current + 1;
         if (!diff.created().isEmpty()) {
@@ -70,7 +81,7 @@ class ModelPriceStore {
         }
         dao.insertHistory(organizationId, version, historyOf(diff), userName);
         dao.updateList(organizationId, version, diff.rowsAfter().size(), userName);
-        return new ModelPriceReplaceResult(version, true, diff, List.of());
+        return ModelPriceReplaceResult.builder().version(version).saved(true).diff(diff).warnings(List.of()).build();
     }
 
     ModelPriceReplaceResult previewReplaceAll(@NonNull Handle handle, @NonNull String organizationId,
@@ -78,8 +89,11 @@ class ModelPriceStore {
         var dao = handle.attach(ModelPriceDAO.class);
         long current = dao.findList(organizationId).map(ModelPriceDAO.ListHeader::version).orElse(0L);
         checkExpectedVersion(expectedVersion, current);
-        return new ModelPriceReplaceResult(current, false,
-                ModelPriceDiff.of(dao.findRows(organizationId), rows, newId), List.of());
+        return unsaved(current, ModelPriceDiff.of(dao.findRows(organizationId), rows, newId));
+    }
+
+    private static ModelPriceReplaceResult unsaved(long version, ModelPriceDiff diff) {
+        return ModelPriceReplaceResult.builder().version(version).saved(false).diff(diff).warnings(List.of()).build();
     }
 
     private void checkExpectedVersion(@Nullable Long expectedVersion, long current) {
@@ -93,13 +107,21 @@ class ModelPriceStore {
 
     private List<ModelPriceDAO.HistoryEntry> historyOf(ModelPriceDiff diff) {
         var entries = new ArrayList<ModelPriceDAO.HistoryEntry>();
-        diff.created().forEach(row -> entries.add(
-                new ModelPriceDAO.HistoryEntry(newId.get(), row.id(), "created", null, HistorySnapshot.jsonOf(row))));
-        diff.updated().forEach(change -> entries.add(new ModelPriceDAO.HistoryEntry(newId.get(),
-                change.before().id(), "updated", HistorySnapshot.jsonOf(change.before()),
-                HistorySnapshot.jsonOf(change.after()))));
-        diff.deleted().forEach(row -> entries.add(
-                new ModelPriceDAO.HistoryEntry(newId.get(), row.id(), "deleted", HistorySnapshot.jsonOf(row), null)));
+        diff.created().forEach(row -> entries.add(historyEntry(row.id(), ModelPriceHistoryAction.CREATED)
+                .afterRow(HistorySnapshot.jsonOf(row))
+                .build()));
+        diff.updated().forEach(change -> entries.add(
+                historyEntry(change.before().id(), ModelPriceHistoryAction.UPDATED)
+                        .beforeRow(HistorySnapshot.jsonOf(change.before()))
+                        .afterRow(HistorySnapshot.jsonOf(change.after()))
+                        .build()));
+        diff.deleted().forEach(row -> entries.add(historyEntry(row.id(), ModelPriceHistoryAction.DELETED)
+                .beforeRow(HistorySnapshot.jsonOf(row))
+                .build()));
         return entries;
+    }
+
+    private ModelPriceDAO.HistoryEntry.HistoryEntryBuilder historyEntry(UUID rowId, ModelPriceHistoryAction action) {
+        return ModelPriceDAO.HistoryEntry.builder().id(newId.get()).rowId(rowId).action(action);
     }
 }

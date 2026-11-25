@@ -1,5 +1,6 @@
 package com.comet.opik.domain.cost;
 
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.ArrayList;
@@ -13,12 +14,14 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /** What replacing an organization's stored rows with a requested list changes, matched by model and provider. */
+@Builder(toBuilder = true)
 public record ModelPriceDiff(
         @NonNull List<ModelPriceRow> created,
         @NonNull List<Change> updated,
         @NonNull List<ModelPriceRow> deleted,
         @NonNull List<ModelPriceRow> unchanged) {
 
+    @Builder(toBuilder = true)
     public record Change(@NonNull ModelPriceRow before, @NonNull ModelPriceRow after) {
     }
 
@@ -48,11 +51,15 @@ public record ModelPriceDiff(
             if (existing.sameContentAs(after)) {
                 unchanged.add(existing);
             } else {
-                updated.add(new Change(existing, after));
+                updated.add(Change.builder().before(existing).after(after).build());
             }
         }
-        return new ModelPriceDiff(List.copyOf(created), List.copyOf(updated), List.copyOf(storedByKey.values()),
-                List.copyOf(unchanged));
+        return ModelPriceDiff.builder()
+                .created(List.copyOf(created))
+                .updated(List.copyOf(updated))
+                .deleted(List.copyOf(storedByKey.values()))
+                .unchanged(List.copyOf(unchanged))
+                .build();
     }
 
     public boolean isEmpty() {

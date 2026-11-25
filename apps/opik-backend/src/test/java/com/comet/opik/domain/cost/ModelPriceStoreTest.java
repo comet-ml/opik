@@ -2,9 +2,12 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.ClientErrorException;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.mysql.MySQLContainer;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
@@ -26,8 +31,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ModelPriceStoreTest {
 
+    private static final String USER_NAME = RandomStringUtils.secure().nextAlphanumeric(10);
+    private static final RecursiveComparisonConfiguration PRICES_BY_VALUE = RecursiveComparisonConfiguration.builder()
+            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+            .build();
+
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
-    private final ModelPriceStore store = new ModelPriceStore(UUID::randomUUID);
+    private final ModelPriceStore store = new ModelPriceStore(TestIdGeneratorFactory.create()::generateId);
     private Jdbi jdbi;
 
     @BeforeAll
@@ -46,21 +56,45 @@ class ModelPriceStoreTest {
         return result.rows();
     }
 
+    private static List<CustomModelPrice> prices(String json) {
+        return validRows(json).stream()
+                .map(CustomModelPriceValidator.ValidRow::price)
+                .sorted(Comparator.comparing(CustomModelPrice::modelName).thenComparing(CustomModelPrice::provider))
+                .toList();
+    }
+
+    private static String newOrganizationId() {
+        return UUID.randomUUID().toString();
+    }
+
     private ModelPriceReplaceResult replace(String organizationId, String json, Long expectedVersion) {
         return jdbi.inTransaction(handle -> store.replaceAll(handle, organizationId, validRows(json), expectedVersion,
-                "alice"));
+                USER_NAME));
     }
 
     private ModelPriceList load(String organizationId) {
         return jdbi.inTransaction(handle -> store.load(handle, organizationId));
     }
 
-    private List<String> historyActions(String organizationId, long listVersion) {
-        return jdbi.withHandle(handle -> handle.createQuery("SELECT action FROM model_prices_history"
-                + " WHERE organization_id = :organizationId AND list_version = :listVersion")
+    private void assertLoaded(String organizationId, long version, String json) {
+        assertThat(load(organizationId))
+                .usingRecursiveComparison(PRICES_BY_VALUE)
+                .isEqualTo(ModelPriceList.builder()
+                        .organizationId(organizationId)
+                        .version(version)
+                        .rows(prices(json))
+                        .build());
+    }
+
+    private List<ModelPriceHistoryAction> historyActions(String organizationId, long listVersion) {
+        return jdbi.withHandle(handle -> handle.createQuery("""
+                SELECT action FROM model_prices_history
+                WHERE organization_id = :organizationId AND list_version = :listVersion
+                """)
                 .bind("organizationId", organizationId)
                 .bind("listVersion", listVersion)
                 .mapTo(String.class)
+                .map(ModelPriceHistoryAction::fromString)
                 .list());
     }
 
@@ -73,79 +107,86 @@ class ModelPriceStoreTest {
 
     @Test
     void loadOfAnOrganizationWithNoRowsIsAnEmptyListAtVersionZero() {
-        var list = load(UUID.randomUUID().toString());
+        var organizationId = newOrganizationId();
 
-        assertThat(list.version()).isZero();
-        assertThat(list.rows()).isEmpty();
+        assertThat(load(organizationId)).isEqualTo(ModelPriceList.builder()
+                .organizationId(organizationId)
+                .version(0)
+                .rows(List.of())
+                .build());
     }
 
     @Test
     void replaceAllOnAnEmptyListSavesTheRowsAsVersionOne() {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
 
         var result = replace(organizationId, TWO_ROWS, 0L);
 
         assertThat(result.saved()).isTrue();
         assertThat(result.version()).isEqualTo(1);
-        var list = load(organizationId);
-        assertThat(list.version()).isEqualTo(1);
-        assertThat(list.rows()).extracting(CustomModelPrice::modelName).containsExactly("gpt-5-mini", "team-mini");
-        assertThat(list.rows().getFirst().inputPerMillion()).isEqualByComparingTo("1.00");
-        assertThat(historyActions(organizationId, 1)).containsExactlyInAnyOrder("created", "created");
+        assertLoaded(organizationId, 1, TWO_ROWS);
+        assertThat(historyActions(organizationId, 1))
+                .containsExactlyInAnyOrder(ModelPriceHistoryAction.CREATED, ModelPriceHistoryAction.CREATED);
     }
 
     @Test
     void replaceAllSavesNamesThatDifferOnlyByAnAccentAsTwoRows() {
-        var organizationId = UUID.randomUUID().toString();
-
-        var result = replace(organizationId, """
+        var organizationId = newOrganizationId();
+        var rows = """
                 [{"model": "modèle", "provider": "openai", "kind": "fixed", "input_price": "1.00"},
                  {"model": "modele", "provider": "openai", "kind": "fixed", "input_price": "2.00"}]
-                """, null);
+                """;
+
+        var result = replace(organizationId, rows, null);
 
         assertThat(result.saved()).isTrue();
-        assertThat(load(organizationId).rows()).extracting(CustomModelPrice::modelName)
-                .containsExactlyInAnyOrder("modèle", "modele");
+        assertLoaded(organizationId, 1, rows);
     }
 
     @Test
     void replaceAllWithTheSameRowsKeepsTheVersion() {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
         replace(organizationId, TWO_ROWS, null);
 
         var result = replace(organizationId, TWO_ROWS, null);
 
         assertThat(result.saved()).isFalse();
         assertThat(result.version()).isEqualTo(1);
-        assertThat(load(organizationId).version()).isEqualTo(1);
+        assertLoaded(organizationId, 1, TWO_ROWS);
         assertThat(historyActions(organizationId, 2)).isEmpty();
     }
 
     @Test
     void replaceAllWritesOneHistoryRowPerChangeUnderOneNewVersion() {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
         replace(organizationId, """
                 [{"model": "gpt-5-mini", "provider": "openai", "kind": "fixed", "input_price": "1.00"},
                  {"model": "gpt-4o", "provider": "openai", "kind": "fixed", "input_price": "2.00"},
                  {"model": "gpt-4.1", "provider": "openai", "kind": "fixed", "input_price": "3.00"}]
                 """, null);
-
-        var result = replace(organizationId, """
+        var after = """
                 [{"model": "gpt-5-mini", "provider": "openai", "kind": "fixed", "input_price": "1.00"},
                  {"model": "gpt-4o", "provider": "openai", "kind": "fixed", "input_price": "2.50"},
                  {"model": "o3", "provider": "openai", "kind": "fixed", "input_price": "4.00"}]
-                """, 1L);
+                """;
+
+        var result = replace(organizationId, after, 1L);
 
         assertThat(result.version()).isEqualTo(2);
-        assertThat(result.diff().unchanged()).hasSize(1);
-        assertThat(historyActions(organizationId, 2)).containsExactlyInAnyOrder("created", "deleted", "updated");
-        assertThat(load(organizationId).rows()).extracting(CustomModelPrice::modelName)
-                .containsExactly("gpt-4o", "gpt-5-mini", "o3");
+        assertThat(result.diff().unchanged())
+                .extracting(ModelPriceRow::toPrice)
+                .usingRecursiveFieldByFieldElementComparator(PRICES_BY_VALUE)
+                .containsExactlyElementsOf(prices("""
+                        [{"model": "gpt-5-mini", "provider": "openai", "kind": "fixed", "input_price": "1.00"}]
+                        """));
+        assertThat(historyActions(organizationId, 2)).containsExactlyInAnyOrder(ModelPriceHistoryAction.CREATED,
+                ModelPriceHistoryAction.DELETED, ModelPriceHistoryAction.UPDATED);
+        assertLoaded(organizationId, 2, after);
     }
 
     @Test
     void concurrentReplaceAllsOfOneListRunOneAfterTheOther() throws Exception {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
         replace(organizationId, TWO_ROWS, null);
         int saves = 4;
         var start = new CyclicBarrier(saves);
@@ -169,7 +210,7 @@ class ModelPriceStoreTest {
 
     @Test
     void replaceAllWithAStaleExpectedVersionIsAConflictAndSavesNothing() {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
         replace(organizationId, TWO_ROWS, null);
 
         assertThatThrownBy(() -> replace(organizationId, """
@@ -177,41 +218,48 @@ class ModelPriceStoreTest {
                 """, 0L))
                 .isInstanceOfSatisfying(ClientErrorException.class,
                         conflict -> assertThat(conflict.getResponse().getStatus()).isEqualTo(409));
-        assertThat(load(organizationId).rows()).hasSize(2);
-        assertThat(load(organizationId).version()).isEqualTo(1);
+        assertLoaded(organizationId, 1, TWO_ROWS);
     }
 
     @Test
     void previewReplaceAllReturnsTheChangesWithoutWritingThem() {
-        var organizationId = UUID.randomUUID().toString();
+        var organizationId = newOrganizationId();
         replace(organizationId, TWO_ROWS, null);
-
-        var preview = jdbi.inTransaction(handle -> store.previewReplaceAll(handle, organizationId, validRows("""
+        var replacement = """
                 [{"model": "o3", "provider": "openai", "kind": "fixed", "input_price": "4.00"}]
-                """), 1L));
+                """;
+
+        var preview = jdbi.inTransaction(
+                handle -> store.previewReplaceAll(handle, organizationId, validRows(replacement), 1L));
 
         assertThat(preview.saved()).isFalse();
-        assertThat(preview.diff().created()).hasSize(1);
-        assertThat(preview.diff().deleted()).hasSize(2);
-        assertThat(load(organizationId).rows()).hasSize(2);
-        assertThat(load(organizationId).version()).isEqualTo(1);
+        assertThat(preview.diff().created())
+                .extracting(ModelPriceRow::toPrice)
+                .usingRecursiveFieldByFieldElementComparator(PRICES_BY_VALUE)
+                .containsExactlyElementsOf(prices(replacement));
+        assertThat(preview.diff().deleted())
+                .extracting(ModelPriceRow::toPrice)
+                .usingRecursiveFieldByFieldElementComparator(PRICES_BY_VALUE)
+                .containsExactlyInAnyOrderElementsOf(prices(TWO_ROWS));
+        assertLoaded(organizationId, 1, TWO_ROWS);
     }
 
     @Test
     void replaceAllKeepsAPerTokenSizedPriceExactly() {
-        var organizationId = UUID.randomUUID().toString();
-
-        replace(organizationId, """
+        var organizationId = newOrganizationId();
+        var rows = """
                 [{"model": "gpt-5-mini", "provider": "openai", "kind": "fixed", "input_price": "0.00000025"}]
-                """, null);
+                """;
 
-        assertThat(load(organizationId).rows().getFirst().inputPerMillion()).isEqualByComparingTo("0.00000025");
+        replace(organizationId, rows, null);
+
+        assertLoaded(organizationId, 1, rows);
     }
 
     @Test
     void replaceAllOfOneOrganizationLeavesAnotherUntouched() {
-        var first = UUID.randomUUID().toString();
-        var second = UUID.randomUUID().toString();
+        var first = newOrganizationId();
+        var second = newOrganizationId();
         replace(second, TWO_ROWS, null);
 
         replace(first, "[]", null);
@@ -219,7 +267,6 @@ class ModelPriceStoreTest {
                 [{"model": "o3", "provider": "openai", "kind": "fixed", "input_price": "4.00"}]
                 """, null);
 
-        assertThat(load(second).rows()).hasSize(2);
-        assertThat(load(second).version()).isEqualTo(1);
+        assertLoaded(second, 1, TWO_ROWS);
     }
 }
