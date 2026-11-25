@@ -17,11 +17,11 @@ class OffloadTest {
     void cpuRunsOnParallelAfterAClientCall() {
         var client = Schedulers.newSingle("offload-test-client");
         try {
-            var cpuThread = Mono.just(1).publishOn(client)
+            var cpuThreadName = Mono.just(1).publishOn(client)
                     .flatMap(__ -> Offload.cpu(() -> Thread.currentThread().getName()))
                     .block();
 
-            assertThat(cpuThread).startsWith("parallel-");
+            assertThat(cpuThreadName).startsWith("parallel-");
         } finally {
             client.dispose();
         }
@@ -34,29 +34,29 @@ class OffloadTest {
         try {
             var reply = Mono.just(1).publishOn(client);
 
-            var resumedThread = reply.transform(Offload::resumeOriginal)
+            var resumedThreadName = reply.transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName())
                     .contextWrite(context -> Offload.originalOn(context, workers))
                     .block();
-            var resumedItemThreads = Flux.just(1, 2).publishOn(client)
+            var resumedItemPoolNames = Flux.just(1, 2).publishOn(client)
                     .transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName().replaceAll("-\\d+$", ""))
                     .distinct()
                     .collectList()
                     .contextWrite(context -> Offload.originalOn(context, workers))
                     .block();
-            var cpuThread = Mono.just(1)
+            var cpuThreadName = Mono.just(1)
                     .flatMap(__ -> Offload.cpu(() -> Thread.currentThread().getName()))
                     .contextWrite(context -> Offload.originalOn(context, workers))
                     .block();
-            var unsetThread = reply.transform(Offload::resumeOriginal)
+            var unsetThreadName = reply.transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread().getName())
                     .block();
 
-            assertThat(resumedThread).startsWith("offload-test-workers-");
-            assertThat(resumedItemThreads).containsExactly("offload-test-workers");
-            assertThat(unsetThread).startsWith("offload-test-client-");
-            assertThat(cpuThread).startsWith("parallel-");
+            assertThat(resumedThreadName).startsWith("offload-test-workers-");
+            assertThat(resumedItemPoolNames).containsExactly("offload-test-workers");
+            assertThat(unsetThreadName).startsWith("offload-test-client-");
+            assertThat(cpuThreadName).startsWith("parallel-");
         } finally {
             workers.dispose();
             client.dispose();
@@ -73,14 +73,14 @@ class OffloadTest {
                     .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
 
-            var resumed = Mono.just(1).publishOn(client)
+            var resumedThread = Mono.just(1).publishOn(client)
                     .transform(Offload::resumeOriginal)
                     .map(__ -> Thread.currentThread())
                     .contextWrite(context -> AsyncUtils.setRequestContext(context, requestContext))
                     .block();
 
-            assertThat(resumed.isVirtual()).isTrue();
-            assertThat(resumed.getName()).startsWith("request-vt-");
+            assertThat(resumedThread.isVirtual()).isTrue();
+            assertThat(resumedThread.getName()).startsWith("request-vt-");
         } finally {
             client.dispose();
         }
@@ -90,22 +90,22 @@ class OffloadTest {
     void blockingRunsTheCallAndBlockingEachRunsEveryItemOnBoundedElastic() {
         var client = Schedulers.newSingle("offload-test-client");
         try {
-            var callThread = Mono.just(1).publishOn(client)
+            var callThreadName = Mono.just(1).publishOn(client)
                     .flatMap(__ -> Offload.blocking(() -> Thread.currentThread().getName()))
                     .block();
-            var runnableThread = new AtomicReference<String>();
+            var runnableThreadName = new AtomicReference<String>();
             Mono.just(1).publishOn(client)
-                    .flatMap(__ -> Offload.blocking(() -> runnableThread.set(Thread.currentThread().getName())))
+                    .flatMap(__ -> Offload.blocking(() -> runnableThreadName.set(Thread.currentThread().getName())))
                     .block();
-            var itemThreads = Offload.blockingEach(Flux.just(1, 2, 3).publishOn(client))
+            var itemPoolNames = Offload.blockingEach(Flux.just(1, 2, 3).publishOn(client))
                     .map(__ -> Thread.currentThread().getName().replaceAll("-\\d+$", ""))
                     .distinct()
                     .collectList()
                     .block();
 
-            assertThat(callThread).startsWith("boundedElastic-");
-            assertThat(runnableThread.get()).startsWith("boundedElastic-");
-            assertThat(itemThreads).containsExactly("boundedElastic");
+            assertThat(callThreadName).startsWith("boundedElastic-");
+            assertThat(runnableThreadName.get()).startsWith("boundedElastic-");
+            assertThat(itemPoolNames).containsExactly("boundedElastic");
         } finally {
             client.dispose();
         }
