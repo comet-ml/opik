@@ -1,7 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,13 +11,12 @@ import java.nio.ByteOrder;
 
 /**
  * The 60 planted traces under {@code src/test/resources/topics/nightly/}: invented questions about a car's tire
- * pressure, with their vectors, that the nightly job tests plant a new theme with.
+ * pressure, with their vectors, that the nightly tests plant a new theme with.
  */
 final class TopicsNightlyFixture {
 
-    static final int DIMENSIONS = 384;
+    static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
     private static final String DIR = "/topics/nightly/";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     final String[] intents;
     final float[] vectors;
@@ -37,7 +36,7 @@ final class TopicsNightlyFixture {
 
     private static JsonNode json(String name) {
         try {
-            return MAPPER.readTree(bytes(name));
+            return JsonUtils.getMapper().readTree(bytes(name));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }

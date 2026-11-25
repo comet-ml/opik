@@ -547,7 +547,7 @@ class TopicsNightlyIntegrationTest {
             + "row is deleted and its retirement logged; each night queues one nightly update of the project")
     void threeNights() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         // The fixture's traces are 21 to 29 days before today: the first build's window, three days back, and the
         // three nights' windows hold all of them.
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), todayStart());
@@ -595,8 +595,8 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a night's run whose trace_topics rows are lost and whose labelling pass did not finish is finished by "
-            + "a later plan's labels run: the run's rows are written and its labels marked complete")
+    @DisplayName("a night's run whose trace_topics rows are lost and whose labelling pass did not finish is finished "
+            + "by a later plan's labels run: the run's rows are written and its labels marked complete")
     void nightAfterLostInsert() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
@@ -628,8 +628,9 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("after a nightly update that retires a topic, the labelling pass also labels a trace vectored after the "
-            + "window's end and before the save: its arrival row of the retired topic gets a row of the night's run")
+    @DisplayName("after a nightly update that retires a topic, the labelling pass also labels a trace vectored after "
+            + "the window's end and before the save: its arrival row of the retired topic gets a row of the night's "
+            + "run")
     void passLabelsUpToTheSave() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
@@ -669,7 +670,7 @@ class TopicsNightlyIntegrationTest {
     @DisplayName("a project without a list is not the night's: no nightly update, and the night does not mark it")
     void noListSkip() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, BUILT, yesterdayStart());
 
         runNight(Instant.now());
@@ -709,7 +710,7 @@ class TopicsNightlyIntegrationTest {
         // While the LLM names the groups, another run saves the project.
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(
                 wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1));
-        var other = UUID.randomUUID();
+        var other = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> handle.execute(
                 "UPDATE topic_projects SET list_run_id = ? WHERE project_id = ?", other.toString(),
                 projectId.toString()));
@@ -780,7 +781,7 @@ class TopicsNightlyIntegrationTest {
     void nightEndpoint() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var listless = UUID.randomUUID();
+        var listless = ID_GENERATOR.generateId();
         data.seed(workspaceId, listless, 0, BUILT, todayStart());
         stubAnswer(emptyNaming());
 
@@ -816,7 +817,7 @@ class TopicsNightlyIntegrationTest {
     @DisplayName("a project with a list in a workspace opted in to ai-labels but not to topics gets no nightly update")
     void topicsOptIn() {
         var workspaceId = aiLabelsOnlyWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, BUILT, yesterdayStart());
         data.savedList(workspaceId, projectId, yesterdayStart(), BUILT);
 
@@ -830,8 +831,8 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a project whose last 3 attempts failed is skipped as paused, and the night still marks it; one with 2 "
-            + "failed attempts is updated")
+    @DisplayName("a project whose last 3 attempts failed is skipped as paused, and the night still marks it; one with "
+            + "2 failed attempts is updated")
     void pauseAfterThreeFailures() {
         var workspaceId = enabledWorkspace();
         var paused = firstBuilt(workspaceId);
@@ -862,9 +863,11 @@ class TopicsNightlyIntegrationTest {
         return projectId;
     }
 
-    /** A project of {@value #BUILT} traces with a list from a first build by hand for yesterday, its labels complete. */
+    /**
+     * A project of {@value #BUILT} traces with a list from a first build by hand for yesterday, its labels complete.
+     */
     private UUID firstBuilt(String workspaceId) {
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, BUILT, yesterdayStart());
         buildByHand(workspaceId, projectId, today().minusDays(1));
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
@@ -1093,10 +1096,10 @@ class TopicsNightlyIntegrationTest {
 
     /**
      * Records {@code failures} failed nightly attempts in a row on the project, the last one started now, and returns
-     * its run id.
+     * its run id. Written to the row directly: no API sets a project's failure history.
      */
     private UUID failedAttempts(UUID projectId, int failures) {
-        var runId = UUID.randomUUID();
+        var runId = ID_GENERATOR.generateId();
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> handle.execute("""
                 UPDATE topic_projects SET run_id = ?, run_mode = 'nightly_update', run_status = 'failed',
@@ -1134,7 +1137,9 @@ class TopicsNightlyIntegrationTest {
                 .willReturn(TopicsTestData.answer(output, delayMillis)));
     }
 
-    /** {@code output} after {@code delayMillis}, matched only in the scenario's {@code state}, which it then moves on. */
+    /**
+     * {@code output} after {@code delayMillis}, matched only in the scenario's {@code state}, which it then moves on.
+     */
     private void stubAnswerInScenario(JsonNode output, int delayMillis, String state, String nextState) {
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).inScenario("answers").whenScenarioStateIs(state)
                 .willSetStateTo(nextState).willReturn(TopicsTestData.answer(output, delayMillis)));
@@ -1164,7 +1169,7 @@ class TopicsNightlyIntegrationTest {
 
     /** Opted in to ai-labels only, not listed in topics.enabledWorkspaces. */
     private String aiLabelsOnlyWorkspace() {
-        var workspaceId = UUID.randomUUID().toString();
+        var workspaceId = ID_GENERATOR.generateId().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;
