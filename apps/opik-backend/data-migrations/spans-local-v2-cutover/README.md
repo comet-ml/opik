@@ -451,8 +451,8 @@ registers its rows again, harmlessly), or around it into `spans_local` on a wrap
 anything: every row they copy was first written through `spans`, under the same id, and a span's week comes from its id
 rather than from the table holding it. So the index stays valid across the cutover, every rollback stage and a retry,
 and none of them calls for a span weeks backfill. What does bypass the view is a **partition import**
-(`ATTACH`/`REPLACE`/`MOVE PARTITION` into `spans`) or a write straight into a table behind the name; after one, re-plan
-the backfill (see "Re-planning" below).
+(`ATTACH`/`REPLACE`/`MOVE PARTITION` into `spans`) or a write straight into a table behind the name; around one,
+re-plan the backfill and handle the read flag (see "Re-planning" below).
 
 **Single shard only.** `span_weeks` is a replicated table, not wrapped: the view writes to the shard of the node that
 received the insert, and reads use the local table. That is complete on one shard, the only topology the wrap
@@ -518,8 +518,13 @@ bounds above, or a re-plan with a smaller `weeksPerChunk`.
 
 **Re-planning** (a plan older than the view, a smaller `weeksPerChunk`, or a partition import to cover): turn
 `spanWeeksBackfillEnabled` off on every instance, `DELETE FROM span_weeks_backfill_chunks`, adjust the tuning, and turn
-it back on. The next step plans afresh and re-registers every range. Delete **all** the rows, never only the pending
-ones: a plan whose every remaining chunk is done reads as complete.
+it back on. The next step plans afresh and re-registers every range, which takes as long as the first backfill. Delete
+**all** the rows, never only the pending ones: a plan whose every remaining chunk is done reads as complete.
+
+Whatever its cause, a re-plan voids what `spanWeeksReadEnabled` rests on, a complete plan. If the flag is on, turn it
+off in the rollout that turns the backfill off (for a partition import, before the import: the bound hides imported
+spans from the moment they land), and back on once the new plan is complete and the spot-check below returns `0` on a
+few of the projects involved.
 
 ### Where it sits relative to the cutover
 

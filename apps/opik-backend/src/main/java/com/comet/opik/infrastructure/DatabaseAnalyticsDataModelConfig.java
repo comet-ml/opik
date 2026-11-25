@@ -99,7 +99,8 @@ import lombok.Builder;
  * backfill, so turn this on once the backfill has planned its chunks in {@code span_weeks_backfill_chunks} and done
  * them all, as unindexed spans would be skipped. In the spans cutover, turn it on only after the {@code EXCHANGE}, and
  * off again with a rollback that restores the legacy table: {@code spanColumnsNonNullable} is on in both windows while
- * {@code spans} is still the legacy table. Partition imports bypass the view and need the backfill re-planned.</p>
+ * {@code spans} is still the legacy table. Partition imports bypass the view and need the backfill re-planned; turn
+ * this off before one, and on again once the new plan is done.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
