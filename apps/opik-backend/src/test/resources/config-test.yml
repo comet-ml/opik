@@ -1160,6 +1160,9 @@ topics:
     planInterval: 5m
     leaseSlack: 1m
     requeueWait: 5s
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
   algorithm:
     minGroups: 30
     maxGroups: 50
