@@ -85,19 +85,6 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("the budget stops at the inference service's max_tokens limit, however many pairs there are")
-        void budgetCapped() {
-            // 60 + 25 x 200 is 5060: above the 4096 the service takes, so the call would be rejected.
-            var many = IntStream.range(0, 200)
-                    .mapToObj(i -> new TopicPrompts.VerifyPair(prompt(0, 0.1), group(i, 30, 0.9))).toList();
-
-            drive(Verifier.ask("verify_naming", many, TASKS.verify(), CONFIG), (tag, prompt, schema, maxTokens) -> {
-                assertThat(maxTokens).isEqualTo(4096);
-                return json("{\"answers\": []}");
-            });
-        }
-
-        @Test
         @DisplayName("a failed call fails the run: read as 'no pair verified', it would turn sound assigns into new topics")
         void failed() {
             assertThatThrownBy(

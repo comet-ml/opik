@@ -2,8 +2,10 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
+import com.comet.opik.infrastructure.inference.BatchGenerateItem;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.base.Preconditions;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -39,6 +41,13 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     public KMeansTopicAlgorithm(@NonNull @Config("topics") TopicsConfig topics, @NonNull TopicTasks tasks) {
         this.config = Objects.requireNonNull(topics.getAlgorithm(), "topics.algorithm");
         this.tasks = tasks;
+        // A night verifies at most nightlyMaxGroups pairs in one call. Checked here, where the task and the config are
+        // both known: the inference service rejects a call above its limit, so every such night would fail.
+        int verifyMaxTokens = Verifier.maxTokens(tasks.verify(), config, config.getNightlyMaxGroups());
+        Preconditions.checkState(verifyMaxTokens <= BatchGenerateItem.MAX_MAX_TOKENS,
+                "the verify call's max_tokens '%s' (max_tokens of topics/tasks/verify.yaml + "
+                        + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) must be at most '%s'",
+                verifyMaxTokens, BatchGenerateItem.MAX_MAX_TOKENS);
     }
 
     @Override

@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
-import com.comet.opik.infrastructure.inference.BatchGenerateItem;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.experimental.UtilityClass;
 
@@ -33,11 +32,16 @@ class Verifier {
                 .prompt(TopicPrompts.verify(task, prompts, config.getVerifyTopicExamples(),
                         config.getVerifyGroupExamples()))
                 .schema(task.schema())
-                // Capped at what the inference service takes, or a night with many pairs fails its call.
-                .maxTokens(Math.min(BatchGenerateItem.MAX_MAX_TOKENS,
-                        task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size()))
+                // Not capped here: a cut answer would verify no pair and turn sound assigns into new topics. A night
+                // has at most nightlyMaxGroups pairs, and KMeansTopicAlgorithm checks that budget at startup.
+                .maxTokens(maxTokens(task, config, prompts.size()))
                 .build();
         return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
+    }
+
+    /** The verify call's max_tokens for {@code pairs} pairs: the task's base plus the config's tokens per pair. */
+    static int maxTokens(AiLabelTask task, AlgorithmConfig config, int pairs) {
+        return task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * pairs;
     }
 
     private static Map<Integer, Boolean> verdicts(JsonNode answer, int pairs) {

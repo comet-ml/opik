@@ -2853,7 +2853,8 @@ topics:
     nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
     #  Default: 25
     #  Description: Nightly: the verify call's tokens per pair it checks, on top of the max_tokens of
-    #  topics/tasks/verify.yaml
+    #  topics/tasks/verify.yaml. That max_tokens + this x nightlyMaxGroups must be at most 4096, the inference
+    #  service's limit: checked at startup
     nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
     #  Default: 4
     #  Description: Nightly: member texts a live topic shows in the naming prompt
