@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import partition from "lodash/partition";
 import { Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
@@ -26,32 +27,20 @@ import {
   filterCatalog,
   builtInLookup,
   groupHistory,
-  identityOf,
   providersOf,
   sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
-import CatalogTable from "./CatalogTable";
+import PricesTable from "./PricesTable";
 import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
-import QuickAccess from "./QuickAccess";
 import useBuiltInPrices from "./useBuiltInPrices";
-import { MAX_QUICK_ACCESS } from "./format";
 
 const HISTORY_PAGE = { page: 1, size: 100 };
 const PAGE_SIZES = [25, 50, 100];
-const QUICK_ACCESS_DEFAULTS = [
-  { model: "gpt-5", provider: "openai" },
-  { model: "gpt-5-mini", provider: "openai" },
-  { model: "claude-sonnet-4-5", provider: "anthropic" },
-  { model: "claude-haiku-4-5", provider: "anthropic" },
-];
 
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
 const IS_LABEL = { "=": "is" } as const;
-
-const identityKey = (model: string, provider: string) =>
-  identityOf({ model, provider, kind: "fixed" });
 
 const CostCenterTab: React.FC = () => {
   const access = useModelPricesAccess();
@@ -74,23 +63,14 @@ const CostCenterTab: React.FC = () => {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const drawerKey = useRef(0);
   const returnFocusTo = useRef<HTMLElement | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
   const isAnyDrawerOpen = Boolean(drawerTarget) || isBatchOpen;
 
   // Radix hands focus back only to its own trigger, and these drawers are
-  // opened from rows and cards, so without this focus falls to <body>. The
-  // opener can be gone by then (a quick access card that dropped out after a
-  // save), hence the search box as the fallback.
+  // opened without one, so without this focus falls to <body>.
   useEffect(() => {
     if (isAnyDrawerOpen) return;
-    const target = returnFocusTo.current;
+    returnFocusTo.current?.focus();
     returnFocusTo.current = null;
-    if (!target) return;
-    if (target.isConnected) {
-      target.focus();
-    } else {
-      searchRef.current?.focus();
-    }
   }, [isAnyDrawerOpen]);
 
   const rememberFocus = () => {
@@ -104,14 +84,6 @@ const CostCenterTab: React.FC = () => {
     () => buildCatalog(builtIns ?? [], list?.rows ?? []),
     [builtIns, list],
   );
-  const byIdentity = useMemo(() => {
-    const map = new Map<string, CatalogEntry>();
-    catalog.forEach((entry) =>
-      map.set(identityKey(entry.model, entry.provider), entry),
-    );
-    return map;
-  }, [catalog]);
-
   const providerOptions = useMemo(() => providersOf(catalog), [catalog]);
   const chipDefinitions = useMemo<ChipDefinition[]>(
     () => [
@@ -190,76 +162,39 @@ const CostCenterTab: React.FC = () => {
     onChange: () => setPage(1),
   });
 
-  const visible = useMemo(
-    () =>
-      sortCatalog(
-        filterCatalog(catalog, { search, filters: chips.filters }),
-        sortDirection,
-        search,
-      ),
-    [catalog, search, chips.filters, sortDirection],
-  );
-  const pageEntries = useMemo(
-    () => visible.slice((page - 1) * size, page * size),
-    [visible, page, size],
-  );
-
   const [pinned = [], setPinned] = useLocalStorageState<string[]>(
     PINNED_STORAGE_KEY,
     { defaultValue: [] },
   );
   const pinnedSet = useMemo(() => new Set(pinned), [pinned]);
   const isPinned = useCallback(
-    (entry: CatalogEntry) =>
-      pinnedSet.has(identityKey(entry.model, entry.provider)),
+    (entry: CatalogEntry) => pinnedSet.has(entry.key),
     [pinnedSet],
   );
   const togglePin = useCallback(
-    (entry: CatalogEntry) => {
-      const key = identityKey(entry.model, entry.provider);
+    (entry: CatalogEntry) =>
       setPinned((current = []) =>
-        current.includes(key)
-          ? current.filter((item) => item !== key)
-          : [...current, key],
-      );
-    },
+        current.includes(entry.key)
+          ? current.filter((key) => key !== entry.key)
+          : [...current, entry.key],
+      ),
     [setPinned],
   );
-  const togglePinFromCard = useCallback(
-    (entry: CatalogEntry) => {
-      togglePin(entry);
-      // Unpinning can remove the card holding the focused star.
-      requestAnimationFrame(() => {
-        if (
-          !document.activeElement ||
-          document.activeElement === document.body
-        ) {
-          searchRef.current?.focus();
-        }
-      });
-    },
-    [togglePin],
-  );
 
-  const pinnedEntries = useMemo(
-    () =>
-      pinned
-        .map((key) => byIdentity.get(key))
-        .filter((entry): entry is CatalogEntry => Boolean(entry)),
-    [pinned, byIdentity],
+  // DataTable lifts pinned rows only within the page it is given, so they are
+  // moved to the front before paging to land on the first page.
+  const visible = useMemo(() => {
+    const sorted = sortCatalog(
+      filterCatalog(catalog, { search, filters: chips.filters }),
+      sortDirection,
+      search,
+    );
+    return partition(sorted, isPinned).flat();
+  }, [catalog, search, chips.filters, sortDirection, isPinned]);
+  const pageEntries = useMemo(
+    () => visible.slice((page - 1) * size, page * size),
+    [visible, page, size],
   );
-  const canPin = pinnedEntries.length < MAX_QUICK_ACCESS;
-
-  const quickAccess = useMemo(() => {
-    const defaults = QUICK_ACCESS_DEFAULTS.map((item) =>
-      byIdentity.get(identityKey(item.model, item.provider)),
-    ).filter((entry): entry is CatalogEntry => Boolean(entry));
-    const seen = new Set<string>();
-    const limit = Math.min(Math.max(4, pinnedEntries.length), MAX_QUICK_ACCESS);
-    return [...pinnedEntries, ...defaults]
-      .filter((entry) => !seen.has(entry.key) && seen.add(entry.key))
-      .slice(0, limit);
-  }, [pinnedEntries, byIdentity]);
 
   const drawerEntry = drawerTarget?.entry;
   const openDrawer = (target: DrawerTarget) => {
@@ -300,13 +235,6 @@ const CostCenterTab: React.FC = () => {
         onToggleHistory={() => setIsHistoryOpen((open) => !open)}
       />
 
-      <QuickAccess
-        entries={quickAccess}
-        onOpen={(entry) => openDrawer({ entry })}
-        isPinned={isPinned}
-        onTogglePin={togglePinFromCard}
-      />
-
       <div className="mb-3 flex flex-wrap items-start gap-1.5">
         <div className="min-w-0 flex-[1_1_510px]">
           <FilterChipBar
@@ -324,7 +252,6 @@ const CostCenterTab: React.FC = () => {
             onOpenChipIdChange={chips.setOpenChipId}
             prefix={
               <SearchInput
-                ref={searchRef}
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
                 className="w-[260px] shrink-0"
@@ -354,37 +281,30 @@ const CostCenterTab: React.FC = () => {
         )}
       </div>
 
-      {visible.length === 0 ? (
-        <p className="comet-body-s rounded-md border py-8 text-center text-muted-slate">
-          No prices match these filters.
-        </p>
-      ) : (
-        <>
-          <CatalogTable
-            entries={pageEntries}
-            sortDirection={sortDirection}
-            onToggleSort={() => {
-              setSortDirection((direction) =>
-                direction === "asc" ? "desc" : "asc",
-              );
-              setPage(1);
-            }}
-            onOpen={(entry) => openDrawer({ entry })}
-            isPinned={isPinned}
-            canPin={canPin}
-            onTogglePin={togglePin}
+      <PricesTable
+        entries={pageEntries}
+        sortDirection={sortDirection}
+        onSortDirectionChange={resetPage(setSortDirection)}
+        pinnedKeys={pinned}
+        onPinnedKeysChange={setPinned}
+        activeKey={drawerEntry?.key}
+        onOpen={(entry) => openDrawer({ entry })}
+        onClearFilters={() => {
+          chips.clearAll();
+          resetPage(setSearch)("");
+        }}
+      />
+      {visible.length > 0 && (
+        <div className="pt-4">
+          <DataTablePagination
+            page={page}
+            pageChange={setPage}
+            size={size}
+            sizeChange={resetPage(setSize)}
+            total={visible.length}
+            itemsPerPage={PAGE_SIZES}
           />
-          <div className="pt-4">
-            <DataTablePagination
-              page={page}
-              pageChange={setPage}
-              size={size}
-              sizeChange={resetPage(setSize)}
-              total={visible.length}
-              itemsPerPage={PAGE_SIZES}
-            />
-          </div>
-        </>
+        </div>
       )}
 
       {drawerTarget && (
@@ -397,7 +317,6 @@ const CostCenterTab: React.FC = () => {
           builtIns={builtIns ?? []}
           canEdit={canEdit}
           isPinned={drawerEntry ? isPinned(drawerEntry) : false}
-          canPin={canPin}
           onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}
         />
       )}

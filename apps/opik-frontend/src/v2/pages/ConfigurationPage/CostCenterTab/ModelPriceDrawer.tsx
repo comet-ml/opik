@@ -1,5 +1,14 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Info, Lock, Plus, RotateCcw, Star, Trash2, X } from "lucide-react";
+import {
+  Info,
+  Lock,
+  Pin,
+  PinOff,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -43,7 +52,6 @@ import {
   validateRow,
 } from "@/lib/model-prices";
 import {
-  MAX_QUICK_ACCESS,
   MODE_LABELS,
   PRICE_UNIT_SUFFIX,
   TYPE_TAG_VARIANT,
@@ -82,7 +90,6 @@ type ModelPriceDrawerProps = {
   builtIns: BuiltInPrice[];
   canEdit: boolean;
   isPinned?: boolean;
-  canPin?: boolean;
   onTogglePin?: () => void;
 };
 
@@ -145,7 +152,6 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   builtIns,
   canEdit,
   isPinned = false,
-  canPin = true,
   onTogglePin,
 }) => {
   const { entry } = target;
@@ -418,31 +424,24 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               {onTogglePin && (
                 <TooltipWrapper
                   hoverOnly
-                  content={
-                    isPinned
-                      ? "Unpin from quick access"
-                      : canPin
-                        ? "Pin to quick access"
-                        : `Quick access holds ${MAX_QUICK_ACCESS} models`
-                  }
+                  content={isPinned ? "Unpin" : "Pin to the top"}
                 >
                   <Button
                     variant="outline"
                     size="icon-2xs"
-                    className={cn(
-                      isPinned && "text-warning-box-text",
-                      !isPinned && !canPin && "cursor-not-allowed opacity-50",
-                    )}
-                    aria-label={
-                      isPinned
-                        ? "Unpin from quick access"
-                        : "Pin to quick access"
-                    }
+                    className="group/pin"
+                    aria-label={isPinned ? "Unpin" : "Pin to the top"}
                     aria-pressed={isPinned}
-                    aria-disabled={!isPinned && !canPin}
-                    onClick={() => (isPinned || canPin) && onTogglePin()}
+                    onClick={onTogglePin}
                   >
-                    <Star className={cn(isPinned && "fill-current")} />
+                    {isPinned ? (
+                      <>
+                        <Pin className="group-hover/pin:hidden" />
+                        <PinOff className="hidden group-hover/pin:block" />
+                      </>
+                    ) : (
+                      <Pin />
+                    )}
                   </Button>
                 </TooltipWrapper>
               )}

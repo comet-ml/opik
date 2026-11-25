@@ -113,6 +113,11 @@ vi.mock("./useBuiltInPrices", () => ({
   default: () => ({ data: BUILT_INS, isPending: false }),
 }));
 
+// DataTable waits 200 ms before a row click counts, so text can be selected.
+vi.mock("@/shared/DataTable/useCustomRowClick", () => ({
+  default: () => (_event: unknown, onClick: () => void) => onClick(),
+}));
+
 import CostCenterTab from "./CostCenterTab";
 
 const tabTree = (access?: ModelPricesAccess) => (
@@ -138,26 +143,32 @@ const withFilters = (filters: object[]) =>
     `/?prices_filters=${encodeURIComponent(JSON.stringify(filters))}`,
   );
 
-const quickAccessModels = () =>
-  within(screen.getByTestId("quick-access"))
-    .getAllByRole("button", { name: /^Open / })
-    .map((card) => card.textContent);
-
 const ADMIN: ModelPricesAccess = {
   canEdit: true,
   isPending: false,
   organizationName: "Acme",
 };
 
+const tableRows = () =>
+  Array.from(document.querySelectorAll<HTMLElement>("tbody tr[data-row-id]"));
+
 const shownModels = () =>
-  screen
-    .queryAllByTestId("model-price-row")
-    .map((row) => row.querySelector(".comet-code, .font-mono")?.textContent);
+  tableRows().map((row) => row.querySelectorAll("td")[1]?.textContent);
 
 const rowOf = (model: string) =>
-  screen
-    .getAllByTestId("model-price-row")
-    .find((row) => within(row).queryByText(model, { exact: true }))!;
+  tableRows().find((row) => within(row).queryByText(model, { exact: true }))!;
+
+const sortByModel = () =>
+  fireEvent.click(
+    within(screen.getByRole("columnheader", { name: /Model/ })).getByText(
+      "Model",
+    ),
+  );
+
+const pinButton = (model: string) =>
+  within(rowOf(model)).getByRole("button", {
+    name: /^(Pin to the top|Unpin)$/,
+  });
 
 const openRow = (model: string) => fireEvent.click(rowOf(model));
 
@@ -284,7 +295,7 @@ describe("CostCenterTab", () => {
     it("sorts by model in both directions", () => {
       renderTab(ADMIN);
 
-      fireEvent.click(screen.getByRole("button", { name: /Sort by model/ }));
+      sortByModel();
 
       expect(shownModels()[0]).toBe("team-model");
     });
@@ -306,7 +317,7 @@ describe("CostCenterTab", () => {
         );
         expect(screen.getByText(/^Showing 26-/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: /Sort by model/ }));
+        sortByModel();
 
         expect(screen.getByText(/^Showing 1-25/)).toBeInTheDocument();
       } finally {
@@ -341,9 +352,7 @@ describe("CostCenterTab", () => {
         { target: { value: "zzz" } },
       );
 
-      expect(
-        await screen.findByText("No prices match these filters."),
-      ).toBeVisible();
+      expect(await screen.findByText("No matching results")).toBeVisible();
     });
 
     it("filters by type from the filter chips", () => {
@@ -393,140 +402,93 @@ describe("CostCenterTab", () => {
     });
   });
 
-  describe("quick access", () => {
-    it("shows the default models the catalog knows when nothing is pinned", () => {
-      renderTab(ADMIN);
-
-      expect(quickAccessModels()).toEqual(["claude-sonnet-4-5"]);
-    });
-
-    it("puts a model pinned from the table first and remembers it", () => {
+  describe("pinning", () => {
+    it("shows pinned rows first and remembers them", () => {
       const { unmount } = renderTab(ADMIN);
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Pin gpt-4o-mini to quick access" }),
-      );
+      fireEvent.click(pinButton("gpt-4o-mini"));
 
-      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
-      expect(screen.queryByLabelText("Model name")).toBeNull();
+      expect(shownModels()[0]).toBe("gpt-4o-mini");
+      expect(pinButton("gpt-4o-mini")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("dialog")).toBeNull();
 
       unmount();
       renderTab(ADMIN);
 
-      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
-      fireEvent.click(
-        within(screen.getByTestId("quick-access")).getByRole("button", {
-          name: "Unpin gpt-4o-mini from quick access",
-        }),
+      expect(shownModels()[0]).toBe("gpt-4o-mini");
+      fireEvent.click(pinButton("gpt-4o-mini"));
+      expect(shownModels()).toEqual([
+        "acme-llama-70b",
+        "claude-sonnet-4-5",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "team-model",
+      ]);
+    });
+
+    it("keeps pinned rows first when the sort flips", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(pinButton("gpt-4o"));
+      sortByModel();
+
+      expect(shownModels().slice(0, 2)).toEqual(["gpt-4o", "team-model"]);
+    });
+
+    it("leaves out a pinned row that the search doesn't match", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(pinButton("gpt-4o"));
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        { target: { value: "sonnet" } },
       );
-      expect(quickAccessModels()).not.toContain("gpt-4o-mini");
+
+      await waitFor(() =>
+        expect(shownModels()).toEqual(["claude-sonnet-4-5", "team-model"]),
+      );
     });
 
     it("pins the open model from the drawer header", () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o-mini");
-      fireEvent.click(
-        screen.getByRole("button", { name: "Pin to quick access" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Pin to the top" }));
 
-      expect(
-        screen.getByRole("button", { name: "Unpin from quick access" }),
-      ).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Unpin" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
-    });
-
-    it("moves focus to search when an unpinned card leaves quick access", async () => {
-      renderTab(ADMIN);
-
-      fireEvent.click(
-        screen.getByRole("button", { name: "Pin gpt-4o-mini to quick access" }),
-      );
-      const star = within(screen.getByTestId("quick-access")).getByRole(
-        "button",
-        { name: "Unpin gpt-4o-mini from quick access" },
-      );
-      star.focus();
-      fireEvent.click(star);
-
-      expect(quickAccessModels()).not.toContain("gpt-4o-mini");
-      await waitFor(() =>
-        expect(
-          screen.getByPlaceholderText("Search models or providers"),
-        ).toHaveFocus(),
-      );
-    });
-
-    it("stops pinning once quick access holds 8 models", () => {
-      const extra = ["m-1", "m-2", "m-3", "m-4"].map((model) => ({
-        model,
-        provider: "acme",
-        mode: "chat",
-        input_price: "1",
-        output_price: "2",
-      }));
-      BUILT_INS.push(...extra);
-      try {
-        renderTab(ADMIN);
-        const pinButton = (model: string) =>
-          within(rowOf(model)).getByRole("button", {
-            name: `Pin ${model} to quick access`,
-          });
-        const models = shownModels() as string[];
-        models
-          .slice(0, 8)
-          .forEach((model) => fireEvent.click(pinButton(model)));
-
-        expect(quickAccessModels()).toHaveLength(8);
-        const ninth = pinButton(models[8]);
-        expect(ninth).toHaveAttribute("aria-disabled", "true");
-        fireEvent.click(ninth);
-        expect(quickAccessModels()).not.toContain(models[8]);
-        expect(screen.queryByLabelText("Model name")).toBeNull();
-      } finally {
-        BUILT_INS.splice(3);
-      }
+      expect(shownModels()[0]).toBe("gpt-4o-mini");
     });
   });
 
   describe("editing one model", () => {
-    it("opens a model from the keyboard and keeps it open", () => {
-      renderTab(ADMIN);
-
-      const row = rowOf("gpt-4o");
-      row.focus();
-      const notPrevented = fireEvent.keyDown(row, { key: "Enter" });
-      fireEvent.keyUp(row, { key: "Enter" });
-
-      expect(notPrevented).toBe(false);
-      expect(priceInput("Input")).toBeInTheDocument();
-    });
-
-    it("closes on the first Escape although the pin star gets the first focus", async () => {
+    it("closes on the first Escape although the pin button gets the first focus", async () => {
       renderTab(ADMIN);
 
       openRow("gpt-4o");
       expect(
-        screen.getByRole("button", { name: "Pin to quick access" }),
+        screen.getByRole("button", { name: "Pin to the top" }),
       ).toHaveFocus();
       fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
-    it("gives focus back to the row once the drawer closes", async () => {
+    it("gives focus back to Add model once the drawer closes", async () => {
       renderTab(ADMIN);
 
-      const row = rowOf("gpt-4o");
-      row.focus();
-      fireEvent.keyDown(row, { key: "Enter" });
-      expect(row).not.toHaveFocus();
+      const addModel = screen.getByRole("button", { name: /Add model/ });
+      addModel.focus();
+      fireEvent.click(addModel);
+      expect(addModel).not.toHaveFocus();
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      await waitFor(() => expect(row).toHaveFocus());
+      await waitFor(() => expect(addModel).toHaveFocus());
     });
 
     it("asks before throwing away unsaved edits", () => {
