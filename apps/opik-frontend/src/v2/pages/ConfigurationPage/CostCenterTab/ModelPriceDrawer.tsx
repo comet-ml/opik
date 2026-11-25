@@ -470,6 +470,14 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
           )
         }
       >
+        {!isNew && (
+          <ColoredTag
+            label={CATALOG_TYPE_LABELS[type]}
+            variant={TYPE_TAG_VARIANT[type]}
+            tooltip={TYPE_DESCRIPTIONS[type]}
+            size="default"
+          />
+        )}
         {navigation && (
           <ResizableSidePanelArrowNavigation
             showSeparator={false}
@@ -485,30 +493,20 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
       </SheetDescription>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
         {!isNew && (
-          <div className="flex flex-col gap-2">
-            <div className="comet-body-s flex flex-wrap items-center gap-3 text-foreground">
-              {lastUpdatedAt && (
-                <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
-                    {lastUpdatedAt}
-                  </div>
-                </TooltipWrapper>
-              )}
-              <div className="flex items-center gap-1 text-muted-slate">
-                Provider:
-                {ProviderIcon && <ProviderIcon className="size-3.5 shrink-0" />}
-                <span className="text-foreground">{providerLabel}</span>
-              </div>
+          <div className="comet-body-s flex flex-wrap items-center justify-between gap-3 text-foreground">
+            <div className="flex items-center gap-1 text-muted-slate">
+              Provider:
+              {ProviderIcon && <ProviderIcon className="size-3.5 shrink-0" />}
+              <span className="text-foreground">{providerLabel}</span>
             </div>
-            <div className="flex">
-              <ColoredTag
-                label={CATALOG_TYPE_LABELS[type]}
-                variant={TYPE_TAG_VARIANT[type]}
-                tooltip={TYPE_DESCRIPTIONS[type]}
-                size="default"
-              />
-            </div>
+            {lastUpdatedAt && (
+              <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
+                <div className="flex items-center gap-1">
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {lastUpdatedAt}
+                </div>
+              </TooltipWrapper>
+            )}
           </div>
         )}
         {changedElsewhere && (
