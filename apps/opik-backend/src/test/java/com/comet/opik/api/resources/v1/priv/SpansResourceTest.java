@@ -1483,6 +1483,21 @@ class SpansResourceTest {
         }
 
         @Test
+        void create__whenTraceIdIsNull__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callCreateSpan(span, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("traceId must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         void createAndGetById() {
             var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .feedbackScores(null)
@@ -2189,6 +2204,22 @@ class SpansResourceTest {
                     TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
                 var expectedError = new ErrorMessage(List.of("spans[0].projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
+        void batch__whenTraceIdIsNull__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(List.of(span), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("spans[0].traceId must not be null"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }

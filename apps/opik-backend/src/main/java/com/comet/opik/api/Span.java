@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +41,7 @@ public record Span(
                 Span.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If null, the default project is used") String projectName,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Span.View.Public.class,
-                Span.View.Write.class}) @NotNull(groups = {Span.View.Write.class}) UUID traceId,
+                Span.View.Write.class}) @NotNull(groups = {Span.View.Create.class}) UUID traceId,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) UUID parentSpanId,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
@@ -138,6 +139,14 @@ public record Span(
         }
 
         public static class Public {
+        }
+
+        /**
+         * Validation group for spans sent through the public create endpoints, where {@code trace_id} is required.
+         * Internal writers (OTel, experiment items bulk) assign the trace id server side, so they validate against
+         * {@link Default} only.
+         */
+        public interface Create extends Default {
         }
     }
 }
