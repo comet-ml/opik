@@ -654,6 +654,67 @@ describe("CostCenterTab", () => {
     });
   });
 
+  describe("stepping through models", () => {
+    const drawerTitle = () =>
+      screen.getByRole("dialog").querySelector("h2")?.textContent;
+
+    it("opens the next and previous model in the same drawer", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.click(screen.getByRole("button", { name: /^Next/ }));
+
+      expect(drawerTitle()).toBe("gpt-4o-mini");
+
+      fireEvent.click(screen.getByRole("button", { name: /^Previous/ }));
+
+      expect(drawerTitle()).toBe("gpt-4o");
+    });
+
+    it("follows the on-screen order of pinned rows", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(pinButton("team-model"));
+      fireEvent.click(pinButton("gpt-4o"));
+      expect(shownModels().slice(0, 2)).toEqual(["team-model", "gpt-4o"]);
+
+      openRow("team-model");
+      fireEvent.click(screen.getByRole("button", { name: /^Next/ }));
+
+      expect(drawerTitle()).toBe("gpt-4o");
+    });
+
+    it("can't step past the first row of the page", () => {
+      renderTab(ADMIN);
+
+      openRow("acme-llama-70b");
+
+      expect(screen.getByRole("button", { name: /^Previous/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /^Next/ })).toBeEnabled();
+    });
+
+    it("asks before leaving unsaved edits for the next model", async () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "3" } });
+      fireEvent.click(screen.getByRole("button", { name: /^Next/ }));
+
+      fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
+
+      await waitFor(() => expect(drawerTitle()).toBe("gpt-4o-mini"));
+    });
+
+    it("steps to the next model with the K key", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.keyDown(document.body, { key: "k", code: "KeyK" });
+
+      expect(drawerTitle()).toBe("gpt-4o-mini");
+    });
+  });
+
   describe("editing one model", () => {
     it("closes on the first Escape from the first focused control", async () => {
       renderTab(ADMIN);

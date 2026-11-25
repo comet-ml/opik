@@ -9,7 +9,6 @@ import useLocalStorageState from "use-local-storage-state";
 import { JsonParam } from "use-query-params";
 import { ColumnSort, OnChangeFn } from "@tanstack/react-table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import partition from "lodash/partition";
 import { History as HistoryIcon, Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
@@ -51,7 +50,10 @@ import PricesTable, {
   DEFAULT_SELECTED_COLUMNS,
   PRICE_COLUMNS,
 } from "./PricesTable";
-import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
+import ModelPriceDrawer, {
+  DrawerNavigation,
+  DrawerTarget,
+} from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import useBuiltInPrices from "./useBuiltInPrices";
 
@@ -249,8 +251,6 @@ const CostCenterTab: React.FC = () => {
     setPage(1);
   };
 
-  // DataTable lifts pinned rows only within the page it is given, so they are
-  // moved to the front before paging to land on the first page.
   const sorted = useMemo(
     () =>
       sortCatalog(
@@ -260,16 +260,34 @@ const CostCenterTab: React.FC = () => {
       ),
     [catalog, search, chips.filters, sortDirection],
   );
-  const visible = useMemo(
-    () => partition(sorted, isPinned).flat(),
-    [sorted, isPinned],
-  );
+  // DataTable lifts pinned rows only within the page it is given, and shows
+  // them in the order they were pinned. Ordering the list the same way puts
+  // them on the first page and keeps Previous / Next in step with the screen.
+  const visible = useMemo(() => {
+    const byKey = new Map(sorted.map((entry) => [entry.key, entry]));
+    const pinnedEntries = pinned
+      .map((key) => byKey.get(key))
+      .filter((entry): entry is CatalogEntry => Boolean(entry));
+    return [...pinnedEntries, ...sorted.filter((entry) => !isPinned(entry))];
+  }, [sorted, pinned, isPinned]);
   const pageEntries = useMemo(
     () => visible.slice((page - 1) * size, page * size),
     [visible, page, size],
   );
 
   const drawerEntry = drawerTarget?.entry;
+  const drawerIndex = drawerEntry
+    ? pageEntries.findIndex((entry) => entry.key === drawerEntry.key)
+    : -1;
+  const drawerNavigation: DrawerNavigation | undefined =
+    drawerIndex >= 0
+      ? {
+          hasPrevious: drawerIndex > 0,
+          hasNext: drawerIndex < pageEntries.length - 1,
+          onChange: (shift) =>
+            setDrawerTarget({ entry: pageEntries[drawerIndex + shift] }),
+        }
+      : undefined;
   const openDrawer = useCallback(
     (target: DrawerTarget) => {
       rememberFocus();
@@ -469,6 +487,7 @@ const CostCenterTab: React.FC = () => {
           canEdit={canEdit}
           isPinned={drawerEntry ? isPinned(drawerEntry) : false}
           onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}
+          navigation={drawerNavigation}
         />
       )}
 
