@@ -381,11 +381,11 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
      * resource goes to the project of its nearest ancestor in the batch. agentgateway sets the attribute on the request
      * span only, not on its upstream-call child span.
      */
-    private record AncestorProjects(Map<SpanKey, Span> spansById, Map<SpanKey, String> projectNames) {
+    private record AncestorProjects(Map<SpanKey, Span> spansById, Map<SpanKey, Optional<String>> resolvedProjects) {
 
         static AncestorProjects of(ExportTraceServiceRequest traceRequest) {
             Map<SpanKey, Span> spansById = new HashMap<>();
-            Map<SpanKey, String> projectNames = new HashMap<>();
+            Map<SpanKey, Optional<String>> resolvedProjects = new HashMap<>();
             traceRequest.getResourceSpansList().stream()
                     .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                     .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
@@ -394,23 +394,33 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         spansById.putIfAbsent(key, span);
                         OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList())
                                 .filter(OpenTelemetryMapper::isValidProjectName)
-                                .ifPresent(projectName -> projectNames.putIfAbsent(key, projectName));
+                                .ifPresent(projectName -> resolvedProjects.putIfAbsent(key, Optional.of(projectName)));
                     });
-            return projectNames.isEmpty()
+            return resolvedProjects.isEmpty()
                     ? new AncestorProjects(Map.of(), Map.of())
-                    : new AncestorProjects(spansById, projectNames);
+                    : new AncestorProjects(spansById, resolvedProjects);
         }
 
         Optional<String> nearestProjectName(Span span) {
+            if (resolvedProjects.isEmpty()) {
+                return Optional.empty();
+            }
+            List<SpanKey> walked = new ArrayList<>();
+            Optional<String> projectName = Optional.empty();
             var ancestorKey = SpanKey.parentOf(span);
-            for (int hops = 0; ancestorKey.isPresent() && hops < spansById.size(); hops++) {
-                var projectName = projectNames.get(ancestorKey.get());
-                if (projectName != null) {
-                    return Optional.of(projectName);
+            while (ancestorKey.isPresent() && walked.size() <= spansById.size()) {
+                var resolved = resolvedProjects.get(ancestorKey.get());
+                if (resolved != null) {
+                    projectName = resolved;
+                    break;
                 }
+                walked.add(ancestorKey.get());
                 ancestorKey = Optional.ofNullable(spansById.get(ancestorKey.get())).flatMap(SpanKey::parentOf);
             }
-            return Optional.empty();
+            for (var key : walked) {
+                resolvedProjects.put(key, projectName);
+            }
+            return projectName;
         }
     }
 
