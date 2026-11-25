@@ -9,9 +9,13 @@ import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * Whether Topics runs for a workspace: the one place that decides it. A workspace runs Topics only when all three hold:
@@ -22,6 +26,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * </ul>
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
+ *
+ * <p>Also keeps the vectors tick's per-workspace watermark and long-window pass progress in
+ * {@code topic_vector_watermarks}.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -47,5 +54,37 @@ public class TopicWorkspaceService {
                 && template.inTransaction(READ_ONLY,
                         handle -> handle.attach(AiLabelWorkspaceDAO.class).enabled(workspaceId))
                         .orElse(false);
+    }
+
+    /** The vectors tick's watermark of each workspace that has one. */
+    Map<String, Instant> vectorsWatermarks(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).watermarks(workspaceIds));
+    }
+
+    void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark);
+            return null;
+        });
+    }
+
+    /** When the long-window pass last read each workspace completely, for those it has. */
+    Map<String, Instant> vectorsLongWindowReads(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).longWindowReads(workspaceIds));
+    }
+
+    void setVectorsLongWindowRead(@NonNull String workspaceId, @NonNull Instant readAt) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).setLongWindowRead(workspaceId, readAt);
+            return null;
+        });
     }
 }

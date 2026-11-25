@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 /**
- * Per k-means group, what a prompt shows. For the author prompt (the first build), its size and share of the window
+ * Per k-means group, what a prompt shows. For the author prompt (the discovery run), its size and share of the window
  * ({@link #summarize(int[], int)}) and its examples ({@link #authorExamples}). For the nightly prompts, also its
  * tightness (mean cosine of its traces to the centre) and examples by the same rule
  * ({@link #summarize(MergedIntents, int[], float[], int, int)}); the caller sets the shares.

@@ -151,15 +151,15 @@ class TopicsRunsIntegrationTest {
         opikConfig.getTopics().setEnabledWorkspaces("");
         opikConfig.getTopics().getRuns().setMaxInFlight(2);
         wireMock.resetAll();
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.firstBuildAnswer,
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
                 0)));
     }
 
     @Test
-    @DisplayName("a plan queues the first build of the opted-in project with minVectors in tomorrow's window; a pod "
+    @DisplayName("a plan queues the discovery run of the opted-in project with minVectors in tomorrow's window; a pod "
             + "runs it, then its labelling pass; a project with a list, one under minVectors, one with no trace in "
             + "the window, one of another workspace and a deleted one get no run; the next plan queues nothing")
-    void plansAndRunsAFirstBuild() {
+    void plansAndRunsADiscovery() {
         var workspaceId = enabledWorkspace();
         var built = UUID.randomUUID();
         var withList = UUID.randomUUID();
@@ -226,7 +226,7 @@ class TopicsRunsIntegrationTest {
     }
 
     @Test
-    @DisplayName("a failed first build waits 1 h before the next plan queues it again; a run by hand does not wait")
+    @DisplayName("a failed discovery run waits 1 h before the next plan queues it again; a run by hand does not wait")
     void retriesAfterAFailure() {
         var workspaceId = enabledWorkspace();
         var failedRecently = UUID.randomUUID();
@@ -259,7 +259,7 @@ class TopicsRunsIntegrationTest {
             + "and stays queued for another pod")
     void runByHandClaimedThenRequeuedDuringAFailedPublish(RedissonReactiveClient redisson,
             @Jit TopicWorkspaceService workspaceService, @Jit TopicsRunReconciler reconciler,
-            @Jit TopicsFirstBuildCandidates candidates) {
+            @Jit TopicsDiscoveryCandidates candidates) {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
@@ -338,16 +338,16 @@ class TopicsRunsIntegrationTest {
         var lostRun = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, stale, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, stale, UUID.randomUUID(), TopicProject.RunMode.DISCOVERY,
                     now.minus(Duration.ofMinutes(10)));
-            TopicsTestData.startRun(dao, workspaceId, late, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, late, UUID.randomUUID(), TopicProject.RunMode.DISCOVERY,
                     now.minus(Duration.ofHours(2)));
             handle.execute("UPDATE topic_projects SET heartbeat_at = ? WHERE project_id = ?", now,
                     late.toString());
             dao.ensureRow(workspaceId, deleted);
-            dao.queue(workspaceId, deleted, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD, now);
+            dao.queue(workspaceId, deleted, UUID.randomUUID(), TopicProject.RunMode.DISCOVERY, now);
             dao.ensureRow(workspaceId, lost);
-            dao.queue(workspaceId, lost, lostRun, TopicProject.RunMode.FIRST_BUILD, now.minus(Duration.ofHours(1)));
+            dao.queue(workspaceId, lost, lostRun, TopicProject.RunMode.DISCOVERY, now.minus(Duration.ofHours(1)));
             return null;
         });
 
@@ -396,7 +396,7 @@ class TopicsRunsIntegrationTest {
         assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
     }
 
-    /** Waits until the project's first build is saved and returns its run id. */
+    /** Waits until the project's discovery run is saved and returns its run id. */
     private UUID awaitBuilt(UUID projectId) {
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
                 .isNotNull());
@@ -409,13 +409,13 @@ class TopicsRunsIntegrationTest {
         assertThat(project == null ? null : project.runId()).isNull();
     }
 
-    /** A failed first build of the project, started a minute before it finished {@code finishedAgo} ago. */
+    /** A failed discovery run of the project, started a minute before it finished {@code finishedAgo} ago. */
     private void insertFailedRun(String workspaceId, UUID projectId, Duration finishedAgo) {
         var finishedAt = Instant.now().minus(finishedAgo);
         var runId = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     finishedAt.minus(Duration.ofMinutes(1)));
             return dao.markFailed(workspaceId, projectId, runId, finishedAt, TopicProject.RunError.LLM_ERROR);
         });
@@ -432,7 +432,7 @@ class TopicsRunsIntegrationTest {
 
     /**
      * Opted in to both, and seen by the vectors tick with no backlog: one drained backfill row, of another project,
-     * so the first build of a project with no row of its own does not wait.
+     * so the discovery run of a project with no row of its own does not wait.
      */
     private String enabledWorkspace() {
         var workspaceId = aiLabelsOnlyWorkspace();
@@ -450,10 +450,10 @@ class TopicsRunsIntegrationTest {
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
-            dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
+            dao.startBackfills(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                     .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             if (drained) {
-                dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
+                dao.recordBackfills(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                         .projectId(projectId).drainedAt(now).build()));
             }
             return null;
@@ -482,11 +482,11 @@ class TopicsRunsIntegrationTest {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, saved, savedRun, TopicProject.RunMode.FIRST_BUILD, now);
-            TopicsTestData.startRun(dao, workspaceId, cancelled, cancelledRun, TopicProject.RunMode.FIRST_BUILD, now);
+            TopicsTestData.startRun(dao, workspaceId, saved, savedRun, TopicProject.RunMode.DISCOVERY, now);
+            TopicsTestData.startRun(dao, workspaceId, cancelled, cancelledRun, TopicProject.RunMode.DISCOVERY, now);
+            dao.cancel(workspaceId, cancelled, cancelledRun, TopicProject.CancelReason.PROJECT_DELETED);
             return dao.markSaved(workspaceId, saved, savedRun, now);
         });
-        store.cancelProjects(workspaceId, List.of(cancelled), TopicProject.CancelReason.PROJECT_DELETED).block();
 
         assertThat(store.heartbeat(message(workspaceId, saved, savedRun)).block()).isTrue();
         assertThat(store.heartbeat(message(workspaceId, cancelled, cancelledRun)).block()).isFalse();
@@ -495,7 +495,7 @@ class TopicsRunsIntegrationTest {
 
     private static TopicsRunMessage message(String workspaceId, UUID projectId, UUID runId) {
         return TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicProject.RunMode.FIRST_BUILD).windowTraces(0).build();
+                .mode(TopicProject.RunMode.DISCOVERY).windowTraces(0).build();
     }
 
     /** A {@link ConflictException} keeps its text in the response's {@link ErrorMessage}, not in getMessage(). */

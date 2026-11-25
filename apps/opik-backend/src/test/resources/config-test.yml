@@ -105,6 +105,17 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
+  #  Default: false
+  #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
+  #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized). false is the string path: payloads serialized to strings, slim
+  #   copies reparsed from them, and bulk insert bodies buffered before the connection is taken.
+  #   Turn it on together with a larger clientMaxOpenConnections (20 was tested), sized to ClickHouse's headroom: at
+  #   the default 10, large batches can wait past the pool's lease timeout. Watch opik.clickhouse.client.pool.pending
+  #   to see inserts waiting for a connection; turning it off again restores the string path.
+  streamPayloads: false
+  clientMaxOpenConnections: 10
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:
@@ -1077,6 +1088,7 @@ topics:
     tickInterval: 1m
     tickBudget: 50s
     window: 24h
+    watermarkOverlap: 15m
     longWindow: 7d
     longWindowInterval: 1d
     backfillWindow: 0s
@@ -1084,6 +1096,7 @@ topics:
     embedBatchSize: 256
     embedConcurrency: 1
     embedTimeout: 10s
+    leaseSlack: 5s
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
@@ -1092,7 +1105,7 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
       discoverySliceSize: 7d
-  build:
+  run:
     projectTimeout: 15m
     minVectors: 100
     windowDays: 30
@@ -1105,17 +1118,18 @@ topics:
     labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
+    insertSlack: 30s
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824
       maxThreads: 2
       priority: 100
-      maxBlockSize: 8192
+      maxBlockSize: 1024
       countSlice: 1d
-  firstBuild:
+  discovery:
     backfillMaxWait: 72h
     timedOutShare: 0.99
-    retryDelays: [1h, 6h, 1d]
+    retryDelays: 1h,6h,1d
   runs:
     streamName: topics-runs
     consumerGroupName: topics-runs-consumers
@@ -1132,6 +1146,7 @@ topics:
     abandonGrace: 60s
     republishAfter: 10m
     planBudget: 2m
+    requeueWait: 5s
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1155,6 +1170,16 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+  read:
+    maxRowsToRead: 30000000
+    maxMemoryUsage: 1073741824
+    maxThreads: 2
+    priority: 0
+    maxBlockSize: 8192
+    budget: 10s
+  # Small, so the tests delete over more than one batch.
+  storage:
+    deleteBatchSize: 2
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1233,6 +1258,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the backend runs guardrails itself
   guardrailsValidationsEnabled: "false"
+  # Default: false
+  # Description: Whether or not workspaces can train their own guardrail models
+  guardrailsTrainingEnabled: "false"
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
@@ -1639,3 +1667,10 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
+guardrailsTrainingDataset:
+  maxFileSizeMb: 50
+  minRows: 20
+  maxRows: 50000
+  minRowsPerLabel: 5
+  maxTextLength: 12000

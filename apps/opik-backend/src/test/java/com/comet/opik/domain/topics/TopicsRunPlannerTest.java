@@ -60,14 +60,14 @@ class TopicsRunPlannerTest {
 
     private TopicsRunPlanner plannerWithPublishError(boolean dropped, boolean claimed) {
         var workspaces = mock(TopicWorkspaceService.class);
-        var candidates = mock(TopicsFirstBuildCandidates.class);
+        var candidates = mock(TopicsDiscoveryCandidates.class);
         var publisher = mock(TopicsRunPublisher.class);
         when(workspaces.isEnabled(workspaceId)).thenReturn(true);
         when(candidates.findListless(workspaceId, projectId, night)).thenReturn(Mono.just(Optional.of(
                 ListlessProject.builder().workspaceId(workspaceId).projectId(projectId).build())));
         when(candidates.windowVectors(workspaceId, projectId, night))
-                .thenReturn(Mono.just((long) CONFIG.getBuild().getMinVectors()));
-        when(store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD))
+                .thenReturn(Mono.just((long) CONFIG.getRun().getMinVectors()));
+        when(store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY))
                 .thenReturn(Mono.just(Optional.of(runId)));
         when(publisher.publish(any())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
         when(store.dropUnclaimed(workspaceId, projectId, runId)).thenReturn(Mono.just(dropped));

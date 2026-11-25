@@ -25,4 +25,5 @@ export interface ExperimentItemCompare {
     executionPolicy?: OpikApi.ExecutionPolicyCompare;
     assertionResults?: OpikApi.AssertionResultCompare[];
     status?: OpikApi.ExperimentItemCompareStatus;
+    datasetItemData?: OpikApi.JsonNode;
 }

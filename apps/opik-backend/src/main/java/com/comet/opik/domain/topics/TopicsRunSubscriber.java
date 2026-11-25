@@ -33,24 +33,23 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
 
     private static final String METRICS_NAMESPACE = "opik";
     private static final String METRICS_BASE_NAME = "topics_runs";
-    private static final Duration REQUEUE_WAIT = Duration.ofSeconds(5);
 
     private final TopicsConfig config;
     private final TopicRunStore store;
-    private final TopicsRebuildService rebuildService;
+    private final TopicsRunService runService;
     private final TopicWindowLabelService labelService;
     private final TopicsRunPlanner planner;
     private final Map<UUID, TopicsRunMessage> running = new ConcurrentHashMap<>();
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
-            @NonNull TopicRunStore store, @NonNull TopicsRebuildService rebuildService,
+            @NonNull TopicRunStore store, @NonNull TopicsRunService runService,
             @NonNull TopicWindowLabelService labelService, @NonNull TopicsRunPlanner planner) {
         super(config.getRuns(), redisson, TopicsConfig.RunsConfig.PAYLOAD_FIELD, METRICS_NAMESPACE,
                 METRICS_BASE_NAME);
         this.config = config;
         this.store = store;
-        this.rebuildService = rebuildService;
+        this.runService = runService;
         this.labelService = labelService;
         this.planner = planner;
     }
@@ -71,7 +70,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         running.values().forEach(message -> {
             try {
                 log.info("Topics run '{}' requeued '{}', project '{}', its pod stops", message.runId(),
-                        store.requeue(message).block(REQUEUE_WAIT), message.projectId());
+                        store.requeue(message).block(config.getRuns().getRequeueWait().toJavaDuration()),
+                        message.projectId());
             } catch (RuntimeException exception) {
                 log.warn("Topics run '{}' not requeued, project '{}'; the planner records it abandoned",
                         message.runId(), message.projectId(), exception);
@@ -94,7 +94,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                     log.info("Topics run '{}' claimed, workspace '{}', project '{}', mode '{}'", message.runId(),
                             message.workspaceId(), message.projectId(), message.mode().getValue());
                     running.put(message.runId(), message);
-                    return run(message, deadline)
+                    return store.resolveWorkspace(message.workspaceId())
+                            .flatMap(workspace -> run(message, workspace, deadline))
                             .takeUntilOther(stopped(message))
                             // A backstop: the run ends itself by its deadline, and the planner cancels it after.
                             .timeout(limit.plus(config.getRuns().getAbandonGrace().toJavaDuration()),
@@ -116,15 +117,22 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
 
     /** How long a run of {@code mode} may last: its deadline is the claim plus this. */
     private Duration runLimit(RunMode mode) {
-        var build = config.getBuild();
-        var timeout = build.getProjectTimeout().toJavaDuration();
-        return mode == RunMode.LABELS ? timeout : timeout.plus(TopicRunStore.insertBound(build));
+        var timeout = config.getRun().getProjectTimeout().toJavaDuration();
+        return mode == RunMode.LABELS ? timeout : timeout.plus(insertBound(config.getRun()));
     }
 
-    private Mono<Void> run(TopicsRunMessage message, Instant deadline) {
+    /** The longest a saved run's {@code trace_topics} insert takes: every attempt to its stop, the backoffs, the slack. */
+    static Duration insertBound(@NonNull TopicsConfig.RunConfig run) {
+        int retries = run.getInsertRetries();
+        var backoffs = run.getInsertBackoff().toJavaDuration().multipliedBy((1L << retries) - 1);
+        return run.getReadTimeout().toJavaDuration().multipliedBy(retries + 1L).plus(backoffs)
+                .plus(run.getInsertSlack().toJavaDuration());
+    }
+
+    private Mono<Void> run(TopicsRunMessage message, TopicsMetrics.Workspace workspace, Instant deadline) {
         return switch (message.mode()) {
-            case FIRST_BUILD -> rebuildService.firstBuild(message.runId(), message.workspaceId(),
-                    message.projectId(), message.night(), message.windowTraces())
+            case DISCOVERY -> runService.discover(message.runId(), workspace, message.projectId(), message.night(),
+                    message.windowTraces())
                     .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
                     // A build saved after its project was deleted is discarded: nothing is left to label. When the
                     // check fails, the labelling run is queued, and the planner cancels it if the project is gone.
@@ -135,20 +143,21 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
                             .build()))
                     .then();
-            case LABELS -> label(message, deadline);
-            case NIGHTLY_UPDATE -> fail(message, RunError.INTERNAL);
+            case LABELS -> label(message, workspace, deadline);
+            case UPDATE -> throw new IllegalStateException("no handler for run mode '%s'".formatted(message.mode()));
         };
     }
 
     /**
      * Goes on with the saved list's labelling pass until the deadline. A pass that finished or ran out of time ends
-     * the run saved, and the next plan queues the rest; a pass that failed ends it failed, and waits to retry.
+     * the run saved, and the next plan queues the rest while the labels are incomplete: a pass cut right after it
+     * labelled everything is resumed too, and its resume marks them. A pass that failed ends it failed, and waits to
+     * retry.
      */
-    private Mono<Void> label(TopicsRunMessage message, Instant deadline) {
+    private Mono<Void> label(TopicsRunMessage message, TopicsMetrics.Workspace workspace, Instant deadline) {
         var passDeadline = deadline.minus(config.getRuns().getHeartbeatInterval().toJavaDuration());
-        return labelService.labelWindow(message.workspaceId(), message.projectId(), passDeadline,
-                TopicWindowLabelService.Trigger.RESUME)
-                .flatMap(outcome -> outcome == TopicWindowLabelService.PassOutcome.FAILED
+        return labelService.labelWindow(workspace, message.projectId(), passDeadline, LabelTrigger.RESUME)
+                .flatMap(outcome -> outcome == LabelPassOutcome.FAILED
                         ? fail(message, RunError.INTERNAL)
                         : store.endLabels(message).then());
     }
@@ -158,22 +167,34 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 Instant.now(), code)).then();
     }
 
+    /** A heartbeat's answer, and when the last one that reached MySQL was written; null for one that failed. */
+    private record Beat(boolean alive, Instant at) {
+    }
+
     /**
-     * Emits once a heartbeat finds the run cancelled, abandoned or requeued; a run that saved its row goes on to its
-     * end. A heartbeat that fails is retried at the next tick.
+     * Emits once a heartbeat finds the run cancelled, abandoned or requeued, or once the last heartbeat that reached
+     * MySQL is older than {@code topics.runs.abandonGrace}: the planner records such a run abandoned and may queue the
+     * project again. A run that saved its row goes on to its end. A heartbeat that fails is retried at the next tick.
      */
-    private Mono<Boolean> stopped(TopicsRunMessage message) {
+    private Mono<Beat> stopped(TopicsRunMessage message) {
         var interval = config.getRuns().getHeartbeatInterval().toJavaDuration();
+        var abandonGrace = config.getRuns().getAbandonGrace().toJavaDuration();
         return Flux.interval(interval, interval)
                 .onBackpressureDrop()
-                .concatMap(tick -> store.heartbeat(message).onErrorResume(error -> {
-                    log.warn("Topics run '{}' heartbeat failed, project '{}'", message.runId(), message.projectId(),
-                            error);
-                    return Mono.just(true);
-                }))
-                .filter(alive -> !alive)
+                .concatMap(tick -> store.heartbeat(message)
+                        .map(alive -> new Beat(alive, Instant.now()))
+                        .onErrorResume(error -> {
+                            log.warn("Topics run '{}' heartbeat failed, project '{}'", message.runId(),
+                                    message.projectId(), error);
+                            return Mono.just(new Beat(true, null));
+                        }))
+                .scan(new Beat(true, Instant.now()),
+                        (last, beat) -> beat.at() != null ? beat : new Beat(true, last.at()))
+                .filter(beat -> !beat.alive() || beat.at().plus(abandonGrace).isBefore(Instant.now()))
                 .next()
-                .doOnNext(stop -> log.info("Topics run '{}' stops, project '{}': its row is no longer running",
-                        message.runId(), message.projectId()));
+                .doOnNext(beat -> log.info("Topics run '{}' stops, project '{}': {}", message.runId(),
+                        message.projectId(), beat.alive()
+                                ? "no heartbeat reached MySQL within topics.runs.abandonGrace"
+                                : "its row is no longer running"));
     }
 }
