@@ -2648,6 +2648,10 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 5s
+    #  Description: The most deadline_ms a realtime-lane decide call sends (the service's
+    #  decide_realtime_max_deadline_ms). inference.realtime.decideDeadline must not be above it
+    maxDecideRealtimeDeadline: ${OPIK_INFERENCE_MAX_DECIDE_REALTIME_DEADLINE:-5s}
     #  Default: 60s
     #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
@@ -2667,12 +2671,23 @@ inference:
     #  quota_exceeded is never retried
     maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
     #  Default: 100ms
-    #  Description: The wait before the first retry, doubled for each one after, unless the service sends Retry-After
+    #  Description: The wait before the first retry, doubled for each one after and jittered by up to half either way,
+    #  unless the service sends Retry-After
     baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
     #  Default: 1048576 (1 MiB)
     #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
     #  per this many bytes sent
     submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+  # The synchronous calls a request waits on
+  realtime:
+    #  Default: 5s
+    #  Description: The deadline a guardrail check's decide call sends, the time the service may spend on it. At most
+    #  inference.limits.maxDecideRealtimeDeadline
+    decideDeadline: ${OPIK_INFERENCE_REALTIME_DECIDE_DEADLINE:-5s}
+    #  Default: 1s
+    #  Description: Room past decideDeadline for the answer to arrive, or for a quick retry of an overloaded call. A
+    #  check not answered by then fails closed. At most 5s, so a request never waits on a check much past 10s
+    decideMargin: ${OPIK_INFERENCE_REALTIME_DECIDE_MARGIN:-1s}
 
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
