@@ -1,0 +1,9 @@
+export type { DeleteViewRequest } from "./DeleteViewRequest.js";
+export type { DeleteViewVersionRequest } from "./DeleteViewVersionRequest.js";
+export type { GetViewByIdRequest } from "./GetViewByIdRequest.js";
+export type { GetViewVersionRequest } from "./GetViewVersionRequest.js";
+export type { GetViewVersionsRequest } from "./GetViewVersionsRequest.js";
+export type { ViewCreate } from "./ViewCreate.js";
+export type { ViewCurrentVersion } from "./ViewCurrentVersion.js";
+export type { ViewUpdate } from "./ViewUpdate.js";
+export type { ViewVersionCreate } from "./ViewVersionCreate.js";

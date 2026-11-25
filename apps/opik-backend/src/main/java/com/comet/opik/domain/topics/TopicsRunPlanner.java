@@ -19,7 +19,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -30,7 +29,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 /**
  * Plans the Topics runs. One plan, on the leader only: settle the runs in flight ({@link TopicsRunReconciler}), then
  * fill the free slots of {@code topics.runs.maxInFlight}, across the cluster, with labelling passes that did not
- * finish and first builds ({@link TopicsFirstBuildCandidates}), one of each in turn. Each run is written
+ * finish and discovery runs ({@link TopicsDiscoveryCandidates}), one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -43,7 +42,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicWorkspaceService workspaceService;
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicsRunReconciler reconciler;
-    private final @NonNull TopicsFirstBuildCandidates candidates;
+    private final @NonNull TopicsDiscoveryCandidates candidates;
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
 
@@ -77,7 +76,7 @@ public class TopicsRunPlanner {
     }
 
     /**
-     * Queues the project's first build now, for the window that ends at {@code night}'s start, and returns its run id.
+     * Queues the project's discovery run now, for the window that ends at {@code night}'s start, and returns its run id.
      * {@code ignoreBackfill} is the operator's way to build a project whose backfill cannot drain. The retry wait and
      * {@code maxInFlight} do not apply.
      *
@@ -95,12 +94,10 @@ public class TopicsRunPlanner {
                         : Mono.error(new ConflictException(("Workspace '%s' is not opted in to topics: it needs to "
                                 + "be in topics.enabledWorkspaces and enabled in ai_label_workspaces")
                                 .formatted(workspaceId))))
+                .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
+                        + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
-                    if (project.isEmpty()) {
-                        return Mono.error(new ConflictException(("Project '%s' has a topic list, a run in flight, "
-                                + "or no trace in the window until '%s'").formatted(projectId, night)));
-                    }
-                    var gate = backfillGate.firstBuildGate(project.get(), now);
+                    var gate = backfillGate.discoveryGate(project, now);
                     if (!ignoreBackfill && !gate.isOpen()) {
                         return Mono.error(new ConflictException(("Project '%s' waits for its vectors backfill to "
                                 + "drain, gate '%s'; ignore_backfill=true builds it anyway").formatted(projectId,
@@ -109,13 +106,13 @@ public class TopicsRunPlanner {
                     return candidates.windowVectors(workspaceId, projectId, night);
                 })
                 .flatMap(vectors -> {
-                    if (vectors < config.getBuild().getMinVectors()) {
+                    if (vectors < config.getRun().getMinVectors()) {
                         return Mono.error(new ConflictException(
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
-                                        .formatted(projectId, vectors, night, config.getBuild().getMinVectors())));
+                                        .formatted(projectId, vectors, night, config.getRun().getMinVectors())));
                     }
                     return queueByHand(Planned.builder().workspaceId(workspaceId).projectId(projectId)
-                            .mode(RunMode.FIRST_BUILD).night(night).windowTraces(vectors).build())
+                            .mode(RunMode.DISCOVERY).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
                 })
@@ -173,36 +170,27 @@ public class TopicsRunPlanner {
     /** Queues the run and publishes it; empty when the project has a run in flight. */
     private Mono<UUID> queueAndPublish(Planned run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
         return store.queue(run.workspaceId(), run.projectId(), run.mode())
-                .flatMap(Mono::justOrEmpty)
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
                         .onErrorResume(error -> onPublishError.apply(runId, error)));
     }
 
     private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
-        var failedAfter = now.minus(config.getFirstBuild().getRetryDelays().getFirst().toJavaDuration());
+        var failedAfter = now.minus(config.getDiscovery().retryDelays().getFirst());
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findLabelsDue(workspaceIds, failedAfter)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** One labelling pass, then one first build, in turn. */
+    /** One labelling pass, then one discovery run, in turn. */
     private static List<Planned> interleave(List<TopicProjectKey> labels,
-            List<TopicsFirstBuildCandidates.Candidate> builds, LocalDate night) {
-        var result = new ArrayList<Planned>();
-        for (int i = 0; i < Math.max(labels.size(), builds.size()); i++) {
-            if (i < labels.size()) {
-                var project = labels.get(i);
-                result.add(Planned.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
-                        .mode(RunMode.LABELS).build());
-            }
-            if (i < builds.size()) {
-                var build = builds.get(i);
-                result.add(Planned.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
-                        .mode(RunMode.FIRST_BUILD).night(night).windowTraces(build.vectors()).build());
-            }
-        }
-        return result;
+            List<TopicsDiscoveryCandidates.Candidate> builds, LocalDate night) {
+        return TopicsDiscoveryCandidates.roundRobin(List.of(
+                labels.stream().map(project -> Planned.builder().workspaceId(project.workspaceId())
+                        .projectId(project.projectId()).mode(RunMode.LABELS).build()).toList(),
+                builds.stream().map(build -> Planned.builder().workspaceId(build.workspaceId())
+                        .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
+                        .windowTraces(build.vectors()).build()).toList()));
     }
 
     /** Queues the runs in order until {@code free} are queued; a project that got a run meanwhile is skipped. */

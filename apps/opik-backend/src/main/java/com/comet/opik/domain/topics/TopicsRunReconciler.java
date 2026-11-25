@@ -33,21 +33,19 @@ class TopicsRunReconciler {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicsRunPublisher publisher;
-    private final @NonNull TopicsFirstBuildCandidates candidates;
+    private final @NonNull TopicsDiscoveryCandidates candidates;
 
     /** Returns the runs still in flight once settled. A run whose step fails stays in flight, for the next plan. */
     Mono<List<InFlightRun>> reconcile(@NonNull List<InFlightRun> runs, @NonNull Collection<String> enabledWorkspaces,
             @NonNull LocalDate night, @NonNull Instant now) {
         var enabled = Set.copyOf(enabledWorkspaces);
         return Flux.fromIterable(runs)
-                .concatMap(run -> settle(run, enabled, night, now)
+                .filterWhen(run -> settle(run, enabled, night, now)
                         .onErrorResume(error -> {
                             log.warn("Topics run '{}' not reconciled, project '{}', status '{}'", run.runId(),
                                     run.projectId(), run.runStatus().getValue(), error);
                             return Mono.just(true);
-                        })
-                        .filter(inFlight -> inFlight)
-                        .map(inFlight -> run))
+                        }))
                 .collectList();
     }
 
@@ -78,7 +76,8 @@ class TopicsRunReconciler {
             }
             // Its pod died before it ended the run: end it as that pod would have.
             case CANCELLING -> run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)
-                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).map(Optional::isEmpty)
+                    ? store.endCancelled(run.workspaceId(), run.projectId(), run.runId()).hasElement()
+                            .map(ended -> !ended)
                     : Mono.just(true);
             case SAVED, FAILED -> Mono.just(false);
         };
@@ -92,7 +91,7 @@ class TopicsRunReconciler {
     }
 
     /**
-     * Publishes a run queued before {@code topics.runs.republishAfter} again. A first build is counted again for
+     * Publishes a run queued before {@code topics.runs.republishAfter} again. A discovery run is counted again for
      * {@code night}, as the stream entry carries the window's count.
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {
@@ -102,7 +101,7 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
-        var ready = run.runMode() == RunMode.FIRST_BUILD
+        var ready = run.runMode() == RunMode.DISCOVERY
                 ? candidates.windowVectors(run.workspaceId(), run.projectId(), night)
                         .map(vectors -> message.night(night).windowTraces(vectors).build())
                 : Mono.just(message.build());

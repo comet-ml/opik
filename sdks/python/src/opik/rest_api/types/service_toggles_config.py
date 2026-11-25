@@ -21,11 +21,13 @@ class ServiceTogglesConfig(UniversalBaseModel):
     guardrails_validations_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="guardrailsValidationsEnabled")
     ]
+    guardrails_training_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsTrainingEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
     cost_intelligence_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="costIntelligenceEnabled")]
+    model_prices_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="modelPricesEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
     dataset_export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetExportEnabled")]
     demo_data_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="demoDataEnabled")]
@@ -51,6 +53,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     custom_charts_enabled_for_workspace: typing_extensions.Annotated[
         typing.Optional[bool], FieldMetadata(alias="customChartsEnabledForWorkspace")
     ] = None
+    topics_enabled: typing_extensions.Annotated[typing.Optional[bool], FieldMetadata(alias="topicsEnabled")] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

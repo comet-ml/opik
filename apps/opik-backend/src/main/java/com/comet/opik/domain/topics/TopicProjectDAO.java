@@ -26,12 +26,12 @@ import java.util.UUID;
 
 /**
  * Every statement on {@code topic_projects}, a project's current topics state, never its history. Each group of
- * columns has its own writer and is never set by another: the run fields (the current or last run, first build,
+ * columns has its own writer and is never set by another: the run fields (the current or last run, discovery run,
  * nightly update or labelling pass), the list fields (the saved list, written by a run's save), and the backfill fields
  * (the topic vectors tick). A run moves {@code queued -> running -> saved | failed}, or through {@code cancelling} to
  * {@code failed}; every run statement is a compare-and-set on the project, the run id and the status it expects, so
  * one writer wins and a run that lost its row writes nothing. {@code failed_runs} and {@code first_failed_at} count
- * the failed first builds and nightly updates since the last saved one: a labelling pass, a cancel that is not the
+ * the failed discovery runs and nightly updates since the last saved one: a labelling pass, a cancel that is not the
  * run's fault and a stopped pod's requeue do not count. A row without {@code backfill_started_at} has no backfill yet; ClickHouse stays the only source of
  * which traces have no vector.
  */
@@ -55,7 +55,12 @@ public interface TopicProjectDAO {
     @SqlUpdate("INSERT IGNORE INTO topic_projects (workspace_id, project_id) VALUES (:workspaceId, :projectId)")
     void ensureRow(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
-    /** Queues {@code runId} on the project's row, which must exist. 0 when the project has a run in flight. */
+    /**
+     * Queues {@code runId} on the project's row, which must exist. 0 when the project has a run in flight, or its row
+     * no longer fits the mode: a discovery run needs no saved list, a labelling pass a saved list with its labels not
+     * complete, and a nightly update a saved list. The planner reads the rows before it queues, so a run that saved
+     * the project in between makes this 0 instead of a run that fails at its save.
+     */
     @SqlUpdate("""
             UPDATE topic_projects
             SET run_id = :runId, run_mode = :mode, run_status = 'queued', run_queued_at = :now, run_started_at = NULL,
@@ -63,6 +68,11 @@ public interface TopicProjectDAO {
                 run_error_code = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             AND (run_status IS NULL OR run_status IN ('saved', 'failed'))
+            AND CASE :mode
+                WHEN 'discovery' THEN list_run_id IS NULL
+                WHEN 'labels' THEN list_run_id IS NOT NULL AND labels_complete = FALSE
+                ELSE list_run_id IS NOT NULL
+            END
             """)
     int queue(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId, @Bind("runId") UUID runId,
             @Bind("mode") TopicProject.RunMode mode, @Bind("now") Instant now);
@@ -138,21 +148,6 @@ public interface TopicProjectDAO {
             @Bind("runId") UUID runId, @Bind("now") Instant now);
 
     /**
-     * Cancels the in-flight runs of the projects: queued ones fail at once, running ones go to {@code cancelling}.
-     * For a project delete or an opt-out, which do not know the run ids.
-     */
-    @SqlUpdate("""
-            UPDATE topic_projects
-            SET run_finished_at = IF(run_status = 'queued', :now, run_finished_at),
-                run_error_code = IF(run_status = 'queued', 'cancelled', run_error_code),
-                cancel_reason = :reason,
-                run_status = IF(run_status = 'queued', 'failed', 'cancelling')
-            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND run_status IN ('queued', 'running')
-            """)
-    int cancelProjects(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
-            @Bind("reason") TopicProject.CancelReason reason, @Bind("now") Instant now);
-
-    /**
      * {@code cancelling -> failed}, by the pod that stopped the run: {@code timeout} when the deadline cancelled it,
      * which counts, else {@code cancelled}, which does not.
      */
@@ -169,7 +164,10 @@ public interface TopicProjectDAO {
     int endCancelled(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("now") Instant now);
 
-    /** {@code running | cancelling -> failed} with {@code abandoned} when its heartbeat is older than {@code before}. */
+    /**
+     * {@code running | cancelling -> failed} with {@code abandoned} when its heartbeat is older than {@code before}, or
+     * it has none: a row left running before the heartbeat column existed.
+     */
     @SqlUpdate("""
             UPDATE topic_projects
             SET run_error_code = 'abandoned',
@@ -177,7 +175,7 @@ public interface TopicProjectDAO {
                 first_failed_at = IF(run_mode = 'labels', first_failed_at, COALESCE(first_failed_at, run_started_at)),
                 run_finished_at = :now, run_status = 'failed'
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
-            AND run_status IN ('running', 'cancelling') AND heartbeat_at < :before
+            AND run_status IN ('running', 'cancelling') AND (heartbeat_at IS NULL OR heartbeat_at < :before)
             """)
     int abandon(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("before") Instant before, @Bind("now") Instant now);
@@ -244,7 +242,7 @@ public interface TopicProjectDAO {
     List<InFlightRun> findInFlight();
 
     /**
-     * The projects of {@code workspaceIds} a first build may be due for: no saved list, no run in flight, a trace
+     * The projects of {@code workspaceIds} a discovery run may be due for: no saved list, no run in flight, a trace
      * written at or after {@code since}. With what the backfill gate and the retry policy read: the backfill and
      * failure columns of the project's row and its workspace's last vectors check, null when there is no row.
      */
@@ -280,7 +278,7 @@ public interface TopicProjectDAO {
 
     /**
      * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
-     * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
+     * {@code expectedListRunId}, null for a discovery run. 0 when another run saved the project meanwhile, or the row is
      * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
      */
     @SqlUpdate("""

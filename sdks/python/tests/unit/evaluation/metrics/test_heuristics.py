@@ -850,6 +850,12 @@ def test_chrf_metric__non_numeric_beta__raises_value_error(beta):
         ChrF(beta=beta, track=False)
 
 
+@pytest.mark.parametrize("beta", [math.nan, math.inf, -math.inf])
+def test_chrf_metric__non_finite_beta__raises_value_error(beta):
+    with pytest.raises(ValueError, match="beta must be finite"):
+        ChrF(beta=beta, track=False)
+
+
 @pytest.mark.parametrize("char_order", ["6", 6.0, None, True])
 def test_chrf_metric__non_integer_char_order__raises_value_error(char_order):
     with pytest.raises(ValueError, match="char_order must be an integer"):
@@ -2137,3 +2143,24 @@ def test_vader_lexicon__interrupted_download_can_be_retried(monkeypatch):
     _vader_lexicon._download_lexicon_once()
     assert calls == ["vader_lexicon", "vader_lexicon"]
     assert _vader_lexicon._download_attempted is True
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, GLEU, METEOR])
+@pytest.mark.parametrize("value", [None, 5, 3.5, {"text": "hello"}, ["token"]])
+def test_heuristic_metrics__non_string_output__raises_metric_computation_error(
+    metric_cls, value
+):
+    # These metrics called .strip() before any type check, so a non-string
+    # output from an agent/tool step surfaced as a bare AttributeError.
+    metric = metric_cls(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=value, reference="a b")
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, GLEU, METEOR])
+def test_heuristic_metrics__non_string_reference_item__raises_metric_computation_error(
+    metric_cls,
+):
+    metric = metric_cls(track=False)
+    with pytest.raises(MetricComputationError, match="string 'reference'"):
+        metric.score(output="a b", reference=["good", 5])

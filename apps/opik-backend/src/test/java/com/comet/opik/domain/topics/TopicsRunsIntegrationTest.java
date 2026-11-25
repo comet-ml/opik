@@ -1,7 +1,9 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.error.ConflictException;
+import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
@@ -9,15 +11,19 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.ws.rs.ServiceUnavailableException;
 import org.assertj.core.api.ThrowingConsumer;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -34,6 +40,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -46,15 +53,19 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 /**
  * Topics runs across pods as a black box: the planner ({@link TopicsRunPlanner}) queues runs on {@code topic_projects}
@@ -117,11 +128,15 @@ class TopicsRunsIntegrationTest {
     private TopicsRunPlanner planner;
     private TopicRunStore store;
     private TopicsTestData data;
+    private ProjectResourceClient projects;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, ClientSupport client) {
+        ClientSupportUtils.config(client);
+        this.projects = new ProjectResourceClient(client, TestUtils.getBaseUrl(client),
+                PodamFactoryUtils.newPodamFactory());
         this.opikConfig = opikConfig;
         this.store = store;
         this.template = template;
@@ -141,25 +156,20 @@ class TopicsRunsIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Each test plans its own workspaces: the earlier ones must not take a slot or be eligible again.
-        template.inTransaction(WRITE, handle -> {
-            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
-            handle.execute("UPDATE topic_projects SET run_status = 'failed' "
-                    + "WHERE run_status IN ('queued', 'running', 'cancelling')");
-            return null;
-        });
+        // Each test plans its own workspaces: unlisting the earlier ones keeps them from being planned again.
         opikConfig.getTopics().setEnabledWorkspaces("");
+        endRunsInFlight();
         opikConfig.getTopics().getRuns().setMaxInFlight(2);
         wireMock.resetAll();
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.firstBuildAnswer,
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
                 0)));
     }
 
     @Test
-    @DisplayName("a plan queues the first build of the opted-in project with minVectors in tomorrow's window; a pod "
+    @DisplayName("a plan queues the discovery run of the opted-in project with minVectors in tomorrow's window; a pod "
             + "runs it, then its labelling pass; a project with a list, one under minVectors, one with no trace in "
             + "the window, one of another workspace and a deleted one get no run; the next plan queues nothing")
-    void plansAndRunsAFirstBuild() {
+    void plansAndRunsADiscovery() {
         var workspaceId = enabledWorkspace();
         var built = UUID.randomUUID();
         var withList = UUID.randomUUID();
@@ -173,26 +183,20 @@ class TopicsRunsIntegrationTest {
         data.seed(workspaceId, small, 0, SMALL, tomorrowStart());
         data.seed(aiLabelsOnlyWorkspace(), notOptedIn, 0, FIXTURE.size(), tomorrowStart());
         data.savedList(workspaceId, withList, tomorrowStart(), FIXTURE.size());
-        template.inTransaction(WRITE, handle -> {
-            handle.execute("UPDATE topic_projects SET labels_complete = TRUE WHERE project_id = ?",
-                    withList.toString());
-            // Its vectors are in the window, but its last trace was written before it.
-            handle.execute("UPDATE projects SET last_updated_trace_at = ? WHERE id = ?",
-                    tomorrowStart().minus(Duration.ofDays(31)), quiet.toString());
-            handle.execute("DELETE FROM projects WHERE id = ?", deleted.toString());
-            return null;
-        });
+        store.markLabelsComplete(workspaceId, withList, data.topicProject(withList).listRunId()).block();
+        lastTraceAt(quiet, tomorrowStart().minus(Duration.ofDays(31)));
+        deleteProject(workspaceId, deleted);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
 
         var buildRun = awaitBuilt(built);
         // The saved list's labelling pass ran as its own run: nothing was left, so it marked the labels complete.
-        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(built)).satisfies(project -> {
-            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
-            assertThat(project.listRunId()).isEqualTo(buildRun);
-            assertThat(project.labelsComplete()).isTrue();
-        }));
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(built).runMode())
+                .isEqualTo(TopicProject.RunMode.LABELS));
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertProject(built, TopicProject.builder()
+                .workspaceId(workspaceId).projectId(built).savedRuns(1).listRunId(buildRun).labelsComplete(true)
+                .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
+                .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
@@ -226,7 +230,7 @@ class TopicsRunsIntegrationTest {
     }
 
     @Test
-    @DisplayName("a failed first build waits 1 h before the next plan queues it again; a run by hand does not wait")
+    @DisplayName("a failed discovery run waits 1 h before the next plan queues it again; a run by hand does not wait")
     void retriesAfterAFailure() {
         var workspaceId = enabledWorkspace();
         var failedRecently = UUID.randomUUID();
@@ -234,20 +238,18 @@ class TopicsRunsIntegrationTest {
         for (var projectId : List.of(failedRecently, failedAnHourAgo)) {
             data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         }
-        insertFailedRun(workspaceId, failedRecently, Duration.ofMinutes(30));
+        var failedRecentlyRun = insertFailedRun(workspaceId, failedRecently, Duration.ofMinutes(30));
         insertFailedRun(workspaceId, failedAnHourAgo, Duration.ofMinutes(70));
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
 
         awaitBuilt(failedAnHourAgo);
-        assertThat(data.topicProject(failedAnHourAgo)).satisfies(project -> {
-            assertThat(project.failedRuns()).isZero();
-            assertThat(project.firstFailedAt()).isNull();
-        });
-        assertThat(data.topicProject(failedRecently)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
-            assertThat(project.failedRuns()).isEqualTo(1);
-        });
+        assertThat(data.topicProject(failedAnHourAgo).failedRuns()).isZero();
+        assertThat(data.topicProject(failedAnHourAgo).firstFailedAt()).isNull();
+        assertProject(failedRecently, TopicProject.builder().workspaceId(workspaceId).projectId(failedRecently)
+                .runId(failedRecentlyRun).runMode(TopicProject.RunMode.DISCOVERY)
+                .runStatus(TopicProject.RunStatus.FAILED).runErrorCode(TopicProject.RunError.LLM_ERROR).failedRuns(1)
+                .build());
 
         var runId = planner.runByHand(workspaceId, failedRecently, tomorrow(), false).block();
 
@@ -259,30 +261,77 @@ class TopicsRunsIntegrationTest {
             + "and stays queued for another pod")
     void runByHandClaimedThenRequeuedDuringAFailedPublish(RedissonReactiveClient redisson,
             @Jit TopicWorkspaceService workspaceService, @Jit TopicsRunReconciler reconciler,
-            @Jit TopicsFirstBuildCandidates candidates) {
+            @Jit TopicsDiscoveryCandidates candidates) {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
-        var config = opikConfig.getTopics();
         // The stream took the run and a pod claimed it, then that pod stopped, before the publish call failed.
-        var publisher = new TopicsRunPublisher(redisson, config) {
-            @Override
-            Mono<Void> publish(TopicsRunMessage message) {
-                return store.claim(message, Instant.now().plus(Duration.ofMinutes(30)))
-                        .then(store.requeue(message))
-                        .then(Mono.error(new IllegalStateException("publish timed out")));
-            }
-        };
-        var planner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates,
-                publisher, new TopicsBackfillGate(config));
+        var planner = plannerWithFailingPublish(redisson, workspaceService, reconciler, candidates,
+                message -> store.claim(message, Instant.now().plus(Duration.ofMinutes(30)))
+                        .then(store.requeue(message)).then());
 
         var runId = planner.runByHand(workspaceId, projectId, tomorrow(), true).block();
 
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.runId()).isEqualTo(runId);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.QUEUED);
-            assertThat(project.runStartedAt()).isNotNull();
-        });
+        assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId).runId(runId)
+                .runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.QUEUED).build());
+        assertThat(data.topicProject(projectId).runStartedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a run by hand whose publish fails before any pod saw it is dropped as cancelled, not counted, and the "
+            + "caller gets an error")
+    void runByHandUnpublishedIsDropped(RedissonReactiveClient redisson, @Jit TopicWorkspaceService workspaceService,
+            @Jit TopicsRunReconciler reconciler, @Jit TopicsDiscoveryCandidates candidates) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        var planner = plannerWithFailingPublish(redisson, workspaceService, reconciler, candidates,
+                message -> Mono.empty());
+
+        assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, tomorrow(), true).block())
+                .isInstanceOf(ServiceUnavailableException.class);
+
+        assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
+                .runId(data.topicProject(projectId).runId()).runMode(TopicProject.RunMode.DISCOVERY)
+                .runStatus(TopicProject.RunStatus.FAILED).runErrorCode(TopicProject.RunError.CANCELLED).build());
+    }
+
+    @Test
+    @DisplayName("a run by hand cancelled while queued, during its failed publish, gives the caller an error and stays "
+            + "cancelled")
+    void runByHandCancelledDuringAFailedPublish(RedissonReactiveClient redisson,
+            @Jit TopicWorkspaceService workspaceService, @Jit TopicsRunReconciler reconciler,
+            @Jit TopicsDiscoveryCandidates candidates) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        // The planner of another pod dropped the queued run, its project deleted, before the publish call failed.
+        var planner = plannerWithFailingPublish(redisson, workspaceService, reconciler, candidates,
+                message -> store.dropQueued(message.workspaceId(), message.projectId(), message.runId(),
+                        TopicProject.CancelReason.PROJECT_DELETED).then());
+
+        assertThatThrownBy(() -> planner.runByHand(workspaceId, projectId, tomorrow(), true).block())
+                .isInstanceOf(ServiceUnavailableException.class);
+
+        assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
+                .runId(data.topicProject(projectId).runId()).runMode(TopicProject.RunMode.DISCOVERY)
+                .runStatus(TopicProject.RunStatus.FAILED).runErrorCode(TopicProject.RunError.CANCELLED)
+                .cancelReason(TopicProject.CancelReason.PROJECT_DELETED).build());
+    }
+
+    /** The app's planner with a publisher that does {@code meanwhile}, then fails as a publish timeout does. */
+    private TopicsRunPlanner plannerWithFailingPublish(RedissonReactiveClient redisson,
+            TopicWorkspaceService workspaceService, TopicsRunReconciler reconciler,
+            TopicsDiscoveryCandidates candidates, Function<TopicsRunMessage, Mono<Void>> meanwhile) {
+        var config = opikConfig.getTopics();
+        var publisher = new TopicsRunPublisher(redisson, config) {
+            @Override
+            Mono<Void> publish(TopicsRunMessage message) {
+                return meanwhile.apply(message).then(Mono.error(new IllegalStateException("publish timed out")));
+            }
+        };
+        return new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
+                new TopicsBackfillGate(config));
     }
 
     @Test
@@ -335,39 +384,35 @@ class TopicsRunsIntegrationTest {
             data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         }
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        var lostRun = UUID.randomUUID();
+        var staleRun = TopicsTestData.newId();
+        var lateRun = TopicsTestData.newId();
+        var deletedRun = TopicsTestData.newId();
+        var lostRun = TopicsTestData.newId();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, stale, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, stale, staleRun, TopicProject.RunMode.DISCOVERY,
                     now.minus(Duration.ofMinutes(10)));
-            TopicsTestData.startRun(dao, workspaceId, late, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, late, lateRun, TopicProject.RunMode.DISCOVERY,
                     now.minus(Duration.ofHours(2)));
-            handle.execute("UPDATE topic_projects SET heartbeat_at = ? WHERE project_id = ?", now,
-                    late.toString());
+            dao.heartbeat(workspaceId, late, lateRun, now);
             dao.ensureRow(workspaceId, deleted);
-            dao.queue(workspaceId, deleted, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD, now);
+            dao.queue(workspaceId, deleted, deletedRun, TopicProject.RunMode.DISCOVERY, now);
             dao.ensureRow(workspaceId, lost);
-            dao.queue(workspaceId, lost, lostRun, TopicProject.RunMode.FIRST_BUILD, now.minus(Duration.ofHours(1)));
+            dao.queue(workspaceId, lost, lostRun, TopicProject.RunMode.DISCOVERY, now.minus(Duration.ofHours(1)));
             return null;
         });
 
         planner.plan(now).block();
 
-        assertThat(data.topicProject(stale)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
-            assertThat(project.runErrorCode()).isEqualTo(TopicProject.RunError.ABANDONED);
-            assertThat(project.failedRuns()).isEqualTo(1);
-        });
-        assertThat(data.topicProject(late)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.CANCELLING);
-            assertThat(project.cancelReason()).isEqualTo(TopicProject.CancelReason.DEADLINE);
-        });
-        assertThat(data.topicProject(deleted)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
-            assertThat(project.runErrorCode()).isEqualTo(TopicProject.RunError.CANCELLED);
-            assertThat(project.cancelReason()).isEqualTo(TopicProject.CancelReason.PROJECT_DELETED);
-            assertThat(project.failedRuns()).isZero();
-        });
+        var project = TopicProject.builder().workspaceId(workspaceId).runMode(TopicProject.RunMode.DISCOVERY);
+        assertProject(stale, project.projectId(stale).runId(staleRun).runStatus(TopicProject.RunStatus.FAILED)
+                .runErrorCode(TopicProject.RunError.ABANDONED).failedRuns(1).build());
+        assertProject(late, project.projectId(late).runId(lateRun).runStatus(TopicProject.RunStatus.CANCELLING)
+                .runErrorCode(null).failedRuns(0).cancelReason(TopicProject.CancelReason.DEADLINE).build());
+        // A delete whose topic_projects cleanup failed: the planner still drops its queued run, not counted.
+        assertProject(deleted, project.projectId(deleted).runId(deletedRun).runStatus(TopicProject.RunStatus.FAILED)
+                .runErrorCode(TopicProject.RunError.CANCELLED).failedRuns(0)
+                .cancelReason(TopicProject.CancelReason.PROJECT_DELETED).build());
         assertThat(awaitBuilt(lost)).isEqualTo(lostRun);
     }
 
@@ -396,7 +441,7 @@ class TopicsRunsIntegrationTest {
         assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
     }
 
-    /** Waits until the project's first build is saved and returns its run id. */
+    /** Waits until the project's discovery run is saved and returns its run id. */
     private UUID awaitBuilt(UUID projectId) {
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
                 .isNotNull());
@@ -409,15 +454,52 @@ class TopicsRunsIntegrationTest {
         assertThat(project == null ? null : project.runId()).isNull();
     }
 
-    /** A failed first build of the project, started a minute before it finished {@code finishedAgo} ago. */
-    private void insertFailedRun(String workspaceId, UUID projectId, Duration finishedAgo) {
+    /** A failed discovery run of the project, started a minute before it finished {@code finishedAgo} ago. */
+    private UUID insertFailedRun(String workspaceId, UUID projectId, Duration finishedAgo) {
         var finishedAt = Instant.now().minus(finishedAgo);
-        var runId = UUID.randomUUID();
+        var runId = TopicsTestData.newId();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     finishedAt.minus(Duration.ofMinutes(1)));
             return dao.markFailed(workspaceId, projectId, runId, finishedAt, TopicProject.RunError.LLM_ERROR);
+        });
+        return runId;
+    }
+
+    /** The project's row as {@code expected}, but for its timestamps and its Other vectors. */
+    private void assertProject(UUID projectId, TopicProject expected) {
+        assertThat(data.topicProject(projectId)).usingRecursiveComparison()
+                .ignoringFieldsOfTypes(Instant.class, PrototypeVectors.class).isEqualTo(expected);
+    }
+
+    /** Deletes the project as a user does, through the projects API; its topic_projects row goes with it. */
+    private void deleteProject(String workspaceId, UUID projectId) {
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceName = "topics-" + workspaceId;
+        AuthTestUtils.mockTargetWorkspace(wireMock, apiKey, workspaceName, workspaceId, "user");
+        projects.deleteProject(projectId, apiKey, workspaceName);
+    }
+
+    /**
+     * Fixture: moves the project's last trace time back. No API can: trace ingestion writes it from the trace's time and
+     * only ever moves it forward. Old traces would not do either, as this test needs the project's vectors in the
+     * window with its last trace time before the window, to show that time alone keeps the project out.
+     */
+    private void lastTraceAt(UUID projectId, Instant at) {
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "UPDATE projects SET last_updated_trace_at = ? WHERE id = ?", at, projectId.toString()));
+    }
+
+    /**
+     * Ends every run an earlier test left in flight, so none takes a slot of {@code topics.runs.maxInFlight}: with no
+     * workspace opted in, each plan cancels them as the planner does for an opt-out, and the pods or the planner end
+     * the cancelled ones.
+     */
+    private void endRunsInFlight() {
+        Awaitility.await().atMost(WAIT).pollInterval(Duration.ofMillis(500)).until(() -> {
+            planner.plan(Instant.now()).block();
+            return store.findInFlight().block().isEmpty();
         });
     }
 
@@ -432,7 +514,7 @@ class TopicsRunsIntegrationTest {
 
     /**
      * Opted in to both, and seen by the vectors tick with no backlog: one drained backfill row, of another project,
-     * so the first build of a project with no row of its own does not wait.
+     * so the discovery run of a project with no row of its own does not wait.
      */
     private String enabledWorkspace() {
         var workspaceId = aiLabelsOnlyWorkspace();
@@ -482,20 +564,56 @@ class TopicsRunsIntegrationTest {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
-            TopicsTestData.startRun(dao, workspaceId, saved, savedRun, TopicProject.RunMode.FIRST_BUILD, now);
-            TopicsTestData.startRun(dao, workspaceId, cancelled, cancelledRun, TopicProject.RunMode.FIRST_BUILD, now);
+            TopicsTestData.startRun(dao, workspaceId, saved, savedRun, TopicProject.RunMode.DISCOVERY, now);
+            TopicsTestData.startRun(dao, workspaceId, cancelled, cancelledRun, TopicProject.RunMode.DISCOVERY, now);
+            dao.cancel(workspaceId, cancelled, cancelledRun, TopicProject.CancelReason.PROJECT_DELETED);
             return dao.markSaved(workspaceId, saved, savedRun, now);
         });
-        store.cancelProjects(workspaceId, List.of(cancelled), TopicProject.CancelReason.PROJECT_DELETED).block();
 
         assertThat(store.heartbeat(message(workspaceId, saved, savedRun)).block()).isTrue();
         assertThat(store.heartbeat(message(workspaceId, cancelled, cancelledRun)).block()).isFalse();
         assertThat(store.heartbeat(message(workspaceId, saved, TopicsTestData.newId())).block()).isFalse();
     }
 
+    @Test
+    @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure")
+    void stopMidRunRequeues(RedissonReactiveClient redisson, @Jit TopicsRunService runService,
+            @Jit TopicWindowLabelService labelService) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        // The model answers after the stop: the run is mid-call when its pod stops.
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
+                60_000)));
+        // A pod of its own, on a stream of its own, so the app's subscriber does not take the run.
+        var runs = spy(opikConfig.getTopics().getRuns());
+        doReturn("topics-runs-stop-" + UUID.randomUUID()).when(runs).getStreamName();
+        var config = spy(opikConfig.getTopics());
+        doReturn(runs).when(config).getRuns();
+        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner);
+        pod.start();
+        try {
+            var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
+            new TopicsRunPublisher(redisson, config).publish(TopicsRunMessage.builder().runId(runId)
+                    .workspaceId(workspaceId).projectId(projectId).mode(TopicProject.RunMode.DISCOVERY)
+                    .night(tomorrow()).windowTraces(FIXTURE.size()).build()).block();
+            Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(wireMock.findAll(
+                    postRequestedFor(urlEqualTo(GENERATE_PATH)))).isNotEmpty());
+            assertThat(data.topicProject(projectId).runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+
+            pod.stop();
+
+            assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
+                    .runId(runId).runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.QUEUED)
+                    .build());
+        } finally {
+            pod.stop();
+        }
+    }
+
     private static TopicsRunMessage message(String workspaceId, UUID projectId, UUID runId) {
         return TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicProject.RunMode.FIRST_BUILD).windowTraces(0).build();
+                .mode(TopicProject.RunMode.DISCOVERY).windowTraces(0).build();
     }
 
     /** A {@link ConflictException} keeps its text in the response's {@link ErrorMessage}, not in getMessage(). */

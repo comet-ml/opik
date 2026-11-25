@@ -8,7 +8,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** The pass's slicing, which needs no store; {@link TopicsStorageTest} runs the pass on real ClickHouse and MySQL. */
+/** The pass's slicing, which needs no store; {@link TopicsLabellingPassTest} runs the pass on real ClickHouse and MySQL. */
 @DisplayName("topics labelling pass slices")
 class TopicWindowLabelServiceTest {
 

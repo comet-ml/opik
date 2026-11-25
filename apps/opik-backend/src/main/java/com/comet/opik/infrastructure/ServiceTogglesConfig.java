@@ -33,6 +33,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean guardrailsValidationsEnabled;
     @JsonProperty
+    @NotNull boolean guardrailsTrainingEnabled;
+    @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
     @NotNull boolean alertsEnabled;
@@ -90,6 +92,13 @@ public class ServiceTogglesConfig {
     @With
     @Getter(AccessLevel.NONE)
     boolean customChartsEnabledForWorkspace;
+
+    // Set per request by the toggles endpoint, never from config, like customChartsEnabledForWorkspace: topics.enabled
+    // and the caller's workspace eligible for topics. False means the topics read API answers 501 or status disabled.
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @With
+    @Getter(AccessLevel.NONE)
+    boolean topicsEnabled;
 
     @JsonIgnore
     public boolean isAgentInsightsActive() {

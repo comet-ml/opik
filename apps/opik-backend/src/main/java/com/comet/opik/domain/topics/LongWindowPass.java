@@ -18,7 +18,7 @@ import java.time.Instant;
 /**
  * When the daily long-window pass is due: once per {@code longWindowInterval}, cluster-wide, a tick reads the long
  * window in place of the short one, for rows the short window missed. A pass that could not read everything runs again
- * after one normal tick, until one drains it.
+ * after one normal tick, reading only the workspaces it has not read completely yet, until none is left.
  */
 @Slf4j
 @Singleton
@@ -44,8 +44,8 @@ class LongWindowPass {
     }
 
     /**
-     * Drained (the tick read every workspace, each under the cap, and left nothing for want of time, a read, an embed
-     * call or an insert): the pass is next due {@code longWindowInterval} from now.
+     * Drained (the tick read every workspace the pass had left, each under the cap, and left nothing for want of time,
+     * a read, an embed call or an insert): the pass is next due {@code longWindowInterval} from now.
      *
      * <p>Not drained: it is due again 1.5 tick intervals after this tick's {@code start}, counted from the start so the
      * pace does not depend on how long the tick ran. The next tick reads the short window and the one after runs the
