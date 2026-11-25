@@ -750,7 +750,7 @@ def _score_seven_entries(prefix_tokens, suffix_tokens):
     ],
     ids=["code_fence", "leading_prose"],
 )
-def test_logprob_path_reads_reason_from_wrapped_json_like_the_text_path(
+def test_parser__logprob_path_with_code_fence_or_leading_prose__reason_read_like_text_path(
     content, prefix_tokens, suffix_tokens
 ):
     bare = parser.parse_litellm_model_output(
