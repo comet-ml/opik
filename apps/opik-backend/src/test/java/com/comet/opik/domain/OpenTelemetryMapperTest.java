@@ -2015,7 +2015,7 @@ class OpenTelemetryMapperTest {
                     .traceId(UUID.randomUUID())
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName, null);
             return spanBuilder.build();
         }
 

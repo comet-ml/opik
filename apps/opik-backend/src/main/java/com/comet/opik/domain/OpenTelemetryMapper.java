@@ -134,7 +134,7 @@ public class OpenTelemetryMapper {
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events) {
-        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, null);
+        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, null, null);
     }
 
     private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
@@ -145,17 +145,13 @@ public class OpenTelemetryMapper {
 
     /**
      * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
-     * span name, used for span-name-aware routing (e.g. Claude Code's {@code new_context} maps to
-     * input only on {@code claude_code.llm_request} spans).
+     * span name and instrumentation scope, used for per-span routing (e.g. Claude Code's {@code new_context} maps to
+     * input only on {@code claude_code.llm_request} spans, and agentgateway's unmapped attributes go to metadata).
      *
-     * @param spanName the OTEL span name (may be null)
+     * @param spanName  the OTEL span name (may be null)
+     * @param scopeName the instrumentation scope name of the span (may be null)
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
-            String integrationName, List<Span.Event> events, String spanName) {
-        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, spanName, null);
-    }
-
-    private static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events, String spanName, String scopeName) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
