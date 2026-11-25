@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.GuardrailExecutionScope;
 import com.comet.opik.api.GuardrailModel;
 import com.comet.opik.api.GuardrailModel.GuardrailModelPage;
+import com.comet.opik.api.GuardrailModelConfig;
 import com.comet.opik.api.GuardrailModelUpdate;
 import com.comet.opik.api.GuardrailPolicy;
 import com.comet.opik.api.GuardrailTrainingRun;
@@ -199,7 +200,9 @@ class GuardrailModelsResourceTest {
                 .header(WORKSPACE_HEADER, workspace.name());
     }
 
-    private static Entity<FormDataMultiPart> multipart(String name, String description, String dataset) {
+    /** Each part only when given, so a request can leave one out. */
+    private static Entity<FormDataMultiPart> multipart(String name, String description, GuardrailModelConfig config,
+            String dataset) {
         var multiPart = new FormDataMultiPart();
         if (name != null) {
             multiPart.field("name", name);
@@ -207,21 +210,36 @@ class GuardrailModelsResourceTest {
         if (description != null) {
             multiPart.field("description", description);
         }
-        multiPart.bodyPart(new FormDataBodyPart("file",
-                new ByteArrayInputStream(dataset.getBytes(StandardCharsets.UTF_8)),
-                MediaType.APPLICATION_OCTET_STREAM_TYPE));
+        if (config != null) {
+            multiPart.bodyPart(new FormDataBodyPart("config", JsonUtils.writeValueAsString(config),
+                    MediaType.APPLICATION_JSON_TYPE));
+        }
+        if (dataset != null) {
+            multiPart.bodyPart(new FormDataBodyPart("file",
+                    new ByteArrayInputStream(dataset.getBytes(StandardCharsets.UTF_8)),
+                    MediaType.APPLICATION_OCTET_STREAM_TYPE));
+        }
         return Entity.entity(multiPart, multiPart.getMediaType());
     }
 
-    private Response postModel(Workspace workspace, String name, String description, String dataset) {
-        return upload(workspace, "").post(multipart(name, description, dataset));
+    private static GuardrailModelConfig configFor(String name) {
+        return new GuardrailModelConfig("Does the text break the rule " + name + "?");
+    }
+
+    private Response postModel(Workspace workspace, String name, String description, GuardrailModelConfig config,
+            String dataset) {
+        return upload(workspace, "").post(multipart(name, description, config, dataset));
+    }
+
+    private UUID created(Response response) {
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+        assertThat(response.hasEntity()).isFalse();
+        return TestUtils.getIdFromLocation(response.getLocation());
     }
 
     private UUID create(Workspace workspace, String name) {
-        try (var response = postModel(workspace, name, "Flags " + name, VALID_DATASET)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            assertThat(response.hasEntity()).isFalse();
-            return TestUtils.getIdFromLocation(response.getLocation());
+        try (var response = postModel(workspace, name, "Flags " + name, configFor(name), VALID_DATASET)) {
+            return created(response);
         }
     }
 
@@ -247,7 +265,7 @@ class GuardrailModelsResourceTest {
     }
 
     private Response postRun(Workspace workspace, UUID modelId, String dataset) {
-        return upload(workspace, "/" + modelId + "/runs").post(multipart(null, null, dataset));
+        return upload(workspace, "/" + modelId + "/runs").post(multipart(null, null, null, dataset));
     }
 
     private UUID retrain(Workspace workspace, UUID modelId) {
@@ -351,13 +369,13 @@ class GuardrailModelsResourceTest {
     Stream<Call> writes() {
         var id = "/" + randomUUID();
         return Stream.of(
-                new Call("create", "", true,
-                        builder -> builder.post(multipart(newName(), randomUUID().toString(), VALID_DATASET))),
+                new Call("create", "", true, builder -> builder.post(
+                        multipart(newName(), randomUUID().toString(), configFor(newName()), VALID_DATASET))),
                 new Call("update", id, false, builder -> builder.method("PATCH",
-                        Entity.json(new GuardrailModelUpdate(randomUUID().toString())))),
+                        Entity.json(GuardrailModelUpdate.builder().description(randomUUID().toString()).build()))),
                 new Call("delete", id, false, Invocation.Builder::delete),
                 new Call("retrain", id + "/runs", true,
-                        builder -> builder.post(multipart(null, null, VALID_DATASET))),
+                        builder -> builder.post(multipart(null, null, null, VALID_DATASET))),
                 new Call("cancel run", id + "/runs/" + randomUUID() + "/cancel", false,
                         builder -> builder.post(Entity.json(""))));
     }
@@ -382,17 +400,51 @@ class GuardrailModelsResourceTest {
                 .usingRecursiveComparison()
                 .ignoringFields("id", "createdAt", "lastUpdatedAt")
                 .isEqualTo(queuedRun(id));
-        assertThat(get(workspace, id))
+        var model = get(workspace, id);
+        assertThat(model)
                 .usingRecursiveComparison()
                 .ignoringFields("createdAt", "lastUpdatedAt")
                 .isEqualTo(GuardrailModel.builder()
                         .id(id)
                         .name(name)
                         .description("Flags " + name)
+                        .config(configFor(name))
                         .latestRun(firstRun)
                         .createdBy(USER)
                         .lastUpdatedBy(USER)
                         .build());
+    }
+
+    @Test
+    @DisplayName("A model needs no description, and a blank one counts as none")
+    void createWithoutDescription() {
+        var workspace = newWorkspace();
+        var name = newName();
+        var otherName = newName();
+
+        UUID id;
+        try (var response = postModel(workspace, name, null, configFor(name), VALID_DATASET)) {
+            id = created(response);
+        }
+        // A form sends an empty field for an empty input.
+        UUID otherId;
+        try (var response = postModel(workspace, otherName, " ", configFor(otherName), VALID_DATASET)) {
+            otherId = created(response);
+        }
+
+        var model = get(workspace, id);
+        assertThat(model)
+                .usingRecursiveComparison()
+                .ignoringFields("createdAt", "lastUpdatedAt")
+                .isEqualTo(GuardrailModel.builder()
+                        .id(id)
+                        .name(name)
+                        .config(configFor(name))
+                        .latestRun(model.latestRun())
+                        .createdBy(USER)
+                        .lastUpdatedBy(USER)
+                        .build());
+        assertThat(get(workspace, otherId).description()).isNull();
     }
 
     Stream<Arguments> invalidDatasets() {
@@ -418,7 +470,8 @@ class GuardrailModelsResourceTest {
     void createWhenDatasetInvalidReturnsBadRequest(String scenario, String dataset, List<String> errors) {
         var workspace = newWorkspace();
 
-        try (var response = postModel(workspace, randomUUID().toString(), randomUUID().toString(), dataset)) {
+        var name = newName();
+        try (var response = postModel(workspace, name, randomUUID().toString(), configFor(name), dataset)) {
             assertErrors(response, HttpStatus.SC_BAD_REQUEST, errors.toArray(String[]::new));
         }
 
@@ -432,7 +485,8 @@ class GuardrailModelsResourceTest {
         var name = newName();
         create(workspace, name);
 
-        try (var response = postModel(workspace, name.toUpperCase(), randomUUID().toString(), VALID_DATASET)) {
+        try (var response = postModel(workspace, name.toUpperCase(), randomUUID().toString(), configFor(name),
+                VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_CONFLICT, "Guardrail model already exists");
         }
 
@@ -440,46 +494,65 @@ class GuardrailModelsResourceTest {
     }
 
     @Test
-    @DisplayName("A model without a name or a description is not created")
-    void createWhenNameOrDescriptionMissingIsRejected() {
+    @DisplayName("A model without a name or a config, or with a blank prompt, is not created")
+    void createWhenNameOrConfigMissingIsRejected() {
         var workspace = newWorkspace();
+        var name = newName();
 
-        try (var response = postModel(workspace, null, randomUUID().toString(), VALID_DATASET)) {
+        try (var response = postModel(workspace, null, randomUUID().toString(), configFor(name), VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body name must not be blank");
         }
-        try (var response = postModel(workspace, randomUUID().toString(), " ", VALID_DATASET)) {
-            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                    "The request body description must not be blank");
+        try (var response = postModel(workspace, name, randomUUID().toString(), null, VALID_DATASET)) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body config must not be null");
+        }
+        try (var response = postModel(workspace, name, randomUUID().toString(), new GuardrailModelConfig(" "),
+                VALID_DATASET)) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "prompt must not be blank");
         }
 
         assertThat(find(workspace, target -> target).total()).isZero();
     }
 
     @Test
-    @DisplayName("A name or a description at its maximum length is accepted, one character longer is a 422")
-    void createWhenNameOrDescriptionAtMaxLength() {
+    @DisplayName("A name, a description or a prompt at its maximum length is accepted, one character longer is a 422")
+    void createWhenAtMaxLength() {
         var workspace = newWorkspace();
         var name = "n".repeat(GuardrailModel.NAME_MAX_LENGTH);
         var description = "d".repeat(GuardrailModel.DESCRIPTION_MAX_LENGTH);
+        var prompt = "p".repeat(GuardrailModelConfig.PROMPT_MAX_LENGTH);
 
-        try (var response = postModel(workspace, name + "n", randomUUID().toString(), VALID_DATASET)) {
+        try (var response = postModel(workspace, name + "n", randomUUID().toString(), configFor(name),
+                VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
                     "The request body name cannot exceed 255 characters");
         }
-        try (var response = postModel(workspace, randomUUID().toString(), description + "d", VALID_DATASET)) {
+        try (var response = postModel(workspace, randomUUID().toString(), description + "d", configFor(name),
+                VALID_DATASET)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
                     "The request body description cannot exceed 1000 characters");
         }
+        try (var response = postModel(workspace, randomUUID().toString(), description,
+                new GuardrailModelConfig(prompt + "p"), VALID_DATASET)) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "prompt cannot exceed 10000 characters");
+        }
         UUID id;
-        try (var response = postModel(workspace, name, description, VALID_DATASET)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            id = TestUtils.getIdFromLocation(response.getLocation());
+        try (var response = postModel(workspace, name, description, new GuardrailModelConfig(prompt),
+                VALID_DATASET)) {
+            id = created(response);
         }
 
-        assertThat(get(workspace, id).name()).isEqualTo(name);
+        var model = get(workspace, id);
+        assertThat(model.name()).isEqualTo(name);
+        assertThat(model.description()).isEqualTo(description);
+        assertThat(model.config()).isEqualTo(new GuardrailModelConfig(prompt));
         try (var response = request(workspace, "/" + id).method("PATCH",
-                Entity.json(new GuardrailModelUpdate(description + "d")))) {
+                Entity.json(GuardrailModelUpdate.builder().description(description + "d").build()))) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "description cannot exceed 1000 characters");
+        }
+        try (var response = request(workspace, "/" + id).method("PATCH",
+                Entity.json(GuardrailModelUpdate.builder().config(new GuardrailModelConfig(prompt + "p")).build()))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                    "config.prompt cannot exceed 10000 characters");
         }
     }
 
@@ -536,27 +609,41 @@ class GuardrailModelsResourceTest {
     }
 
     @Test
-    @DisplayName("The description is updated; a blank one or an unknown model is refused")
-    void updateDescription() {
+    @DisplayName("The description and the config are updated separately; a blank one or an unknown model is refused")
+    void update() {
         var workspace = newWorkspace();
         var id = create(workspace, newName());
         var model = get(workspace, id);
         var description = randomUUID().toString();
+        var config = configFor(newName());
 
         try (var response = request(workspace, "/" + id).method("PATCH",
-                Entity.json(new GuardrailModelUpdate(description)))) {
+                Entity.json(GuardrailModelUpdate.builder().description(description).build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
         assertThat(get(workspace, id))
                 .usingRecursiveComparison()
                 .ignoringFields("lastUpdatedAt")
                 .isEqualTo(model.toBuilder().description(description).build());
+        try (var response = request(workspace, "/" + id).method("PATCH",
+                Entity.json(GuardrailModelUpdate.builder().config(config).build()))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+        assertThat(get(workspace, id))
+                .usingRecursiveComparison()
+                .ignoringFields("lastUpdatedAt")
+                .isEqualTo(model.toBuilder().description(description).config(config).build());
 
-        try (var response = request(workspace, "/" + id).method("PATCH", Entity.json(new GuardrailModelUpdate(" ")))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        try (var response = request(workspace, "/" + id).method("PATCH",
+                Entity.json(GuardrailModelUpdate.builder().description(" ").build()))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "description must not be blank");
+        }
+        try (var response = request(workspace, "/" + id).method("PATCH",
+                Entity.json(GuardrailModelUpdate.builder().config(new GuardrailModelConfig(" ")).build()))) {
+            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "config.prompt must not be blank");
         }
         try (var response = request(workspace, "/" + randomUUID()).method("PATCH",
-                Entity.json(new GuardrailModelUpdate(description)))) {
+                Entity.json(GuardrailModelUpdate.builder().description(description).build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
     }
@@ -758,7 +845,7 @@ class GuardrailModelsResourceTest {
         var secondId = create(workspace, newName());
         var thirdId = create(workspace, newName());
         try (var response = request(workspace, "/" + firstId).method("PATCH",
-                Entity.json(new GuardrailModelUpdate(randomUUID().toString())))) {
+                Entity.json(GuardrailModelUpdate.builder().description(randomUUID().toString()).build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
         var first = get(workspace, firstId);
@@ -820,9 +907,9 @@ class GuardrailModelsResourceTest {
     @DisplayName("A create or a retrain without a file is a 422, and creates nothing")
     void createOrRetrainWithoutFileIsRejected() {
         var workspace = newWorkspace();
-        var model = new FormDataMultiPart().field("name", newName()).field("description", randomUUID().toString());
+        var name = newName();
 
-        try (var response = upload(workspace, "").post(Entity.entity(model, model.getMediaType()))) {
+        try (var response = postModel(workspace, name, randomUUID().toString(), configFor(name), null)) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "The request body must not be null");
         }
         assertThat(find(workspace, target -> target).total()).isZero();
