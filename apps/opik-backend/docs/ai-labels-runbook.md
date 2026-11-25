@@ -118,7 +118,7 @@ Every body has `today` and `window_from` (UTC dates, both included) and `topics`
 
 | `status` | When | Other fields |
 |---|---|---|
-| `disabled` | The workspace is not opted in to both topics and ai-labels. This includes a workspace opted out after a run: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
+| `disabled` | The workspace is not opted in to both topics and ai-labels, or `TOPICS_ENABLED_WORKSPACES` lists it at a stage before `ui`. This includes a workspace opted out after a run: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
 | `collecting` | Opted in, and the project has no live topic: before its discovery run, or after all its topics retired. | `vectors_in_window` (traces with a topic vector in the window) and `min_vectors` (`TOPICS_RUN_MIN_VECTORS`). `last_run_at` after a saved run. `attempt` (`status` only) when the project's newest `topic_runs` row (by `started_at`, then `run_id`) is `running` or `failed`. |
 | `ready` | Opted in, and the project has at least one live topic. | `last_run_at`, `total_traces`, `labelled_from`, `topics` in rank order, `other`. |
 | `too_large` | Opted in, and a ClickHouse read of `collecting` or `ready` hit a `TOPICS_READ_*` size guard: rows (158), memory (241), bytes (307) or rows or bytes (396). A retry fails the same way, so the page shows the state and does not retry. The backend logs a WARN `Topics read is too large` with the workspace and the project. | None. Not cached: the next request reads again. |
@@ -169,8 +169,8 @@ The queries only read, so a read-only database user can run them for any workspa
 takes their output.
 
 ```sql
--- MySQL: 1 when the workspace is enabled in ai-labels. The workspace must also be in TOGGLE_TOPICS_WORKSPACES (see
--- "Opting workspaces in and out"). Not in the list, or 0 here, means `disabled`
+-- MySQL: 1 when the workspace is enabled in ai-labels. The workspace must also be in TOPICS_ENABLED_WORKSPACES, with no
+-- stage or as `<id>:ui`. Not in the list, at an earlier stage, or 0 here, means `disabled`
 SELECT COUNT(*) > 0 AS eligible
 FROM ai_label_workspaces
 WHERE workspace_id = '<workspace_id>' AND enabled = TRUE;
@@ -329,5 +329,7 @@ cache runs no query. No alert reads these metrics.
 | `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` | `60` | The time bucket, in seconds. |
 | `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION` | `PT5M` | How long the counts of a `ready` project stay in Redis. |
 
-The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
-stay.
+The endpoint has no deployment-wide switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored
+topics and rows stay. To hide topics for one workspace and keep its jobs running, list it in
+`TOPICS_ENABLED_WORKSPACES` at a stage before `ui` (for example `<id>:nightly`); it is a Helm value, so the change
+needs a deploy.

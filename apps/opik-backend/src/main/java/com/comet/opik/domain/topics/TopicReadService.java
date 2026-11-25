@@ -36,8 +36,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * The topics read API: a project's topics over the window, the last {@code topics.run.windowDays} UTC days, today
  * included, in one of four states.
  * <ul>
- * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
- * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
+ * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels, or listed
+ * below the {@code ui} stage); no topics are read and ClickHouse is not called, also when the project still has
+ * topics from before an opt-out.</li>
  * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has
  * ({@link #vectorCounts}, cached) and how many the discovery run needs, and, as {@code attempt}, whether the project's current or last attempt is running or
  * failed.</li>
@@ -207,7 +208,7 @@ public class TopicReadService {
 
     /** Empty when the workspace is not eligible for topics. */
     private Optional<TopicReadScope> readScope(String workspaceId, UUID projectId) {
-        if (!workspaces.isEnabled(workspaceId)) {
+        if (!workspaces.reaches(workspaceId, TopicsStage.UI)) {
             return Optional.empty();
         }
         return Optional.of(template.inTransaction(READ_ONLY, handle -> {

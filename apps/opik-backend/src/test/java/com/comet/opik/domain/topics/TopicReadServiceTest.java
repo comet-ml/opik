@@ -99,7 +99,7 @@ class TopicReadServiceTest {
         template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(true);
         when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
         service = service(NOW);
     }
@@ -111,7 +111,7 @@ class TopicReadServiceTest {
             "2026-11-02T23:59:59.999Z, 2026-11-02"})
     @DisplayName("today is the UTC date of the request, from its first to its last millisecond")
     void today(Instant now, LocalDate today) {
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(false);
 
         var body = service(now).get(WORKSPACE_ID, projectId);
 
@@ -142,7 +142,7 @@ class TopicReadServiceTest {
     @Test
     @DisplayName("disabled: a workspace not eligible reads no topics and calls no ClickHouse")
     void disabled() {
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(false);
 
         var body = service.get(WORKSPACE_ID, projectId);
 
