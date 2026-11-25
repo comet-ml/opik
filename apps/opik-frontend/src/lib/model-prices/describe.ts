@@ -116,6 +116,9 @@ export interface HistoryVersion {
   version: number;
   createdAt: string;
   createdBy: string;
+  added: number;
+  changed: number;
+  removed: number;
   lines: string[];
 }
 
@@ -131,10 +134,16 @@ export const groupHistory = (
         version: entry.list_version,
         createdAt: entry.created_at,
         createdBy: entry.created_by,
+        added: 0,
+        changed: 0,
+        removed: 0,
         lines: [],
       };
       versions.push(current);
     }
+    if (entry.action === "created") current.added += 1;
+    if (entry.action === "updated") current.changed += 1;
+    if (entry.action === "deleted") current.removed += 1;
     current.lines.push(describeHistoryEntry(entry, builtInOf));
   });
   return versions;

@@ -257,20 +257,22 @@ describe("CostCenterTab", () => {
     });
   });
 
-  it("opens and closes the history from the History button", () => {
+  it("opens the price history in a side sheet from the History button", async () => {
     renderTab(ADMIN);
 
     expect(screen.queryByTestId("model-price-history")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    expect(
-      within(screen.getByTestId("model-price-history")).getByText("Version 3"),
-    ).toBeVisible();
+    const sheet = await screen.findByTestId("model-price-history");
+    expect(within(sheet).getByText("v3")).toBeVisible();
+    expect(within(sheet).getByText("maria")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(screen.queryByTestId("model-price-history")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("model-price-history")).toBeNull(),
+    );
   });
 
   describe("catalog", () => {

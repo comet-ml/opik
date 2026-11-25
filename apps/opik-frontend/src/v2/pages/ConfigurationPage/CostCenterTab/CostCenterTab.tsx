@@ -40,7 +40,7 @@ import {
   sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
-import HistoryPanel from "./HistoryPanel";
+import HistorySheet from "./HistorySheet";
 import PricesTable, {
   DEFAULT_COLUMNS_ORDER,
   DEFAULT_SELECTED_COLUMNS,
@@ -83,7 +83,7 @@ const CostCenterTab: React.FC = () => {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const drawerKey = useRef(0);
   const returnFocusTo = useRef<HTMLElement | null>(null);
-  const isAnyDrawerOpen = Boolean(drawerTarget) || isBatchOpen;
+  const isAnyDrawerOpen = Boolean(drawerTarget) || isBatchOpen || isHistoryOpen;
 
   // Radix hands focus back only to its own trigger, and these drawers are
   // opened without one, so without this focus falls to <body>.
@@ -362,15 +362,15 @@ const CostCenterTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
           />
           {history.length > 0 && (
-            <TooltipWrapper
-              content={isHistoryOpen ? "Hide history" : "History"}
-            >
+            <TooltipWrapper content="History">
               <Button
                 variant="outline"
                 size="icon-sm"
                 aria-label="History"
-                aria-pressed={isHistoryOpen}
-                onClick={() => setIsHistoryOpen((open) => !open)}
+                onClick={() => {
+                  rememberFocus();
+                  setIsHistoryOpen(true);
+                }}
               >
                 <HistoryIcon className="size-3.5" />
               </Button>
@@ -378,10 +378,6 @@ const CostCenterTab: React.FC = () => {
           )}
         </div>
       </div>
-
-      {isHistoryOpen && history.length > 0 && (
-        <HistoryPanel history={history} />
-      )}
 
       <PricesTable
         entries={pageEntries}
@@ -424,6 +420,14 @@ const CostCenterTab: React.FC = () => {
           canEdit={canEdit}
           isPinned={drawerEntry ? isPinned(drawerEntry) : false}
           onTogglePin={drawerEntry ? () => togglePin(drawerEntry) : undefined}
+        />
+      )}
+
+      {history.length > 0 && (
+        <HistorySheet
+          open={isHistoryOpen}
+          setOpen={setIsHistoryOpen}
+          history={history}
         />
       )}
 

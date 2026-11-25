@@ -161,6 +161,9 @@ describe("describe", () => {
         version: 3,
         createdAt: "2026-11-03T10:00:00Z",
         createdBy: "maria",
+        added: 0,
+        changed: 1,
+        removed: 1,
         lines: [
           "gpt-4o on openai: output 8.5 → 8",
           "removed bifrost/gpt-4o on any provider",
@@ -170,6 +173,9 @@ describe("describe", () => {
         version: 2,
         createdAt: "2026-11-02T10:00:00Z",
         createdBy: "daniel",
+        added: 1,
+        changed: 0,
+        removed: 0,
         lines: [
           "added bifrost/gpt-4o on any provider: priced like gpt-4o on the span's own provider",
         ],
