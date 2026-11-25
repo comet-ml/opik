@@ -312,6 +312,14 @@ public class OpikConfiguration extends JobConfiguration {
         return vectors == null || limits == null || notAbove(vectors.getEmbedTimeout(), limits.getMaxEmbedDeadline());
     }
 
+    @JsonIgnore
+    @AssertTrue(message = "inference.realtime.decideDeadline must not be above inference.limits.maxDecideRealtimeDeadline") public boolean isDecideDeadlineWithinLimits() {
+        var realtime = inference.getRealtime();
+        var limits = inference.getLimits();
+        return realtime == null || limits == null
+                || notAbove(realtime.getDecideDeadline(), limits.getMaxDecideRealtimeDeadline());
+    }
+
     /** A bound left unset is checked by its own field's validation, not here. */
     private static boolean notAbove(Duration value, Duration limit) {
         return value == null || limit == null || value.toMilliseconds() <= limit.toMilliseconds();

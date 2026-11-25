@@ -94,6 +94,14 @@ public class InferenceConfig {
         @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
         private Duration maxEmbedDeadline;
 
+        /**
+         * The most {@code deadline_ms} a realtime-lane decide call sends; the service's
+         * {@code decide_realtime_max_deadline_ms}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxDecideRealtimeDeadline;
+
         /** The most {@code deadline_ms} a realtime-lane generate call sends. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
@@ -139,10 +147,12 @@ public class InferenceConfig {
     /** The synchronous calls a request waits on: what a guardrail check's decide call asks of the service. */
     @Data
     public static class RealtimeConfig {
-        /** The deadline a decide call sends, the time the service may spend on it; at most the realtime lane's limit. */
+        /**
+         * The deadline a decide call sends, the time the service may spend on it; at most
+         * {@code limits.maxDecideRealtimeDeadline}.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-        @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
         private Duration decideDeadline;
         /** Room past that deadline for the answer to arrive, or for a quick retry of an overloaded call. */
         @NotNull @JsonProperty
