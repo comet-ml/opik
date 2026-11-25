@@ -17,6 +17,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -259,6 +260,94 @@ class TopicRunStore {
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
                 .flatMap(saved -> keepIfProjectExists(run, !topics.isEmpty()));
+    }
+
+    /**
+     * The saved list as the night reads it ({@link #readSaved}): the topics in list order (born, then id) with their
+     * vectors, the known-Other vectors, and the run that saved it, which the save checks is still the saved one. Fails
+     * with {@code internal} when the project has no saved list.
+     */
+    Mono<NightList> readList(@NonNull TopicRun run, @NonNull LocalDate night) {
+        return readSaved(run.workspaceId(), run.projectId())
+                .filter(saved -> !saved.topics().isEmpty())
+                .switchIfEmpty(Mono.error(() -> new TopicsRunException(RunError.INTERNAL,
+                        "the project has no saved topic list")))
+                .map(saved -> {
+                    var otherVectors = saved.project().otherVectors();
+                    var state = NightState.builder()
+                            .topics(saved.topics().stream().map(TopicRunStore::nightTopic).toList())
+                            .otherPrototypes(otherVectors == null ? List.of() : otherVectors.vectors())
+                            .rebuilds(saved.project().savedRuns())
+                            .night(night)
+                            .ids(idGenerator::generateId)
+                            .build();
+                    return NightList.builder()
+                            .state(state)
+                            .listRunId(saved.project().listRunId())
+                            .topicIds(saved.topics().stream().map(Topic::id)
+                                    .collect(Collectors.toUnmodifiableSet()))
+                            .build();
+                });
+    }
+
+    private static NightTopic nightTopic(Topic topic) {
+        return NightTopic.builder()
+                .id(topic.id())
+                .name(topic.name())
+                .definition(topic.definition())
+                .born(topic.born())
+                .prototypes(topic.vectors().vectors())
+                .lowNights(topic.lowNights())
+                .size(topic.size())
+                .build();
+    }
+
+    /**
+     * Saves a nightly update in one transaction: the list on the project's row (a compare-and-set on the
+     * {@code list_run_id} the run read), the retired topics deleted, the kept ones updated (lifecycle, size, vectors),
+     * tonight's new ones inserted, the run saved. When no topic stayed live it clears the list instead
+     * ({@link TopicProjectDAO#clearList}). A run failed meanwhile, by its timeout, rolls the save back.
+     *
+     * <p>As {@link #save}, the project's row is not locked: after the commit the save reads it, and when the project is
+     * gone the topics are deleted and the result is false. False too when the list was cleared: either way the caller
+     * inserts no {@code trace_topics}.
+     */
+    Mono<Boolean> saveUpdate(@NonNull TopicRun run, @NonNull NightList saved, @NonNull NightSave save) {
+        return jdbi(() -> {
+            var now = Instant.now();
+            template.inTransaction(WRITE, handle -> {
+                var topicDAO = handle.attach(TopicDAO.class);
+                var projectDAO = handle.attach(TopicProjectDAO.class);
+                // First, so a run that saved this project meanwhile fails the save before anything else.
+                int listed = save.keep()
+                        ? projectDAO.saveList(run.workspaceId(), run.projectId(), saved.listRunId(), run.runId(), now,
+                                run.to(), save.otherVectors(), TopicEmbedding.MODEL)
+                        : projectDAO.clearList(run.workspaceId(), run.projectId(), saved.listRunId(), now);
+                if (listed != 1) {
+                    throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
+                }
+                if (!save.retired().isEmpty()) {
+                    topicDAO.deleteTopics(run.workspaceId(), run.projectId(), save.retired());
+                }
+                if (!save.updated().isEmpty()) {
+                    topicDAO.updateTopics(save.updated());
+                }
+                if (!save.inserted().isEmpty()) {
+                    topicDAO.insertTopics(save.inserted());
+                }
+                if (projectDAO.markSaved(run.workspaceId(), run.projectId(), run.runId(), now) != 1) {
+                    throw new TopicsRunException(RunError.TIMEOUT, "the run ended before its save committed");
+                }
+                return null;
+            });
+            metrics.run(run.workspace(), TopicProject.RunStatus.SAVED, null);
+            metrics.saved(run.workspace(), "topics",
+                    save.inserted().size() + save.updated().size() + save.retired().size());
+            return true;
+        })
+                .onErrorMap(error -> !(error instanceof TopicsRunException),
+                        error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
+                .flatMap(__ -> keepIfProjectExists(run, save.keep()));
     }
 
     /** Whether the project is still in {@code projects}. The workspace comes from the Reactor context. */

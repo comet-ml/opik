@@ -19,7 +19,9 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
@@ -448,6 +450,82 @@ class TopicsRunsIntegrationTest {
         assertThat(data.topicProject(unfinished).runMode()).isEqualTo(TopicProject.RunMode.LABELS);
         assertThat(data.topicProject(notOptedIn).labelsComplete()).isFalse();
         assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a queued nightly update of a saved list runs on a pod: it saves the list under its own run with the "
+            + "topics' ids, writes one trace_topics row per trace as its run's, and its labelling pass runs after it")
+    void runsANightlyUpdate(@Jit TopicsRunPublisher publisher) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        awaitBuilt(projectId);
+        awaitLabelsComplete(projectId);
+        var before = data.topics(projectId);
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
+
+        var updateRunId = queueUpdate(publisher, workspaceId, projectId);
+
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
+                .isEqualTo(updateRunId));
+        awaitLabelsComplete(projectId);
+        var project = data.topicProject(projectId);
+        assertThat(project.savedRuns()).isEqualTo(2);
+        assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
+        assertThat(data.topics(projectId)).isNotEmpty().extracting(Topic::id)
+                .isSubsetOf(before.stream().map(Topic::id).toList());
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
+    }
+
+    @Test
+    @DisplayName("a queued nightly update that leaves no live topic deletes every topic, clears the list, keeps the "
+            + "traces' last rows and queues no labelling pass; the next plan queues a discovery run")
+    void nightlyUpdateClearsAnEmptyList(@Jit TopicsRunPublisher publisher) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        // One topic whose only vector is far from every trace: no trace tonight, so it retires.
+        data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
+        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
+
+        var updateRunId = queueUpdate(publisher, workspaceId, projectId);
+
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                .isEqualTo(TopicProject.RunStatus.SAVED));
+        var project = data.topicProject(projectId);
+        assertThat(project.runId()).isEqualTo(updateRunId);
+        assertThat(project.listRunId()).isNull();
+        assertThat(project.savedRuns()).isEqualTo(2);
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
+    }
+
+    /** Queues and publishes the project's nightly update for tomorrow's window, as the nightly job will. */
+    private UUID queueUpdate(TopicsRunPublisher publisher, String workspaceId, UUID projectId) {
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.UPDATE).block();
+        publisher.publish(TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(TopicProject.RunMode.UPDATE).night(tomorrow()).windowTraces(FIXTURE.size()).build()).block();
+        return runId;
+    }
+
+    private void awaitLabelsComplete(UUID projectId) {
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).labelsComplete())
+                .isTrue());
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     /** Waits until the project's discovery run is saved and returns its run id. */
