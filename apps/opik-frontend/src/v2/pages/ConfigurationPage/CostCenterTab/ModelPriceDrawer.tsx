@@ -85,8 +85,11 @@ const KeyName: React.FC<{ name: string }> = ({ name }) => (
 
 const READ_ONLY_INPUT = "bg-muted hover:shadow-none";
 
-const PROVIDER_EMPTY_MESSAGE = "Not in the list. Saved as a custom provider.";
-const MODEL_EMPTY_MESSAGE = "Not in the list. Saved as a custom model.";
+const PROVIDER_EMPTY_MESSAGE =
+  "Not in the list. Will be saved as a custom provider.";
+const MODEL_EMPTY_MESSAGE = "Not in the list. Will be saved as a custom model.";
+const ALIAS_TARGET_EMPTY_MESSAGE =
+  "Not in the list. Saving checks that this model has a price.";
 const SPANS_OWN_PROVIDER_LABEL = "The span's own provider";
 const MAX_MODEL_SUGGESTIONS = 50;
 
@@ -468,17 +471,16 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
     : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
   const providerLabel = provider.trim() || ANY_PROVIDER_LABEL;
   const ProviderIcon = providerIconOf(provider.trim());
-  const aliasTargetProvider = aliasProvider.trim();
-  const modelsMatching = (typed: string) =>
+  const modelsMatching = (typed: string, onProvider: string) =>
     matching(
       Array.from(
         new Set(
           pricedModels
             .filter(
               (target) =>
-                !aliasTargetProvider ||
+                !onProvider.trim() ||
                 target.provider.toLowerCase() ===
-                  aliasTargetProvider.toLowerCase(),
+                  onProvider.trim().toLowerCase(),
             )
             .map((target) => target.model),
         ),
@@ -591,15 +593,17 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="model-price-model">Model name</Label>
-              <Input
-                id="model-price-model"
+              <Label id="model-price-model">Model name</Label>
+              <Autocomplete
+                aria-labelledby="model-price-model"
                 dimension="sm"
                 placeholder="e.g. acme-finetune-v3"
                 value={model}
-                onChange={(event) => {
+                items={modelsMatching(model, provider)}
+                emptyMessage={MODEL_EMPTY_MESSAGE}
+                onValueChange={(value) => {
                   resetFeedback();
-                  setModel(event.target.value);
+                  setModel(value);
                 }}
               />
             </div>
@@ -691,8 +695,8 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   dimension="sm"
                   placeholder="e.g. gpt-4o"
                   value={aliasModel}
-                  items={modelsMatching(aliasModel)}
-                  emptyMessage={MODEL_EMPTY_MESSAGE}
+                  items={modelsMatching(aliasModel, aliasProvider)}
+                  emptyMessage={ALIAS_TARGET_EMPTY_MESSAGE}
                   onValueChange={(value) => {
                     resetFeedback();
                     setAliasModel(value);

@@ -188,6 +188,15 @@ const replaceResult = (dryRun: boolean, warnings: unknown[] = []) => ({
 
 const sentRows = () => mutateAsync.mock.lastCall![0].request.rows;
 
+// The picker hands typed text on after a short pause, or at once when the
+// field loses focus, as it does when someone clicks Save.
+const typeModelName = (value: string) => {
+  const field = screen.getByLabelText("Model name");
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+};
+
 const clickOutside = async () => {
   // Radix starts listening for outside clicks a tick after a sheet opens, and
   // a modal acts on an outside press only once its click arrives.
@@ -812,6 +821,48 @@ describe("CostCenterTab", () => {
       expect(screen.getByText("Empty = the span's own provider")).toBeVisible();
     });
 
+    it("suggests model names for the chosen provider and keeps a new one", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      const provider = screen.getByLabelText("Provider");
+      fireEvent.focus(provider);
+      fireEvent.click(await screen.findByRole("option", { name: "openai" }));
+      const modelName = screen.getByLabelText("Model name");
+      fireEvent.focus(modelName);
+      expect(
+        await screen.findByRole("option", { name: "gpt-4o-mini" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: "claude-sonnet-4-5" }),
+      ).toBeNull();
+
+      fireEvent.keyDown(modelName, { key: "a" });
+      fireEvent.change(modelName, { target: { value: "acme-finetune-v3" } });
+      expect(
+        await screen.findByText(
+          "Not in the list. Will be saved as a custom model.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("says an unlisted alias target is checked for a price", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.click(screen.getByRole("radio", { name: "Alias" }));
+      const pricedLike = screen.getByLabelText("Priced like");
+      fireEvent.focus(pricedLike);
+      fireEvent.keyDown(pricedLike, { key: "z" });
+      fireEvent.change(pricedLike, { target: { value: "zzz-unknown" } });
+
+      expect(
+        await screen.findByText(
+          "Not in the list. Saving checks that this model has a price.",
+        ),
+      ).toBeInTheDocument();
+    });
+
     it("suggests models to alias, narrowed to the chosen provider", async () => {
       renderTab(ADMIN);
 
@@ -851,7 +902,7 @@ describe("CostCenterTab", () => {
       fireEvent.keyDown(provider, { key: "m" });
       fireEvent.change(provider, { target: { value: "my-gateway" } });
       expect(
-        await screen.findByText(/Saved as a custom provider/),
+        await screen.findByText(/Will be saved as a custom provider/),
       ).toBeInTheDocument();
       expect(provider).toHaveValue("my-gateway");
     });
@@ -1316,9 +1367,7 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
-      fireEvent.change(screen.getByLabelText("Model name"), {
-        target: { value: "ACME-llama-70b" },
-      });
+      typeModelName("ACME-llama-70b");
       fireEvent.change(priceInput("Input"), { target: { value: "1" } });
       fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
@@ -1350,9 +1399,7 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
-      fireEvent.change(screen.getByLabelText("Model name"), {
-        target: { value: "acme-finetune-v3" },
-      });
+      typeModelName("acme-finetune-v3");
       fireEvent.change(priceInput("Input"), { target: { value: "2" } });
       fireEvent.change(priceInput("Output"), { target: { value: "8" } });
       fireEvent.click(screen.getByRole("button", { name: "Add model" }));
@@ -1369,9 +1416,7 @@ describe("CostCenterTab", () => {
       renderTab(ADMIN);
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
-      fireEvent.change(screen.getByLabelText("Model name"), {
-        target: { value: "acme-finetune-v3" },
-      });
+      typeModelName("acme-finetune-v3");
       const provider = screen.getByLabelText("Provider");
       fireEvent.focus(provider);
       fireEvent.change(provider, { target: { value: "any provider" } });
