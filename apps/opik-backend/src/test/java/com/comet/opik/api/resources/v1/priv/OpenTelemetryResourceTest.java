@@ -824,7 +824,7 @@ class OpenTelemetryResourceTest {
             sendProtobufTraces(List.of(otelSpan), "Test Project", workspaceName, okApikey, true, null);
 
             var opikTraceId = opikTraceIdOf(otelSpan);
-            var expectedSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+            var expectedSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null, null).toBuilder()
                     .usage(Map.of("prompt_tokens", inputTokens, "completion_tokens", outputTokens,
                             "total_tokens", inputTokens + outputTokens))
                     .metadata(JsonUtils.getMapper().valueToTree(expectedMetadata))
@@ -1780,7 +1780,7 @@ class OpenTelemetryResourceTest {
         }
 
         private com.comet.opik.api.Span expectedSpan(Span otelSpan, UUID opikTraceId) {
-            return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+            return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null, null).toBuilder()
                     .environment("")
                     .build();
         }
@@ -1839,7 +1839,7 @@ class OpenTelemetryResourceTest {
         private com.comet.opik.api.Span.SpanPage assertSpansStoredInProject(List<Span> otelSpans, UUID opikTraceId,
                 String projectName, String workspaceName) {
             var expectedSpans = otelSpans.stream()
-                    .map(otelSpan -> OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+                    .map(otelSpan -> OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null, null).toBuilder()
                             .environment("")
                             .build())
                     .toList();
@@ -1860,7 +1860,7 @@ class OpenTelemetryResourceTest {
             var opikTraceId = opikTraceIdOf(otelSpans.getFirst());
             var spans = assertSpansStoredInProject(otelSpans, opikTraceId, projectName, workspaceName);
 
-            var expectedRoot = OpenTelemetryMapper.toOpikSpan(otelSpans.getFirst(), opikTraceId, null);
+            var expectedRoot = OpenTelemetryMapper.toOpikSpan(otelSpans.getFirst(), opikTraceId, null, null);
             var expectedTrace = Trace.builder()
                     .id(opikTraceId)
                     .name(expectedRoot.name())

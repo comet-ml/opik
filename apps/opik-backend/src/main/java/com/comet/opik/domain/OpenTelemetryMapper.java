@@ -55,17 +55,9 @@ public class OpenTelemetryMapper {
      * @param otelSpan        an OpenTelemetry Span
      * @param opikTraceId     the Opik UUID to be used for this span
      * @param integrationName the detected (if any) integration name
+     * @param scopeName       the instrumentation scope name of the span (may be null), which decides scope-specific
+     *                        mapping (e.g. agentgateway's unmapped attributes go to metadata)
      * @return a converted Opik Span
-     */
-    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName) {
-        return toOpikSpan(otelSpan, opikTraceId, integrationName, null);
-    }
-
-    /**
-     * Same as {@link #toOpikSpan(Span, UUID, String)} but with the instrumentation scope of the span, which decides
-     * scope-specific mapping (e.g. agentgateway's unmapped attributes go to metadata).
-     *
-     * @param scopeName the instrumentation scope name of the span (may be null)
      */
     public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName,
             String scopeName) {
