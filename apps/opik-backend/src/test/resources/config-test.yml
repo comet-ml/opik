@@ -963,6 +963,8 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    topics_day_counts: PT5M
+    topics_vector_counts: PT1M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
