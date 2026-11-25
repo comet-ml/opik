@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -99,7 +100,7 @@ class AnalyticsQueriesPublicResourceTest {
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
                                 new CustomConfig("customCharts.publicEndpointsEnabled", "true"),
-                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
+                                new CustomConfig("customCharts.maxConcurrentPublicApiQueriesPerWorkspace",
                                         String.valueOf(MAX_CONCURRENT_QUERIES))))
                         .build());
     }
@@ -200,8 +201,10 @@ class AnalyticsQueriesPublicResourceTest {
         assertThat(permits).doesNotContainNull();
 
         try (Response response = analyticsQueriesClient.callRun(null, RESULT_QUERY, API_KEY_C, WORKSPACE_NAME_C)) {
-            assertThat(response.getStatus()).isEqualTo(429);
-            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNotBlank();
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+            assertThat(response.readEntity(ErrorMessage.class))
+                    .isEqualTo(new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
         }
 
         lockService.releaseSlot(lock, permits.getFirst()).block();

@@ -6,6 +6,7 @@ import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardWidgetQueryRequest;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -125,7 +126,7 @@ class DashboardWidgetQueryResourceTest {
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
-                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
+                                new CustomConfig("customCharts.maxConcurrentPublicApiQueriesPerWorkspace",
                                         String.valueOf(MAX_CONCURRENT_QUERIES))))
                         .build());
     }
@@ -266,7 +267,9 @@ class DashboardWidgetQueryResourceTest {
             try (Response response = dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
                     API_KEY_A, WORKSPACE_NAME_A)) {
                 assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-                assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNotBlank();
+                assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+                assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(
+                        new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
             }
 
             lockService.releaseSlot(lock, permits.getFirst()).block();
