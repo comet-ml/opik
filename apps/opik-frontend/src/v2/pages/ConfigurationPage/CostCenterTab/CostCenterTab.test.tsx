@@ -769,27 +769,27 @@ describe("CostCenterTab", () => {
       expect(onProvider).toHaveFocus();
     });
 
-    it("offers an empty provider choice in each provider list", async () => {
+    it("explains an empty provider instead of listing it", async () => {
       renderTab(ADMIN);
 
       fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
       const provider = screen.getByLabelText("Provider");
       fireEvent.focus(provider);
-      fireEvent.click(await screen.findByRole("option", { name: "openai" }));
-      fireEvent.keyDown(provider, { key: "a" });
-      fireEvent.change(provider, { target: { value: "" } });
-      fireEvent.click(
-        await screen.findByRole("option", { name: "Any provider" }),
-      );
-      fireEvent.blur(provider);
-      expect(provider).toHaveValue("");
+      expect(
+        await screen.findByRole("option", { name: "openai" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Any provider" })).toBeNull();
       expect(screen.getByText("Empty = any provider")).toBeVisible();
+      fireEvent.keyDown(provider, { key: "Escape" });
 
       fireEvent.click(screen.getByRole("radio", { name: "Alias" }));
       fireEvent.focus(screen.getByLabelText("On provider"));
       expect(
-        await screen.findByRole("option", { name: "The span's own provider" }),
+        await screen.findByRole("option", { name: "openai" }),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: "The span's own provider" }),
+      ).toBeNull();
       expect(screen.getByText("Empty = the span's own provider")).toBeVisible();
     });
 
@@ -1341,6 +1341,29 @@ describe("CostCenterTab", () => {
       await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
       expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false);
       expect(screen.queryByTestId("model-price-warnings")).toBeNull();
+    });
+
+    it("treats a typed Any provider as the empty provider", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.change(screen.getByLabelText("Model name"), {
+        target: { value: "acme-finetune-v3" },
+      });
+      const provider = screen.getByLabelText("Provider");
+      fireEvent.focus(provider);
+      fireEvent.change(provider, { target: { value: "any provider" } });
+      fireEvent.blur(provider);
+      fireEvent.change(priceInput("Input"), { target: { value: "2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(sentRows()).toContainEqual(
+        expect.objectContaining({ model: "acme-finetune-v3", provider: "" }),
+      );
     });
   });
 

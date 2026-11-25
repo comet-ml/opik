@@ -99,9 +99,10 @@ const matching = (names: string[], typed: string) => {
   ];
 };
 
-// The empty provider is offered as a named option, like the table's Provider filter.
-const fromProviderOption = (value: string, emptyLabel: string) =>
-  value === emptyLabel ? "" : value;
+// Typing the placeholder's words means the empty provider, as in CSV import;
+// saved as text it would be a provider no span reports.
+const emptyIfLabel = (value: string, emptyLabel: string) =>
+  value.trim().toLowerCase() === emptyLabel.toLowerCase() ? "" : value;
 
 type ModelPriceDrawerProps = {
   open: boolean;
@@ -557,6 +558,24 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         {isNew && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
+              <Label id="model-price-provider">Provider</Label>
+              <Autocomplete
+                aria-labelledby="model-price-provider"
+                dimension="sm"
+                placeholder={ANY_PROVIDER_LABEL}
+                value={provider}
+                items={matching(providers, provider)}
+                emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                onValueChange={(value) => {
+                  resetFeedback();
+                  setProvider(emptyIfLabel(value, ANY_PROVIDER_LABEL));
+                }}
+              />
+              <p className="comet-body-xs text-muted-slate">
+                Empty = any provider
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="model-price-model">Model name</Label>
               <Input
                 id="model-price-model"
@@ -569,24 +588,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   setModel(event.target.value);
                 }}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label id="model-price-provider">Provider</Label>
-              <Autocomplete
-                aria-labelledby="model-price-provider"
-                dimension="sm"
-                placeholder={ANY_PROVIDER_LABEL}
-                value={provider}
-                items={matching([ANY_PROVIDER_LABEL, ...providers], provider)}
-                emptyMessage={PROVIDER_EMPTY_MESSAGE}
-                onValueChange={(value) => {
-                  resetFeedback();
-                  setProvider(fromProviderOption(value, ANY_PROVIDER_LABEL));
-                }}
-              />
-              <p className="comet-body-xs text-muted-slate">
-                Empty = any provider
-              </p>
             </div>
             {fieldProblems("model").map((problem, i) => (
               <p key={i} className="comet-body-xs col-span-2 text-destructive">
@@ -629,6 +630,37 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         {kind === "alias" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
+              <Label id="model-price-alias-provider">On provider</Label>
+              {readOnly ? (
+                <Input
+                  aria-labelledby="model-price-alias-provider"
+                  dimension="sm"
+                  className={READ_ONLY_INPUT}
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
+                  value={aliasProvider}
+                  readOnly
+                />
+              ) : (
+                <Autocomplete
+                  aria-labelledby="model-price-alias-provider"
+                  dimension="sm"
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
+                  value={aliasProvider}
+                  items={matching(providers, aliasProvider)}
+                  emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                  onValueChange={(value) => {
+                    resetFeedback();
+                    setAliasProvider(
+                      emptyIfLabel(value, SPANS_OWN_PROVIDER_LABEL),
+                    );
+                  }}
+                />
+              )}
+              <p className="comet-body-xs text-muted-slate">
+                Empty = the span&apos;s own provider
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label id="model-price-alias-model">Priced like</Label>
               {readOnly ? (
                 <Input
@@ -654,40 +686,6 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
                   }}
                 />
               )}
-            </div>
-            <div className="space-y-1.5">
-              <Label id="model-price-alias-provider">On provider</Label>
-              {readOnly ? (
-                <Input
-                  aria-labelledby="model-price-alias-provider"
-                  dimension="sm"
-                  className={READ_ONLY_INPUT}
-                  placeholder={SPANS_OWN_PROVIDER_LABEL}
-                  value={aliasProvider}
-                  readOnly
-                />
-              ) : (
-                <Autocomplete
-                  aria-labelledby="model-price-alias-provider"
-                  dimension="sm"
-                  placeholder={SPANS_OWN_PROVIDER_LABEL}
-                  value={aliasProvider}
-                  items={matching(
-                    [SPANS_OWN_PROVIDER_LABEL, ...providers],
-                    aliasProvider,
-                  )}
-                  emptyMessage={PROVIDER_EMPTY_MESSAGE}
-                  onValueChange={(value) => {
-                    resetFeedback();
-                    setAliasProvider(
-                      fromProviderOption(value, SPANS_OWN_PROVIDER_LABEL),
-                    );
-                  }}
-                />
-              )}
-              <p className="comet-body-xs text-muted-slate">
-                Empty = the span&apos;s own provider
-              </p>
             </div>
             {problems
               .filter((problem) => problem.field?.startsWith("alias_of"))
