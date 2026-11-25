@@ -33,6 +33,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -265,6 +266,30 @@ class TopicVectorsStorageTest {
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, inside, 1).toBuilder()
                 .traceCreatedAt(insideCreatedAt).build())).block();
         assertThat(findUnvectored(workspaceId, lower, createdAfter)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a window with no new done status reads at most the workspace's status rows: the summary and "
+            + "vector sides get no id_at bound of 1970 from an empty done")
+    void emptyWindowReadsNoSummaryOrVectorRows() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId(Instant.now().minus(2, ChronoUnit.DAYS));
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 1))).block();
+        // Summaries and vectors of other traces: only a 1970 bound reads them.
+        var others = IntStream.range(0, 50)
+                .mapToObj(i -> ID_GENERATOR.generateId(Instant.now().minus(2, ChronoUnit.DAYS)))
+                .toList();
+        labelsDAO.insert(others.stream().map(id -> outputLabel(workspaceId, projectId, id, 1)).toList()).block();
+        vectorsDAO.insert(others.stream().map(id -> vector(workspaceId, projectId, id, 1)).toList()).block();
+
+        assertThat(findUnvectored(workspaceId, Instant.now())).isEmpty();
+
+        var reads = findUnvectoredReads(workspaceId);
+        assertThat(reads.queries()).isEqualTo(1);
+        // done is read at most three times, one status row each time; with a 1970 bound the vector side adds its
+        // 50 rows (the summary side stays pruned by its IN on done).
+        assertThat(reads.rows()).isLessThanOrEqualTo(3);
     }
 
     @Test
@@ -822,6 +847,25 @@ class TopicVectorsStorageTest {
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id AND task_version = :task_version
                 LIMIT 1
                 """, Map.of("workspace_id", workspaceId, "trace_id", traceId.toString(), "task_version", taskVersion));
+    }
+
+    private record QueryReads(long queries, long rows) {
+    }
+
+    private QueryReads findUnvectoredReads(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS queries, sum(read_rows) AS read_rows
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("log_comment", "topics:find_unvectored:" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> new QueryReads(
+                        row.get("queries", Long.class), row.get("read_rows", Long.class))))))
+                .block();
     }
 
     private Map<String, String> idAtAndPartition(String table, String workspaceId) {

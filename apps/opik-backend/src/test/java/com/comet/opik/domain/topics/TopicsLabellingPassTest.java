@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -475,7 +476,7 @@ class TopicsLabellingPassTest {
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
+            TopicsTestData.startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     savedAt.minus(Duration.ofMinutes(1)));
             projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
@@ -550,7 +551,7 @@ class TopicsLabellingPassTest {
     private TopicWindowLabelService service(TopicWindowDAO windowDAO, TraceTopicsDAO traceTopicsDAO) {
         var metrics = TopicsMetricsReader.metrics(InMemoryMetricReader.create());
         var store = new TopicRunStore(opikConfig.getTopics(), template, traceTopicsDAO, mock(ProjectService.class),
-                ID_GENERATOR, metrics);
+                ID_GENERATOR, metrics, mock(WorkspaceNameService.class));
         return new TopicWindowLabelService(opikConfig.getTopics(), windowDAO, store, metrics, algorithm);
     }
 

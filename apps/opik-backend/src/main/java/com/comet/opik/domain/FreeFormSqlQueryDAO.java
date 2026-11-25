@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.clickhouse.client.api.query.Records;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
@@ -211,6 +212,10 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
 
     private static FreeFormSqlResult readResult(Records records) {
         try (records) {
+            var columns = records.getSchema().getColumns();
+            if (columns.size() != 1 || !RESULT_COLUMN.equals(columns.getFirst().getColumnName())) {
+                throw new NoSuchColumnException("Free-form SQL must return exactly one result column");
+            }
             List<JsonNode> rows = StreamSupport.stream(records.spliterator(), false)
                     .map(record -> JsonUtils.getJsonNodeFromString(record.getString(RESULT_COLUMN)))
                     .toList();

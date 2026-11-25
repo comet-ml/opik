@@ -1,9 +1,9 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
-import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
@@ -32,7 +32,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -97,8 +96,6 @@ class TopicsRunServiceFaultsTest {
         when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         projectService = mock(ProjectService.class);
-        when(projectService.findByIds(workspaceId, Set.of(projectId)))
-                .thenReturn(List.of(Project.builder().id(projectId).name("p").build()));
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
@@ -112,7 +109,8 @@ class TopicsRunServiceFaultsTest {
         when(idGenerator.generateId()).thenAnswer(invocation -> IDS.generate());
         var metrics = TopicsMetricsReader.metrics(metricReader);
         var config = TestConfigUtils.loadConfigTest().getTopics();
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                mock(WorkspaceNameService.class));
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         algorithm = spy(TopicsTestAlgorithm.algorithm());

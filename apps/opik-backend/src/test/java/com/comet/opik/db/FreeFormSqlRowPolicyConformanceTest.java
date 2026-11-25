@@ -164,6 +164,17 @@ class FreeFormSqlRowPolicyConformanceTest {
                 .filter(table -> "1".equals(single(admin, "EXISTS TABLE %s.%s".formatted(DATABASE_NAME, table))));
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"traces", "spans"})
+    @DisplayName("resolved queries retain the logical table name in both topologies")
+    void resolvedTreeKeepsLogicalTableName(String table) {
+        var lines = admin.queryAll("EXPLAIN QUERY TREE SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table))
+                .stream().map(row -> row.getString(1).stripLeading()).toList();
+        assertThat(lines).anyMatch(line -> line.startsWith("TABLE ")
+                && line.contains("table_name: %s.%s".formatted(DATABASE_NAME, table)));
+        assertThat(lines).noneMatch(line -> line.contains("table_name: %s.%s_local".formatted(DATABASE_NAME, table)));
+    }
+
     /**
      * The rows of {@code table} seeded in one project, or across a workspace's two projects: fixed by the seeding, not
      * read back from the tables under test, so a row lost on the way in fails rather than lowering the expectation.

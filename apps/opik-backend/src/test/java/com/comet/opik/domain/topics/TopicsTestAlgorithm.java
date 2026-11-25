@@ -43,6 +43,13 @@ final class TopicsTestAlgorithm {
         config.setRecentDays(7);
         config.setRetireShare(0.005);
         config.setRetireNights(3);
+        config.setNightlyMinTightness(0.80);
+        config.setNightlyBigShare(0.02);
+        config.setNightlySameMemory(0.95);
+        config.setNightlyVerifyTokensPerPair(25);
+        config.setNightlyTopicExamples(4);
+        config.setVerifyTopicExamples(3);
+        config.setVerifyGroupExamples(5);
         return config;
     }
 

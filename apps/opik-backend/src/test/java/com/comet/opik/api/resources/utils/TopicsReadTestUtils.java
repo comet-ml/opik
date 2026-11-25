@@ -137,11 +137,25 @@ public class TopicsReadTestUtils {
      */
     public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         var runDAO = handle.attach(TopicProjectDAO.class);
-        runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
-                savedAt.minus(Duration.ofMinutes(5)));
+        startRun(handle, workspaceId, projectId, runId, savedAt.minus(Duration.ofMinutes(5)));
         runDAO.saveList(workspaceId, projectId, null, runId, savedAt,
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
         runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+    }
+
+    /**
+     * Starts run {@code runId} at {@code startedAt} as the queue does: queued, then claimed by a pod. It is a nightly
+     * update when the project has a list, else a discovery run.
+     */
+    public static void startRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant startedAt) {
+        var runDAO = handle.attach(TopicProjectDAO.class);
+        runDAO.ensureRow(workspaceId, projectId);
+        var listed = runDAO.findProjects(workspaceId, List.of(projectId)).getFirst().listRunId() != null;
+        var mode = listed ? TopicProject.RunMode.UPDATE : TopicProject.RunMode.DISCOVERY;
+        if (runDAO.queue(workspaceId, projectId, runId, mode, startedAt) != 1
+                || runDAO.claim(workspaceId, projectId, runId, startedAt, startedAt.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
     }
 
     private static float[] unit() {
