@@ -696,11 +696,13 @@ retention removes it.
 
 ## Topic on arrival
 
-A new trace gets a topic within about a minute, before the next run of its project. Right after the vectors tick
-writes a chunk of vectors, each trace of the chunk whose trace is still live gets the topic of the nearest saved
-prototype of its project. The rule is the algorithm's labeller (`TopicAlgorithm.labeller`), the same rule the
-labelling pass uses. Code: `TopicsArrivalService`, called from `TopicVectorWriter` after each write, in the fresh phase
-and in the backfill phase.
+A new trace gets a topic within about a minute, before the next run of its project. The vectors tick reads a
+workspace's traces (a fresh read, or a backfill turn), embeds them and writes their vectors chunk by chunk. Right after
+the read's last chunk, each of its traces that is still live gets the topic of the nearest saved prototype of its
+project, in one labelling and one `trace_topics` insert per read. A read that ends early (no time left, a failed chunk)
+still labels the vectors written before. The rule is the algorithm's labeller (`TopicAlgorithm.labeller`), the same
+rule the labelling pass uses. Code: `TopicsArrivalService`, called from `TopicVectorWriter`, in the fresh phase and in
+the backfill phase.
 
 Only a workspace listed at stage `arrival` or later in `TOPICS_ENABLED_WORKSPACES` gets arrival rows (`<id>:arrival`,
 `<id>:nightly`, `<id>:ui`, or the id alone). The tick reads the listed stages once per tick.
@@ -741,15 +743,15 @@ vectors and runs go on, and its traces get no arrival row. To stop it everywhere
 
 - Arrival is best effort. A failure is logged and counted. The tick writes and counts its vectors as without arrival.
 - Any failure stops arrival for the workspace for the rest of the tick: the read, the insert, or the labelling. The
-  traces of its later chunks count as `after_failure`. The next run labels them. Other workspaces go on.
+  traces of its later reads count as `after_failure`. The next run labels them. Other workspaces go on.
 - A failed read of the listed stages is logged (`Topic arrival stage read failed`), and no workspace gets arrival that
   tick. The vectors go on.
 - A shutdown is not a failure. It cancels the tick, its arrival steps included.
 - The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
-  before the tick's deadline. A step (the read, or the labelling and insert of one chunk) that would start with less
-  than `topics.arrival.minStepTime` left does not start: its traces count as `over_budget`. A step that has built its
-  rows inserts them with the time left; only when no time is left do they count as `over_budget`. A read or insert
-  that runs out of time fails with `error_type = TimeoutException`.
+  before the tick's deadline. A step (the saved lists read, or the labelling and insert of one read) that would start
+  with less than `topics.arrival.minStepTime` left does not start: its traces count as `over_budget`. A step that has
+  built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A lists
+  read or insert that runs out of time fails with `error_type = TimeoutException`.
 
 ### What to watch
 

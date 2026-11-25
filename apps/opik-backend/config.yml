@@ -3094,14 +3094,15 @@ topics:
   #  workspace runs only while it is also enabled in the ai_label_workspaces table. Set in Helm, so a change needs a
   #  deploy
   enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
-  #  Topic on arrival: after each vectors insert, every trace of a project with a saved topic list gets the topic of
-  #  its nearest saved prototype (trace_topics, source arrival, no run_id). The next run's row for the trace wins. Only
-  #  for a workspace listed at the arrival stage or a later one in enabledWorkspaces
+  #  Topic on arrival: after the vectors of one workspace read are written, every live trace of a project with a
+  #  saved topic list gets the topic of its nearest saved prototype (trace_topics, source arrival, no run_id). The
+  #  next run's row for the trace wins. Only for a workspace listed at the arrival stage or a later one in
+  #  enabledWorkspaces
   arrival:
     #  Default: 5s
     #  Description: The arrival steps of one workspace in one vectors tick (the saved lists read and the trace_topics
-    #  insert after each vectors insert) take this in total, and each ends before the tick's budget ends. Any failure
-    #  stops arrival for the workspace for the rest of the tick
+    #  insert after each workspace read's vectors) take this in total, and each ends before the tick's budget ends.
+    #  Any failure stops arrival for the workspace for the rest of the tick
     timeout: ${TOPICS_ARRIVAL_TIMEOUT:-5s}
     #  Default: 1s
     #  Description: A step starts only with at least this much left of topics.arrival.timeout and of the tick's

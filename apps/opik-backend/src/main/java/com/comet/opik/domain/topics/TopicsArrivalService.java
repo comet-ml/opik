@@ -24,8 +24,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Topic on arrival: right after the vectors tick writes a chunk of vectors, each trace gets the topic of its project's
- * saved list, as a {@code trace_topics} row with source {@code arrival} and no run id.
+ * Topic on arrival: right after the vectors tick writes the vectors of one workspace read (a fresh read or a backfill
+ * turn), each of their live traces gets the topic of its project's saved list, as a {@code trace_topics} row with
+ * source {@code arrival} and no run id: one labelling and one insert per read.
  *
  * <p>The rule is the algorithm's {@link TopicAlgorithm#labeller}, the same one the labelling pass uses, made from the
  * project's topics and the list's known-Other vectors. A workspace's turn reads the saved lists of its read's projects
@@ -42,7 +43,7 @@ import java.util.stream.Collectors;
  *
  * <p>Best effort: a failure is logged and counted, never returned as an error, and the tick writes and counts its
  * vectors as without arrival; the next run labels those traces. Any failure (the read, the labelling or the insert)
- * stops arrival for the workspace for the rest of the tick: its later chunks count as
+ * stops arrival for the workspace for the rest of the tick: its later reads count as
  * {@link ArrivalOutcome#AFTER_FAILURE}.
  *
  * <p>Bounded in time: the steps of one workspace in one tick take {@code topics.arrival.timeout} in all, and each one
@@ -79,7 +80,7 @@ class TopicsArrivalService {
         }
         var left = left(steps, budget);
         if (left.compareTo(config.getArrival().getMinStepTime().toJavaDuration()) < 0) {
-            // Not read: the chunks of these projects count as over_budget.
+            // Not read: the vectors of these projects count as over_budget.
             return Mono.just(steps);
         }
         return timed(workspace, steps, store.readSavedLists(workspace.id(), toRead)
@@ -102,7 +103,7 @@ class TopicsArrivalService {
     }
 
     /**
-     * Labels the vectors one write put in, all of one workspace, and writes their {@code trace_topics} rows, within
+     * Labels the live vectors one workspace read wrote, and writes their {@code trace_topics} rows, within
      * what is left of the workspace's {@code topics.arrival.timeout} and of the tick's budget. Never fails.
      */
     Mono<ArrivalSteps> label(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull List<TopicVector> vectors,
@@ -229,7 +230,7 @@ class TopicsArrivalService {
         return Labelled.builder().rows(rows).topics(topics).other(other).noPrototypes(noPrototypes).build();
     }
 
-    /** One chunk's rows, with the count of traces per outcome: topic, other, and no_prototypes (no row). */
+    /** One read's rows, with the count of traces per outcome: topic, other, and no_prototypes (no row). */
     @Builder(toBuilder = true)
     private record Labelled(List<TraceTopic> rows, int topics, int other, int noPrototypes) {
     }

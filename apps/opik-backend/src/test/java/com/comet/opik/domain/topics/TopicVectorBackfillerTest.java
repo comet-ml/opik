@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -258,7 +259,7 @@ class TopicVectorBackfillerTest {
         when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
         when(setup.writer.embedAndWrite(any(), any(), any(), any(), any()))
-                .thenReturn(Mono.just(ChunkWrite.empty(ArrivalSteps.OFF)));
+                .thenReturn(Mono.just(new ChunkWrite(TickResult.EMPTY, Set.of(), ArrivalSteps.OFF)));
         var workspaces = mock(TopicWorkspaceService.class);
         when(workspaces.enabledWorkspaceIds()).thenReturn(List.of(setup.workspaceId));
         when(workspaces.vectorsWatermarks(any())).thenReturn(Map.of());

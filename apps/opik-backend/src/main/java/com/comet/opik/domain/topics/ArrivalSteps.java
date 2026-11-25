@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * One workspace's topic on arrival in one vectors tick, as its steps leave it: each step of
- * {@link TopicsArrivalService} returns the next value, and the vectors writes carry it from one chunk to the next.
+ * {@link TopicsArrivalService} returns the next value, and the vectors tick carries it from one workspace read to the next.
  *
  * @param on the workspace is listed at the arrival stage or a later one
  * @param read the projects whose saved list was read this tick

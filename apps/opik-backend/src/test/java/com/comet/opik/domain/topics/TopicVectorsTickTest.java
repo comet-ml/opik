@@ -95,6 +95,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -121,6 +122,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -1306,8 +1308,8 @@ class TopicVectorsTickTest {
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
             assertThat(countTraceTopicRows(workspaceId)).isZero();
-            // The read comes before the embed, so its failure leaves all 5 traces untried. Chunks of 2: an insert or a
-            // labelling fails on the first chunk, and the other 3 traces are not tried.
+            // The lists read comes before the embed, so its failure leaves all 5 traces untried. An insert or a labelling
+            // takes the read's 5 traces at once, after its last chunk: nothing is left for a later step.
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
                     .containsExactly(failure(workspaceId, phase, "IllegalStateException"));
             switch (phase) {
@@ -1317,13 +1319,13 @@ class TopicVectorsTickTest {
             }
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
                     "workspace_id", workspaceId))
-                    .isEqualTo(phase.equals("read") ? 5 : 3);
+                    .isEqualTo(phase.equals("read") ? 5 : 0);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic")).isZero();
         }
 
         @Test
         @DisplayName("a trace_topics insert that hangs is cut at topics.arrival.timeout; the vectors stay written, it "
-                + "counts as a TimeoutException, and the later chunks do not wait")
+                + "counts as a TimeoutException, and the tick does not wait for it")
         void slowInsert() {
             var hanging = storeWith(spied -> doReturn(Mono.never()).when(spied).insertTraceTopics(any(), any()));
             var meter = InMemoryMetricReader.create();
@@ -1342,14 +1344,42 @@ class TopicVectorsTickTest {
             assertThat(result.written()).isEqualTo(5);
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
-            // Chunks of 2: the first chunk's insert is cut about 2s after its step started; the other two do not try.
+            // The read's one insert, after its last chunk, is cut about 2s after the lists read started.
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
                     .containsExactly(failure(workspaceId, "insert", "TimeoutException"));
-            // The read's step and the cut labelling step.
+            verify(hanging, times(1)).insertTraceTopics(any(), any());
+            // The lists read's step and the cut labelling step.
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.duration_seconds")).isBetween(1.8, 5.0);
-            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
-                    "workspace_id", workspaceId))
-                    .isEqualTo(3);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+        }
+
+        @Test
+        @DisplayName("a read whose later chunk fails to insert its vectors still labels the chunks written before and "
+                + "after it, in one insert; the failed chunk's traces count as insert_failed and get no row")
+        void laterChunkFails() {
+            var failingDAO = spy(vectorsDAO);
+            doCallRealMethod().doReturn(Mono.error(new IllegalStateException("topic_vectors down")))
+                    .doCallRealMethod().when(failingDAO).insert(any());
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter), workspaceService, failingDAO);
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            saveList(workspaceId, projectId, List.of(billing), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(1), intent(2), intent(3), intent(4)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            // Chunks of 2: the second chunk's vectors insert fails.
+            assertThat(result.written()).isEqualTo(3);
+            assertThat(result.skipped()).isEqualTo(Map.of(SkipReason.INSERT_FAILED, 2));
+            var written = tables.vectors(workspaceId, traceIds).stream().map(TopicVector::traceId).toList();
+            assertThat(written).hasSize(3);
+            assertThat(arrivalRows(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(expectedArrivalRows(
+                    workspaceId, projectId, written.stream().collect(Collectors.toMap(id -> id, id -> billing.id()))));
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
         }
 
         @Test
@@ -1385,16 +1415,15 @@ class TopicVectorsTickTest {
         }
 
         @Test
-        @DisplayName("a slow trace_topics insert that still answers takes at most topics.arrival.timeout of the "
-                + "workspace's tick in all: once the steps' time together leaves less than a second, the later chunks "
-                + "count as over_budget, and every vector is written")
+        @DisplayName("a slow trace_topics insert that still answers within topics.arrival.timeout writes the rows of "
+                + "all the read's chunks in one insert")
         void slowButWorkingInsert() {
             var slow = storeWith(spied -> doAnswer(invocation -> Mono.delay(Duration.ofMillis(1_100)).then(
                     store.insertTraceTopics(invocation.getArgument(0), invocation.getArgument(1))))
                     .when(spied).insertTraceTopics(any(), any()));
             var meter = InMemoryMetricReader.create();
             var tick = tickWith(arrival(meter, slow, algorithm));
-            // 3s in all: two steps of about 1.1s fit, the third has about 0.8s left.
+            // 3s in all: the read's one insert of about 1.1s fits.
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(3));
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
@@ -1408,13 +1437,13 @@ class TopicVectorsTickTest {
             assertThat(result.written()).isEqualTo(6);
             assertThat(result.skipped()).isEmpty();
             assertThat(tables.vectors(workspaceId, traceIds)).hasSize(6);
-            verify(slow, times(2)).insertTraceTopics(any(), any());
+            verify(slow, times(1)).insertTraceTopics(any(), any());
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
                     workspaceId))
-                    .isEqualTo(4);
+                    .isEqualTo(6);
             assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
                     "workspace_id", workspaceId))
-                    .isEqualTo(2);
+                    .isZero();
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
         }
 
@@ -1427,7 +1456,8 @@ class TopicVectorsTickTest {
                     .when(spied).insertTraceTopics(any(), any()));
             var meter = InMemoryMetricReader.create();
             var tick = tickWith(arrival(meter, slow, algorithm));
-            // 2s per workspace: its first step of about 1.1s fits, its second has about 0.9s left.
+            // 2s per workspace: its one insert of about 1.1s fits. A budget shared by the tick would leave the second
+            // workspace about 0.9s, under the 1s minStepTime.
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
             config().setEmbedBatchSize(2);
             // One workspace after the other, so a budget shared by the tick would leave the second one nothing.
@@ -1444,10 +1474,10 @@ class TopicVectorsTickTest {
             for (var workspaceId : workspaceIds) {
                 assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic",
                         "workspace_id", workspaceId))
-                        .isEqualTo(2);
+                        .isEqualTo(4);
                 assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
                         "workspace_id", workspaceId))
-                        .isEqualTo(2);
+                        .isZero();
             }
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
         }
@@ -1668,7 +1698,13 @@ class TopicVectorsTickTest {
     }
 
     private TopicVectorsTickService tickWith(TopicsArrivalService arrival, TopicWorkspaceService workspaces) {
-        var arrivalWriter = new TopicVectorWriter(vectorsDAO, embedder, vectorsMetrics, arrival);
+        return tickWith(arrival, workspaces, vectorsDAO);
+    }
+
+    /** The tick with its own arrival and workspaces, and a writer that inserts vectors through {@code writerDAO}. */
+    private TopicVectorsTickService tickWith(TopicsArrivalService arrival, TopicWorkspaceService workspaces,
+            TopicVectorsDAO writerDAO) {
+        var arrivalWriter = new TopicVectorWriter(writerDAO, embedder, vectorsMetrics, arrival);
         var arrivalBackfiller = new TopicVectorBackfiller(opikConfig.getTopics(), vectorsDAO, backfillService,
                 arrivalWriter, vectorsMetrics);
         return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaces,

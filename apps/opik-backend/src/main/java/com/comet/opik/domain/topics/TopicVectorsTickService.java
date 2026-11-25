@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
  * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
  * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
  *
- * <p>In both phases, each written chunk's traces get their topic on arrival ({@link TopicsArrivalService}), for a
+ * <p>In both phases, the live traces of each read's written vectors get their topic on arrival ({@link TopicsArrivalService}), for a
  * workspace listed at the arrival stage or a later one, read once per tick.
  *
  * <p>A workspace is read only with time left for the read and one embed call, so the tick never spends its budget
