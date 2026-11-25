@@ -15,7 +15,6 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -57,22 +56,6 @@ public interface TopicDAO {
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId AND id IN (<ids>)")
     int deleteTopics(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @BindList("ids") Collection<UUID> ids);
-
-    @SqlQuery("""
-            SELECT DISTINCT project_id FROM topics
-            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            """)
-    List<UUID> findProjectsWithTopics(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds);
-
-    /** The projects of {@code workspaceIds} with at least one topic: the nightly update's candidates. */
-    @SqlQuery("SELECT DISTINCT workspace_id, project_id FROM topics WHERE workspace_id IN (<workspaceIds>)")
-    List<TopicProjectKey> findProjectsWithTopics(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    /** Of {@code projectIds}, those the workspace still has. A plain read: it locks no {@code projects} row. */
-    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
-    Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
-            @BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,

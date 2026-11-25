@@ -1169,10 +1169,6 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
-  nightly:
-    enabled: true
-    schedule: "0 0 2 * * ?"
-    budget: 2h
 
 # Python evaluator configuration
 pythonEvaluator:

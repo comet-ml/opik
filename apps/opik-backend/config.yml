@@ -2966,17 +2966,6 @@ topics:
     #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
     #  bounded however many projects went at once. From 1 to 10000
     deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
-  nightly:
-    #  Default: true
-    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
-    #  topics.enabled
-    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
-    #  Default: 0 0 2 * * ? (02:00 UTC)
-    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
-    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
-    #  Default: 2h
-    #  Description: No project starts after this much of the night; the rest run the next night. At most 20h
-    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it

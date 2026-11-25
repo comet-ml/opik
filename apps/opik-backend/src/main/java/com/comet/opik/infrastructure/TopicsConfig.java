@@ -11,7 +11,6 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -47,9 +46,6 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private StorageConfig storage;
-
-    @Valid @NotNull @JsonProperty
-    private NightlyConfig nightly;
 
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
@@ -444,25 +440,6 @@ public class TopicsConfig {
             log.error("Topics config is not valid: {}", exception.getMessage());
             return false;
         }
-    }
-
-    /** The nightly job: updates the topic list of each project that has one. */
-    @Data
-    public static class NightlyConfig {
-
-        /** Runs only when {@code topics.enabled} is on too. */
-        @JsonProperty
-        private boolean enabled;
-
-        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
-        @NotBlank @JsonProperty
-        private String schedule;
-
-        /** No project starts after this much of the night has passed; the rest run the next night. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
-        private Duration budget;
     }
 
     @Data
