@@ -28,7 +28,7 @@ class TopicsCountsTest {
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final int WINDOW_DAYS = 30;
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 3);
-    private static final LocalDate FIRST_BUILD = TODAY.minusDays(20);
+    private static final LocalDate DISCOVERY = TODAY.minusDays(20);
     private static final String WORKSPACE_ID = "ws-1";
     private static final UUID PROJECT_ID = ID_GENERATOR.generateId();
     private static final Instant LAST_RUN = TODAY.atTime(2, 40).toInstant(ZoneOffset.UTC);
@@ -39,7 +39,7 @@ class TopicsCountsTest {
             .projectId(PROJECT_ID)
             .workspaceId(WORKSPACE_ID)
             .savedRuns(3)
-            .firstBuiltAt(FIRST_BUILD.atTime(2, 0).toInstant(ZoneOffset.UTC))
+            .firstBuiltAt(DISCOVERY.atTime(2, 0).toInstant(ZoneOffset.UTC))
             .lastSuccessAt(LAST_RUN)
             .windowUntil(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC))
             .labelsComplete(true)
@@ -49,7 +49,7 @@ class TopicsCountsTest {
     @DisplayName("ready body: the window, the last run and the total; a series of 30 days, oldest first, today last, "
             + "missing days as 0")
     void series() {
-        var topic = topic(FIRST_BUILD);
+        var topic = topic(DISCOVERY);
         var body = fold(List.of(topic), List.of(
                 row(topic, TODAY.minusDays(29), 2),
                 row(topic, TODAY.minusDays(10), 5),
@@ -71,7 +71,7 @@ class TopicsCountsTest {
     @Test
     @DisplayName("a 14-day window: series of 14 days for the topics and Other, the window starts at today - 13")
     void shorterWindow() {
-        var topic = topic(FIRST_BUILD);
+        var topic = topic(DISCOVERY);
         var body = TopicsCounts.ready(TODAY, 14, List.of(topic), STATE, List.of(
                 row(topic, TODAY.minusDays(13), 4),
                 TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(1).build()));
@@ -87,12 +87,12 @@ class TopicsCountsTest {
     @Test
     @DisplayName("rank: by count, most first; ties by born, then id")
     void rank() {
-        var big = topic(FIRST_BUILD);
-        var biggest = topic(FIRST_BUILD);
-        var tieOlder = topic(FIRST_BUILD);
-        var tieYounger = topic(FIRST_BUILD.plusDays(2));
-        var lowId = topic(new UUID(1L, 1L), FIRST_BUILD.plusDays(5));
-        var highId = topic(new UUID(9L, 9L), FIRST_BUILD.plusDays(5));
+        var big = topic(DISCOVERY);
+        var biggest = topic(DISCOVERY);
+        var tieOlder = topic(DISCOVERY);
+        var tieYounger = topic(DISCOVERY.plusDays(2));
+        var lowId = topic(new UUID(1L, 1L), DISCOVERY.plusDays(5));
+        var highId = topic(new UUID(9L, 9L), DISCOVERY.plusDays(5));
         var body = fold(List.of(highId, tieYounger, biggest, lowId, tieOlder, big), List.of(
                 row(big, TODAY, 50),
                 row(biggest, TODAY, 90),
@@ -109,8 +109,8 @@ class TopicsCountsTest {
     @Test
     @DisplayName("share: count over total traces; the topics' shares and Other's series add up to 1; 0 with no rows")
     void share() {
-        var first = topic(FIRST_BUILD);
-        var second = topic(FIRST_BUILD);
+        var first = topic(DISCOVERY);
+        var second = topic(DISCOVERY);
         var body = fold(List.of(first, second), List.of(
                 row(first, TODAY, 3),
                 row(second, TODAY.minusDays(4), 2),
@@ -128,14 +128,14 @@ class TopicsCountsTest {
     }
 
     @Test
-    @DisplayName("is_new: never a first build's topic; a later topic born today - 6 is New, born today - 7 is not")
+    @DisplayName("is_new: never a discovery run's topic; a later topic born today - 6 is New, born today - 7 is not")
     void isNew() {
-        var firstBuild = topic(FIRST_BUILD);
+        var discovered = topic(DISCOVERY);
         var sixDays = topic(TODAY.minusDays(6));
         var sevenDays = topic(TODAY.minusDays(7));
-        var body = fold(List.of(firstBuild, sixDays, sevenDays), List.of());
+        var body = fold(List.of(discovered, sixDays, sevenDays), List.of());
 
-        assertThat(stats(body, firstBuild).isNew()).isFalse();
+        assertThat(stats(body, discovered).isNew()).isFalse();
         assertThat(stats(body, sixDays).isNew()).isTrue();
         assertThat(stats(body, sevenDays).isNew()).isFalse();
 
@@ -149,7 +149,7 @@ class TopicsCountsTest {
     @Test
     @DisplayName("Other: rows of ids that are not live count as Other, with Other's own rows")
     void notLiveIdsCountAsOther() {
-        var live = topic(FIRST_BUILD);
+        var live = topic(DISCOVERY);
         var retiredId = ID_GENERATOR.generateId();
         var body = fold(List.of(live), List.of(
                 row(live, TODAY, 5),
@@ -173,8 +173,8 @@ class TopicsCountsTest {
     @Test
     @DisplayName("a live topic with no rows is listed with 30 zero days")
     void topicWithoutRows() {
-        var quiet = topic(FIRST_BUILD);
-        var busy = topic(FIRST_BUILD);
+        var quiet = topic(DISCOVERY);
+        var busy = topic(DISCOVERY);
         var body = fold(List.of(quiet, busy), List.of(row(busy, TODAY, 1)));
 
         assertThat(stats(body, quiet)).isEqualTo(stats(quiet, 2, 0, 0.0, days(Map.of())));
@@ -184,7 +184,7 @@ class TopicsCountsTest {
     @DisplayName("labelled_from: the first day with any row, Other included; days before it are 0; omitted with no "
             + "rows")
     void labelledFrom() {
-        var topic = topic(FIRST_BUILD);
+        var topic = topic(DISCOVERY);
         var body = fold(List.of(topic), List.of(
                 TopicDayCount.builder().topicId(ID_GENERATOR.generateId()).day(TODAY.minusDays(4)).traces(1).build(),
                 row(topic, TODAY.minusDays(3), 6),
@@ -218,7 +218,7 @@ class TopicsCountsTest {
     private static TopicProject run(TopicProject.RunStatus status) {
         return STATE.toBuilder()
                 .runId(ID_GENERATOR.generateId())
-                .runMode(TopicProject.RunMode.NIGHTLY_UPDATE)
+                .runMode(TopicProject.RunMode.UPDATE)
                 .runStatus(status)
                 .runStartedAt(LAST_RUN)
                 .build();

@@ -33,7 +33,7 @@ public class TopicsConfig {
     private AlgorithmConfig algorithm;
 
     @Valid @NotNull @JsonProperty
-    private BuildConfig build;
+    private RunConfig run;
 
     @Valid @NotNull @JsonProperty
     private ReadConfig read;
@@ -80,6 +80,14 @@ public class TopicsConfig {
 
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
+
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A discovery run over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
 
         @JsonProperty
         @Min(1) @Max(100_000) private int nightlyMinCandidate;
@@ -143,20 +151,78 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
+    /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
-    public static class BuildConfig {
+    public static class RunConfig {
 
         @Valid @NotNull @JsonProperty
-        private BuildReadConfig read;
+        private RunReadConfig read;
+
+        /** One project's run is stopped and failed with {@code timeout} after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 2, unit = TimeUnit.HOURS)
+        private Duration projectTimeout;
+
+        /** A project gets a discovery run when its window holds at least this many traces with a vector. */
+        @JsonProperty
+        @Min(2) @Max(100_000) private int minVectors;
+
+        /** The window: this many whole UTC days before the day the window ends on. */
+        @JsonProperty
+        @Min(1) @Max(90) private int windowDays;
+
+        /**
+         * A larger window is sampled: the run finds topics on this many of its traces, spread evenly by a hash of the
+         * trace id, and then labels every trace of the window.
+         */
+        @JsonProperty
+        @Min(100) @Max(100_000) private int maxVectors;
+
+        /** The deadline of the LLM call that names the groups. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration llmDeadline;
+
+        /**
+         * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
+         * of its {@code trace_topics} insert.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration readTimeout;
+
+        /** Retries of the {@code trace_topics} insert after the save's commit. */
+        @JsonProperty
+        @Min(0) @Max(10) private int insertRetries;
+
+        /** The first backoff before an insert retry; it doubles each time. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration insertBackoff;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.llmDeadline must be shorter than topics.run.projectTimeout") public boolean isLlmDeadlineValid() {
+            return llmDeadline == null || projectTimeout == null
+                    || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a run needs. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.run.maxVectors must be at least topics.run.minVectors") public boolean isMaxVectorsValid() {
+            return maxVectors >= minVectors;
+        }
     }
 
     /**
-     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
-     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     * The ClickHouse guards of the run's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the run reads a whole window, the window read about three times.
      */
     @Data
-    public static class BuildReadConfig implements ReadGuards {
+    public static class RunReadConfig implements ReadGuards {
 
         @JsonProperty
         @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
@@ -182,7 +248,7 @@ public class TopicsConfig {
         private Duration countSlice;
     }
 
-    /** The ClickHouse guards a topics read binds: the build's and the read API's are two sets of them. */
+    /** The ClickHouse guards a topics read binds: the run's and the read API's are two sets of them. */
     public interface ReadGuards {
 
         long getMaxRowsToRead();
@@ -197,7 +263,7 @@ public class TopicsConfig {
     }
 
     /**
-     * The read API's ClickHouse guards, apart from the build's: a page request, not a background job. Its reads (the
+     * The read API's ClickHouse guards, apart from the run's: a page request, not a background job. Its reads (the
      * per topic and day counts, the collecting count) share one time budget.
      */
     @Data
@@ -319,6 +385,12 @@ public class TopicsConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration embedTimeout;
 
+        /** How much longer than the rest the leader lock lasts, for the insert after the last embed call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
         @Valid @NotNull @JsonProperty
         private FindConfig find;
 
@@ -374,7 +446,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick; adds to the leader lock's lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;

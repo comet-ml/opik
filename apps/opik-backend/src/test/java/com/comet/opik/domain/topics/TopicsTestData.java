@@ -147,7 +147,7 @@ final class TopicsTestData {
     }
 
     /**
-     * What a saved first build leaves in MySQL for a project: its row with the run saved two hours after
+     * What a saved discovery run leaves in MySQL for a project: its row with the run saved two hours after
      * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
@@ -157,7 +157,7 @@ final class TopicsTestData {
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     savedAt.minus(Duration.ofMinutes(1)));
             projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);

@@ -850,6 +850,12 @@ def test_chrf_metric__non_numeric_beta__raises_value_error(beta):
         ChrF(beta=beta, track=False)
 
 
+@pytest.mark.parametrize("beta", [math.nan, math.inf, -math.inf])
+def test_chrf_metric__non_finite_beta__raises_value_error(beta):
+    with pytest.raises(ValueError, match="beta must be finite"):
+        ChrF(beta=beta, track=False)
+
+
 @pytest.mark.parametrize("char_order", ["6", 6.0, None, True])
 def test_chrf_metric__non_integer_char_order__raises_value_error(char_order):
     with pytest.raises(ValueError, match="char_order must be an integer"):

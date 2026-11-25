@@ -80,7 +80,7 @@ class NightState {
 
     /**
      * Step f, after the final assignment. A topic's share is its count over the window's traces; a topic born after
-     * the first build is measured as any other. A live topic that holds no trace retires tonight. Otherwise its streak
+     * the discovery run is measured as any other. A live topic that holds no trace retires tonight. Otherwise its streak
      * grows on a night with a share below {@code retireShare} and goes back to 0 on any other; at {@code retireNights}
      * it retires. No cap rule is needed: a birth on a full list replaces a topic, so the live list never grows past the
      * maximum.

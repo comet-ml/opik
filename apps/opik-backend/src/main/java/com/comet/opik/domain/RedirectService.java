@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.TraceDetails;
+import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +41,7 @@ class RedirectServiceImpl implements RedirectService {
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull TraceService traceService;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull @Config("authentication") AuthenticationConfig authentication;
 
     @Override
     public String projectRedirectUrl(@NotNull UUID traceId, String workspaceName, @NotNull String opikBEPath) {
@@ -46,7 +49,7 @@ class RedirectServiceImpl implements RedirectService {
         TraceDetails traceDetails = traceService.getTraceDetailsById(traceId).block();
         String resolvedWorkspaceName = Optional.ofNullable(workspaceName)
                 .orElseGet(() -> workspaceNameService.getWorkspaceName(
-                        traceDetails.workspaceId(), getReactBaseUrl(opikBEPath)));
+                        traceDetails.workspaceId(), authentication.getReactService().url()));
 
         return TRACE_REDIRECT_URL.formatted(feBaseUrl(opikBEPath), resolvedWorkspaceName,
                 traceDetails.projectId(), traceId);
@@ -55,7 +58,7 @@ class RedirectServiceImpl implements RedirectService {
     @Override
     public String datasetRedirectUrl(@NotNull UUID datasetId, String workspaceName, @NotNull String OpikBEBaseUrl) {
 
-        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId);
 
         return DATASET_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId);
     }
@@ -64,7 +67,7 @@ class RedirectServiceImpl implements RedirectService {
     public String experimentsRedirectUrl(@NotNull UUID datasetId, @NotNull UUID experimentId, String workspaceName,
             @NotNull String OpikBEBaseUrl) {
 
-        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId);
 
         var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
         return EXPERIMENT_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId,
@@ -74,18 +77,19 @@ class RedirectServiceImpl implements RedirectService {
     @Override
     public String optimizationsRedirectUrl(UUID datasetId, UUID optimizationId, String workspaceName,
             String OpikBEBaseUrl) {
-        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId);
 
         var optimizationIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(optimizationId), StandardCharsets.UTF_8);
         return OPTIMIZATION_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId,
                 optimizationIdEncoded);
     }
 
-    private String resolveWorkspaceNameByDatasetId(String workspaceName, UUID datasetId, String OpikBEBaseUrl) {
+    private String resolveWorkspaceNameByDatasetId(String workspaceName, UUID datasetId) {
         return Optional.ofNullable(workspaceName)
                 .orElseGet(() -> {
                     String workspaceId = datasetService.findWorkspaceIdByDatasetId(datasetId);
-                    return workspaceNameService.getWorkspaceName(workspaceId, getReactBaseUrl(OpikBEBaseUrl));
+                    return workspaceNameService.getWorkspaceName(workspaceId,
+                            authentication.getReactService().url());
                 });
     }
 
@@ -93,9 +97,5 @@ class RedirectServiceImpl implements RedirectService {
         return Optional.ofNullable(
                 opikBEBaseUrl.contains("/api") ? opikBEBaseUrl.substring(0, opikBEBaseUrl.indexOf("/api")) : null)
                 .orElseThrow(() -> new RuntimeException("Unexpected opikBEBaseUrl %s".formatted(opikBEBaseUrl)));
-    }
-
-    private String getReactBaseUrl(String opikBEBaseUrl) {
-        return opikBEBaseUrl.replace("/opik", "");
     }
 }
