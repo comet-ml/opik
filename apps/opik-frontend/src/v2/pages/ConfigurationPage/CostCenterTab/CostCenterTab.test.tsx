@@ -788,16 +788,20 @@ describe("CostCenterTab", () => {
       );
       const formula = screen.getByTestId("price-formula");
       expect(formula).toHaveTextContent(
-        "cost=Tin·Pin+Tout·Pout+Tcr·Pcr+Tcw·Pcw1,000,000",
+        "cost=Tin·$2.00+Tout·$10.00+Tcr·$1.25+Tcw·$2.001,000,000",
       );
-      expect(formula).toHaveTextContent(/Pin\s*\$2\.00\s*input tokens/);
-      expect(formula).toHaveTextContent(/Pout\s*\$10\.00 \(built-in\)/);
-      expect(formula).toHaveTextContent(/Pcr\s*\$1\.25 \(built-in\)/);
-      expect(formula).toHaveTextContent(/Pcw\s*\$2\.00 \(input price\)/);
+      expect(formula).toHaveTextContent(/Tin\s*input tokens, not cached\s*T/);
+      expect(formula).toHaveTextContent(
+        /Tout\s*output tokens · built-in price/,
+      );
+      expect(formula).toHaveTextContent(
+        /Tcw\s*cache write tokens · billed at the input price/,
+      );
 
       fireEvent.change(priceInput("Input"), { target: { value: "3" } });
-      expect(formula).toHaveTextContent(/Pin\s*\$3\.00\s*input tokens/);
-      expect(formula).toHaveTextContent(/Pcw\s*\$3\.00 \(input price\)/);
+      expect(formula).toHaveTextContent(
+        "cost=Tin·$3.00+Tout·$10.00+Tcr·$1.25+Tcw·$3.001,000,000",
+      );
     });
 
     it("prices a new model's empty fields at $0 or the input price", () => {
@@ -809,8 +813,10 @@ describe("CostCenterTab", () => {
         screen.getByRole("button", { name: "How the cost is calculated" }),
       );
       const formula = screen.getByTestId("price-formula");
-      expect(formula).toHaveTextContent(/Pout\s*\$0 \(no price\)/);
-      expect(formula).toHaveTextContent(/Pcr\s*\$1\.00 \(input price\)/);
+      expect(formula).toHaveTextContent(
+        "cost=Tin·$1.00+Tout·$0+Tcr·$1.00+Tcw·$1.001,000,000",
+      );
+      expect(formula).toHaveTextContent(/Tout\s*output tokens · no price set/);
     });
 
     it("says which cache prices fall back to the input price", () => {
