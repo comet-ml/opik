@@ -212,7 +212,7 @@ public class SpansResource {
     @UsageLimited
     @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid @ConvertGroup(to = Span.View.Create.class) Span span,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid @ConvertGroup(to = Span.View.Write.class) Span span,
             @Context UriInfo uriInfo) {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
