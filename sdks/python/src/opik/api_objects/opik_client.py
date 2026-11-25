@@ -1864,16 +1864,22 @@ class Opik:
             item_id: The test suite item's id. Must be a UUID.
             dataset_versions: Test suite version hashes or tags. Only experiments run
                 against one of these versions are included. Defaults to every version.
-            project_name: The name of the project the suite belongs to.
+            project_name: The name of the project the suite belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: The maximum number of results to return.
 
         Returns:
             List[ExperimentItemContent]: The item's results, one per run: an
             experiment with ``runs_per_item`` above 1 contributes several.
+            Optimizer trial, mini-batch and mutation experiments are excluded.
 
         Raises:
             ValueError: If ``item_id`` is not a UUID.
             DatasetVersionNotFound: If a version in ``dataset_versions`` does not exist.
+
+        Note:
+            For several items at once, such as every item with a tag, use
+            ``get_experiments_client().find_experiment_items_for_dataset`` with the
+            suite's name and a ``filter_string`` such as ``'tags contains "team-x"'``.
         """
         analytics.track_event("client", "get_test_suite_item_experiment_results")
         return self._get_item_experiment_results(
