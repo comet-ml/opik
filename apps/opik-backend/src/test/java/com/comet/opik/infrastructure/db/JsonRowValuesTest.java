@@ -109,7 +109,7 @@ class JsonRowValuesTest {
     private static String written(ObjectNode row) throws IOException {
         var client = JsonEachRowBulkInsertTest.clientReturning(1L);
 
-        new JsonEachRowBulkInsert(client, JsonUtils.getMapper(), JsonEachRowBulkInsertTest.streamPayloads(true))
+        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
                 .insert("spans", "log-comment", List.of(row), Function.identity())
                 .block();
 

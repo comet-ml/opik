@@ -3798,7 +3798,7 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        StreamedPayload.bind(statement, streamPayloads(), trace.input(), trace.output(),
+        StreamedPayload.bind(statement, trace.input(), trace.output(),
                 TruncationUtils.toJsonString(trace.metadata()));
 
         bindEpochSentinel(statement, "end_time", trace.endTime());
@@ -4945,7 +4945,7 @@ class TraceDAOImpl implements TraceDAO {
                     traces,
                     trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
                             traceColumnsNonNullable(),
-                            configuration.getResponseFormatting().getTruncationSize(), streamPayloads()));
+                            configuration.getResponseFormatting().getTruncationSize()));
         });
     }
 
@@ -5716,12 +5716,8 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
-        StreamedPayload.bind(statement, streamPayloads(), traceUpdate.input(), traceUpdate.output(),
+        StreamedPayload.bind(statement, traceUpdate.input(), traceUpdate.output(),
                 Objects.toString(traceUpdate.metadata(), null));
-    }
-
-    private boolean streamPayloads() {
-        return configuration.getDatabaseAnalytics().isStreamPayloads();
     }
 
     private void bindBulkUpdateParams(TraceUpdate traceUpdate, Statement statement) {

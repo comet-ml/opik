@@ -42,7 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.utils.TruncationUtils.createSlimJsonString;
+import static com.comet.opik.utils.TruncationUtils.toJsonWithSlim;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
@@ -237,8 +237,8 @@ class TracesLocalV2TableTest {
                 .createdBy(user)
                 .lastUpdatedBy(user)
                 .truncationThreshold(truncationThreshold)
-                .inputSlim(createSlimJsonString(input.toString()))
-                .outputSlim(createSlimJsonString(output.toString()))
+                .inputSlim(toJsonWithSlim(input).slim())
+                .outputSlim(toJsonWithSlim(output).slim())
                 .isDeleted((byte) 0) // 0 = live row, not a tombstone
                 // Materialized columns: the values the DDL formulas are expected to compute
                 .inputLength(toByteLength(input))

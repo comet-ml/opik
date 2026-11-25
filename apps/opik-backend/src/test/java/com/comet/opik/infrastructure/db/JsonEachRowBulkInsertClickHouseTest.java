@@ -62,7 +62,7 @@ class JsonEachRowBulkInsertClickHouseTest {
     }
 
     /** Inserts three rows into {@code table} with a row mapper that throws {@code failure} on the second. */
-    private Mono<Long> insertFailingOnSecondRow(String table, boolean streamPayloads, RuntimeException failure) {
+    private Mono<Long> insertFailingOnSecondRow(String table, RuntimeException failure) {
         var items = List.of(RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32),
                 RandomStringUtils.secure().nextAlphanumeric(32));
@@ -72,34 +72,21 @@ class JsonEachRowBulkInsertClickHouseTest {
             }
             return row(item);
         };
-        return new JsonEachRowBulkInsert(client, MAPPER, JsonEachRowBulkInsertTest.streamPayloads(streamPayloads))
+        return new JsonEachRowBulkInsert(client, MAPPER)
                 .insert(table, "log-comment", items, rowMapper);
     }
 
     @Test
-    @DisplayName("streamed: a row mapper failing mid-body fails the insert with the client's exception and writes no row")
-    void streamedMapperFailureMidBodyFailsTheInsertAndWritesNothing() {
+    @DisplayName("a row mapper failing mid-body fails the insert with the client's exception and writes no row")
+    void mapperFailureMidBodyFailsTheInsertAndWritesNothing() {
         var table = newTable();
         var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(32));
 
-        var insert = insertFailingOnSecondRow(table, true, failure);
+        var insert = insertFailingOnSecondRow(table, failure);
 
         // The client wraps what the writer throws, and does not retry it, so callers matching on exception types
         // see ClickHouseException rather than the mapper's own exception.
         assertThatThrownBy(insert::block).isInstanceOf(ClickHouseException.class).hasRootCause(failure);
-        assertThat(count(table)).isZero();
-    }
-
-    @Test
-    @DisplayName("buffered: a row mapper failing mid-body fails the insert with the mapper's exception and writes no row")
-    void bufferedMapperFailureMidBodyFailsTheInsertAndWritesNothing() {
-        var table = newTable();
-        var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(32));
-
-        var insert = insertFailingOnSecondRow(table, false, failure);
-
-        // The batch is built before the client is called, so the mapper's exception is what fails the insert.
-        assertThatThrownBy(insert::block).isSameAs(failure);
         assertThat(count(table)).isZero();
     }
 }

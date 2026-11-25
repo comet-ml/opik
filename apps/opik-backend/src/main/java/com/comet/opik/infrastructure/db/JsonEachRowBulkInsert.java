@@ -5,7 +5,6 @@ import com.clickhouse.client.api.DataStreamWriter;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
-import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.core.JsonFactory;
@@ -22,11 +21,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -51,18 +47,12 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
  * implementation it replaced; both the toggle and that implementation are gone.
  *
- * <p><b>Two ways to build the body</b>, chosen by {@code databaseAnalytics.streamPayloads}, which also picks how the
- * span and trace row mappers write their payloads:
- * <ul>
- *   <li><b>Streamed</b> (true): {@link #write} runs as the client's {@code DataStreamWriter}, so each row is mapped
- *   and serialized into the body as it is sent, and the batch is never held as a buffer: the client sends the body
- *   chunked through its fixed-size compression buffer. The writer runs on the client's {@code chc-operation} pool
- *   ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), and the insert holds its pooled connection
- *   while the rows are mapped and serialized. The client leases that connection before it calls the writer, so
- *   {@code clientMaxOpenConnections} bounds how many inserts serialize at once.</li>
- *   <li><b>Buffered</b> (false): {@link #serialize} renders the batch into a buffer on
- *   {@code boundedElastic}, and the insert takes a connection only to send the finished buffer.</li>
- * </ul>
+ * <p><b>The body is streamed</b>: {@link #write} runs as the client's {@code DataStreamWriter}, so each row is mapped
+ * and serialized into the body as it is sent, and the batch is never held as a buffer: the client sends the body
+ * chunked through its fixed-size compression buffer. The writer runs on the client's {@code chc-operation} pool
+ * ({@code useAsyncRequests(true)} in {@code DatabaseAnalyticsFactory}), and the insert holds its pooled connection
+ * while the rows are mapped and serialized. The client leases that connection before it calls the writer, so
+ * {@code clientMaxOpenConnections} bounds how many inserts serialize at once.
  *
  * <p>The client calls the writer again on a retry, which maps and serializes the items again. That gives identical
  * bytes as long as the row mapper is a pure function of the item; callers resolve values such as the batch
@@ -87,13 +77,9 @@ public class JsonEachRowBulkInsert {
 
     private final Client clickHouseClient;
 
-    private final ObjectMapper objectMapper;
-
     private final JsonFactory rowFactory;
 
     private final ObjectWriter rowWriter;
-
-    private final boolean streamPayloads;
 
     /**
      * The mapper is injected rather than read from {@code JsonUtils}: that one is a static field the
@@ -111,12 +97,9 @@ public class JsonEachRowBulkInsert {
      * flush empties the generator into the {@link BufferedWriter} without draining the writer itself.
      */
     @Inject
-    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper,
-            @NonNull @Config("databaseAnalytics") DatabaseAnalyticsFactory databaseAnalytics) {
+    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper) {
         this.clickHouseClient = clickHouseClient;
-        this.objectMapper = objectMapper;
-        this.streamPayloads = databaseAnalytics.isStreamPayloads();
-        // Streamed rows only: one nesting level above the mapper's, so a payload node.toString() can serialize still
+        // One nesting level above the mapper's, so a payload node.toString() can serialize still
         // fits inside the row object that JsonRowValues embeds it in.
         this.rowFactory = objectMapper.getFactory().rebuild()
                 .streamWriteConstraints(StreamWriteConstraints.builder()
@@ -143,13 +126,7 @@ public class JsonEachRowBulkInsert {
             return Mono.just(0L);
         }
 
-        Mono<Long> insert = streamPayloads
-                ? send(table, logComment, body -> write(body, items, rowMapper))
-                : Mono.fromCallable(() -> serialize(items, rowMapper))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .flatMap(body -> send(table, logComment, body::writeTo));
-
-        return insert
+        return send(table, logComment, body -> write(body, items, rowMapper))
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it
                 // was serialization, a connection reset or a server-side rejection. Only the table and
@@ -173,8 +150,8 @@ public class JsonEachRowBulkInsert {
 
     /**
      * Sends the body the writer produces. Deferred so the segment opens at subscription, not at assembly. Named for
-     * the table, so spans report custom-reactive-spans / batch_insert. When rows are streamed, it times their mapping
-     * and serialization with the statement.
+     * the table, so spans report custom-reactive-spans / batch_insert. It times the rows' mapping and serialization
+     * with the statement.
      */
     private Mono<Long> send(String table, String logComment, DataStreamWriter body) {
         return Mono.defer(() -> {
@@ -188,7 +165,7 @@ public class JsonEachRowBulkInsert {
     }
 
     private InsertSettings settings(String logComment) {
-        var settings = new InsertSettings()
+        return new InsertSettings()
                 .logComment(logComment)
                 // best_effort so the client-side formatted DateTime64 literals parse, and
                 // defaults_for_omitted_fields so columns absent from the row (created_at,
@@ -215,15 +192,12 @@ public class JsonEachRowBulkInsert {
                 // the threshold would only move the cliff; disabling the parallel parser removes it,
                 // and it engages at all only above 10 MiB of body -- under 2% of span inserts, and
                 // none of the other write paths.
-                .serverSetting("input_format_parallel_parsing", "0");
-        if (streamPayloads) {
-            // JsonRowValues.putJsonWithSlim embeds object and array payloads as raw JSON, and these store them
-            // verbatim in their String columns. Both default to 1; pinned here so the stored text does not depend on
-            // the server default.
-            settings.serverSetting("input_format_json_read_objects_as_strings", "1")
-                    .serverSetting("input_format_json_read_arrays_as_strings", "1");
-        }
-        return settings;
+                .serverSetting("input_format_parallel_parsing", "0")
+                // JsonRowValues.putJsonWithSlim embeds object and array payloads as raw JSON, and these store them
+                // verbatim in their String columns. Both default to 1; pinned here so the stored text does not depend
+                // on the server default.
+                .serverSetting("input_format_json_read_objects_as_strings", "1")
+                .serverSetting("input_format_json_read_arrays_as_strings", "1");
     }
 
     /**
@@ -232,25 +206,7 @@ public class JsonEachRowBulkInsert {
      */
     private <T> void write(OutputStream body, Collection<T> items, Function<T, ObjectNode> rowMapper)
             throws IOException {
-        writeRows(new BufferedWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8)), rowFactory, items,
-                rowMapper);
-    }
-
-    /**
-     * Renders the batch into a buffer: the body {@code streamPayloads=false} sends. Returns the buffer rather than a
-     * {@code byte[]} so the caller can hand it to the client via {@link ByteArrayOutputStream#writeTo}, which writes
-     * the backing array directly instead of copying the whole payload a second time.
-     */
-    private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
-            throws IOException {
-        // Outside the try-with-resources, unlike the other ByteArrayOutputStream uses in this codebase:
-        // they copy out with toByteArray() before the block ends, while this one is handed to the client
-        // as writeTo and read on its thread after this method returns, so it has to outlive the block.
-        var payload = new ByteArrayOutputStream();
-        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8))) {
-            writeRows(writer, objectMapper.getFactory(), items, rowMapper);
-        }
-        return payload;
+        writeRows(new BufferedWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8)), items, rowMapper);
     }
 
     /**
@@ -261,12 +217,12 @@ public class JsonEachRowBulkInsert {
      * {@code \r\n} that produces on Windows — JSONEachRow treats the {@code \r} as inter-row
      * whitespace — and the backend runs on Linux, where the two are the same byte.
      */
-    private <T> void writeRows(BufferedWriter writer, JsonFactory factory, Collection<T> items,
-            Function<T, ObjectNode> rowMapper) throws IOException {
+    private <T> void writeRows(BufferedWriter writer, Collection<T> items, Function<T, ObjectNode> rowMapper)
+            throws IOException {
 
         // A resource so a row that fails to serialize still releases the generator's buffer back to Jackson's
         // recycler on the way out.
-        try (var generator = factory.createGenerator(writer)) {
+        try (var generator = rowFactory.createGenerator(writer)) {
 
             // Both set before anything is written, since they govern what close() and flush() do.
             // The generator writes into, but does not own, the writer; left enabled, closing the generator

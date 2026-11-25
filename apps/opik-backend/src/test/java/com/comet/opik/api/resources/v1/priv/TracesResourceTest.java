@@ -2751,6 +2751,24 @@ class TracesResourceTest {
                     .build()
                     .assertBatchAndSingleCreateStoreTheSameSlimPayload();
         }
+
+        @Test
+        @DisplayName("the deepest payload a batch create and a single create accept is stored and read back as sent")
+        void storeTheDeepestPayload() {
+            var payload = PayloadCases.deepestPayload();
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchTrace = PayloadCases.trace(factory, projectName, payload);
+            var singleTrace = PayloadCases.trace(factory, projectName, payload);
+
+            traceResourceClient.batchCreateTraces(List.of(batchTrace), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(singleTrace, API_KEY, TEST_WORKSPACE);
+
+            var actual = Stream.of(batchTrace, singleTrace)
+                    .map(trace -> traceResourceClient.getById(trace.id(), TEST_WORKSPACE, API_KEY))
+                    .map(trace -> List.of(trace.input().toString(), trace.output().toString()))
+                    .toList();
+            assertThat(actual).isEqualTo(PayloadCases.storedAsText(payload, 2));
+        }
     }
 
     private Trace getAndAssert(Trace expectedTrace, UUID expectedProjectId, String apiKey, String workspaceName) {

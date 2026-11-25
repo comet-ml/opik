@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.utils.JsonWithSlim;
 import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
@@ -32,27 +31,16 @@ public class StreamedPayload {
 
     /**
      * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its slim copy
-     * here, so callers cannot let the two drift. With {@code streamPayloads} ({@code databaseAnalytics.streamPayloads})
-     * both come from the node without a reparse, the slim copy reusing the full JSON when nothing needs truncating
-     * (see {@link TruncationUtils#toJsonWithSlim}); without it (the string path), the slim copy is reparsed from the full
-     * JSON string.
+     * here, so callers cannot let the two drift (see {@link TruncationUtils#toJsonWithSlim}).
      */
-    public static void bind(@NonNull Statement statement, boolean streamPayloads, @Nullable JsonNode input,
-            @Nullable JsonNode output, @Nullable String metadata) {
-        var inputColumns = columns(streamPayloads, input);
-        var outputColumns = columns(streamPayloads, output);
+    public static void bind(@NonNull Statement statement, @Nullable JsonNode input, @Nullable JsonNode output,
+            @Nullable String metadata) {
+        var inputColumns = TruncationUtils.toJsonWithSlim(input);
+        var outputColumns = TruncationUtils.toJsonWithSlim(output);
         statement.bind("input", inputColumns.json())
                 .bind("output", outputColumns.json())
                 .bind("metadata", StringUtils.defaultString(metadata))
                 .bind("input_slim", inputColumns.slim())
                 .bind("output_slim", outputColumns.slim());
-    }
-
-    private static JsonWithSlim columns(boolean streamPayloads, JsonNode node) {
-        if (streamPayloads) {
-            return TruncationUtils.toJsonWithSlim(node);
-        }
-        var json = TruncationUtils.toJsonString(node);
-        return JsonWithSlim.builder().json(json).slim(TruncationUtils.createSlimJsonString(json)).build();
     }
 }
