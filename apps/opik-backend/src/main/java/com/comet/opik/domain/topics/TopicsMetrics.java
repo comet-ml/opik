@@ -7,6 +7,7 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
@@ -15,7 +16,7 @@ import java.time.Duration;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics, on the global meter. Every metric of one workspace's work carries {@code workspace_id}
+ * The Topics runs' metrics, on the global meter. Every metric of one workspace's work carries {@code workspace_id}
  * and {@code workspace_name}: the caller resolves the name once, at its boundary, so recording never blocks. Only
  * {@code topics.nightly.budget_used_seconds} and {@code topics.nightly.nights}, a whole night's, have neither.
  */
@@ -39,9 +40,9 @@ public class TopicsMetrics {
     private static final AttributeKey<String> REASON = stringKey("reason");
     private static final AttributeKey<String> DECISION = stringKey("decision");
 
-    static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
-    static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
-    static final String NIGHTLY_BUDGET_USED = "topics.nightly.budget_used_seconds";
+    private static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
+    private static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
+    private static final String NIGHTLY_BUDGET_USED = "topics.nightly.budget_used_seconds";
 
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
@@ -182,16 +183,17 @@ public class TopicsMetrics {
     }
 
     /** {@code reason} is null for a decision other than skip. */
-    void nightlyDecision(@NonNull Workspace workspace, @NonNull String decision, String reason, long projects) {
-        var attributes = attributes(workspace).put(DECISION, decision);
+    void nightlyDecision(@NonNull Workspace workspace, @NonNull NightDecision decision,
+            @Nullable NightSkipReason reason, long projects) {
+        var attributes = attributes(workspace).put(DECISION, decision.getValue());
         if (reason != null) {
-            attributes.put(REASON, reason);
+            attributes.put(REASON, reason.getValue());
         }
         nightlyDecisions.add(projects, attributes.build());
     }
 
-    void night(@NonNull String outcome, long nights) {
-        this.nights.add(nights, Attributes.of(OUTCOME, outcome));
+    void night(@NonNull NightOutcome outcome, long nights) {
+        this.nights.add(nights, Attributes.of(OUTCOME, outcome.getValue()));
     }
 
     private static AttributesBuilder attributes(Workspace workspace) {

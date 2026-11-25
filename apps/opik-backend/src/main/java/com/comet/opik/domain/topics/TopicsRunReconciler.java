@@ -104,7 +104,7 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
-        var current = TopicsNightPass.current(config.getNightly().getSchedule(), now).map(TopicsNightPass.Night::date);
+        var current = TopicsNight.current(config.getNightly().getSchedule(), now).map(TopicsNight::date);
         if (run.runMode() == TopicProject.RunMode.NIGHTLY_UPDATE && current.isEmpty()) {
             return store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE)
                     .map(dropped -> !dropped);

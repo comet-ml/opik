@@ -2,6 +2,9 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.error.ConflictException;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.jdbi.v3.core.Handle;
@@ -47,7 +50,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("topics night pass")
 class TopicsNightPassTest {
 
-    private static final String WORKSPACE_ID = "ws-1";
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final String WORKSPACE_ID = ID_GENERATOR.generateId().toString();
     private static final LocalDate NIGHT = LocalDate.of(2026, 11, 2);
     private static final Instant START = Instant.parse("2026-11-02T02:00:00Z");
     private static final Instant NIGHT_START = NIGHT.atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -110,15 +114,18 @@ class TopicsNightPassTest {
         when(workspaceService.isEnabled(WORKSPACE_ID)).thenReturn(true);
         queue = planned -> {
             queued.add(planned);
-            return Mono.just(UUID.randomUUID());
+            return Mono.just(ID_GENERATOR.generateId());
         };
+        var workspaceNames = mock(WorkspaceNameService.class);
+        when(workspaceNames.nameOrId(anyString()))
+                .thenAnswer(invocation -> "name of " + invocation.<String>getArgument(0));
         pass = new TopicsNightPass(config, template, workspaceService, candidates,
-                TopicsMetricsReader.metrics(reader), workspaceId -> "name of " + workspaceId);
+                TopicsMetricsReader.metrics(reader), workspaceNames);
     }
 
     /** A project with a list saved for the night before, and its window count. */
     private UUID listed(Long count) {
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         rows.put(projectId, row(projectId).build());
         if (count != null) {
             vectors.put(projectId, count);
@@ -127,7 +134,8 @@ class TopicsNightPassTest {
     }
 
     private static TopicProject.TopicProjectBuilder row(UUID projectId) {
-        return TopicProject.builder().workspaceId(WORKSPACE_ID).projectId(projectId).listRunId(UUID.randomUUID())
+        return TopicProject.builder().workspaceId(WORKSPACE_ID).projectId(projectId)
+                .listRunId(ID_GENERATOR.generateId())
                 .windowUntil(NIGHT_START.minusSeconds(86_400));
     }
 
@@ -137,22 +145,22 @@ class TopicsNightPassTest {
 
     private double decisions(String decision, String reason) {
         return reason == null
-                ? sum(reader, TopicsMetrics.NIGHTLY_DECISIONS, "decision", decision)
-                : sum(reader, TopicsMetrics.NIGHTLY_DECISIONS, "decision", decision, "reason", reason);
+                ? sum(reader, "topics.nightly.decisions", "decision", decision)
+                : sum(reader, "topics.nightly.decisions", "decision", decision, "reason", reason);
     }
 
     @Test
     @DisplayName("the night is the UTC date of the schedule's latest fire, today or yesterday, and starts at its first "
             + "fire that day; a schedule that fired on neither day gives none")
     void currentNight() {
-        assertThat(TopicsNightPass.current("0 0 2 * * ?", Instant.parse("2026-11-02T03:00:00Z")))
-                .contains(new TopicsNightPass.Night(NIGHT, START));
-        assertThat(TopicsNightPass.current("0 0 2 * * ?", Instant.parse("2026-11-02T01:00:00Z")))
-                .contains(new TopicsNightPass.Night(NIGHT.minusDays(1), START.minusSeconds(86_400)));
-        assertThat(TopicsNightPass.current("0 0 * * * ?", Instant.parse("2026-11-02T05:30:00Z")))
-                .contains(new TopicsNightPass.Night(NIGHT, NIGHT_START));
+        assertThat(TopicsNight.current("0 0 2 * * ?", Instant.parse("2026-11-02T03:00:00Z")))
+                .contains(new TopicsNight(NIGHT, START));
+        assertThat(TopicsNight.current("0 0 2 * * ?", Instant.parse("2026-11-02T01:00:00Z")))
+                .contains(new TopicsNight(NIGHT.minusDays(1), START.minusSeconds(86_400)));
+        assertThat(TopicsNight.current("0 0 * * * ?", Instant.parse("2026-11-02T05:30:00Z")))
+                .contains(new TopicsNight(NIGHT, NIGHT_START));
         // 2026-11-02 is a Monday: a Friday-only schedule fired on neither day.
-        assertThat(TopicsNightPass.current("0 0 2 ? * FRI", Instant.parse("2026-11-02T05:30:00Z"))).isEmpty();
+        assertThat(TopicsNight.current("0 0 2 ? * FRI", Instant.parse("2026-11-02T05:30:00Z"))).isEmpty();
     }
 
     @Test
@@ -214,7 +222,9 @@ class TopicsNightPassTest {
         rows.put(gone, row(gone).lastNight(NIGHT).build());
         assertThat(plan(IN_BUDGET, 2)).isEqualTo(2);
 
-        assertThat(queued).extracting(TopicsRunPlanner.Planned::projectId).containsExactly(never, older);
+        assertThat(queued).containsExactly(
+                new TopicsRunPlanner.Planned(WORKSPACE_ID, never, TopicProject.RunMode.NIGHTLY_UPDATE, NIGHT, 500),
+                new TopicsRunPlanner.Planned(WORKSPACE_ID, older, TopicProject.RunMode.NIGHTLY_UPDATE, NIGHT, 500));
         verify(nightDAO, never()).markLooked(WORKSPACE_ID, Set.of(newer), NIGHT);
     }
 
@@ -235,8 +245,8 @@ class TopicsNightPassTest {
     @DisplayName("after the budget no project is read or queued: the ones the night did not look at are written not "
             + "reached in one write per workspace, and the night is counted finished once")
     void endsAfterTheBudget() {
-        var left = List.of(new TopicProjectKey(WORKSPACE_ID, UUID.randomUUID()),
-                new TopicProjectKey(WORKSPACE_ID, UUID.randomUUID()));
+        var left = List.of(new TopicProjectKey(WORKSPACE_ID, ID_GENERATOR.generateId()),
+                new TopicProjectKey(WORKSPACE_ID, ID_GENERATOR.generateId()));
         when(nightDAO.findNotReached(List.of(WORKSPACE_ID), NIGHT)).thenReturn(left, List.of());
         listed(500L);
 
@@ -248,8 +258,8 @@ class TopicsNightPassTest {
         verify(topicDAO, never()).findProjectsWithTopics(anyCollection());
         assertThat(queued).isEmpty();
         assertThat(decisions("not_reached", null)).isEqualTo(2);
-        assertThat(sum(reader, TopicsMetrics.NIGHTLY_NIGHTS, "outcome", "finished")).isEqualTo(1);
-        assertThat(sum(reader, TopicsMetrics.NIGHTLY_BUDGET_USED)).isEqualTo(
+        assertThat(sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
+        assertThat(sum(reader, "topics.nightly.budget_used_seconds")).isEqualTo(
                 config.getNightly().getBudget().toSeconds());
     }
 
@@ -260,7 +270,7 @@ class TopicsNightPassTest {
         when(topicDAO.findProjectsWithTopics(anyCollection())).thenThrow(new IllegalStateException("MySQL down"));
 
         assertThat(plan(IN_BUDGET, 2)).isZero();
-        assertThat(sum(reader, TopicsMetrics.NIGHTLY_NIGHTS, "outcome", "failed")).isEqualTo(1);
+        assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
 
         config.getNightly().setEnabled(false);
         assertThat(plan(IN_BUDGET, 2)).isZero();

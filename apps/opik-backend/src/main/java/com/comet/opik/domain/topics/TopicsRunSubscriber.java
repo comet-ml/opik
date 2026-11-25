@@ -124,7 +124,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     /** A nightly update's claim also re-checks that its night is still to do (see {@link TopicRunStore#claimNightly}). */
     private Mono<Boolean> claim(TopicsRunMessage message, Instant deadline) {
         return message.mode() == RunMode.NIGHTLY_UPDATE
-                ? store.claimNightly(message, deadline).map(claim -> claim == TopicRunStore.NightClaim.CLAIMED)
+                ? store.claimNightly(message, deadline).map(claim -> claim == NightClaim.CLAIMED)
                 : store.claim(message, deadline);
     }
 
