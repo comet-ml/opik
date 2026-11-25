@@ -61,5 +61,5 @@ public class CustomChartsConfig {
      * queries come from our internal model, not from users' clients.
      */
     @JsonProperty
-    private @Min(1) @Max(50) int maxConcurrentPublicApiQueriesPerWorkspace = 4;
+    private @Min(1) @Max(50) int maxConcurrentQueriesPerWorkspace = 4;
 }

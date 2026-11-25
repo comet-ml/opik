@@ -344,7 +344,8 @@ customCharts:
   #   with Retry-After. Ollie's chart authoring (POST /v1/internal/analytics-queries) is not counted: our
   #   internal model runs those queries.
   #   Keep it below the EXTENDED account's per-replica max_concurrent_queries_for_user.
-  maxConcurrentPublicApiQueriesPerWorkspace: ${CUSTOM_CHARTS_MAX_CONCURRENT_PUBLIC_API_QUERIES_PER_WORKSPACE:-4}
+  #   If Redis is unreachable the limit is skipped and only that ClickHouse cap applies.
+  maxConcurrentQueriesPerWorkspace: ${CUSTOM_CHARTS_MAX_CONCURRENT_QUERIES_PER_WORKSPACE:-4}
 
 # Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
 #   query's system.query_log entries and plan that every table it read was read under a row policy.

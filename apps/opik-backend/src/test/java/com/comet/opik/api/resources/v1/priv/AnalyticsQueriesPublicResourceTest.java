@@ -118,7 +118,7 @@ class AnalyticsQueriesPublicResourceTest {
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
                                 new CustomConfig("customCharts.publicEndpointsEnabled", "true"),
-                                new CustomConfig("customCharts.maxConcurrentPublicApiQueriesPerWorkspace",
+                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
                                         String.valueOf(MAX_CONCURRENT_QUERIES)),
                                 // On so the redaction refusal can be reached; callers holding original_data_view
                                 // are unaffected.
@@ -236,8 +236,9 @@ class AnalyticsQueriesPublicResourceTest {
     @DisplayName("with every workspace slot taken returns 429 with Retry-After, and runs once a slot is freed")
     void runQuery__whenWorkspaceSlotsTaken__thenTooManyRequestsUntilOneFrees() {
         var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_C, MAX_CONCURRENT_QUERIES);
+        // Longer than the test can run, so only the release below can free a slot.
         var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
-                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(1)).block())
+                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(10)).block())
                 .toList();
         assertThat(permits).doesNotContainNull();
 

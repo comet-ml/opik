@@ -58,7 +58,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -90,6 +89,11 @@ class DashboardWidgetQueryResourceTest {
     private static final String API_KEY_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
+
+    // Its own workspace, so holding its slots does not affect the other tests.
+    private static final String API_KEY_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_NAME_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_ID_C = UUID.randomUUID().toString();
 
     private static final String WINDOWED_QUERY = "SELECT toJSONString(map('id', toString(id))) AS result FROM traces"
             + " WHERE start_time >= {{window_start}} AND start_time <= {{window_end}}";
@@ -126,7 +130,7 @@ class DashboardWidgetQueryResourceTest {
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
-                                new CustomConfig("customCharts.maxConcurrentPublicApiQueriesPerWorkspace",
+                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
                                         String.valueOf(MAX_CONCURRENT_QUERIES))))
                         .build());
     }
@@ -157,6 +161,8 @@ class DashboardWidgetQueryResourceTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B, USER);
         mockDashboardSavedQueriesAuth(API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A);
         mockDashboardSavedQueriesAuth(API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_C, WORKSPACE_NAME_C, WORKSPACE_ID_C, USER);
+        mockDashboardSavedQueriesAuth(API_KEY_C, WORKSPACE_NAME_C, WORKSPACE_ID_C);
 
         var projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         dashboardClient = new DashboardResourceClient(client, baseURI);
@@ -254,32 +260,32 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("with every workspace slot taken returns 429 with Retry-After, and runs once a slot is freed")
     void runWidgetQuery__whenWorkspaceSlotsTaken__thenTooManyRequestsUntilOneFrees() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
-                API_KEY_A, WORKSPACE_NAME_A);
-        var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_A, MAX_CONCURRENT_QUERIES);
-        var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
-                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(1)).block())
-                .toList();
-        try {
-            assertThat(permits).doesNotContainNull();
-
-            try (Response response = dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
-                    API_KEY_A, WORKSPACE_NAME_A)) {
-                assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-                assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
-                assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(
-                        new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
-            }
-
-            lockService.releaseSlot(lock, permits.getFirst()).block();
-
-            run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null), API_KEY_A,
-                    WORKSPACE_NAME_A));
-        } finally {
-            // Workspace A is shared with the other tests: free every slot this one took.
-            permits.stream().filter(Objects::nonNull).forEach(permit -> lockService.releaseSlot(lock, permit).block());
+        UUID queryId;
+        try (var response = callSaveDashboardQuery(WINDOWED_QUERY, null, API_KEY_C, WORKSPACE_NAME_C)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
+            queryId = response.readEntity(DashboardSavedQuery.class).id();
         }
+        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", queryId), API_KEY_C,
+                WORKSPACE_NAME_C);
+        var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_C, MAX_CONCURRENT_QUERIES);
+        // Longer than the test can run, so only the release below can free a slot.
+        var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
+                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(10)).block())
+                .toList();
+        assertThat(permits).doesNotContainNull();
+
+        try (Response response = dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
+                API_KEY_C, WORKSPACE_NAME_C)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(
+                    new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
+        }
+
+        lockService.releaseSlot(lock, permits.getFirst()).block();
+
+        run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null), API_KEY_C,
+                WORKSPACE_NAME_C));
     }
 
     @Test

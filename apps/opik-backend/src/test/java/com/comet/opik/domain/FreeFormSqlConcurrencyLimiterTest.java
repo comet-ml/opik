@@ -45,7 +45,7 @@ class FreeFormSqlConcurrencyLimiterTest {
     /** Socket timeout 200s; enforced log reads 3 x 10s. */
     private FreeFormSqlConcurrencyLimiter newLimiter(FreeFormSqlPostRunCheckConfig.Mode mode) {
         var customCharts = new CustomChartsConfig();
-        customCharts.setMaxConcurrentPublicApiQueriesPerWorkspace(LIMIT);
+        customCharts.setMaxConcurrentQueriesPerWorkspace(LIMIT);
         var extended = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
         extended.setSocketTimeout(io.dropwizard.util.Duration.seconds(200));
         var postRunCheck = new FreeFormSqlPostRunCheckConfig();
@@ -82,6 +82,39 @@ class FreeFormSqlConcurrencyLimiterTest {
 
         query.complete(result);
         assertThat(actual.join()).isEqualTo(result);
+        verify(lockService).releaseSlot(lock, permitId);
+    }
+
+    @Test
+    @DisplayName("the slot key is per workspace and carries the limit")
+    void slotLock__thenKeyedByWorkspaceAndLimit() {
+        assertThat(lock.key()).isEqualTo(workspaceId + "-free-form-sql-slots-" + LIMIT);
+    }
+
+    @Test
+    @DisplayName("a query that throws before returning its future still releases its slot")
+    void run__whenQueryThrowsSynchronously__thenReleases() {
+        when(lockService.tryAcquireSlot(eq(lock), eq(LIMIT), any())).thenReturn(Mono.just(permitId));
+        var failure = new IllegalStateException(UUID.randomUUID().toString());
+
+        assertThatThrownBy(limiter.run(workspaceId, () -> {
+            throw failure;
+        })::join)
+                .isInstanceOf(CompletionException.class)
+                .hasCause(failure);
+        verify(lockService).releaseSlot(lock, permitId);
+    }
+
+    @Test
+    @DisplayName("a failed slot release does not fail the query")
+    void run__whenReleaseFails__thenReturnsResult() {
+        when(lockService.tryAcquireSlot(eq(lock), eq(LIMIT), any())).thenReturn(Mono.just(permitId));
+        when(lockService.releaseSlot(lock, permitId))
+                .thenReturn(Mono.error(new RedisConnectionException(UUID.randomUUID().toString())));
+        var result = UUID.randomUUID().toString();
+
+        assertThat(limiter.run(workspaceId, () -> CompletableFuture.completedFuture(result)).join())
+                .isEqualTo(result);
         verify(lockService).releaseSlot(lock, permitId);
     }
 

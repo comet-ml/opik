@@ -63,7 +63,7 @@ public class FreeFormSqlConcurrencyLimiter {
             @NonNull @Config("databaseAnalyticsReadOnlyFreeFormExtendedSql") DatabaseAnalyticsReadOnlyFreeFormSqlConfig extended,
             @NonNull @Config("freeFormSqlPostRunCheck") FreeFormSqlPostRunCheckConfig postRunCheck) {
         this.lockService = lockService;
-        this.maxConcurrentQueries = customCharts.getMaxConcurrentPublicApiQueriesPerWorkspace();
+        this.maxConcurrentQueries = customCharts.getMaxConcurrentQueriesPerWorkspace();
         this.lease = slotLease(extended, postRunCheck);
         this.outcomes = GlobalOpenTelemetry.get()
                 .getMeter(FreeFormSqlQueryService.METRIC_NAMESPACE)

@@ -39,8 +39,9 @@ import java.util.concurrent.CompletionException;
 
 /**
  * Public entry point for Custom Charts free-form SQL, called by the Opik MCP server and by API keys directly. Runs on
- * the EXTENDED account with the same checks as the internal scoped endpoint. Its per-workspace budget is its own, so
- * programmatic callers cannot starve the dashboard and Insights Views widget queries.
+ * the EXTENDED account with the same checks as the internal scoped endpoint. Its per-workspace rate limit is its own,
+ * but it shares the workspace's concurrent-query slots with the dashboard and Insights Views widget queries
+ * ({@link FreeFormSqlConcurrencyLimiter}).
  */
 @Path("/v1/private/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
