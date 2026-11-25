@@ -287,13 +287,14 @@ cache runs no query. No alert reads these metrics.
 
 The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
 stay.
-## Topics first builds
+## Topics discovery runs
 
-A first build makes the topic list of a project that has none yet, from the project's topic vectors. A project with
-a saved list is not built again: updating a list is the nightly update's work, which is not shipped yet. First builds
-read the same workspaces as ai-labels, and run only with `TOPICS_ENABLED=true`.
+A discovery run makes the topic list of a project that has none yet, from the project's topic vectors. A project
+with a saved list gets no second discovery run: updating a list is the nightly update's work, which is not shipped
+yet. Discovery runs read the same workspaces as ai-labels, only those listed in `TOPICS_ENABLED_WORKSPACES` at stage
+`build` or later (an id with no `:stage` suffix is at every stage), and run only with `TOPICS_ENABLED=true`.
 
-A first build reads the project's window: the 30 whole UTC days before the window's end. The planner's window ends at
+A discovery run reads the project's window: the 30 whole UTC days before the window's end. The planner's window ends at
 tomorrow's start (UTC), so it holds today's traces so far. A window of more than 100,000 traces is sampled: the build
 reads the 100,000 traces with the lowest `cityHash64(trace_id)`. That is an even sample over the window, and it
 changes little from one day to the next. The run's stats keep both sizes: `window_traces` (the window's count) and
@@ -306,7 +307,7 @@ writes:
 | Table | Database | What |
 |---|---|---|
 | `topics` | MySQL | One row per live topic: name, definition, `born` (the window's end date, or the run's day if that is later), `size` (traces the run read: the window, or its sample), and `vectors`, the prototype vectors traces are assigned by. |
-| `topic_projects` | MySQL | One row per project the topics jobs know, its current state only. The list columns: `saved_runs`, `list_run_id`, `window_until`, `labels_complete`, `other_vectors`. The run columns, for the current or last run: `run_id`, `run_mode`, `run_status`, `run_error_code`, `cancel_reason`, `run_queued_at`, `run_started_at`, `deadline_at`, `heartbeat_at`, `run_finished_at`, and `failed_runs` and `first_failed_at` for the failed first builds since the last saved one. The vectors tick writes the `backfill_*` columns. |
+| `topic_projects` | MySQL | One row per project the topics jobs know, its current state only. The list columns: `saved_runs`, `list_run_id`, `window_until`, `labels_complete`, `other_vectors`. The run columns, for the current or last run: `run_id`, `run_mode`, `run_status`, `run_error_code`, `cancel_reason`, `run_queued_at`, `run_started_at`, `deadline_at`, `heartbeat_at`, `run_finished_at`, and `failed_runs` and `first_failed_at` for the failed discovery runs since the last saved one. The vectors tick writes the `backfill_*` columns. |
 | `trace_topics` | ClickHouse | One row per window trace and run (`source = 'run'`): its `topic_id`, the all-zeros id for Other. The latest row by `last_updated_at` wins, a `run` row first on a tie; a latest row with `is_deleted = 1` hides the trace. |
 
 ### How runs work
@@ -315,34 +316,35 @@ Runs go through a queue across pods. The leader plans; any pod runs.
 
 ```mermaid
 flowchart TD
-    A["Every pod fires TopicsFirstBuildJob every planInterval"] --> B{"Takes topics:first_build:leader?"}
+    A["Every pod fires TopicsDiscoveryJob every planInterval"] --> B{"Takes topics:discovery:leader?"}
     B -->|no| B1["Another pod plans"]
-    B -->|yes| P{"Takes topics:first_build:plan?"}
+    B -->|yes| P{"Takes topics:discovery:plan?"}
     P -->|no| S
     P -->|yes| R["Reconcile the runs in flight"]
-    R --> C["Find candidates: unfinished labelling passes and first builds"]
+    R --> C["Find candidates: unfinished labelling passes and discovery runs"]
     C --> Q["Queue runs on topic_projects up to maxInFlight,<br/>publish each on the topics-runs stream"]
-    Q --> S{"Takes topics:first_build:sweep?"}
+    Q --> S{"Takes topics:discovery:sweep?"}
     S -->|yes| D["Delete the topics of deleted projects"]
     S -->|no| E["Done"]
     D --> E
     Q -.-> X["Any pod reads the stream, claims the run<br/>(queued to running) and runs it"]
 ```
 
-- Every pod fires the job every `TOPICS_FIRST_BUILD_PLAN_INTERVAL`, each at its own second. Three Redis locks make
+- Every pod fires the job every `TOPICS_RUNS_PLAN_INTERVAL`, each at its own second. Three Redis locks make
   that one plan per interval across the cluster:
-  - `topics:first_build:leader` is held for the plan and released when it ends, so two plans never overlap. Its lease
-    is `TOPICS_RUNS_PLAN_BUDGET` + `TOPICS_BUILD_COUNT_TIMEOUT` + 1 minute. A plan that runs longer is cancelled.
-  - `topics:first_build:plan` is taken by the leader before it plans and never released. It expires one interval
+  - `topics:discovery:leader` is held for the plan and released when it ends, so two plans never overlap. Its lease
+    is `TOPICS_RUNS_PLAN_BUDGET` + `TOPICS_RUN_COUNT_TIMEOUT` + `TOPICS_RUNS_LEASE_SLACK`. A plan that runs longer is
+    cancelled.
+  - `topics:discovery:plan` is taken by the leader before it plans and never released. It expires one interval
     (less up to 1s for trigger jitter) after the plan started, so a pod that fires sooner skips.
-  - `topics:first_build:sweep` works the same way for `TOPICS_FIRST_BUILD_SWEEP_INTERVAL`.
+  - `topics:discovery:sweep` works the same way for `TOPICS_STORAGE_SWEEP_INTERVAL`.
 - A plan first reconciles the runs in flight (see "Stuck runs"). Then it fills the free slots: `TOPICS_RUNS_MAX_IN_FLIGHT`
   minus the runs `queued`, `running` or `cancelling` across the cluster. It takes one unfinished labelling pass, then
-  one first build, in turn.
-- First build candidates: one MySQL read finds the projects of the opted-in workspaces with no list, no run in flight,
-  and a `last_updated_trace_at` in the window. The retry wait (see "Retries") and the backfill gate (see "First builds
+  one discovery run, in turn.
+- Discovery candidates: one MySQL read finds the projects of the opted-in workspaces with no list, no run in flight,
+  and a `last_updated_trace_at` in the window. The retry wait (see "Retries") and the backfill gate (see "Discovery runs
   and the vectors backfill") filter them. Then ClickHouse counts each workspace's vectors in the window, one query per
-  workspace (`topics:count_window` in `system.query_log`). A project needs at least `TOPICS_BUILD_MIN_VECTORS`. The
+  workspace (`topics:count_window` in `system.query_log`). A project needs at least `TOPICS_RUN_MIN_VECTORS`. The
   planner counts until `TOPICS_RUNS_PLAN_BUDGET` and queues what it found. It takes one project of each workspace in
   turn, the most vectors first within a workspace.
 - The planner writes each run `queued` on its project's row, with a new `run_id`, then publishes it on the Redis stream
@@ -352,10 +354,10 @@ flowchart TD
   loses the claim only acks the message.
 - A running run writes `heartbeat_at` every `TOPICS_RUNS_HEARTBEAT_INTERVAL`. A heartbeat that updates no row stops the
   run: its row was cancelled or settled.
-- When a pod stops, it puts its running runs back to `queued` (`requeued` in the logs). Another pod runs them. A
-  shutdown does not count as a failure.
-- A saved first build queues its labelling pass as a run of its own (`run_mode = 'labels'`).
-- A first build under 1,000 traces is saved with `"provisional": true` in its stats.
+- When a pod stops, it puts its running runs back to `queued` and publishes each again (`requeued and published
+  again` in the logs). Another pod runs them at once. A shutdown does not count as a failure.
+- A saved discovery run queues its labelling pass as a run of its own (`run_mode = 'labels'`).
+- A discovery run under 1,000 traces is saved with `"provisional": true` in its stats.
 
 The leader logs `Topics plan done` with the window end and the runs queued. Each run logs `claimed`, then its outcome
 (`Topics run '<run_id>' saved` or `failed`, with its stats).
@@ -369,7 +371,7 @@ The leader logs `Topics plan done` with the window end and the runs queued. Each
 | `queued` | The planner or a run by hand queued it. No pod has claimed it yet. |
 | `running` | A pod claimed it. `deadline_at` and `heartbeat_at` are set. |
 | `cancelling` | Cancelled while running. Its pod stops at its next heartbeat and ends it `failed`. `cancel_reason` says why: `deadline`, `project_deleted` or `workspace_disabled`. |
-| `saved` | Ended well. For a first build, `list_run_id` is the run. |
+| `saved` | Ended well. For a discovery run, `list_run_id` is the run. |
 | `failed` | Ended badly. `run_error_code` says why (see below). |
 
 A cancelled run ends `failed` with `run_error_code = 'cancelled'`, or `timeout` when `cancel_reason = 'deadline'`.
@@ -377,10 +379,10 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 
 | `run_error_code` | Meaning |
 |---|---|
-| `llm_timeout` | The LLM call ran out of `TOPICS_BUILD_LLM_DEADLINE`. |
+| `llm_timeout` | The LLM call ran out of `TOPICS_RUN_LLM_DEADLINE`. |
 | `llm_error` | The LLM call failed after its retries, or with a 4xx. The run's `failed` log line has the code and HTTP status. |
 | `llm_bad_answer` | The answer has no JSON object, or breaks the schema. The run logs the answer's length and SHA-256, not its text. |
-| `window_read` | The ClickHouse window read failed (it stops after `TOPICS_BUILD_READ_TIMEOUT`), or the window had no usable vector. |
+| `window_read` | The ClickHouse window read failed (it stops after `TOPICS_RUN_READ_TIMEOUT`), or the window had no usable vector. |
 | `invariant` | The check before the save failed: a prototype without 384 values or not of unit length. |
 | `timeout` | The run passed its deadline. |
 | `save` | The MySQL transaction failed, or another run saved the project meanwhile. Nothing of the run is written. |
@@ -392,50 +394,52 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `TOPICS_FIRST_BUILD_ENABLED` | `false` | Schedules the job. Needs `TOPICS_ENABLED=true`. |
-| `TOPICS_FIRST_BUILD_PLAN_INTERVAL` | `5m` | How often the leader plans. From `10s` to `1h`. |
-| `TOPICS_FIRST_BUILD_SWEEP_INTERVAL` | `24h` | How often the leader deletes the topics of deleted projects. From `1h` to `7d`. |
-| `TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT` | `72h` | How long a first build waits for the project's vectors backfill (see "First builds and the vectors backfill"). |
-| `TOPICS_FIRST_BUILD_TIMED_OUT_SHARE` | `0.99` | Past the max wait, the share of the backfill's traces with a vector that lets the build start. |
+| `TOPICS_RUNS_PLAN_INTERVAL` | `5m` | How often the leader plans. Longer than `TOPICS_RUNS_PLAN_BUDGET`, from `10s` to `1h`. |
+| `TOPICS_RUNS_LEASE_SLACK` | `1m` | How much longer than the plan's budget and one count the leader lock lasts. At most `5m`. |
+| `TOPICS_STORAGE_SWEEP_INTERVAL` | `24h` | How often the leader deletes the topics of deleted projects. From `1h` to `7d`. |
+| `TOPICS_DISCOVERY_BACKFILL_MAX_WAIT` | `72h` | How long a discovery run waits for the project's vectors backfill (see "Discovery runs and the vectors backfill"). |
+| `TOPICS_DISCOVERY_TIMED_OUT_SHARE` | `0.99` | Past the max wait, the share of the backfill's traces with a vector that lets the build start. |
 | `TOPICS_RUNS_MAX_IN_FLIGHT` | `2` | Runs `queued`, `running` or `cancelling` across the cluster. Runs by hand do not wait for a slot. |
-| `TOPICS_RUNS_CONSUMER_BATCH_SIZE` | `1` | Runs one pod runs at a time. Each holds a window in memory. |
+| `TOPICS_RUNS_CONSUMER_BATCH_SIZE` | `2` | Runs one pod runs at a time. Each holds its window in memory, so this is a per-pod memory budget; set it to `TOPICS_RUNS_MAX_IN_FLIGHT` so one pod can fill every slot. At most `8`. |
 | `TOPICS_RUNS_HEARTBEAT_INTERVAL` | `20s` | How often a running run writes `heartbeat_at`. |
 | `TOPICS_RUNS_ABANDON_GRACE` | `60s` | A run whose heartbeat is older than this is `abandoned` at the next plan. |
 | `TOPICS_RUNS_REPUBLISH_AFTER` | `10m` | A run `queued` this long ago and not claimed is published again. |
 | `TOPICS_RUNS_PLAN_BUDGET` | `2m` | The planner stops counting candidates after this. |
 | `TOPICS_RUNS_PENDING_MESSAGE_DURATION` | `5m` | A stream message no pod acked for this long goes to another pod. |
-| `TOPICS_BUILD_PROJECT_TIMEOUT` | `15m` | A run's time limit. A first build's deadline adds its `trace_topics` insert bound (about 8.5 minutes by default). |
-| `TOPICS_BUILD_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. |
-| `TOPICS_BUILD_WINDOW_DAYS` | `30` | The window, in whole UTC days before its end. |
-| `TOPICS_BUILD_MAX_VECTORS` | `100000` | A larger window is sampled. |
-| `TOPICS_BUILD_LLM_DEADLINE` | `120s` | The deadline of the LLM call. Under the project timeout. |
-| `TOPICS_BUILD_COUNT_TIMEOUT` | `60s` | One ClickHouse window count. |
+| `TOPICS_RUN_PROJECT_TIMEOUT` | `15m` | A run's time limit. A discovery run's deadline adds its `trace_topics` insert bound (about 8.5 minutes by default). |
+| `TOPICS_RUN_MIN_VECTORS` | `100` | A project gets a discovery run when its window holds at least this many traces with a vector. |
+| `TOPICS_RUN_WINDOW_DAYS` | `30` | The window, in whole UTC days before its end. |
+| `TOPICS_RUN_MAX_VECTORS` | `100000` | A larger window is sampled. |
+| `TOPICS_RUN_LLM_DEADLINE` | `120s` | The deadline of the LLM call. Under the project timeout. |
+| `TOPICS_RUN_COUNT_TIMEOUT` | `60s` | One ClickHouse window count. |
 
 The `topics.runs` block also holds the stream settings: `TOPICS_RUNS_STREAM_NAME`, `TOPICS_RUNS_CONSUMER_GROUP_NAME`,
 `TOPICS_RUNS_POOLING_INTERVAL`, `TOPICS_RUNS_LONG_POLLING_DURATION`, `TOPICS_RUNS_CLAIM_INTERVAL_RATIO`,
 `TOPICS_RUNS_MAX_RETRIES`, `TOPICS_RUNS_STREAM_MAX_LEN` and `TOPICS_RUNS_STREAM_TRIM_LIMIT`.
 
-To turn planning off, set `TOPICS_FIRST_BUILD_ENABLED=false` and restart. Saved lists stay. Pods still run the runs
-already queued, and a run by hand still works. The sweep stops with the job. Nothing reconciles the runs in flight
-until the job is on again.
+The job runs whenever `TOPICS_ENABLED` is on; it has no switch of its own. To stop discovery runs for every workspace
+without a code change, list every workspace at `:vectors` in `TOPICS_ENABLED_WORKSPACES` (a deploy), for example
+`<workspace_id>:vectors`. Their vectors go on, saved lists stay, the next plan cancels their runs in flight with
+`cancel_reason = 'workspace_disabled'`, and a run by hand answers `409`. The job still runs the sweep.
 
-To stop first builds for one workspace, remove it from `TOPICS_ENABLED_WORKSPACES` (a deploy). Without a deploy,
+To stop discovery runs for one workspace, list it at `:vectors`, or remove it from `TOPICS_ENABLED_WORKSPACES`, which
+also stops its topic vectors (a deploy). Without a deploy,
 disable it in `ai_label_workspaces`, which also stops its ai-labels summaries (see "Opting workspaces in and out").
 Either one also stops its topic vectors. The next plan cancels its runs in flight with `cancel_reason =
 'workspace_disabled'`.
 
 ### Retries
 
-A failed first build writes nothing but the run columns of its row. `failed_runs` grows by one, except for
-`cancelled`. The planner queues the project again 1 hour after its first failed first build, 6 hours after its second,
-and 24 hours after each later one (`topics.firstBuild.retryDelays`). It waits from `run_finished_at`. A run by hand
+A failed discovery run writes nothing but the run columns of its row. `failed_runs` grows by one, except for
+`cancelled`. The planner queues the project again 1 hour after its first failed discovery run, 6 hours after its second,
+and 24 hours after each later one (`topics.discovery.retryDelays`). It waits from `run_finished_at`. A run by hand
 does not wait. A failed labelling pass waits the first delay, 1 hour, and does not count in `failed_runs`.
 
 ### Saving and labelling
 
 A run saves in this order: one MySQL transaction (the list columns of the project's row, the topics with their
 prototype vectors, the run `saved`), then the `trace_topics` insert. The insert is retried up to
-`TOPICS_BUILD_INSERT_RETRIES` (3) times, and each attempt stops after `TOPICS_BUILD_READ_TIMEOUT`. If the insert still
+`TOPICS_RUN_INSERT_RETRIES` (3) times, and each attempt stops after `TOPICS_RUN_READ_TIMEOUT`. If the insert still
 fails, the run stays saved and an ERROR names it (`saved, but its trace_topics insert failed`). The labelling pass then
 gives the window's traces their topics. If the project was deleted before the commit, the run deletes its topics and
 logs `saved after its project was deleted`.
@@ -443,7 +447,7 @@ logs `saved after its project was deleted`.
 The labelling pass gives a `trace_topics` row of the run to every window trace that has none: the traces outside the
 sample, and the run's own traces when its insert failed. It is a run of its own, `run_mode = 'labels'`, queued right
 after the save. It reads the saved prototypes from MySQL and the vectors from ClickHouse in pages of
-`TOPICS_BUILD_LABEL_PAGE_TRACES` (`topics:read_unlabelled` in `system.query_log`). It assigns them in the backend and
+`TOPICS_RUN_LABEL_PAGE_TRACES` (`topics:read_unlabelled` in `system.query_log`). It assigns them in the backend and
 inserts each page. It stops at the run's deadline less one heartbeat interval, and logs `labelling pass ended` with its
 outcome.
 
@@ -493,7 +497,7 @@ ORDER BY size DESC;
 
 ```sql
 -- ClickHouse: a project's trace counts per topic in the last saved window
--- (window_until is on the project's topic_projects row; window_from is TOPICS_BUILD_WINDOW_DAYS before it)
+-- (window_until is on the project's topic_projects row; window_from is TOPICS_RUN_WINDOW_DAYS before it)
 SELECT topic_id, count() AS traces
 FROM (
     SELECT trace_id, topic_id, is_deleted
@@ -547,8 +551,8 @@ XPENDING topics-runs topics-runs-consumers
 
 When a run stays in flight:
 
-1. Check that a leader plans: search the logs for `Topics plan done` in the last `TOPICS_FIRST_BUILD_PLAN_INTERVAL`.
-   No line means the job is off (`TOPICS_FIRST_BUILD_ENABLED`) or every plan fails (`Topics plan failed`). Nothing
+1. Check that a leader plans: search the logs for `Topics plan done` in the last `TOPICS_RUNS_PLAN_INTERVAL`.
+   No line means topics are off (`TOPICS_ENABLED`) or every plan fails (`Topics plan failed`). Nothing
    settles runs without a plan.
 2. A `queued` row that no pod claims: look for `claimed` and `not claimed` with its run id. The plan publishes it again
    after `TOPICS_RUNS_REPUBLISH_AFTER`.
@@ -561,29 +565,29 @@ settles each case above.
 
 ### Running by hand
 
-An internal endpoint queues a project's first build now instead of waiting for the next plan. Call it from inside the
-cluster. It works while `TOPICS_ENABLED` is on, also with the job off, and answers `501` otherwise.
+An internal endpoint queues a project's discovery run now instead of waiting for the next plan. Call it from inside the
+cluster.
 
 ```bash
 curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/run?workspace_id=<workspace_id>"
 ```
 
-The planner's rules apply: the workspace is opted in to topics, the project has no list and no run in flight, its
-window holds at least `TOPICS_BUILD_MIN_VECTORS` vectors, and its vectors backfill has drained (see "First builds and
-the vectors backfill"). The retry wait and `TOPICS_RUNS_MAX_IN_FLIGHT` do not apply. `&night=yyyy-MM-dd` sets the
-window's end: today (UTC) by default, so the window ends at today's start. It is at most tomorrow, whose window holds
-today's traces so far, and at least 365 days ago. `&ignore_backfill=true` builds it anyway, from the vectors it has so
-far; the call logs a WARN `ignores the vectors backfill gate`.
+The planner's rules apply: the workspace is opted in to topics at stage `build` or later, the project has no list and no
+run in flight, its window holds at least `TOPICS_RUN_MIN_VECTORS` vectors, and its vectors backfill has drained (see
+"Discovery runs and the vectors backfill"). The retry wait and `TOPICS_RUNS_MAX_IN_FLIGHT` do not apply.
+`&night=yyyy-MM-dd` sets the window's end: today (UTC) by default, so the window ends at today's start. It is at most
+tomorrow, whose window holds today's traces so far, and at least 365 days ago. `&ignore_backfill=true` builds it anyway,
+from the vectors it has so far; the call logs a WARN `ignores the vectors backfill gate`.
 
 | Answer | Meaning |
 |---|---|
 | `202` | The run is queued. The body is `{"run_id": "..."}`. Any pod runs it; read its outcome on the project's row or in the logs. |
-| `409` | The workspace is not opted in, the project has a list or a run in flight or no trace in the window, the window has too few vectors, or the backfill has not drained. The body's message says which. |
+| `409` | The workspace is not opted in at stage `build` or later (or topics are off), the project has a list or a run in flight or no trace in the window, the window has too few vectors, or the backfill has not drained. The body's message says which. |
 | `400` | The night is not a date, is after tomorrow, or is more than 365 days ago. |
 | `503` | The run could not be started, so nothing is queued. Try again. |
 
-To build a project that already has a list again (for example after a bad first build), delete its list first. Keep
-the project's `topic_projects` row: its `backfill_*` columns are the vectors tick's, and the first build waits for
+To build a project that already has a list again (for example after a bad discovery run), delete its list first. Keep
+the project's `topic_projects` row: its `backfill_*` columns are the vectors tick's, and the discovery run waits for
 them. Its `trace_topics` rows stay until the new run replaces them:
 
 ```sql
@@ -595,10 +599,10 @@ WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
 AND (run_status IS NULL OR run_status IN ('saved', 'failed'));
 ```
 
-### First builds and the vectors backfill
+### Discovery runs and the vectors backfill
 
 When a workspace is opted in, the topic vectors tick embeds the traces it already has in a backfill, project by
-project. A project's first list waits until the project's backfill has drained. Otherwise the list is built from the
+project. A project's first list waits until the project's backfill has drained. Otherwise the list is made from the
 part of the window that has vectors so far.
 
 The gate reads two MySQL tables that only the vectors tick writes: the `backfill_*` columns of `topic_projects`, and
@@ -610,19 +614,19 @@ The gate reads two MySQL tables that only the vectors tick writes: the `backfill
 Each project gets one of four states. "Fresh" means the workspace's `vectors_checked_at` is within 2 ×
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`.
 
-| State | When | First build |
+| State | When | Discovery run |
 |---|---|---|
-| `open` | `backfill_drained_at` is set and the workspace is fresh. | Built. |
-| `waiting` | Not `open`, and the backfill started `TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT` (`72h`) ago or less. | Waits. |
-| `timed_out_open` | Not `open`, the backfill started more than `72h` ago, and `backfill_traces_done` is at least `TOPICS_FIRST_BUILD_TIMED_OUT_SHARE` (99%) of `backfill_traces_total`. | Built. |
+| `open` | `backfill_drained_at` is set and the workspace is fresh. | Runs. |
+| `waiting` | Not `open`, and the backfill started `TOPICS_DISCOVERY_BACKFILL_MAX_WAIT` (`72h`) ago or less. | Waits. |
+| `timed_out_open` | Not `open`, the backfill started more than `72h` ago, and `backfill_traces_done` is at least `TOPICS_DISCOVERY_TIMED_OUT_SHARE` (99%) of `backfill_traces_total`. | Runs. |
 | `timed_out_waiting` | Not `open`, the backfill started more than `72h` ago, and fewer have a vector, or `backfill_traces_total` is 0. | Waits. |
 
 A project with no backfill is `open` when its workspace is fresh. When the workspace is not fresh, the project is
 `waiting`.
 
 For a workspace with `timed_out_waiting` projects, each plan logs a WARN with their count and the longest wait:
-`Topics first builds held back: the vectors tick stopped checking the workspace, or a backfill ran past
-topics.firstBuild.backfillMaxWait`. Then check that the vectors tick still runs for the workspace:
+`Topics discovery runs held back: the vectors tick stopped checking the workspace, or a backfill ran past
+topics.discovery.backfillMaxWait`. Then check that the vectors tick still runs for the workspace:
 
 ```sql
 -- MySQL: when the tick last discovered the workspace's projects
@@ -643,7 +647,7 @@ ORDER BY backfill_started_at;
   embed service refuses them).
 
 To build the project anyway, call the endpoint with `&ignore_backfill=true` (see "Running by hand"). The list is then
-built only from the traces that have a vector now, so its topics can miss what the other traces are about.
+made only from the traces that have a vector now, so its topics can miss what the other traces are about.
 
 ### What to watch
 
@@ -660,22 +664,21 @@ move between pods, so read the counters with `sum` across pods.
 | `topics.trace_topics.inserts` by `outcome` | `trace_topics` inserts after a save and per labelling page: `ok`, or `failed` after the retries. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No threshold is set. |
 
-A failed window count logs a WARN (`Topics first builds count failed`) with the workspace. The planner then counts
+A failed window count logs a WARN (`Topics discovery runs count failed`) with the workspace. The planner then counts
 each project of that workspace alone. The Prometheus names replace the dots with underscores, for example
 `topics_runs_total`. ClickHouse queries of the runs have a `log_comment` that starts with `topics:`.
 
-No alert reads first builds yet: the planner publishes no gauge. Watch the WARN above and the runs in flight.
+No alert reads discovery runs yet: the planner publishes no gauge. Watch the WARN above and the runs in flight.
 
 ### Deletes
 
 A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
 both. Deleting a project:
 
-- cancels its runs in flight: a `queued` run fails at once with `cancelled`, a `running` one goes to `cancelling` with
-  `cancel_reason = 'project_deleted'` and stops at its next heartbeat;
-- deletes its `topics`, with their prototype vectors;
-- deletes its `topic_projects` row.
+- deletes its `topic_projects` row, run included: a run in flight then finds no row, writes nothing and stops at its
+  next heartbeat;
+- deletes its `topics`, with their prototype vectors, `TOPICS_STORAGE_DELETE_BATCH_SIZE` projects per transaction.
 
-When that fails, the next plan cancels its runs, the job's sweep (every `TOPICS_FIRST_BUILD_SWEEP_INTERVAL`) deletes
+When that fails, the job's sweep (every `TOPICS_STORAGE_SWEEP_INTERVAL`, in the same batches) deletes
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

@@ -352,6 +352,12 @@ public class TopicsConfig {
          */
         @JsonProperty
         @Min(1) @Max(10_000) private int deleteBatchSize;
+
+        /** How often the leader deletes the topics of deleted projects that the project delete left. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration sweepInterval;
     }
 
     /**
@@ -471,7 +477,10 @@ public class TopicsConfig {
         @NotNull @JsonProperty
         private String consumerGroupName;
 
-        /** Runs one pod runs at a time: each holds a window in memory. */
+        /**
+         * Runs one pod runs at a time: each holds its window in memory, so this is a per-pod memory budget. Set it to
+         * {@code maxInFlight} so one pod can fill every slot.
+         */
         @JsonProperty
         @Min(1) @Max(8) private int consumerBatchSize;
 
@@ -538,6 +547,18 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration planBudget;
 
+        /** How often the leader plans: the discovery job fires on every pod this often, and one of them plans. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration planInterval;
+
+        /** How much longer than the plan the leader lock lasts, for the queue writes and publishes after the counts. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
         /** How long a stopping pod waits for each of its runs to be put back to {@code queued}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -548,6 +569,12 @@ public class TopicsConfig {
         @JsonIgnore
         public Codec getCodec() {
             return RedisStreamCodec.JAVA.getCodec();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.runs.planBudget must be shorter than topics.runs.planInterval") public boolean isPlanBudgetValid() {
+            return planBudget == null || planInterval == null
+                    || planBudget.toMilliseconds() < planInterval.toMilliseconds();
         }
 
         @JsonIgnore

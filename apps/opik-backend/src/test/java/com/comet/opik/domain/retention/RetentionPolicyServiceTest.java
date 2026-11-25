@@ -931,7 +931,8 @@ class RetentionPolicyServiceTest {
     }
 
     private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
-        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "topic_vector_status", "trace_topics")) {
+        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "topic_vector_status",
+                "trace_topics")) {
             var actual = templateAsync.nonTransaction(connection -> Mono
                     .from(connection.createStatement(
                             "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"

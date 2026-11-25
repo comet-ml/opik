@@ -10,11 +10,9 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
-import com.comet.opik.api.resources.v1.jobs.TopicsFirstBuildJob;
+import com.comet.opik.api.resources.v1.events.TopicProjectsDeletedListener;
+import com.comet.opik.api.resources.v1.jobs.TopicsDiscoveryJob;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
-import com.comet.opik.domain.topics.TopicProject.CancelReason;
-import com.comet.opik.domain.topics.TopicProject.RunStatus;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -68,20 +66,20 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The first-build job, the run by hand and the project-delete cancel against real ClickHouse, MySQL and Redis, with
+ * The discovery job, the run by hand and the project delete against real ClickHouse, MySQL and Redis, with
  * opik-inference's {@code /v1/generate} stubbed in WireMock. The planner and the runs themselves are
  * {@link TopicsRunsIntegrationTest}'s. The scheduled job fires at startup, before any workspace is opted in, which
  * holds its plan and sweep locks; a test that fires the job frees the lock it needs first.
  */
-@DisplayName("topics first-build job")
+@DisplayName("topics discovery job")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class TopicsFirstBuildJobIntegrationTest {
+class TopicsDiscoveryJobIntegrationTest {
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final Duration WAIT = Duration.ofSeconds(90);
-    private static final Lock PLAN_LOCK = new Lock("topics:first_build:plan");
-    private static final Lock SWEEP_LOCK = new Lock("topics:first_build:sweep");
+    private static final Lock PLAN_LOCK = new Lock("topics:discovery:plan");
+    private static final Lock SWEEP_LOCK = new Lock("topics:discovery:sweep");
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -117,8 +115,7 @@ class TopicsFirstBuildJobIntegrationTest {
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
-                        new CustomConfig("topics.firstBuild.enabled", "true"),
-                        new CustomConfig("topics.firstBuild.planInterval", "1h"),
+                        new CustomConfig("topics.runs.planInterval", "1h"),
                         new CustomConfig("topics.runs.poolingInterval", "200ms"),
                         new CustomConfig("topics.runs.longPollingDuration", "200ms")))
                 .build());
@@ -128,16 +125,16 @@ class TopicsFirstBuildJobIntegrationTest {
     private TransactionTemplate template;
     private TopicsTestData data;
     private GuiceJobManager jobManager;
-    private TopicsFirstBuildJob job;
+    private TopicsDiscoveryJob job;
     private LockService lockService;
-    private TopicsProjectDeletedListener projectDeletedListener;
+    private TopicProjectsDeletedListener projectDeletedListener;
     private ClientSupport client;
     private String baseUrl;
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
-            @Jit TopicsFirstBuildJob job, @Jit TopicsProjectDeletedListener projectDeletedListener,
+            @Jit TopicsDiscoveryJob job, @Jit TopicProjectsDeletedListener projectDeletedListener,
             @Jit TopicVectorsDAO vectorsDAO) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -169,16 +166,16 @@ class TopicsFirstBuildJobIntegrationTest {
         });
         opikConfig.getTopics().setEnabledWorkspaces("");
         wireMock.resetAll();
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.firstBuildAnswer,
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
                 0)));
     }
 
     @Test
-    @DisplayName("enabled, the first-build job is scheduled on topics.firstBuild.planInterval")
+    @DisplayName("with topics on, the discovery job is scheduled on topics.runs.planInterval")
     void jobIsScheduled() throws SchedulerException {
         var scheduler = jobManager.getScheduler();
         var triggers = scheduler.getJobKeys(GroupMatcher.anyGroup()).stream()
-                .filter(key -> jobClass(key) == TopicsFirstBuildJob.class)
+                .filter(key -> jobClass(key) == TopicsDiscoveryJob.class)
                 .flatMap(key -> triggers(key).stream())
                 .toList();
 
@@ -187,11 +184,11 @@ class TopicsFirstBuildJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("a job fire plans: the opted-in project's first build is queued and built; another fire within the "
+    @DisplayName("a job fire plans: the opted-in project's discovery run is queued and run; another fire within the "
             + "interval plans nothing")
     void jobPlans() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = TopicsTestData.newId();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         lockService.unlockUsingToken(PLAN_LOCK).block();
 
@@ -201,14 +198,14 @@ class TopicsFirstBuildJobIntegrationTest {
             assertThat(data.topicProject(projectId)).isNotNull()
                     .satisfies(project -> assertThat(project.runId()).isNotNull());
         });
-        var builtRun = awaitBuilt(projectId);
+        var savedRun = awaitSaved(projectId);
 
-        var other = UUID.randomUUID();
+        var other = TopicsTestData.newId();
         data.seed(workspaceId, other, 0, FIXTURE.size(), tomorrowStart());
         job.doJob(null);
         Awaitility.await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5))
                 .untilAsserted(() -> assertNoRun(other));
-        assertThat(data.topicProject(projectId).listRunId()).isEqualTo(builtRun);
+        assertThat(data.topicProject(projectId).listRunId()).isEqualTo(savedRun);
     }
 
     @Test
@@ -217,8 +214,8 @@ class TopicsFirstBuildJobIntegrationTest {
     void jobSweepsDeletedProjects() {
         var workspaceId = enabledWorkspace();
         // More than topics.storage.deleteBatchSize (2 in the tests), so the sweep deletes in two transactions.
-        var deleted = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        var kept = UUID.randomUUID();
+        var deleted = List.of(TopicsTestData.newId(), TopicsTestData.newId(), TopicsTestData.newId());
+        var kept = TopicsTestData.newId();
         data.project(workspaceId, kept);
         deleted.forEach(projectId -> data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size()));
         data.savedList(workspaceId, kept, tomorrowStart(), FIXTURE.size());
@@ -233,11 +230,11 @@ class TopicsFirstBuildJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("the internal endpoint queues a first build and returns its run id, which a pod builds; a second "
+    @DisplayName("the internal endpoint queues a discovery run and returns its run id, which a pod runs; a second "
             + "call is refused (409) with the planner's reason, and a bad night is refused (400)")
     void runByHand() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = TopicsTestData.newId();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
 
         String runId;
@@ -246,7 +243,7 @@ class TopicsFirstBuildJobIntegrationTest {
             runId = response.readEntity(JsonNode.class).path("run_id").asText();
         }
 
-        assertThat(awaitBuilt(projectId)).hasToString(runId);
+        assertThat(awaitSaved(projectId)).hasToString(runId);
         try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
             assertThat(response.readEntity(String.class)).contains("has a topic list");
@@ -257,44 +254,57 @@ class TopicsFirstBuildJobIntegrationTest {
         }
         for (var night : List.of("yesterday", LocalDate.now(ZoneOffset.UTC).plusDays(2).toString(),
                 "-999999999-01-05")) {
-            try (var response = runProject(workspaceId, UUID.randomUUID(), night)) {
+            try (var response = runProject(workspaceId, TopicsTestData.newId(), night)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
         }
     }
 
     @Test
-    @DisplayName("deleting a project cancels its runs: a queued run fails at once as cancelled, a running one goes to "
-            + "cancelling; another project's run is kept")
-    void projectDeleteCancelsItsRuns() {
+    @DisplayName("deleting projects deletes their topics, with their prototype vectors, in batches, and keeps another "
+            + "project's")
+    void projectDeleteDeletesItsTopics() {
         var workspaceId = enabledWorkspace();
-        var queued = UUID.randomUUID();
-        var running = UUID.randomUUID();
-        var kept = UUID.randomUUID();
-        var now = Instant.now();
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicProjectDAO.class);
-            dao.ensureRow(workspaceId, queued);
-            dao.queue(workspaceId, queued, TopicsTestData.newId(), TopicProject.RunMode.FIRST_BUILD, now);
-            TopicsTestData.startRun(dao, workspaceId, running, TopicsTestData.newId(),
-                    TopicProject.RunMode.FIRST_BUILD, now);
-            TopicsTestData.startRun(dao, workspaceId, kept, TopicsTestData.newId(),
-                    TopicProject.RunMode.FIRST_BUILD, now);
-            return null;
-        });
+        // More than topics.storage.deleteBatchSize (2 in the tests), so the listener deletes in two transactions.
+        var deleted = List.of(TopicsTestData.newId(), TopicsTestData.newId(), TopicsTestData.newId());
+        var kept = TopicsTestData.newId();
+        deleted.forEach(projectId -> data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size()));
+        data.savedList(workspaceId, kept, tomorrowStart(), FIXTURE.size());
 
-        projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(queued, running), workspaceId, "test"));
+        projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.copyOf(deleted), workspaceId, "test"));
 
-        assertThat(data.topicProject(queued)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(RunStatus.FAILED);
-            assertThat(project.runErrorCode()).isEqualTo(TopicProject.RunError.CANCELLED);
-            assertThat(project.cancelReason()).isEqualTo(CancelReason.PROJECT_DELETED);
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(deleted)
+                .allSatisfy(projectId -> assertThat(data.topics(projectId)).isEmpty()));
+        assertThat(data.topics(kept)).singleElement()
+                .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));
+    }
+
+    @Test
+    @DisplayName("a workspace listed at a stage before build gets no run from a job fire and is refused by hand (409); "
+            + "one listed at build gets its run")
+    void stageBeforeBuildIsSkipped() {
+        var vectorsOnly = aiLabelsOnlyWorkspace();
+        var atBuild = aiLabelsOnlyWorkspace();
+        opikConfig.getTopics().setEnabledWorkspaces(vectorsOnly + ":vectors," + atBuild + ":build");
+        var skipped = TopicsTestData.newId();
+        var planned = TopicsTestData.newId();
+        data.seed(vectorsOnly, skipped, 0, FIXTURE.size(), tomorrowStart());
+        data.seed(atBuild, planned, 0, FIXTURE.size(), tomorrowStart());
+        drainedBackfill(vectorsOnly);
+        drainedBackfill(atBuild);
+        lockService.unlockUsingToken(PLAN_LOCK).block();
+
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> {
+            job.doJob(null);
+            assertThat(data.topicProject(planned)).isNotNull()
+                    .satisfies(project -> assertThat(project.runId()).isNotNull());
         });
-        assertThat(data.topicProject(running)).satisfies(project -> {
-            assertThat(project.runStatus()).isEqualTo(RunStatus.CANCELLING);
-            assertThat(project.cancelReason()).isEqualTo(CancelReason.PROJECT_DELETED);
-        });
-        assertThat(data.topicProject(kept).runStatus()).isEqualTo(RunStatus.RUNNING);
+        awaitSaved(planned);
+        assertNoRun(skipped);
+        try (var response = runProject(vectorsOnly, skipped, tomorrow().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("not opted in");
+        }
     }
 
     private Class<?> jobClass(org.quartz.JobKey key) {
@@ -313,8 +323,8 @@ class TopicsFirstBuildJobIntegrationTest {
         }
     }
 
-    /** Waits until the project's first build is saved and returns its run id. */
-    private UUID awaitBuilt(UUID projectId) {
+    /** Waits until the project's discovery run is saved and returns its run id. */
+    private UUID awaitSaved(UUID projectId) {
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
                 .isNotNull());
         return data.topicProject(projectId).listRunId();
@@ -345,7 +355,7 @@ class TopicsFirstBuildJobIntegrationTest {
 
     /**
      * Opted in to both, and seen by the vectors tick with no backlog: one drained backfill row, of another project,
-     * so the first build of a project with no row of its own does not wait.
+     * so the discovery run of a project with no row of its own does not wait.
      */
     private String enabledWorkspace() {
         var workspaceId = aiLabelsOnlyWorkspace();
@@ -353,23 +363,28 @@ class TopicsFirstBuildJobIntegrationTest {
         var listed = new TreeSet<>(topics.enabledWorkspaceIds());
         listed.add(workspaceId);
         topics.setEnabledWorkspaces(String.join(",", listed));
+        drainedBackfill(workspaceId);
+        return workspaceId;
+    }
+
+    /** One drained backfill row, of another project, so the workspace's vectors tick has no backlog. */
+    private void drainedBackfill(String workspaceId) {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
             var dao = handle.attach(TopicProjectDAO.class);
-            var drained = UUID.randomUUID();
+            var drained = TopicsTestData.newId();
             dao.startBackfills(List.of(TopicBackfill.builder().workspaceId(workspaceId)
                     .projectId(drained).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             dao.recordBackfills(List.of(TopicBackfillProgress.builder().workspaceId(workspaceId)
                     .projectId(drained).drainedAt(now).build()));
             return null;
         });
-        return workspaceId;
     }
 
     /** Opted in to ai-labels only, not listed in topics.enabledWorkspaces. */
     private String aiLabelsOnlyWorkspace() {
-        var workspaceId = UUID.randomUUID().toString();
+        var workspaceId = TopicsTestData.newId().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;

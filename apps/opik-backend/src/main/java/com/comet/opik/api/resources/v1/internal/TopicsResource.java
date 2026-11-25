@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
-import com.comet.opik.infrastructure.TopicsConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,7 +19,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -29,7 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Queues a project's first topic build by hand instead of waiting for the leader's next plan. Internal and
+ * Queues a project's discovery run by hand instead of waiting for the leader's next plan. Internal and
  * cross-workspace, so it is reachable only from inside the cluster: like the other {@code /v1/internal} resources it is
  * not authenticated by {@code AuthFilter}. For the runbook.
  */
@@ -45,23 +43,18 @@ public class TopicsResource {
     private static final int MAX_NIGHT_AGE_DAYS = 365;
 
     private final @NonNull TopicsRunPlanner planner;
-    private final @NonNull @Config("topics") TopicsConfig config;
 
     @POST
     @Path("/projects/{projectId}/run")
-    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Queues the project's first build and returns its run id; any pod runs it. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The window ends at the start of the night date (UTC; default today, at most tomorrow, at least 365 days ago). The workspace is opted in to topics, the window holds topics.build.minVectors vectors of the project, and the project has no list and no run in flight. The project's vectors backfill must have drained: ignore_backfill=true builds it from the vectors it has so far. A failed first build's retry wait and topics.runs.maxInFlight do not apply.", responses = {
+    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Queues the project's discovery run and returns its run id; any pod runs it. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The window ends at the start of the night date (UTC; default today, at most tomorrow, at least 365 days ago). The workspace is opted in to topics at stage build or later, the window holds topics.run.minVectors vectors of the project, and the project has no list and no run in flight. The project's vectors backfill must have drained: ignore_backfill=true builds it from the vectors it has so far. A failed discovery run's retry wait and topics.runs.maxInFlight do not apply.", responses = {
             @ApiResponse(responseCode = "202", description = "The run is queued"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
-            @ApiResponse(responseCode = "409", description = "The workspace is not opted in, the window is too small, a run is in flight, the project has a list, or its vectors backfill has not drained"),
-            @ApiResponse(responseCode = "503", description = "The run could not be started; nothing is queued, try again"),
-            @ApiResponse(responseCode = "501", description = "Topics are off")})
+            @ApiResponse(responseCode = "409", description = "The workspace is not opted in at stage build or later, or topics are off, the window is too small, a run is in flight, the project has a list, or its vectors backfill has not drained"),
+            @ApiResponse(responseCode = "503", description = "The run could not be started; nothing is queued, try again")})
     public Response runProject(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
             @QueryParam("night") String night,
             @QueryParam("ignore_backfill") @DefaultValue("false") boolean ignoreBackfill) {
-        if (!config.isEnabled()) {
-            return Response.status(Response.Status.NOT_IMPLEMENTED).build();
-        }
         if (ignoreBackfill) {
             log.warn("Topics run by hand ignores the vectors backfill gate, workspace '{}', project '{}'", workspaceId,
                     projectId);

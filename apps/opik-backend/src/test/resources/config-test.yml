@@ -1135,7 +1135,7 @@ topics:
   runs:
     streamName: topics-runs
     consumerGroupName: topics-runs-consumers
-    consumerBatchSize: 1
+    consumerBatchSize: 2
     poolingInterval: 5s
     longPollingDuration: 5s
     claimIntervalRatio: 2
@@ -1148,6 +1148,8 @@ topics:
     abandonGrace: 60s
     republishAfter: 10m
     planBudget: 2m
+    planInterval: 5m
+    leaseSlack: 1m
     requeueWait: 5s
   algorithm:
     minGroups: 30
@@ -1182,6 +1184,7 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
+    sweepInterval: 24h
 
 # Python evaluator configuration
 pythonEvaluator:

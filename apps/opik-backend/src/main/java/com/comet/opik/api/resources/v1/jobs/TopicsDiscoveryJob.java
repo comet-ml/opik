@@ -1,12 +1,10 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.topics.TopicDAO;
-import com.comet.opik.domain.topics.TopicProjectKey;
+import com.comet.opik.domain.topics.TopicRunStore;
 import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.google.common.collect.Lists;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -22,28 +20,23 @@ import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
-import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
- * The topics first-build job: the leader plans the Topics runs ({@link TopicsRunPlanner#plan(Instant)}) and, once a
- * day, deletes the topics of deleted projects that the project delete missed. Every pod fires it every
- * {@code topics.firstBuild.planInterval}, each at its own second (Quartz starts the trigger at boot). The same locks as
- * {@link TopicVectorsJob} make that one plan per interval across the cluster:
+ * The scheduled caller of the Topics planner: the leader plans the runs ({@link TopicsRunPlanner#plan(Instant)}) every
+ * {@code topics.runs.planInterval} and, every {@code topics.storage.sweepInterval}, deletes the topics of deleted
+ * projects that the project delete left. Every pod fires it every plan interval, each at its own second (Quartz starts
+ * the trigger at boot). The same locks as {@link TopicVectorsJob} make that one plan per interval across the cluster:
  * <ul>
  * <li>the leader lock, held for the plan and released when it ends, so two plans never overlap; its lease
  * ({@link #leaderLease()}) only matters when the pod dies mid-plan, because a plan that runs longer is cancelled;</li>
  * <li>the plan lock, taken by the leader before it plans and never released: it expires one interval (less a small
  * margin for trigger jitter) after the plan started, so a pod that fires sooner skips. The sweep lock does the same
- * for {@code topics.firstBuild.sweepInterval}.</li>
+ * for the sweep interval.</li>
  * </ul>
  * The runs themselves run on any pod, from the stream. A pod shutdown interrupts the job (the lifecycle listener does
  * it before it stops the scheduler): it cancels the plan in flight, which frees the leader lock at once, and the job
@@ -53,26 +46,24 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Singleton
 @DisallowConcurrentExecution
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class TopicsFirstBuildJob extends Job implements InterruptableJob {
+public class TopicsDiscoveryJob extends Job implements InterruptableJob {
 
-    static final Lock LEADER_LOCK = new Lock("topics:first_build:leader");
-    static final Lock PLAN_LOCK = new Lock("topics:first_build:plan");
-    static final Lock SWEEP_LOCK = new Lock("topics:first_build:sweep");
+    static final Lock LEADER_LOCK = new Lock("topics:discovery:leader");
+    static final Lock PLAN_LOCK = new Lock("topics:discovery:plan");
+    static final Lock SWEEP_LOCK = new Lock("topics:discovery:sweep");
     private static final Duration MAX_JITTER = Duration.ofSeconds(1);
-    /** The plan's MySQL writes and stream publishes after its candidates, and the sweep. */
-    private static final Duration LEASE_SLACK = Duration.ofMinutes(1);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicsRunPlanner planner;
     private final @NonNull TopicWorkspaceService workspaceService;
-    private final @NonNull TransactionTemplate template;
+    private final @NonNull TopicRunStore store;
     private final @NonNull LockService lockService;
     // Every plan in flight, not only the last one: an interrupt must cancel the one the next fire did not start.
     private final Disposable.Composite inFlight = Disposables.composite();
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!config.isEnabled() || !config.getFirstBuild().isEnabled() || inFlight.isDisposed()) {
+        if (!config.isEnabled() || inFlight.isDisposed()) {
             return;
         }
         // The plan is added before it is subscribed: an interrupt that comes first disposes it, and the update below
@@ -100,7 +91,7 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
     @Override
     public void interrupt() throws UnableToInterruptJobException {
         inFlight.dispose();
-        log.info("TopicsFirstBuildJob interrupted, cancelling any in-flight plan");
+        log.info("TopicsDiscoveryJob interrupted, cancelling any in-flight plan");
     }
 
     /**
@@ -109,7 +100,8 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
      * runs.
      */
     Mono<Void> planIfDue(Instant start) {
-        return Mono.defer(() -> lockService.lockUsingToken(PLAN_LOCK, slot(config.getFirstBuild().getPlanInterval())))
+        return Mono.defer(
+                () -> lockService.lockUsingToken(PLAN_LOCK, slot(config.getRuns().getPlanInterval().toJavaDuration())))
                 .flatMap(due -> due
                         ? planner.plan(start).then()
                         : Mono.<Void>fromRunnable(() -> log.debug(
@@ -123,7 +115,9 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
 
     /** Deletes the topics of deleted projects unless a sweep started, on any pod, less than one interval ago. */
     Mono<Void> sweepIfDue() {
-        return Mono.defer(() -> lockService.lockUsingToken(SWEEP_LOCK, slot(config.getFirstBuild().getSweepInterval())))
+        return Mono
+                .defer(() -> lockService.lockUsingToken(SWEEP_LOCK,
+                        slot(config.getStorage().getSweepInterval().toJavaDuration())))
                 .flatMap(due -> due ? sweep() : Mono.<Void>empty())
                 .onErrorResume(error -> {
                     log.error("Topics delete of deleted projects' topics failed", error);
@@ -132,26 +126,9 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
     }
 
     private Mono<Void> sweep() {
-        return Mono.fromCallable(() -> {
-            var workspaceIds = workspaceService.enabledWorkspaceIds();
-            if (workspaceIds.isEmpty()) {
-                return 0;
-            }
-            var missing = template.inTransaction(READ_ONLY,
-                    handle -> handle.attach(TopicDAO.class).findTopicProjectsOfMissingProjects(workspaceIds));
-            // One transaction per batch, so a bulk project delete the listener missed is never one large delete.
-            return missing.stream()
-                    .collect(Collectors.groupingBy(TopicProjectKey::workspaceId,
-                            Collectors.mapping(TopicProjectKey::projectId, Collectors.toList())))
-                    .entrySet().stream()
-                    .flatMap(entry -> Lists.partition(entry.getValue(), config.getStorage().getDeleteBatchSize())
-                            .stream()
-                            .map(batch -> Map.entry(entry.getKey(), batch)))
-                    .mapToInt(batch -> template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                            .deleteTopicsByProjects(batch.getKey(), batch.getValue())))
-                    .sum();
-        })
+        return Mono.fromCallable(workspaceService::enabledWorkspaceIds)
                 .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(store::deleteTopicsOfMissingProjects)
                 .doOnNext(topics -> {
                     if (topics > 0) {
                         log.info("Deleted the topics of deleted projects, topics '{}'", topics);
@@ -162,19 +139,18 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
 
     /**
      * How long the leader lock lasts, and the plan with it: the planner stops counting candidates after
-     * {@code topics.runs.planBudget}, a count started just before that ends within {@code topics.build.countTimeout},
-     * and {@link #LEASE_SLACK} covers the rest.
+     * {@code topics.runs.planBudget}, a count started just before that ends within {@code topics.run.countTimeout},
+     * and {@code topics.runs.leaseSlack} covers the queue writes and publishes after it.
      */
     Duration leaderLease() {
         return config.getRuns().getPlanBudget().toJavaDuration()
-                .plus(config.getBuild().getCountTimeout().toJavaDuration())
-                .plus(LEASE_SLACK);
+                .plus(config.getRun().getCountTimeout().toJavaDuration())
+                .plus(config.getRuns().getLeaseSlack().toJavaDuration());
     }
 
     /** One interval, less a margin for trigger jitter, so the pod whose trigger comes next is never one plan late. */
-    static Duration slot(io.dropwizard.util.Duration interval) {
-        var length = interval.toJavaDuration();
-        var margin = length.dividedBy(10);
-        return length.minus(margin.compareTo(MAX_JITTER) < 0 ? margin : MAX_JITTER);
+    static Duration slot(Duration interval) {
+        var margin = interval.dividedBy(10);
+        return interval.minus(margin.compareTo(MAX_JITTER) < 0 ? margin : MAX_JITTER);
     }
 }

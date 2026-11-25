@@ -119,6 +119,12 @@ final class TopicsTestData {
                 INSERT INTO projects (id, name, workspace_id, last_updated_trace_at) VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE last_updated_trace_at = GREATEST(IFNULL(last_updated_trace_at, ?), ?)
                 """, projectId.toString(), "topics-" + projectId, workspaceId, lastTrace, lastTrace, lastTrace));
+        seedVectors(workspaceId, projectId, from, count, night);
+    }
+
+    /** As {@link #seed(String, UUID, int, int, Instant)}, the vectors only: the project row is left as it is. */
+    void seedVectors(String workspaceId, UUID projectId, int from, int count, Instant night) {
+        var shift = Duration.between(traces.night(), night);
         int dimensions = TopicEmbedding.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {

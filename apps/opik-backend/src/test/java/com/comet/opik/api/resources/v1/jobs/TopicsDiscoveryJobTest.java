@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.topics.TopicRunStore;
 import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.DistributedLockConfig;
@@ -29,7 +30,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -52,26 +52,28 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@DisplayName("topics first-build job")
-class TopicsFirstBuildJobTest {
+@DisplayName("topics discovery job")
+class TopicsDiscoveryJobTest {
 
-    /** planBudget 2m + countTimeout 60s + 1m slack, from config-test.yml. */
+    /** planBudget 2m + countTimeout 60s + leaseSlack 1m, from config-test.yml. */
     private static final Duration LEASE = Duration.ofMinutes(4);
 
     private final TopicsConfig config = enabled(TestConfigUtils.loadConfigTest()).getTopics();
     private final TopicsRunPlanner planner = mock(TopicsRunPlanner.class);
     private final TopicWorkspaceService workspaceService = mock(TopicWorkspaceService.class);
+    private final TopicRunStore store = mock(TopicRunStore.class);
     private final LockService lockService = mock(LockService.class);
-    private TopicsFirstBuildJob job;
+    private TopicsDiscoveryJob job;
 
     @BeforeEach
     void setUp() {
         when(planner.plan(any())).thenReturn(Mono.just(0));
         when(workspaceService.enabledWorkspaceIds()).thenReturn(List.of());
+        when(store.deleteTopicsOfMissingProjects(any())).thenReturn(Mono.just(0));
         // This pod takes the leader lock: the lock service runs the action, here before doJob returns.
-        when(lockService.bestEffortLock(eq(TopicsFirstBuildJob.LEADER_LOCK), any(), any(), eq(LEASE),
+        when(lockService.bestEffortLock(eq(TopicsDiscoveryJob.LEADER_LOCK), any(), any(), eq(LEASE),
                 eq(Duration.ZERO))).thenAnswer(invocation -> invocation.<Mono<?>>getArgument(1));
-        job = new TopicsFirstBuildJob(config, planner, workspaceService, mock(TransactionTemplate.class), lockService);
+        job = new TopicsDiscoveryJob(config, planner, workspaceService, store, lockService);
     }
 
     @Test
@@ -80,9 +82,9 @@ class TopicsFirstBuildJobTest {
         var now = new AtomicReference<>(Instant.EPOCH);
         var plan = new FakeTokenLock(now);
         var sweep = new FakeTokenLock(now);
-        when(lockService.lockUsingToken(eq(TopicsFirstBuildJob.PLAN_LOCK), any()))
+        when(lockService.lockUsingToken(eq(TopicsDiscoveryJob.PLAN_LOCK), any()))
                 .thenAnswer(invocation -> plan.take(invocation.getArgument(1)));
-        when(lockService.lockUsingToken(eq(TopicsFirstBuildJob.SWEEP_LOCK), any()))
+        when(lockService.lockUsingToken(eq(TopicsDiscoveryJob.SWEEP_LOCK), any()))
                 .thenAnswer(invocation -> sweep.take(invocation.getArgument(1)));
 
         job.doJob(null);
@@ -118,7 +120,7 @@ class TopicsFirstBuildJobTest {
     @DisplayName("an interrupt cancels every plan in flight, not only the last fire's, and a later fire takes no lock")
     void interrupt() throws Exception {
         var cancelled = new AtomicInteger();
-        when(lockService.bestEffortLock(eq(TopicsFirstBuildJob.LEADER_LOCK), any(), any(), eq(LEASE),
+        when(lockService.bestEffortLock(eq(TopicsDiscoveryJob.LEADER_LOCK), any(), any(), eq(LEASE),
                 eq(Duration.ZERO))).thenReturn(Mono.never().doOnCancel(cancelled::incrementAndGet));
 
         job.doJob(null);
@@ -147,7 +149,7 @@ class TopicsFirstBuildJobTest {
         private RedissonReactiveClient redisClient;
         private OpikConfiguration opikConfig;
         private LockService lockService;
-        private TopicsFirstBuildJob job;
+        private TopicsDiscoveryJob job;
         private Injector injector;
         private Scheduler scheduler;
         private OpikGuiceyLifecycleEventListener listener;
@@ -180,7 +182,7 @@ class TopicsFirstBuildJobTest {
             scheduler = mock(Scheduler.class);
             when(injector.getInstance(GuiceJobManager.class)).thenReturn(jobManager);
             when(injector.getInstance(OpikConfiguration.class)).thenReturn(opikConfig);
-            when(injector.getInstance(TopicsFirstBuildJob.class)).thenReturn(job);
+            when(injector.getInstance(TopicsDiscoveryJob.class)).thenReturn(job);
             when(jobManager.getScheduler()).thenReturn(scheduler);
             when(scheduler.getJobKeys(any())).thenReturn(Set.of());
 
@@ -238,19 +240,18 @@ class TopicsFirstBuildJobTest {
         }
 
         @Test
-        @DisplayName("a disabled first-build job is not created at shutdown, and the scheduler still shuts down")
+        @DisplayName("with topics off the discovery job is not created at shutdown, and the scheduler still shuts down")
         void disabledJobIsNotCreated() throws Exception {
-            opikConfig.getTopics().getFirstBuild().setEnabled(false);
+            opikConfig.getTopics().setEnabled(false);
 
             shutdown();
 
-            verify(injector, never()).getInstance(TopicsFirstBuildJob.class);
+            verify(injector, never()).getInstance(TopicsDiscoveryJob.class);
             verify(scheduler).shutdown(false);
         }
 
-        private TopicsFirstBuildJob newJob() {
-            return new TopicsFirstBuildJob(opikConfig.getTopics(), planner, workspaceService,
-                    mock(TransactionTemplate.class), lockService);
+        private TopicsDiscoveryJob newJob() {
+            return new TopicsDiscoveryJob(opikConfig.getTopics(), planner, workspaceService, store, lockService);
         }
 
         private void shutdown() {
@@ -260,14 +261,13 @@ class TopicsFirstBuildJobTest {
         }
 
         private boolean tryLeaderLock() {
-            return Boolean.TRUE.equals(lockService.bestEffortLock(TopicsFirstBuildJob.LEADER_LOCK, Mono.just(true),
+            return Boolean.TRUE.equals(lockService.bestEffortLock(TopicsDiscoveryJob.LEADER_LOCK, Mono.just(true),
                     Mono.empty(), Duration.ofSeconds(5), Duration.ZERO).block(Duration.ofSeconds(10)));
         }
     }
 
     private static OpikConfiguration enabled(OpikConfiguration config) {
         config.getTopics().setEnabled(true);
-        config.getTopics().getFirstBuild().setEnabled(true);
         return config;
     }
 
