@@ -4,20 +4,13 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
-import com.comet.opik.infrastructure.inference.InferenceJson;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
-/** The k-means topic algorithm as config.yml sets it up, and a run context that answers the LLM calls from a stub. */
+/** The k-means topic algorithm as config.yml sets it up. */
 final class TopicsTestAlgorithm {
 
     static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
@@ -39,6 +32,8 @@ final class TopicsTestAlgorithm {
         config.setAuthorMaxExamples(10);
         config.setAssignMinCosine(0.75);
         config.setOtherGate(0.95);
+        config.setMaxTopics(10);
+        config.setProvisionalBelow(1_000);
         config.setNightlyMinCandidate(20);
         config.setNightlyMinGroups(2);
         config.setNightlyMaxGroups(20);
@@ -48,6 +43,21 @@ final class TopicsTestAlgorithm {
         config.setRecentDays(7);
         config.setRetireShare(0.005);
         config.setRetireNights(3);
+        config.setNightlyMinTightness(0.80);
+        config.setNightlyBigShare(0.02);
+        config.setNightlySameMemory(0.95);
+        config.setNightlyVerifyTokensPerPair(25);
+        config.setNightlyTopicExamples(4);
+        config.setVerifyTopicExamples(3);
+        config.setVerifyGroupExamples(5);
+        return config;
+    }
+
+    /** {@link #config()} with exactly {@code k} groups, as the fixture's reference grouping has. */
+    static AlgorithmConfig fixedGroups(int k) {
+        var config = config();
+        config.setMinGroups(k);
+        config.setMaxGroups(k);
         return config;
     }
 
@@ -72,37 +82,4 @@ final class TopicsTestAlgorithm {
                 .born(LocalDate.now().minusDays(RandomUtils.secure().randomInt(0, 365)));
     }
 
-    /** A run context whose every LLM call gets {@code answer}; it keeps the calls and the run's stats. */
-    static final class StubContext implements TopicRunContext {
-
-        record Call(LlmCall call, String tag, String prompt, JsonNode schema, int maxTokens) {
-        }
-
-        final List<Call> calls = new ArrayList<>();
-        final List<String> phases = new ArrayList<>();
-        private final ObjectNode stats = InferenceJson.MAPPER.createObjectNode();
-        private final JsonNode answer;
-
-        StubContext(JsonNode answer) {
-            this.answer = answer;
-        }
-
-        @Override
-        public <T> T generate(LlmCall call, String tag, String prompt, JsonNode schema, int maxTokens,
-                Function<JsonNode, T> read) {
-            calls.add(new Call(call, tag, prompt, schema, maxTokens));
-            return read.apply(answer);
-        }
-
-        @Override
-        public <T> T timed(String phase, Supplier<T> action) {
-            phases.add(phase);
-            return action.get();
-        }
-
-        @Override
-        public ObjectNode stats() {
-            return stats;
-        }
-    }
 }

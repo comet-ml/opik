@@ -54,6 +54,30 @@ class TopicVectorsTables {
                 .block();
     }
 
+    /** The latest {@code topic_vector_status} row of each trace that has one, by trace id: its reason. */
+    Map<UUID, String> statuses(String workspaceId, Collection<UUID> traceIds) {
+        return templateAsync.nonTransaction(connection -> Flux
+                .from(connection.createStatement("""
+                        SELECT trace_id, reason
+                        FROM (
+                            SELECT *
+                            FROM topic_vector_status
+                            WHERE workspace_id = :workspace_id
+                            AND trace_id IN :trace_ids
+                            ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
+                            LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+                        )
+                        WHERE is_deleted = 0
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("trace_id", String.class)), row.get("reason", String.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue))
+                .block();
+    }
+
     private static TopicVector toVector(Row row) {
         // The driver's Java array type for Array(Float32) isn't part of its contract, so read the elements as numbers.
         var array = row.get("vector", Object.class);

@@ -14,6 +14,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.stream.IntStream;
@@ -23,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-/** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
-@DisplayName("topics first build: rules")
+/** The small rules of the discovery run: number formats, text order and strip, the answer, apply and assignment. */
+@DisplayName("topics discovery run: rules")
 class TopicsAlgorithmRulesTest {
 
     private static final int MAX_ITERATIONS = 150;
@@ -363,6 +364,22 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
+        @DisplayName("two names that share their first 255 code points are one stored name, so they merge")
+        void sameNameAfterTheCut() {
+            var prefix = "a".repeat(TopicText.MAX_NAME_LENGTH);
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(prefix + " one", "d", List.of(1)),
+                    new AuthorTopic(prefix + " two", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).singleElement().satisfies(topic -> {
+                assertThat(topic.name()).isEqualTo(prefix);
+                assertThat(topic.groups()).containsExactly(1, 2);
+            });
+        }
+
+        @Test
         @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
         void sameNameKey() {
             var answer = new AuthorAnswer(List.of(
@@ -399,6 +416,73 @@ class TopicsAlgorithmRulesTest {
             var assigner = assigner(List.of(a, a.clone()), List.of(0, 1), List.of());
             assertThat(assigner.assign(new float[]{1, 0, 0.7f, 0.71414284f})).containsExactly(0,
                     TopicAlgorithm.OTHER);
+        }
+
+        @Test
+        @DisplayName("the winner: ties to the earlier prototype, a gated known-Other one never wins, below 0.75 none")
+        void winners() {
+            var a = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(close, far), 2, 0.75,
+                    OTHER_GATE);
+
+            assertThat(assigner.winners(new float[]{1, 0, 0.96f, 0.28f, 0, 1, 0.6f, -0.8f}))
+                    .containsExactly(0, 0, 2, PrototypeAssigner.NO_WINNER);
+        }
+
+        @ParameterizedTest(name = "{0} dimensions, {1} prototypes")
+        @CsvSource({"384, 161", "384, 160", "13, 7", "8, 2", "5, 1"})
+        @DisplayName("two prototypes per pass: every cosine is the single dot's bit for bit, and the winners are the "
+                + "same as one prototype at a time")
+        void twoPerPass(int dimensions, int count) {
+            var random = new SplittableRandom(dimensions * 1_000L + count);
+            int n = 500;
+            var vectors = randomRows(random, n, dimensions);
+            var flat = randomRows(random, count, dimensions);
+            var prototypes = new ArrayList<float[]>();
+            for (int p = 0; p < count; p++) {
+                // Every fifth prototype repeats the one before it, so ties come up.
+                int from = p > 0 && p % 5 == 0 ? p - 1 : p;
+                prototypes.add(Arrays.copyOfRange(flat, from * dimensions, (from + 1) * dimensions));
+            }
+            var cosines = new double[2];
+            for (int i = 0; i < n; i++) {
+                for (int p = 0; p + 1 < count; p++) {
+                    VectorMath.dot2(vectors, i * dimensions, flat, p * dimensions, (p + 1) * dimensions, dimensions,
+                            cosines);
+                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions)));
+                    assertThat(Double.doubleToRawLongBits(cosines[1])).isEqualTo(Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, (p + 1) * dimensions, dimensions)));
+                }
+            }
+            var owners = IntStream.range(0, count).boxed().toList();
+            var assigner = new PrototypeAssigner(prototypes, owners, List.of(), dimensions,
+                    Double.NEGATIVE_INFINITY, OTHER_GATE);
+
+            var expected = new int[n];
+            for (int i = 0; i < n; i++) {
+                int best = PrototypeAssigner.NO_WINNER;
+                double bestCosine = Double.NEGATIVE_INFINITY;
+                for (int p = 0; p < count; p++) {
+                    double cosine = VectorMath.dot(vectors, i * dimensions, prototypes.get(p), 0, dimensions);
+                    if (cosine > bestCosine) {
+                        bestCosine = cosine;
+                        best = p;
+                    }
+                }
+                expected[i] = best;
+            }
+            assertThat(assigner.winners(vectors)).containsExactly(expected);
+        }
+
+        private static float[] randomRows(SplittableRandom random, int rows, int dimensions) {
+            var out = new float[rows * dimensions];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = (float) (random.nextDouble() * 2 - 1);
+            }
+            return out;
         }
 
         @Test
@@ -647,7 +731,7 @@ class TopicsAlgorithmRulesTest {
         }
     }
 
-    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the first build merges them. */
+    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the discovery run merges them. */
     private static List<List<String>> authorExamples(String[] texts, float[] vectors, int[] traceLabels,
             float[] centres, int frequent, int extra) {
         var merged = IntentMerger.merge(texts, vectors, 2);

@@ -75,7 +75,7 @@ class TopicsDaoStorageTest {
     private static final int SAMPLE = 150;
     private static final TopicsTestData.Traces SPREAD_TRACES = TopicsTestData.Traces.spread(SPREAD, NIGHT,
             WINDOW_DAYS, 3);
-    /** A first build's minimum of vectors, as config-test.yml sets it; the window count does not read it. */
+    /** A discovery run's minimum of vectors, as config-test.yml sets it; the window count does not read it. */
     private static final int MIN_VECTORS = 100;
 
     // The app needs Redis to start; no test here uses it.
@@ -166,29 +166,34 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the window count runs under topics.build.read: 2 threads, its row guard, a background priority; the window read "
+    @DisplayName("the window count runs under topics.run.read: 2 threads, its row guard, a background priority; the window read "
             + "stops after 120 s")
     void readsCarryTheirGuards() {
         var workspaceId = newId().toString();
         var projectId = newId();
         data.seed(workspaceId, projectId, 0, BUILT);
 
-        // As a first-build run reads: the count of its projects under 60 s, a run's window under 120 s.
+        // As a discovery run reads: the count of its projects under 60 s, a run's window under 120 s.
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60)
                 .collectList().block())
                 .containsExactly(count(projectId, BUILT));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 120).collectList().block())
                 .hasSize(BUILT);
 
-        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getBuild().getRead().getMaxRowsToRead());
+        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxRowsToRead());
+        var maxBlockSize = String.valueOf(opikConfig.getTopics().getRun().getRead().getMaxBlockSize());
         assertThat(data.queryGuards("topics:count_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
         // The count's memory bound rests on these two.
         assertThat(data.queryLogSettings("topics:count_window", workspaceId, "optimize_aggregation_in_order",
                 "max_block_size"))
-                .containsExactly(List.of("1", "8192"));
+                .containsExactly(List.of("1", maxBlockSize));
         assertThat(data.queryGuards("topics:read_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "", "120"));
+        // The read's memory is mostly the vector column, read in blocks of this size.
+        assertThat(data.queryLogSettings("topics:read_window", workspaceId, "optimize_read_in_order",
+                "max_block_size"))
+                .containsExactly(List.of("0", maxBlockSize));
     }
 
     @Test
@@ -590,7 +595,7 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the first-build candidates are the listed workspaces' projects with a trace since the cutoff and no "
+    @DisplayName("the discovery candidates are the listed workspaces' projects with a trace since the cutoff and no "
             + "saved list")
     void listlessProjectsAreActiveWithoutAList() {
         var workspaceId = newId().toString();
@@ -604,7 +609,7 @@ class TopicsDaoStorageTest {
         data.seed(workspaceId, started, 0, 10);
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicProjectDAO.class).startRun(workspaceId, started, newId(),
-                    TopicProject.RunMode.FIRST_BUILD, NIGHT);
+                    TopicProject.RunMode.DISCOVERY, NIGHT);
             return null;
         });
         data.seed(workspaceId, listed, 0, 10);
@@ -668,7 +673,7 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("a save is a compare-and-set on the saved run: a second first build of a saved project saves nothing, "
+    @DisplayName("a save is a compare-and-set on the saved run: a second discovery run of a saved project saves nothing, "
             + "a run that read the saved list replaces it")
     void saveComparesTheSavedRun() {
         var workspaceId = newId().toString();
@@ -678,11 +683,11 @@ class TopicsDaoStorageTest {
         var savedAt = NIGHT.plus(Duration.ofDays(1));
         var other = new PrototypeVectors(List.of(TopicsTestData.unit(2)));
 
-        int secondFirstBuild = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
+        int secondDiscovery = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .saveList(workspaceId, projectId, null, newId(), savedAt, savedAt, other,
                         TopicEmbedding.MODEL));
 
-        assertThat(secondFirstBuild).isZero();
+        assertThat(secondDiscovery).isZero();
         assertThat(data.topicProject(projectId)).isEqualTo(first);
 
         var nextRunId = newId();
@@ -709,18 +714,18 @@ class TopicsDaoStorageTest {
         var savedRun = newId();
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
-            projectDAO.startRun(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
+            projectDAO.startRun(workspaceId, projectId, firstRun, TopicProject.RunMode.DISCOVERY, firstStart);
             assertThat(projectDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
                     TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
             assertThat(projectDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
-            projectDAO.startRun(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
+            projectDAO.startRun(workspaceId, projectId, leftRun, TopicProject.RunMode.DISCOVERY, leftStart);
             assertThat(projectDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
             return null;
         });
 
         var running = TopicProject.builder().workspaceId(workspaceId).projectId(projectId).runId(leftRun)
-                .runMode(TopicProject.RunMode.FIRST_BUILD).runStatus(TopicProject.RunStatus.RUNNING)
+                .runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.RUNNING)
                 .runStartedAt(leftStart).failedRuns(1).firstFailedAt(firstStart).build();
         assertThat(data.topicProject(projectId)).isEqualTo(running);
 
@@ -738,7 +743,7 @@ class TopicsDaoStorageTest {
 
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
-            projectDAO.startRun(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
+            projectDAO.startRun(workspaceId, projectId, savedRun, TopicProject.RunMode.DISCOVERY, abandonedAt);
             assertThat(projectDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
                     .isEqualTo(1);
             return null;

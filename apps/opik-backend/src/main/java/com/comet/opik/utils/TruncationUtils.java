@@ -1,7 +1,9 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -13,6 +15,9 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Iterator;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -30,7 +35,7 @@ public final class TruncationUtils {
     /**
      * Suffix appended to truncated strings to indicate truncation.
      */
-    private static final String TRUNCATION_SUFFIX = "...";
+    static final String TRUNCATION_SUFFIX = "...";
 
     /**
      * Creates a "slim" version of a JSON node by recursively truncating all leaf string values
@@ -138,14 +143,98 @@ public final class TruncationUtils {
     }
 
     /**
-     * Converts a JsonNode to a slim JSON string using the default max length.
-     * Combines toJsonString and createSlimJsonString for convenience.
+     * Serializes a payload node into the strings stored in its full column ({@code input}, {@code output}) and
+     * its slim column ({@code input_slim}, {@code output_slim}), with the default max length.
      *
-     * @param node the JSON node to process (may be null)
-     * @return the slim JSON string, or empty string if null
+     * <p>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
+     * {@code String} instance. Otherwise it is {@link #slimJsonSerializable(JsonNode)}, written in one walk of the
+     * node. For a node parsed from JSON, both match {@code toJsonString(node)} and
+     * {@code createSlimJsonString(toJsonString(node))}, the string path's columns.
+     *
+     * <p>Only for a node parsed from JSON. In a node built in code, a value can render differently once reparsed, so
+     * the slim copy can differ from the string path's while the full JSON matches. A {@code BigDecimal} of 10, as
+     * {@code valueToTree} builds online-evaluation scores, renders as {@code 1E+1}: kept here, {@code 10.0} once
+     * reparsed. Float, binary and POJO values differ the same way. Reads parse the slim JSON, so they get the same
+     * value either way.
+     *
+     * @param node the payload node (may be null)
+     * @return the full and slim JSON strings, both empty if the node is null
      */
-    public static String createSlimJsonStringFromNode(JsonNode node) {
-        return createSlimJsonString(toJsonString(node));
+    public static JsonWithSlim toJsonWithSlim(JsonNode node) {
+        if (node == null) {
+            return JsonWithSlim.EMPTY;
+        }
+
+        String json = node.toString();
+        if (json.isEmpty() || !hasLongString(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
+            return JsonWithSlim.builder().json(json).slim(json).build();
+        }
+
+        try {
+            return JsonWithSlim.builder().json(json)
+                    .slim(PayloadJson.NODE_WRITER.writeValueAsString(slimJsonSerializable(node)))
+                    .build();
+        } catch (JsonProcessingException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    /**
+     * The full JSON of a payload node, as a value that writes itself into the caller's generator: the same text as
+     * {@link #toJsonString(JsonNode)}, without materializing it.
+     *
+     * <p>Written through a default mapper's writer, as {@code node.toString()} is, not the caller's, so the text does
+     * not depend on the configuration of the mapper that writes the enclosing value.
+     *
+     * @param node the payload node
+     * @return the full JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable fullJsonSerializable(@NonNull JsonNode node) {
+        return PayloadJson.builder().node(node).slim(false).build();
+    }
+
+    /**
+     * The slim JSON of a payload node, as a value that writes itself into the caller's generator: every string
+     * value longer than the default max length is cut to it and followed by {@code "..."}, keys and structure are
+     * kept. Like {@link #fullJsonSerializable(JsonNode)}, it does not depend on the caller's mapper configuration.
+     *
+     * @param node the payload node
+     * @return the slim JSON, written when the enclosing value is serialized
+     */
+    public static JsonSerializable slimJsonSerializable(@NonNull JsonNode node) {
+        return PayloadJson.builder().node(node).slim(true).build();
+    }
+
+    /**
+     * Whether any string value is longer than the max length; stops at the first one. Walks with a stack of child
+     * iterators rather than recursion, so depth costs heap rather than call stack, in the same order and with the same
+     * early exit.
+     */
+    private static boolean hasLongString(JsonNode node, int maxStringLength) {
+        if (!node.isContainerNode()) {
+            return node.isTextual() && node.textValue().length() > maxStringLength;
+        }
+        Deque<Iterator<JsonNode>> pending = new ArrayDeque<>();
+        pending.push(node.iterator());
+        while (!pending.isEmpty()) {
+            Iterator<JsonNode> children = pending.peek();
+            if (!children.hasNext()) {
+                pending.pop();
+                continue;
+            }
+            JsonNode child = children.next();
+            switch (child.getNodeType()) {
+                case OBJECT, ARRAY -> pending.push(child.iterator());
+                case STRING -> {
+                    if (child.textValue().length() > maxStringLength) {
+                        return true;
+                    }
+                }
+                case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> {
+                }
+            }
+        }
+        return false;
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {

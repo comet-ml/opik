@@ -114,12 +114,23 @@ class METEOR(base_metric.BaseMetric):
         reference: Union[str, Sequence[str]],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"METEOR metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty (METEOR metric).")
         if isinstance(reference, str):
             references: Sequence[str] = [reference]
         else:
             references = list(reference)
+        for ref in references:
+            if not isinstance(ref, str):
+                raise MetricComputationError(
+                    f"METEOR metric requires string 'reference' items, "
+                    f"got {type(ref).__name__}"
+                )
         if not references or any(not ref.strip() for ref in references):
             raise MetricComputationError("Reference is empty (METEOR metric).")
 
