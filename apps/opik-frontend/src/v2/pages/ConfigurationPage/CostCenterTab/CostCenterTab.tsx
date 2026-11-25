@@ -19,6 +19,8 @@ import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
 import { COLUMN_TYPE } from "@/types/shared";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Button } from "@/ui/button";
 import {
   CATALOG_TYPES,
@@ -248,9 +250,39 @@ const CostCenterTab: React.FC = () => {
         history={history}
         isHistoryOpen={isHistoryOpen}
         onToggleHistory={() => setIsHistoryOpen((open) => !open)}
+        actions={
+          canEdit && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => openDrawer({})}
+              >
+                <Plus className="mr-1 size-4" />
+                Add model
+              </Button>
+              <Button
+                variant="default"
+                size="xs"
+                onClick={() => {
+                  rememberFocus();
+                  setIsBatchOpen(true);
+                }}
+              >
+                <Layers className="mr-1 size-4" />
+                Batch update
+              </Button>
+            </div>
+          )
+        }
       />
 
-      <div className="mb-3 flex flex-wrap items-start gap-1.5">
+      <ExplainerCallout
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_model_prices]}
+      />
+
+      <div className="mb-4 flex flex-wrap items-start gap-1.5">
         <div className="min-w-0 flex-[1_1_510px]">
           <FilterChipBar
             chipsPinned={chips.chipsPinned}
@@ -276,7 +308,7 @@ const CostCenterTab: React.FC = () => {
             }
           />
         </div>
-        <div className="ml-auto flex shrink-0 gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <ColumnsButton
             columns={PRICE_COLUMNS}
             selectedColumns={selectedColumns}
@@ -284,28 +316,6 @@ const CostCenterTab: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {canEdit && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openDrawer({})}
-              >
-                <Plus className="mr-1.5 hidden size-3.5 xl:block" />
-                Add model
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  rememberFocus();
-                  setIsBatchOpen(true);
-                }}
-              >
-                <Layers className="mr-1.5 hidden size-3.5 xl:block" />
-                Batch update
-              </Button>
-            </>
-          )}
         </div>
       </div>
 

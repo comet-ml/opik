@@ -13,6 +13,7 @@ type CostCenterHeaderProps = {
   history: HistoryVersion[];
   isHistoryOpen: boolean;
   onToggleHistory: () => void;
+  actions?: React.ReactNode;
 };
 
 const describeAccess = (
@@ -43,16 +44,16 @@ const CostCenterHeader: React.FC<CostCenterHeaderProps> = ({
   history,
   isHistoryOpen,
   onToggleHistory,
+  actions,
 }) => {
   const access = describeAccess(organizationName, canEdit, isAccessPending);
   return (
-    <div className="mb-6 flex flex-col gap-3">
+    <div className="mb-4 flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="comet-title-s">Cost center</h2>
-        <p className="comet-body-s text-muted-slate">
-          Model prices used to estimate cost. Changes apply to spans logged
-          after you save.
-        </p>
+        <div className="flex items-center justify-between">
+          <h2 className="comet-title-xs">Cost center</h2>
+          {actions}
+        </div>
         <div className="comet-body-s flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-slate">
           {!canEdit && !isAccessPending && (
             <Tag variant="yellow" size="md">
