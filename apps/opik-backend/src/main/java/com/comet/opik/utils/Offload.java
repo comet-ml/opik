@@ -40,7 +40,8 @@ public class Offload {
     private static final String ORIGINAL_SCHEDULER = Offload.class.getName() + ".originalScheduler";
 
     /**
-     * Runs a blocking call on {@link Schedulers#boundedElastic()}. What follows runs there too until the next hop.
+     * Runs a blocking call on {@link Schedulers#boundedElastic()}. What follows runs there too until the next hop, so
+     * heavy CPU after it goes in its own {@link #cpu(Callable)}: every MySQL, S3 and sync HTTP call waits for this pool.
      */
     public static <T> Mono<T> blocking(@NonNull Callable<T> call) {
         return Mono.fromCallable(call).subscribeOn(Schedulers.boundedElastic());

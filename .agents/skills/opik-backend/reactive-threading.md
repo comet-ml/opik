@@ -12,7 +12,7 @@ thread only because the chain put it there, never because of what ran before it.
 | An r2dbc ClickHouse read or write | `ClickHouseWorker-*` | The driver's shared pool (2 × CPU + 1 threads, unbounded queue). Every query in the service waits for a free worker. |
 | A client-v2 call (`JsonEachRowBulkInsert`) | `chc-operation-*` | The v2 client's unbounded cached pool. |
 | `timeout`, `delay`, `interval`, retry backoff | `parallel-*` | One thread per core, shared by all CPU steps and all Reactor timers. |
-| `fromCallable(x).subscribeOn(boundedElastic())` | `boundedElastic-*` | The pool for blocking calls (10 × cores threads). |
+| `fromCallable(x).subscribeOn(boundedElastic())` | `boundedElastic-*` | The pool for blocking calls (10 × cores threads), shared by every MySQL, S3 and sync HTTP call. Light work may follow there; heavy CPU may not. |
 | A Jersey `async()` call | the Jersey client executor | Shared by every async outbound HTTP call. |
 | `block()` | the caller's thread | The only place where the thread actually comes back. |
 
@@ -28,7 +28,7 @@ client's thread. `publishOn` is the only operator that moves the signals after i
 |---|---|---|
 | Blocking call (JDBI, sync Redisson, S3, sync HTTP, DNS) | `Offload.blocking(() -> ...)` | `boundedElastic` |
 | CPU that grows with the input | `Offload.cpu(() -> ...)` | `parallel`, or the entry point's pool |
-| Per-item blocking or CPU in a `Flux` | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
+| Per-item blocking in a `Flux`, plus the light work around it | `Offload.blockingEach(flux)` | `boundedElastic`, every item |
 | Back to the entry point's pool after a call | `.transform(Offload::resumeOriginal)` | the pool set with `Offload.originalOn`: a subscriber's workers, a `request-vt` virtual thread for a resource that sets the request context, or no hop |
 | Light work (map one row, build a DTO) | nothing | wherever it lands |
 
@@ -127,8 +127,10 @@ return reader.readWindow(workspaceId, projectId)
 return topicsRunService.discover(run)
         .contextWrite(context -> Offload.originalOn(Offload.cpuOn(context, clusteringScheduler), workersScheduler));
 ```
-- Never use `boundedElastic` for long CPU work to make it fit. Never `publishOn` mid-chain to move one step: it moves
-  every step after it.
+- Light work after `Offload.blocking` may stay on `boundedElastic`. Heavy CPU may not, even right after a blocking
+  call: every MySQL transaction, S3 call and sync HTTP call in the service waits for a free `boundedElastic` thread, so
+  a batch serialized there delays them all. Put it in its own `Offload.cpu(...)`. Never `publishOn` mid-chain to move
+  one step: it moves every step after it.
 
 ## Rule 4: Per-Item Work on a Stream Moves Once
 
