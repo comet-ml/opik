@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000125_create_model_prices_tables
+--changeset aadereiko:000126_create_model_prices_tables
 --comment: Create model_price_lists, model_prices and model_prices_history — an organization's custom model prices (OPIK-8626)
 
 -- One header per organization: the list version that each saved change raises, which spans record with their
