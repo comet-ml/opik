@@ -42,6 +42,15 @@ public interface TopicDAO {
             """)
     List<Topic> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
+    /** The topics of several projects, each project's in the order assignment breaks ties by. */
+    @SqlQuery("""
+            SELECT * FROM topics
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            ORDER BY project_id, born, id
+            """)
+    List<Topic> findByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
+
     /**
      * The nightly update's save of a topic it kept. Only {@code low_nights}, {@code size} and {@code vectors} change:
      * the night never changes a topic's id, name, definition or born.
@@ -56,6 +65,7 @@ public interface TopicDAO {
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId AND id IN (<ids>)")
     int deleteTopics(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @BindList("ids") Collection<UUID> ids);
+
     /** Deletes the project's topics only when the project is no longer in {@code projects}; 0 when it still is. */
     @SqlUpdate("""
             DELETE FROM topics
