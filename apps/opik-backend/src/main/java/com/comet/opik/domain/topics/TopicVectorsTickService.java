@@ -71,6 +71,7 @@ public class TopicVectorsTickService {
     private final @NonNull TopicVectorsDAO dao;
     private final @NonNull AiLabelTaskRegistry registry;
     private final @NonNull TopicVectorWriter writer;
+    private final @NonNull TopicVectorDiscovery discovery;
     private final @NonNull TopicVectorBackfiller backfiller;
     private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
@@ -109,7 +110,7 @@ public class TopicVectorsTickService {
                     arrivalWorkspaceIds());
         })
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(enabled -> backfiller.discover(enabled.workspaceIds(), backfillLowerBound,
+                .flatMap(enabled -> discovery.discover(enabled.workspaceIds(), backfillLowerBound,
                         createdAfter(backfillLowerBound), budget)
                         .then(backfiller.undrained(enabled.workspaceIds()))
                         .flatMap(undrained -> Flux.fromIterable(enabled.workspaceIds())

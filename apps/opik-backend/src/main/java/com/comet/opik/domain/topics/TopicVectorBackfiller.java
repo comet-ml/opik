@@ -7,18 +7,13 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,15 +23,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The topic vectors backfill: the traces of projects whose done statuses go back further than the short window, read
  * one project at a time over the backfill window, so the read follows the tables' sort keys. A project's row in
  * {@code topic_projects} says whether it still has to be read; ClickHouse alone says which traces have no vector.
  *
- * <p>About once per {@code longWindowInterval} per workspace, the tick discovers the projects with done statuses in the
- * backfill window and creates or refreshes their rows. A project the workspace read sees for the first time gets a row
- * too, so its traces are this class's from then on.
+ * <p>{@link TopicVectorDiscovery} creates and refreshes the rows. A project the workspace read sees for the first time
+ * gets a row too, so its traces are this class's from then on.
  */
 @Slf4j
 @Singleton
@@ -49,13 +44,6 @@ class TopicVectorBackfiller {
     private final @NonNull TopicVectorWriter writer;
     private final @NonNull TopicVectorsMetrics metrics;
 
-    /**
-     * When this pod last discovered each workspace's projects. Only a hint for when to discover again: a new leader
-     * starts empty and discovers every workspace once more, which changes no row's drained mark.
-     */
-    private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
-    /** The discoveries a tick's budget cut short, resumed by the next tick; a new leader starts them again. */
-    private final Map<String, Discovery> discoveries = new ConcurrentHashMap<>();
     /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
     private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
@@ -87,155 +75,6 @@ class TopicVectorBackfiller {
     /** The started backfills not drained yet, by workspace. */
     Mono<Map<String, List<TopicBackfill>>> undrained(@NonNull List<String> workspaceIds) {
         return Mono.fromCallable(() -> backfills.findUndrained(workspaceIds)).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * Discovers the projects of the workspaces due for it, one at a time: never discovered by this pod, or not for
-     * {@code longWindowInterval}, those a tick cut short first. Per workspace, two plain aggregates over the backfill
-     * window, a slice at a time: the projects with done statuses, and their vector counts. A workspace's rows not checked for twice the interval start again, because the
-     * tick did not run for it meanwhile. A workspace no longer enabled is forgotten, so one enabled again is discovered
-     * at its first tick.
-     *
-     * @param lowerBound the backfill window's start
-     * @param createdAfter the backfill window's {@code trace_created_at} bound
-     */
-    Mono<Void> discover(@NonNull List<String> workspaceIds, @NonNull Instant lowerBound,
-            @NonNull Instant createdAfter, @NonNull TickBudget budget) {
-        return Mono.defer(() -> {
-            var enabled = new HashSet<>(workspaceIds);
-            discoveredAt.keySet().retainAll(enabled);
-            discoveries.keySet().retainAll(enabled);
-            var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
-            var due = workspaceIds.stream()
-                    .filter(id -> Optional.ofNullable(discoveredAt.get(id))
-                            .map(last -> Duration.between(last, budget.start()).compareTo(interval) >= 0)
-                            .orElse(true))
-                    .sorted(Comparator.comparing(id -> !discoveries.containsKey(id)))
-                    .limit(config.getVectors().getMaxDiscoveriesPerTick())
-                    .toList();
-            long started = System.nanoTime();
-            return Flux.fromIterable(due)
-                    .concatMap(workspaceId -> discover(workspaceId, lowerBound, createdAfter, budget, interval))
-                    .then(Mono.fromRunnable(() -> metrics.phase("discover",
-                            Duration.ofNanos(System.nanoTime() - started))));
-        });
-    }
-
-    /**
-     * One workspace's discovery, a slice at a time while half the tick budget is left; the next tick resumes it. Its
-     * rows are written once every slice of both reads is read.
-     */
-    private Mono<Void> discover(String workspaceId, Instant lowerBound, Instant createdAfter, TickBudget budget,
-            Duration interval) {
-        return Mono.defer(() -> {
-            var reserve = config.getVectors().getEmbedTimeout().toJavaDuration();
-            var discoveryReserve = discoveryReserve(budget, reserve);
-            if (!budget.hasTimeForRead(discoveryReserve)) {
-                return Mono.empty();
-            }
-            var maxExecutionTime = config.getVectors().getFind().getMaxExecutionTime().toJavaDuration();
-            var discovery = discoveries.computeIfAbsent(workspaceId,
-                    __ -> new Discovery(budget.start(), lowerBound, dao.slices(createdAfter)));
-            return Mono.defer(() -> readSlice(workspaceId, discovery,
-                    budget.readSeconds(maxExecutionTime, discoveryReserve)))
-                    .repeat(() -> !discovery.done() && budget.hasTimeForRead(discoveryReserve))
-                    .then(Mono.defer(() -> discovery.done() ? save(workspaceId, discovery, interval) : Mono.empty()))
-                    .onErrorResume(exception -> {
-                        discoveries.remove(workspaceId);
-                        log.warn("Topic vectors project discovery failed, trying again next tick, workspace '{}'",
-                                workspaceId, exception);
-                        return metrics.workspace(workspaceId)
-                                .doOnNext(workspace -> metrics.readFailure("discover", workspace, exception))
-                                .then(Mono.empty());
-                    });
-        });
-    }
-
-    /**
-     * What a discovery slice leaves for after it: half of the tick budget, and at least what one more read needs. A
-     * slice starts only with that plus a read's minimum left, and its {@code max_execution_time} ends before it, so a
-     * long discovery (a 365d backfill window is over 100 reads per workspace) leaves the fresh and backfill phases the
-     * other half; the next tick resumes it.
-     */
-    private static Duration discoveryReserve(TickBudget budget, Duration reserve) {
-        var half = Duration.between(budget.start(), budget.deadline()).dividedBy(2);
-        var oneRead = TickBudget.MIN_READ_TIME.plus(reserve);
-        return half.compareTo(oneRead) > 0 ? half : oneRead;
-    }
-
-    /** The next slice: the projects' slices first, then their vector counts. */
-    private Mono<Void> readSlice(String workspaceId, Discovery discovery, long maxExecutionSeconds) {
-        if (!discovery.toFind.isEmpty()) {
-            return dao.findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, discovery.lowerBound,
-                    discovery.toFind.peek(), maxExecutionSeconds)
-                    .collectList()
-                    .doOnNext(found -> {
-                        found.forEach(project -> discovery.projects.merge(project.projectId(), project,
-                                TopicVectorsDAO.BackfillProject::merge));
-                        discovery.toFind.poll();
-                    })
-                    .then();
-        }
-        return dao.countTracesWithVectorsByProject(workspaceId, TopicEmbedding.SUMMARY_TASK,
-                discovery.toCount.peek(), List.copyOf(discovery.projects.keySet()), maxExecutionSeconds)
-                .doOnNext(counts -> {
-                    counts.forEach((projectId, traces) -> discovery.withVectors.merge(projectId, traces, Long::sum));
-                    discovery.toCount.poll();
-                })
-                .then();
-    }
-
-    private Mono<Void> save(String workspaceId, Discovery discovery, Duration interval) {
-        var start = discovery.start;
-        var rows = discovery.projects.values().stream()
-                .map(project -> TopicBackfill.builder()
-                        .workspaceId(workspaceId)
-                        .projectId(project.projectId())
-                        .backfillStartedAt(start)
-                        .backfillLastDoneAt(project.lastDoneAt())
-                        .backfillTracesTotal(project.traces())
-                        .backfillTracesDone(Math.min(project.traces(),
-                                discovery.withVectors.getOrDefault(project.projectId(), 0L)))
-                        .build())
-                .toList();
-        return Mono
-                .fromCallable(
-                        () -> backfills.discovered(workspaceId, rows, start, start.minus(interval.multipliedBy(2))))
-                .subscribeOn(Schedulers.boundedElastic())
-                .doOnNext(removed -> {
-                    if (removed > 0) {
-                        log.info("Topic vectors backfill rows of deleted projects removed, workspace '{}', rows "
-                                + "'{}'", workspaceId, removed);
-                    }
-                    discoveredAt.put(workspaceId, start);
-                    discoveries.remove(workspaceId);
-                })
-                .then();
-    }
-
-    /**
-     * A workspace's discovery in progress: the slices each read has left, and what the slices read so far found. Its
-     * bounds and start are those of the tick that began it. Only one tick at a time touches it.
-     */
-    private static final class Discovery {
-
-        private final Instant start;
-        private final Instant lowerBound;
-        private final ArrayDeque<TopicVectorsDAO.Slice> toFind;
-        private final ArrayDeque<TopicVectorsDAO.Slice> toCount;
-        private final Map<UUID, TopicVectorsDAO.BackfillProject> projects = new HashMap<>();
-        private final Map<UUID, Long> withVectors = new HashMap<>();
-
-        private Discovery(Instant start, Instant lowerBound, List<TopicVectorsDAO.Slice> slices) {
-            this.start = start;
-            this.lowerBound = lowerBound;
-            this.toFind = new ArrayDeque<>(slices);
-            this.toCount = new ArrayDeque<>(slices);
-        }
-
-        private boolean done() {
-            return toFind.isEmpty() && toCount.isEmpty();
-        }
     }
 
     /**
@@ -314,51 +153,61 @@ class TopicVectorBackfiller {
         }
         var vectors = config.getVectors();
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
-        var run = new Run(projects.stream().sorted(order(vectors.getMaxTracesPerTick()))
-                .collect(Collectors.toCollection(ArrayDeque::new)), arrival);
-        // repeat() runs the turns one after another, so only one thread at a time touches the run.
-        return Mono.defer(() -> {
-            var project = run.queue.poll();
-            return turn(workspace, project, window, budget, run.settled, run.arrival)
-                    .doOnNext(turn -> run.add(project, turn));
-        })
-                .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
-                .then(Mono.fromCallable(() -> {
-                    backfills.record(run.progress);
-                    return run.result;
-                }).subscribeOn(Schedulers.boundedElastic()))
-                .onErrorResume(exception -> {
-                    log.warn("Topic vectors backfill progress not recorded, reading them again next tick, workspace "
-                            + "'{}', projects '{}'", window.workspaceId(), run.progress.size(), exception);
-                    return Mono.just(run.result);
-                });
+        var first = Run.start(projects.stream().sorted(order(vectors.getMaxTracesPerTick())).toList(), arrival);
+        // Each step takes one turn and gives the run after it; expand() runs the steps one after another.
+        return next(workspace, window, budget, first)
+                .expand(run -> !run.stopped() && !run.queue().isEmpty() && budget.hasTimeForRead(embedTimeout)
+                        ? next(workspace, window, budget, run)
+                        : Mono.empty())
+                .last()
+                .flatMap(run -> Mono.fromCallable(() -> {
+                    backfills.record(run.progress());
+                    return run.result();
+                })
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .onErrorResume(exception -> {
+                            log.warn("Topic vectors backfill progress not recorded, reading them again next tick, "
+                                    + "workspace '{}', projects '{}'", window.workspaceId(), run.progress().size(),
+                                    exception);
+                            return Mono.just(run.result());
+                        }));
     }
 
-    /** One workspace's backfill in progress: the projects still to take a turn, and what the turns did. */
-    private static final class Run {
+    /** The run after its first project's turn. */
+    private Mono<Run> next(TopicVectorsMetrics.Workspace workspace, TopicVectorsFind window, TickBudget budget,
+            Run run) {
+        var project = run.queue().getFirst();
+        return turn(workspace, project, window, budget, run.settled(), run.arrival()).map(turn -> run.after(project,
+                turn));
+    }
 
-        private final ArrayDeque<TopicBackfill> queue;
-        private final List<TopicBackfillProgress> progress = new ArrayList<>();
-        private final Set<VectorKey> settled = new HashSet<>();
-        private TickResult result = TickResult.EMPTY;
-        private ArrivalSteps arrival;
-        private boolean stopped;
+    /**
+     * One workspace's backfill so far: the projects still to take a turn, in order, and what the turns did.
+     *
+     * @param stopped an embed call failed: the service would answer the next project the same way this tick
+     */
+    private record Run(@NonNull List<TopicBackfill> queue, @NonNull List<TopicBackfillProgress> progress,
+            @NonNull Set<VectorKey> settled, @NonNull TickResult result, @NonNull ArrivalSteps arrival,
+            boolean stopped) {
 
-        private Run(ArrayDeque<TopicBackfill> queue, ArrivalSteps arrival) {
-            this.queue = queue;
-            this.arrival = arrival;
+        static Run start(List<TopicBackfill> queue, ArrivalSteps arrival) {
+            return new Run(queue, List.of(), Set.of(), TickResult.EMPTY, arrival, false);
         }
 
-        private void add(TopicBackfill project, Turn turn) {
-            result = result.plus(turn.result());
-            turn.progress().ifPresent(progress::add);
-            settled.addAll(turn.settled());
-            arrival = turn.arrival();
-            if (turn.more()) {
-                queue.addFirst(project);
-            }
-            // A back-off: the service would answer the next project the same way this tick.
-            stopped = turn.result().skipped().containsKey(SkipReason.EMBED_FAILED);
+        /** After {@code project}, the first in the queue, took {@code turn}: it goes first again when it has more. */
+        Run after(TopicBackfill project, Turn turn) {
+            var rest = queue.subList(1, queue.size());
+            var nextQueue = turn.more()
+                    ? Stream.concat(Stream.of(project), rest.stream()).toList()
+                    : List.copyOf(rest);
+            var nextProgress = turn.progress()
+                    .map(added -> Stream.concat(progress.stream(), Stream.of(added))
+                            .toList())
+                    .orElse(progress);
+            var nextSettled = new HashSet<>(settled);
+            nextSettled.addAll(turn.settled());
+            return new Run(nextQueue, nextProgress, Set.copyOf(nextSettled), result.plus(turn.result()),
+                    turn.arrival(), turn.result().skipped().containsKey(SkipReason.EMBED_FAILED));
         }
     }
 

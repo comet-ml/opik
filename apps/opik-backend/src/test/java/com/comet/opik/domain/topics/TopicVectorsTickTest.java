@@ -1708,7 +1708,9 @@ class TopicVectorsTickTest {
         var arrivalBackfiller = new TopicVectorBackfiller(opikConfig.getTopics(), vectorsDAO, backfillService,
                 arrivalWriter, vectorsMetrics);
         return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaces,
-                vectorsDAO, taskRegistry, arrivalWriter, arrivalBackfiller, longWindowPass, vectorsMetrics);
+                vectorsDAO, taskRegistry, arrivalWriter,
+                new TopicVectorDiscovery(opikConfig.getTopics(), vectorsDAO, backfillService, vectorsMetrics),
+                arrivalBackfiller, longWindowPass, vectorsMetrics);
     }
 
     /** One failed arrival step of the workspace, as {@code topics.arrival.failures} records it. */
