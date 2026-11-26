@@ -1459,20 +1459,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling-small",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T2_CHIMERA,
+      label: "tngtech/deepseek-r1t2-chimera",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TYPESAFE_JEV_ROUTER,
       label: "typesafe/jev-router",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_10,
-      label: "unbiased/pareto-26.10",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_10_PREVIEW,
-      label: "unbiased/pareto-26.10-preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_9,
-      label: "unbiased/pareto-26.9",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,
@@ -1665,10 +1657,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_TERRA_LATEST,
       label: "~openai/gpt-terra-latest",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_LATEST,
-      label: "~unbiased/pareto-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
