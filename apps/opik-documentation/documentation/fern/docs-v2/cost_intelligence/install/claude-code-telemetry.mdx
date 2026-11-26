@@ -79,7 +79,7 @@ Every line is needed. [The settings in detail](#the-settings-in-detail) says wha
 
 Deliver the file exactly as you would the plugin's settings. The two ways are the same as for the plugin, and those pages have the commands:
 
-- **With your MDM**, as a drop-in next to any managed settings you already push. Follow [Plugin with MDM](/cost-intelligence/install/mdm#what-lands-on-the-device), and name the file `50-opik-telemetry.json`. This lets you choose which devices get it, so you can start with one team.
+- **With your MDM**, as a drop-in next to any managed settings you already push. Follow [Plugin with MDM](/cost-intelligence/install/mdm#what-lands-on-the-device), and keep that page's file name, `50-opik-cipx.json`. On a device that already has the plugin's settings, the new file then replaces them, so the device does not report through both. This lets you choose which devices get it, so you can start with one team.
 - **In the Claude admin console**, as managed settings. Follow [Plugin with managed settings](/cost-intelligence/install/managed-settings#apply-it-in-the-admin-console). This applies to every signed-in user in the organization at once.
 
 Claude Code reads managed settings when it starts, so a session that is already running picks them up the next time it is opened.
@@ -124,8 +124,8 @@ On this path Claude Code sends the enrollment token with every upload. That make
 
 1. Create the new token.
 2. Deliver the settings again with the new token.
-3. Wait until the old token's device count on the **Enrollment tokens** page reaches zero.
-4. Retire the old token.
+3. Watch the old token's device count on the **Enrollment tokens** page. It falls as users open Claude Code with the new settings. It does not reach zero while some users have not opened Claude Code since, and it also counts Macs that enrolled the macOS app with the same token.
+4. Retire the old token once the users you expect to be active have moved.
 
 <Warning>
   Retiring a token stops the usage of every user who still sends it, straight
