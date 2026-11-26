@@ -1,7 +1,7 @@
 ---
-description: Log Claude Code sessions to Opik with Claude Code's native OpenTelemetry export, and give Claude Code the Opik skills and MCP tools with the Opik plugin.
+description: Log Claude Code sessions to Opik with Claude Code's native OpenTelemetry export, and give Claude Code the Opik skills and MCP tools.
 headline: Claude Code
-og:description: Trace Claude Code sessions in Opik with native OpenTelemetry export, and install the Opik plugin to give Claude Code the Opik skills and MCP tools.
+og:description: Trace Claude Code sessions in Opik with native OpenTelemetry export, and give Claude Code the Opik skills and MCP tools on Opik Cloud, Enterprise or self-hosted Opik.
 og:site_name: Opik Documentation
 og:title: Claude Code Integration - Opik
 title: Observability for Claude Code with Opik
@@ -12,7 +12,7 @@ Opik works with [Claude Code](https://claude.ai/code) in two ways:
 - **Tracing:** Claude Code's native OpenTelemetry export sends each session to Opik as a trace, so
   you can review what developers asked, what the model answered, which tools ran and what each
   turn cost.
-- **The Opik plugin:** gives Claude Code the Opik skills and the Opik MCP server tools, so it can
+- **Skills and MCP tools:** the Opik skills and the Opik MCP server tools let Claude Code
   instrument your app, read and score traces, run evaluations and explain failures in your Opik
   workspace.
 
@@ -80,34 +80,98 @@ For the full variable reference, endpoint modes and validation steps, see
    tokens and cost). The trace-level output stays empty. Tool calls appear as `claude_code.tool`
    spans with their input and result.
 
-## The Opik plugin: skills and MCP tools
+## Opik skills and MCP tools
 
-The [Opik plugin](https://github.com/comet-ml/opik-mcp) installs the Opik skills and registers the
-hosted [Opik MCP server](/mcp-server) for Opik Cloud. The plugin does not log Claude Code sessions
-to Opik. For that, use [OpenTelemetry export](#trace-claude-code-sessions-with-opentelemetry).
+The Opik skills and the [Opik MCP server](/mcp-server) tools let Claude Code work in your Opik
+workspace. They do not log Claude Code sessions to Opik. For that, use
+[OpenTelemetry export](#trace-claude-code-sessions-with-opentelemetry).
 
-### Install the plugin
+### Install
 
-Inside Claude Code:
+<Tabs>
+  <Tab value="Opik Cloud" title="Opik Cloud (recommended)">
+    Install the [Opik plugin](https://github.com/comet-ml/opik-mcp). It installs the Opik skills
+    and registers the hosted MCP server. Inside Claude Code:
 
-```
-/plugin install opik --marketplace comet-ml/opik-mcp
-```
+    ```
+    /plugin install opik --marketplace comet-ml/opik-mcp
+    ```
 
-On Claude Code before 2.1.275, run these two commands instead:
+    On Claude Code before 2.1.275, run these two commands instead:
 
-```
-/plugin marketplace add comet-ml/opik-mcp
-/plugin install opik@opik
-```
+    ```
+    /plugin marketplace add comet-ml/opik-mcp
+    /plugin install opik@opik
+    ```
 
-Start a new session, then sign in from `/mcp` → **Authenticate**. The sign-in opens in the
-browser; there is no API key to set. `/mcp` shows the server as `plugin:opik:opik-cloud`.
+    Start a new session, then sign in from `/mcp` → **Authenticate**. The sign-in opens in the
+    browser; there is no API key to set. `/mcp` shows the server as `plugin:opik:opik-cloud`.
+  </Tab>
+  <Tab value="Enterprise deployment" title="Enterprise deployment">
+    The hosted MCP server and the Opik plugin connect to Opik Cloud only. On an Enterprise
+    deployment, Claude Code runs the MCP server on your machine with `uvx opik-mcp`.
+
+    Run this command in a terminal. It finds your Opik from `~/.opik.config` or asks for it,
+    registers the MCP server and installs the Opik skills. It needs
+    [uv](https://docs.astral.sh/uv/).
+
+    ```bash
+    uvx opik@latest mcp configure
+    ```
+
+    To register the server by hand, with your API key in `OPIK_API_KEY`:
+
+    ```bash
+    claude mcp add --scope user opik-mcp \
+      --env COMET_URL_OVERRIDE=https://<host> \
+      --env OPIK_WORKSPACE=<workspace> \
+      --env OPIK_API_KEY="$OPIK_API_KEY" \
+      -- uvx opik-mcp
+    ```
+
+    Set `OPIK_WORKSPACE` to the part of your Opik URL after `/opik/`.
+
+    If your deployment runs the MCP OAuth server (off by default), you can use the hosted flow
+    instead:
+
+    ```bash
+    claude mcp add --transport http opik-mcp https://<host>/opik/api/v1/mcp
+    ```
+
+    Start a new session after you add the server. If you also installed the Opik plugin, disable
+    `plugin:opik:opik-cloud` in `/mcp`.
+  </Tab>
+  <Tab value="Self-hosted instance" title="Self-hosted instance">
+    The hosted MCP server and the Opik plugin connect to Opik Cloud only. On open-source Opik,
+    Claude Code runs the MCP server on your machine with `uvx opik-mcp`.
+
+    Run this command in a terminal. It finds an Opik that runs on localhost, or the one in
+    `~/.opik.config`, registers the MCP server and installs the Opik skills. It needs
+    [uv](https://docs.astral.sh/uv/).
+
+    ```bash
+    uvx opik@latest mcp configure
+    ```
+
+    To register the server by hand:
+
+    ```bash
+    claude mcp add --scope user opik-mcp --env OPIK_URL=http://localhost:5173/api -- uvx opik-mcp
+    ```
+
+    For Opik on a server, set `OPIK_URL=https://<host>/api`. Add `OPIK_API_KEY` only if your
+    deployment uses authentication. Open-source Opik has one workspace, so you do not set
+    `OPIK_WORKSPACE`.
+
+    Start a new session after you add the server. If you also installed the Opik plugin, disable
+    `plugin:opik:opik-cloud` in `/mcp`.
+  </Tab>
+</Tabs>
 
 ### Skills
 
-The skills load as `opik:<skill>`, such as `opik:opik-instrument`. Claude Code picks the skill
-that fits your request.
+Claude Code picks the skill that fits your request. With the Opik plugin, the skills load as
+`opik:<skill>`, such as `opik:opik-instrument`.
 
 | Skill | What it does |
 | --- | --- |
@@ -137,17 +201,6 @@ them by hand.
 | `read_skill` | Loads one of the Opik skills on demand. |
 
 For the full list of operations, see the [MCP tools reference](/mcp-server/tools).
-
-### Self-hosted Opik
-
-The plugin registers the server for Opik Cloud. The skills work with any Opik. To use your own
-server:
-
-1. Add your server:
-   - For a self-hosted Comet that serves the MCP server, run
-     `claude mcp add --transport http opik-mcp https://<host>/opik/api/v1/mcp`.
-   - For any other self-hosted or open-source Opik, follow the [MCP server setup](/mcp-server).
-2. In `/mcp`, disable `plugin:opik:opik-cloud`.
 
 ### Update the plugin
 
