@@ -22,6 +22,8 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -100,6 +102,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringLlmAsJudgeScorerTest {
+
+    // Built-in prices only, as before organization prices: every scorer test charges the bundled price table.
+    private final ModelPriceService modelPriceService = mock(ModelPriceService.class,
+            invocation -> Mono.just(PriceLayers.BUILT_IN_ONLY));
 
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
@@ -195,7 +201,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 opikConfiguration,
                 onlineEvaluationRecorder,
                 attachmentService,
-                new DecisionScoringService(Set.of(decisionsClient, openAiDecisionsClient), llmProviderFactory));
+                new DecisionScoringService(Set.of(decisionsClient, openAiDecisionsClient), llmProviderFactory),
+                modelPriceService);
     }
 
     @AfterEach

@@ -11,12 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -36,6 +41,7 @@ public class ModelPriceTable {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
     private static final Set<String> pricedProviders;
+    private static final String pricesFingerprint;
     private static final Map<String, Map<String, List<String>>> prefixedModelNames;
     private static final Map<String, Set<String>> providersByModelName;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
@@ -64,14 +70,14 @@ public class ModelPriceTable {
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
         pricedProviders = modelProviderPrices.keySet().stream()
-                .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
+                .map(ModelPriceTable::providerOf)
                 .collect(Collectors.toUnmodifiableSet());
+        pricesFingerprint = fingerprint(MODEL_PRICES_FILE, MODEL_PRICES_OPENROUTER_FILE, MODEL_PRICES_OVERRIDES_FILE);
         prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
         providersByModelName = modelProviderPrices.keySet().stream()
                 .collect(Collectors.collectingAndThen(Collectors.groupingBy(
-                        key -> key.substring(0, key.lastIndexOf(MODEL_PROVIDER_SEPARATOR)),
-                        Collectors.mapping(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1),
-                                Collectors.toUnmodifiableSet())),
+                        ModelPriceTable::modelNameOf,
+                        Collectors.mapping(ModelPriceTable::providerOf, Collectors.toUnmodifiableSet())),
                         Collections::unmodifiableMap));
     }
 
@@ -85,6 +91,30 @@ public class ModelPriceTable {
 
     static Set<String> pricedProviders() {
         return pricedProviders;
+    }
+
+    // The bundled files hold no date, so their content names the built-in prices a span was priced with.
+    static String pricesFingerprint() {
+        return pricesFingerprint;
+    }
+
+    private static String fingerprint(String... files) {
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            for (String file : files) {
+                try (InputStream inputStream = ModelPriceTable.class.getClassLoader().getResourceAsStream(file)) {
+                    if (inputStream != null) {
+                        digest.update(file.getBytes(StandardCharsets.UTF_8));
+                        digest.update(inputStream.readAllBytes());
+                    }
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest(), 0, 4);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Failed to read the model prices files", exception);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     /** The providers with a built-in price filed under exactly this model name. */
@@ -103,12 +133,11 @@ public class ModelPriceTable {
     private static Map<String, Map<String, List<String>>> indexPrefixedModelNames(Set<String> keys) {
         Map<String, Map<String, List<String>>> index = new HashMap<>();
         for (String key : keys) {
-            int providerSeparator = key.lastIndexOf(MODEL_PROVIDER_SEPARATOR);
-            String modelName = key.substring(0, providerSeparator);
+            String modelName = modelNameOf(key);
             if (modelName.indexOf(MODEL_PROVIDER_SEPARATOR) <= 0) {
                 continue;
             }
-            index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
+            index.computeIfAbsent(providerOf(key), unused -> new HashMap<>())
                     .computeIfAbsent(rowModelName(modelName), unused -> new ArrayList<>())
                     .add(modelName);
         }
@@ -399,6 +428,14 @@ public class ModelPriceTable {
 
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
+    }
+
+    private static String modelNameOf(String modelProviderKey) {
+        return modelProviderKey.substring(0, modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR));
+    }
+
+    private static String providerOf(String modelProviderKey) {
+        return modelProviderKey.substring(modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1);
     }
 
     private static boolean isValidModelProvider(String modelName, String provider) {
