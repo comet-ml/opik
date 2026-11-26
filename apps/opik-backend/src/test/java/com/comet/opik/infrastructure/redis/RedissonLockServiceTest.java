@@ -39,6 +39,7 @@ import static org.mockito.Mockito.when;
  * <ul>
  *   <li>{@code semaphore.expire(...)} failure / cancellation — the orphan-prevention
  *       inside {@code expire()}'s inner {@code doFinally};</li>
+ *   <li>{@code semaphore.expire(...)} failure in {@code tryAcquireSlot} releasing the acquired permit;</li>
  *   <li>retry contract in {@code acquireLock} when the underlying semaphore throws
  *       {@code RedisException};</li>
  *   <li>{@code bestEffortLock}'s outer {@code onErrorResume(RedisException.class, ...)}
@@ -239,5 +240,23 @@ class RedissonLockServiceTest {
                 .verifyComplete();
 
         verify(semaphore, timeout(ACTION_TIMEOUT_MS).atLeastOnce()).tryRelease(permitId);
+    }
+
+    @Test
+    void tryAcquireSlotReleasesPermitWhenExpireErrors() {
+        var permitId = "permitId-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(RANDOM_STRING_LENGTH));
+        var lease = Duration.ofSeconds(TTL_IN_SECONDS);
+        when(semaphore.trySetPermits(2)).thenReturn(Mono.just(true));
+        when(semaphore.tryAcquire(0L, lease.toMillis(), TimeUnit.MILLISECONDS)).thenReturn(Mono.just(permitId));
+        when(semaphore.expire(lease)).thenReturn(Mono.error(new RedisException("expire failed")));
+        when(semaphore.tryRelease(permitId)).thenReturn(Mono.just(true));
+
+        var lock = new LockService.Lock(UUID.randomUUID(),
+                "lockName-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(RANDOM_STRING_LENGTH)));
+
+        StepVerifier.create(lockService.tryAcquireSlot(lock, 2, lease))
+                .expectError(RedisException.class)
+                .verify();
+        verify(semaphore).tryRelease(permitId);
     }
 }

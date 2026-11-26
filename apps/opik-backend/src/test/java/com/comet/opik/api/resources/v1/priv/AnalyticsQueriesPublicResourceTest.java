@@ -17,12 +17,15 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -39,10 +42,12 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -62,6 +67,13 @@ class AnalyticsQueriesPublicResourceTest {
     private static final String API_KEY_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
+
+    // Its own workspace, so holding its slots does not affect the other tests.
+    private static final String API_KEY_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_NAME_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_ID_C = UUID.randomUUID().toString();
+
+    private static final int MAX_CONCURRENT_QUERIES = 2;
 
     private static final String RESULT_QUERY = "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM traces ORDER BY id";
 
@@ -106,6 +118,8 @@ class AnalyticsQueriesPublicResourceTest {
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
                                 new CustomConfig("customCharts.publicEndpointsEnabled", "true"),
+                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
+                                        String.valueOf(MAX_CONCURRENT_QUERIES)),
                                 // On so the redaction refusal can be reached; callers holding original_data_view
                                 // are unaffected.
                                 new CustomConfig("redaction.enabled", "true"),
@@ -117,6 +131,7 @@ class AnalyticsQueriesPublicResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private AnalyticsQueriesClient analyticsQueriesClient;
+    private LockService lockService;
 
     private UUID projectIdA;
     private UUID projectIdB;
@@ -124,13 +139,15 @@ class AnalyticsQueriesPublicResourceTest {
     private UUID traceIdA2;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, LockService lockService) {
+        this.lockService = lockService;
         var baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
 
         mockOriginalDataViewer(API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A);
         mockOriginalDataViewer(API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B);
+        mockOriginalDataViewer(API_KEY_C, WORKSPACE_NAME_C, WORKSPACE_ID_C);
 
         var projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         var traceResourceClient = new TraceResourceClient(client, baseURI);
@@ -213,6 +230,28 @@ class AnalyticsQueriesPublicResourceTest {
                     .containsExactly(
                             "query size must be between 0 and %d".formatted(DashboardSavedQuery.MAX_SQL_LENGTH));
         }
+    }
+
+    @Test
+    @DisplayName("with every workspace slot taken returns 429 with Retry-After, and runs once a slot is freed")
+    void runQuery__whenWorkspaceSlotsTaken__thenTooManyRequestsUntilOneFrees() {
+        var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_C, MAX_CONCURRENT_QUERIES);
+        // Longer than the test can run, so only the release below can free a slot.
+        var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
+                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(10)).block())
+                .toList();
+        assertThat(permits).doesNotContainNull();
+
+        try (Response response = analyticsQueriesClient.callRun(null, RESULT_QUERY, API_KEY_C, WORKSPACE_NAME_C)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+            assertThat(response.readEntity(ErrorMessage.class))
+                    .isEqualTo(new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
+        }
+
+        lockService.releaseSlot(lock, permits.getFirst()).block();
+
+        assertThat(analyticsQueriesClient.run(null, RESULT_QUERY, API_KEY_C, WORKSPACE_NAME_C).results()).isEmpty();
     }
 
     @Test

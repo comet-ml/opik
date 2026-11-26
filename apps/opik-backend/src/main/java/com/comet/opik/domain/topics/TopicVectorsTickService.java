@@ -294,7 +294,7 @@ public class TopicVectorsTickService {
     }
 
     /** The long-window pass's and the backfill's window: {@code backfillWindow} when set, else {@code longWindow}. */
-    static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
+    public static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 

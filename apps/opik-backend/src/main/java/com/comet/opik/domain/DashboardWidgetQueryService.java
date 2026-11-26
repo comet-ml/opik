@@ -59,6 +59,7 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     private final DashboardService dashboardService;
     private final DashboardSavedQueryService dashboardSavedQueryService;
     private final FreeFormSqlQueryService freeFormSqlQueryService;
+    private final FreeFormSqlConcurrencyLimiter concurrencyLimiter;
     private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
     private final CustomChartsConfig customCharts;
@@ -70,12 +71,14 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
             @NonNull DashboardService dashboardService,
             @NonNull DashboardSavedQueryService dashboardSavedQueryService,
             @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
+            @NonNull FreeFormSqlConcurrencyLimiter concurrencyLimiter,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         this.dashboardService = dashboardService;
         this.dashboardSavedQueryService = dashboardSavedQueryService;
         this.freeFormSqlQueryService = freeFormSqlQueryService;
+        this.concurrencyLimiter = concurrencyLimiter;
         this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
         this.customCharts = customCharts;
@@ -115,9 +118,9 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
 
         String sql = bindWindow(savedQuery.sql(), start, end);
         try {
-            return freeFormSqlQueryService
-                    .executeQuery(FreeFormSqlAccount.EXTENDED, workspaceId, savedQuery.projectId(),
-                            sql)
+            return concurrencyLimiter
+                    .run(workspaceId, () -> freeFormSqlQueryService.executeQuery(FreeFormSqlAccount.EXTENDED,
+                            workspaceId, savedQuery.projectId(), sql))
                     .join();
         } catch (CompletionException e) {
             // Unwrap so the mapped WebApplicationException, and its HTTP status, reaches the JAX-RS handling.

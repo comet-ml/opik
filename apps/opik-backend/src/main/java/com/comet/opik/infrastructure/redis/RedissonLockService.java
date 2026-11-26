@@ -279,7 +279,12 @@ class RedissonLockService implements LockService {
         var semaphore = slotSemaphore(lock);
         return semaphore.trySetPermits(totalSlots)
                 .then(Mono.defer(() -> semaphore.tryAcquire(0L, leaseTime.toMillis(), TimeUnit.MILLISECONDS)))
-                .flatMap(permitId -> semaphore.expire(leaseTime).thenReturn(permitId));
+                .flatMap(permitId -> semaphore.expire(leaseTime)
+                        .thenReturn(permitId)
+                        // A failed expire would otherwise leave the acquired permit held until its lease ends.
+                        .onErrorResume(error -> semaphore.tryRelease(permitId)
+                                .onErrorResume(releaseError -> Mono.empty())
+                                .then(Mono.error(error))));
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ScopedAnalyticsQueryRequest;
+import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
 import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class AnalyticsQueriesPublicResourceOffTest {
 
     private final FreeFormSqlQueryService freeFormSqlQueryService = mock(FreeFormSqlQueryService.class);
+    private final FreeFormSqlConcurrencyLimiter concurrencyLimiter = mock(FreeFormSqlConcurrencyLimiter.class);
     @SuppressWarnings("unchecked")
     private final Provider<RequestContext> requestContext = mock(Provider.class);
 
@@ -27,7 +29,8 @@ class AnalyticsQueriesPublicResourceOffTest {
         serviceToggles.setOllieEnabled(true);
         var customCharts = new CustomChartsConfig();
         customCharts.setEnabled(true);
-        var resource = new AnalyticsQueriesPublicResource(freeFormSqlQueryService, requestContext, serviceToggles,
+        var resource = new AnalyticsQueriesPublicResource(freeFormSqlQueryService, concurrencyLimiter, requestContext,
+                serviceToggles,
                 customCharts);
 
         try (Response response = resource.runQuery(ScopedAnalyticsQueryRequest.builder()
@@ -35,6 +38,6 @@ class AnalyticsQueriesPublicResourceOffTest {
                 .build())) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_IMPLEMENTED.getStatusCode());
         }
-        verifyNoInteractions(freeFormSqlQueryService);
+        verifyNoInteractions(freeFormSqlQueryService, concurrencyLimiter);
     }
 }

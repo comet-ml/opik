@@ -338,6 +338,14 @@ customCharts:
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
   maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
+  #  Default: 4
+  #  Description: How many free-form SQL queries one workspace may run at once, across every backend pod. Counts the
+  #   public analytics-queries endpoint and the dashboard and Insights Views widget queries; above it they answer 429
+  #   with Retry-After. Ollie's chart authoring (POST /v1/internal/analytics-queries) is not counted: our
+  #   internal model runs those queries.
+  #   Keep it below the EXTENDED account's per-replica max_concurrent_queries_for_user.
+  #   If Redis is unreachable the limit is skipped and only that ClickHouse cap applies.
+  maxConcurrentQueriesPerWorkspace: ${CUSTOM_CHARTS_MAX_CONCURRENT_QUERIES_PER_WORKSPACE:-4}
 
 # Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
@@ -2649,6 +2657,10 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 5s
+    #  Description: The most deadline_ms a realtime-lane decide call sends (the service's
+    #  decide_realtime_max_deadline_ms). inference.realtime.decideDeadline must not be above it
+    maxDecideRealtimeDeadline: ${OPIK_INFERENCE_MAX_DECIDE_REALTIME_DEADLINE:-5s}
     #  Default: 60s
     #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
@@ -2668,12 +2680,23 @@ inference:
     #  quota_exceeded is never retried
     maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
     #  Default: 100ms
-    #  Description: The wait before the first retry, doubled for each one after, unless the service sends Retry-After
+    #  Description: The wait before the first retry, doubled for each one after and jittered by up to half either way,
+    #  unless the service sends Retry-After
     baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
     #  Default: 1048576 (1 MiB)
     #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
     #  per this many bytes sent
     submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+  # The synchronous calls a request waits on
+  realtime:
+    #  Default: 5s
+    #  Description: The deadline a guardrail check's decide call sends, the time the service may spend on it. At most
+    #  inference.limits.maxDecideRealtimeDeadline
+    decideDeadline: ${OPIK_INFERENCE_REALTIME_DECIDE_DEADLINE:-5s}
+    #  Default: 1s
+    #  Description: Room past decideDeadline for the answer to arrive, or for a quick retry of an overloaded call. A
+    #  check not answered by then fails closed. At most 5s, so a request never waits on a check much past 10s
+    decideMargin: ${OPIK_INFERENCE_REALTIME_DECIDE_MARGIN:-1s}
 
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
@@ -2989,9 +3012,10 @@ topics:
     #  Default: topics-runs-consumers
     #  Description: Consumer group of the Topics runs stream
     consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
-    #  Default: 1
-    #  Description: Runs one pod runs at a time; each holds a window in memory. At most 8
-    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-1}
+    #  Default: 2
+    #  Description: Runs one pod runs at a time. Each holds its window in memory (about 200 MiB at 100k traces), so
+    #  this is a per-pod memory budget; set it to maxInFlight so one pod can fill every slot. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-2}
     #  Default: 5s
     #  Description: How often a pod polls the stream for queued runs. At most 10s
     poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
@@ -3033,9 +3057,28 @@ topics:
     #  Default: 2m
     #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+    #  Default: 5m
+    #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them
+    #  plans. Longer than planBudget, at least 10s, at most 1h
+    planInterval: ${TOPICS_RUNS_PLAN_INTERVAL:-5m}
+    #  Default: 1m
+    #  Description: How much longer than planBudget plus topics.run.countTimeout the leader lock lasts, for the queue
+    #  writes and publishes after the counts. At most 5m
+    leaseSlack: ${TOPICS_RUNS_LEASE_SLACK:-1m}
     #  Default: 5s
     #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
     requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 4m. A longer query outlives
+    #  the progress headers the driver can take at the default databaseAnalytics.httpHeadersProgressIntervalMs
+    maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
+    #  At most 68719476736 (64 GiB)
+    maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After
@@ -3066,6 +3109,14 @@ topics:
     #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
     #  bounded however many projects went at once. From 1 to 10000
     deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
+    #  Default: 24h
+    #  Description: How often each pod deletes the topics of deleted projects that the project delete left. At
+    #  least 1h, at most 7d
+    sweepInterval: ${TOPICS_STORAGE_SWEEP_INTERVAL:-24h}
+    #  Default: 5m
+    #  Description: How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire
+    #  sweeps again. At least 10s, at most 30m
+    sweepTimeout: ${TOPICS_STORAGE_SWEEP_TIMEOUT:-5m}
 
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it

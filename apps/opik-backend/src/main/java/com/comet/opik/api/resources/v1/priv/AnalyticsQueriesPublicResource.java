@@ -5,6 +5,7 @@ import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.ScopedAnalyticsQueryRequest;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.FreeFormSqlAccount;
+import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
 import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -38,8 +39,9 @@ import java.util.concurrent.CompletionException;
 
 /**
  * Public entry point for Custom Charts free-form SQL, called by the Opik MCP server and by API keys directly. Runs on
- * the EXTENDED account with the same checks as the internal scoped endpoint. Its per-workspace budget is its own, so
- * programmatic callers cannot starve the dashboard and Insights Views widget queries.
+ * the EXTENDED account with the same checks as the internal scoped endpoint. Its per-workspace rate limit is its own,
+ * but it shares the workspace's concurrent-query slots with the dashboard and Insights Views widget queries
+ * ({@link FreeFormSqlConcurrencyLimiter}).
  */
 @Path("/v1/private/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -50,6 +52,7 @@ import java.util.concurrent.CompletionException;
 public class AnalyticsQueriesPublicResource {
 
     private final FreeFormSqlQueryService freeFormSqlQueryService;
+    private final FreeFormSqlConcurrencyLimiter concurrencyLimiter;
     private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
     private final CustomChartsConfig customCharts;
@@ -59,10 +62,12 @@ public class AnalyticsQueriesPublicResource {
     @Inject
     public AnalyticsQueriesPublicResource(
             @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
+            @NonNull FreeFormSqlConcurrencyLimiter concurrencyLimiter,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         this.freeFormSqlQueryService = freeFormSqlQueryService;
+        this.concurrencyLimiter = concurrencyLimiter;
         this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
         this.customCharts = customCharts;
@@ -73,7 +78,7 @@ public class AnalyticsQueriesPublicResource {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many queries; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many queries, or too many running at once in this workspace; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Custom Charts or its public endpoints are not enabled")})
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     @RateLimited(value = "analyticsQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
@@ -92,8 +97,9 @@ public class AnalyticsQueriesPublicResource {
                 request.projectId() == null ? "all" : request.projectId());
 
         try {
-            return Response.ok(freeFormSqlQueryService
-                    .executeQuery(FreeFormSqlAccount.EXTENDED, workspaceId, request.projectId(), request.query())
+            return Response.ok(concurrencyLimiter
+                    .run(workspaceId, () -> freeFormSqlQueryService.executeQuery(FreeFormSqlAccount.EXTENDED,
+                            workspaceId, request.projectId(), request.query()))
                     .join())
                     .build();
         } catch (CompletionException e) {
