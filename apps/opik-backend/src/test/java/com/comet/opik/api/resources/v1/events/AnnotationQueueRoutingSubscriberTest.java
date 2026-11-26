@@ -22,6 +22,7 @@ import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -52,6 +53,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -220,7 +222,8 @@ class AnnotationQueueRoutingSubscriberTest {
                                     .queueId(otherQueueId)
                                     .projectId(otherProjectId)
                                     .build()));
-            givenLoggingSource(traceId);
+            when(traceDAO.getLoggingSourceIds(any(), any()))
+                    .thenReturn(Mono.just(Set.of(Pair.of(projectId, traceId), Pair.of(otherProjectId, traceId))));
             when(traceDAO.search(anyInt(), any())).thenReturn(Flux.just(trace(traceId)));
             when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
 
@@ -330,8 +333,7 @@ class AnnotationQueueRoutingSubscriberTest {
             UUID playgroundTraceId = UUID.randomUUID();
             givenTraces(sdkTraceId, playgroundTraceId);
             givenEnabledAutomation(AnnotationQueue.AnnotationScope.TRACE, List.of(List.of(scoreFilter)));
-            when(traceDAO.getLoggingSourceIds(eq(Set.of(projectId)), any()))
-                    .thenReturn(Mono.just(Set.of(sdkTraceId)));
+            givenLoggingSource(sdkTraceId);
             when(traceDAO.search(anyInt(), any())).thenReturn(Flux.just(trace(sdkTraceId)));
             when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
 
@@ -340,6 +342,32 @@ class AnnotationQueueRoutingSubscriberTest {
             var criteria = ArgumentCaptor.forClass(TraceSearchCriteria.class);
             verify(traceDAO).search(eq(1), criteria.capture());
             assertThat(criteria.getValue().traceIds()).containsExactly(sdkTraceId);
+        }
+
+        @Test
+        void judgesAReusedTraceIdPerProject() {
+            UUID traceId = UUID.randomUUID();
+            UUID playgroundProjectId = UUID.randomUUID();
+            when(traceDAO.getAllProjectIdsByTraceIdsBounded(Set.of(traceId)))
+                    .thenReturn(Mono.just(Map.of(traceId, Set.of(projectId, playgroundProjectId))));
+            when(automationService.findEnabledByProjects(WORKSPACE_ID, Set.of(projectId, playgroundProjectId),
+                    AnnotationQueue.AnnotationScope.TRACE))
+                    .thenReturn(List.of(automation(List.of(List.of(scoreFilter))),
+                            automation(List.of(List.of(scoreFilter))).toBuilder()
+                                    .queueId(UUID.randomUUID())
+                                    .projectId(playgroundProjectId)
+                                    .build()));
+            givenLoggingSource(traceId);
+            when(traceDAO.search(anyInt(), any())).thenReturn(Flux.just(trace(traceId)));
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
+
+            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId));
+
+            var criteria = ArgumentCaptor.forClass(TraceSearchCriteria.class);
+            verify(traceDAO).search(eq(1), criteria.capture());
+            assertThat(criteria.getValue().projectId()).isEqualTo(projectId);
+            verify(annotationQueueService).addItems(queueId, Set.of(traceId), AnnotationQueueItemSource.AUTOMATED);
+            verifyNoMoreInteractions(annotationQueueService);
         }
 
         /**
@@ -497,7 +525,9 @@ class AnnotationQueueRoutingSubscriberTest {
     }
 
     private void givenLoggingSource(UUID... entityIds) {
-        when(traceDAO.getLoggingSourceIds(any(), any())).thenReturn(Mono.just(Set.of(entityIds)));
+        when(traceDAO.getLoggingSourceIds(any(), any())).thenReturn(Mono.just(Arrays.stream(entityIds)
+                .map(entityId -> Pair.of(projectId, entityId))
+                .collect(Collectors.toSet())));
     }
 
     private static Trace trace(UUID id) {

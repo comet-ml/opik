@@ -163,10 +163,11 @@ public interface TraceDAO {
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
     /**
-     * Of the given ids, the ones an SDK logged — {@link Source#isLoggingSource} expressed as a query,
-     * so legacy {@code unknown} rows count as SDK the same way it treats {@code null}.
+     * Of the given ids, the {@code (project id, trace id)} pairs an SDK logged — {@link Source#isLoggingSource}
+     * expressed as a query, so legacy {@code unknown} rows count as SDK the same way it treats {@code null}. A trace
+     * id reused across projects is judged in each project on its own.
      */
-    Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds);
+    Mono<Set<Pair<UUID, UUID>>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds);
 
     /** Same as {@link #countTracesPerWorkspaceProject()}, broken down by user for the BI events. */
     Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject();
@@ -463,9 +464,9 @@ class TraceDAOImpl implements TraceDAO {
      * Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332).
      */
     private static final String SELECT_LOGGING_SOURCE_IDS = """
-            SELECT id
+            SELECT project_id, id
             FROM (
-                SELECT id, argMax(source, last_updated_at) AS source
+                SELECT project_id, id, argMax(source, last_updated_at) AS source
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -5630,7 +5631,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Set<UUID>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds) {
+    public Mono<Set<Pair<UUID, UUID>>> getLoggingSourceIds(Set<UUID> projectIds, Set<UUID> traceIds) {
         if (CollectionUtils.isEmpty(projectIds) || CollectionUtils.isEmpty(traceIds)) {
             return Mono.just(Set.of());
         }
@@ -5651,7 +5652,8 @@ class TraceDAOImpl implements TraceDAO {
             idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> row.get("id", UUID.class)))
+                    .flatMap(result -> result.map((row, metadata) -> Pair.of(row.get("project_id", UUID.class),
+                            row.get("id", UUID.class))))
                     .collect(toSet());
         }));
     }

@@ -21,6 +21,7 @@ import jakarta.inject.Inject;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -178,14 +180,17 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
 
         Set<UUID> entityIds = entities.stream().map(RoutedEntity::id).collect(Collectors.toSet());
 
-        Mono<Set<UUID>> loggedBySdk = message.scope() == AnnotationQueue.AnnotationScope.THREAD
+        // Thread model ids are unique per project; a trace id can be reused across projects, so it is judged per pair.
+        Mono<Predicate<RoutedEntity>> loggedBySdk = message.scope() == AnnotationQueue.AnnotationScope.THREAD
                 ? traceThreadDAO.getLoggingSourceIds(projectIds, entityIds)
-                : traceDAO.getLoggingSourceIds(projectIds, entityIds);
+                        .map(kept -> entity -> kept.contains(entity.id()))
+                : traceDAO.getLoggingSourceIds(projectIds, entityIds)
+                        .map(kept -> entity -> kept.contains(Pair.of(entity.projectId(), entity.id())));
 
         return withSystemContext(loggedBySdk, message)
-                .map(kept -> {
+                .map(isLoggedBySdk -> {
                     var production = entities.stream()
-                            .filter(entity -> kept.contains(entity.id()))
+                            .filter(isLoggedBySdk)
                             .toList();
                     int skipped = entities.size() - production.size();
                     if (skipped > 0) {

@@ -30,6 +30,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -141,7 +142,26 @@ class AnnotationQueueRoutingReadsTest {
 
         assertThat(kept)
                 .as("a queue is for production traffic: playground, evaluator and experiment traffic is not")
-                .containsExactly(sdk);
+                .containsExactly(Pair.of(projectId, sdk));
+    }
+
+    @Test
+    @DisplayName("logging source: a trace id reused across projects is judged in each project")
+    void loggingSourceIdsJudgeAReusedTraceIdPerProject() {
+        String sdkProjectName = randomName("project");
+        String playgroundProjectName = randomName("project");
+        UUID traceId = createTrace(sdkProjectName, Source.SDK, null);
+        UUID sdkProjectId = projectIdOf(traceId);
+        UUID playgroundProjectId = projectIdOf(createTrace(playgroundProjectName, Source.SDK, null));
+        traceResourceClient.batchCreateTraces(
+                List.of(traceOf(playgroundProjectName, Source.PLAYGROUND, null).toBuilder().id(traceId).build()),
+                API_KEY, WORKSPACE_NAME);
+
+        var kept = traceDAO.getLoggingSourceIds(Set.of(sdkProjectId, playgroundProjectId), Set.of(traceId))
+                .contextWrite(this::workspaceContext)
+                .block();
+
+        assertThat(kept).containsExactly(Pair.of(sdkProjectId, traceId));
     }
 
     /**
@@ -169,7 +189,7 @@ class AnnotationQueueRoutingReadsTest {
 
         assertThat(kept)
                 .as("the correction is what counts, in both directions")
-                .containsExactly(becameSdk);
+                .containsExactly(Pair.of(projectId, becameSdk));
     }
 
     @Test
