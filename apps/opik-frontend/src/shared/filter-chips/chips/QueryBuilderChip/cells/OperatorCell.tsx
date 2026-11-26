@@ -14,6 +14,8 @@ interface OperatorCellProps<T extends string> {
   options: OperatorOption<T>[];
   onSelect: (value: T) => void;
   ariaLabel?: string;
+  className?: string;
+  placeholder?: string;
 }
 
 export function OperatorCell<T extends string>({
@@ -21,6 +23,8 @@ export function OperatorCell<T extends string>({
   options,
   onSelect,
   ariaLabel,
+  className,
+  placeholder,
 }: OperatorCellProps<T>) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
@@ -31,10 +35,12 @@ export function OperatorCell<T extends string>({
         <button
           type="button"
           data-filter-cell
-          className={cellButton}
+          className={cn(cellButton, className)}
           aria-label={ariaLabel}
         >
-          <span>{current?.label ?? value}</span>
+          <span className={cn(!current && placeholder && "text-light-slate")}>
+            {current?.label ?? (value || placeholder)}
+          </span>
           <ChevronDown className="size-3 shrink-0" />
         </button>
       </PopoverTrigger>

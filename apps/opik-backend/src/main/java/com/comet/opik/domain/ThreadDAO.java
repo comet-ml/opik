@@ -2197,7 +2197,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     .add("log_comment", getLogComment("search_threads", workspaceId, userName,
                             "limit:" + limit));
 
-            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+            // Given threads reuse the page pushdown find runs on its resolved page: every read narrows to them,
+            // and the filters still apply in full.
+            boolean narrowedToThreads = CollectionUtils.isNotEmpty(criteria.threadIds());
+            if (narrowedToThreads) {
+                template.add("page_pushdown", true);
+            } else if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
                 template.add("traces_final_ids", true);
             }
 
@@ -2207,6 +2212,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     .bind("workspace_id", workspaceId);
 
             bindTraceThreadSearchCriteria(criteria, statement);
+            if (narrowedToThreads) {
+                statement.bind("page_thread_ids", criteria.threadIds().toArray(String[]::new));
+            }
 
             InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "threadsSearch");
 

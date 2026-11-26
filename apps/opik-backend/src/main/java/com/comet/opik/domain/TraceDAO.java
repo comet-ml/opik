@@ -154,6 +154,8 @@ public interface TraceDAO {
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
 
+    Mono<Map<UUID, Set<String>>> getThreadIdsByTraceIds(Set<UUID> traceIds);
+
     Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIds(Set<UUID> traceIds);
 
     Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIdsBounded(Set<UUID> traceIds);
@@ -1109,6 +1111,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_ids)> AND id IN :trace_ids <endif>
                 <if(last_received_id)> AND id \\< :last_received_id
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
@@ -1118,7 +1121,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                <if(filters)> AND <filters> <endif>
+                <if(filters)><if(!guardrails_filters)> AND <filters> <endif><endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1583,6 +1586,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_ids)> AND id IN :trace_ids <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
@@ -2603,6 +2607,19 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY project_id DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_THREAD_IDS_BY_TRACE_IDS = """
+            SELECT DISTINCT
+                project_id,
+                thread_id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id IN :trace_ids
+            AND thread_id != ''
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4795,7 +4812,11 @@ class TraceDAOImpl implements TraceDAO {
         // inside the prefilter.
         boolean annotationQueuePrefilter = template.getAttribute("annotation_queue_narrows") != null
                 && template.getAttribute("guardrails_filters") == null;
-        boolean usePrefilter = annotationQueuePrefilter
+        // Given trace ids key the aggregates on them even with guardrails filters: the prefilter then holds the
+        // given traces and leaves the filters, which a guardrails filter makes unusable there, to traces_deduped.
+        boolean traceIdsPrefilter = template.getAttribute("trace_ids") != null;
+        boolean usePrefilter = traceIdsPrefilter
+                || annotationQueuePrefilter
                 || (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores);
 
         if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
@@ -5496,6 +5517,33 @@ class TraceDAOImpl implements TraceDAO {
         }));
     }
 
+    @Override
+    public Mono<Map<UUID, Set<String>>> getThreadIdsByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_THREAD_IDS_BY_TRACE_IDS, "get_thread_ids_by_trace_ids",
+                    workspaceId, userName, traceIds.size());
+
+            var idWeeks = idWeeks(traceIds);
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
+            var statement = connection.createStatement(template.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId);
+
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                            row.get("project_id", UUID.class), row.get("thread_id", String.class))))
+                    .collect(Collectors.groupingBy(Map.Entry::getKey,
+                            Collectors.mapping(Map.Entry::getValue, toSet())));
+        }));
+    }
+
     private Mono<Map<UUID, UUID>> collectTraceIdToProjectId(Statement statement) {
         return traceIdProjectIdPairs(statement)
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -5725,17 +5773,27 @@ class TraceDAOImpl implements TraceDAO {
 
     private Flux<? extends Result> findTraceStream(int limit, @NonNull TraceSearchCriteria criteria,
             Connection connection) {
-        log.info("Searching traces by '{}'", criteria);
+        // A search narrowed to given traces is automation routing, with up to a whole batch of ids: describe it by
+        // the parts routing sets and count the ids rather than listing them.
+        var loggedCriteria = CollectionUtils.isEmpty(criteria.traceIds())
+                ? criteria.toString()
+                : "projectId=%s, filters=%s, traceIds=[%d ids]".formatted(
+                        criteria.projectId(), criteria.filters(), criteria.traceIds().size());
+        log.info("Searching traces by '{}'", loggedCriteria);
 
         return makeFluxContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("find_trace_stream", workspaceId, userName,
-                    "limit:" + limit + ":" + criteria);
+                    "limit:" + limit + ":" + loggedCriteria);
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);
+
+            if (CollectionUtils.isNotEmpty(criteria.traceIds())) {
+                template.add("trace_ids", true);
+            }
 
             // The stream has no custom sorting, so only filters can make aggregates drive page selection.
             addAggregateKeyingFlags(template, criteria, false, false, false);
@@ -5750,6 +5808,9 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("limit", limit);
 
             bindTraceThreadSearchCriteria(criteria, statement);
+            if (CollectionUtils.isNotEmpty(criteria.traceIds())) {
+                statement.bind("trace_ids", criteria.traceIds().toArray(UUID[]::new));
+            }
 
             Segment segment = startSegment("traces", "Clickhouse", "findTraceStream");
 

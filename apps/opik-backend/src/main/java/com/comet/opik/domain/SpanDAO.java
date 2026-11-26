@@ -1589,6 +1589,16 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_TRACE_IDS_BY_SPAN_IDS = """
+            SELECT DISTINCT trace_id
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     /**
      * Split-A of the span stats: the per-project span aggregates, computed in the level that reads {@code spans FINAL}
      * ({@code spans_stats}). When {@code spans} is a {@code Distributed} table, each subquery reading it runs on the
@@ -3372,6 +3382,32 @@ public class SpanDAO {
      */
     private Optional<Long[]> idWeeks(Collection<UUID> ids) {
         return WeeklyPartitions.weeksOf(ids).map(weeks -> weeks.toArray(Long[]::new));
+    }
+
+    @WithSpan
+    public Mono<Set<UUID>> getTraceIdsBySpanIds(@NonNull Set<UUID> spanIds) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_SPAN_IDS, "get_trace_ids_by_span_ids",
+                            workspaceId, userName, spanIds.size());
+
+                    var idWeeks = idWeeks(spanIds);
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", spanIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
+
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("trace_id", UUID.class)))
+                .collect(Collectors.toSet());
     }
 
     @WithSpan

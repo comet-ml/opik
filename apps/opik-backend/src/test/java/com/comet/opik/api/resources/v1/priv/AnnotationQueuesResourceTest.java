@@ -12,10 +12,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
-import com.comet.opik.api.annotationqueue.ConditionGroup;
-import com.comet.opik.api.annotationqueue.Conditions;
-import com.comet.opik.api.annotationqueue.ScoreCondition;
-import com.comet.opik.api.annotationqueue.ScoreConditionOperator;
+import com.comet.opik.api.annotationqueue.AutomationFilter;
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.Operator;
@@ -44,6 +41,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -599,6 +598,11 @@ class AnnotationQueuesResourceTest {
     class AnnotationQueueAutomationConfig {
 
         private AnnotationQueue createQueue(AnnotationQueueAutomation automation, int expectedStatus) {
+            return createQueue(automation, AnnotationQueue.AnnotationScope.TRACE, expectedStatus);
+        }
+
+        private AnnotationQueue createQueue(AnnotationQueueAutomation automation,
+                AnnotationQueue.AnnotationScope scope, int expectedStatus) {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
@@ -606,6 +610,7 @@ class AnnotationQueuesResourceTest {
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
+                    .scope(scope)
                     .automation(automation)
                     .build();
 
@@ -620,30 +625,160 @@ class AnnotationQueuesResourceTest {
                     queueId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
         }
 
-        private Conditions conditionsOn(String score, double value) {
-            return Conditions.builder()
-                    .groups(List.of(ConditionGroup.builder()
-                            .conditions(List.of(ScoreCondition.builder()
-                                    .scoreName(score)
-                                    .operator(ScoreConditionOperator.LESS_THAN)
-                                    .value(value)
-                                    .build()))
-                            .build()))
-                    .build();
+        private AutomationFilter filter(String field, Operator operator, String key, String value) {
+            return AutomationFilter.builder().field(field).operator(operator).key(key).value(value).build();
+        }
+
+        private List<List<AutomationFilter>> scoreBelow(String score, String value) {
+            return List.of(List.of(filter("feedback_scores", Operator.LESS_THAN, score, value)));
         }
 
         @Test
-        @DisplayName("should persist conditions and the item ceiling and return them on get")
+        @DisplayName("should persist filter groups and the item ceiling and return them on get")
         void persistsAutomation() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(List.of(
+                            List.of(filter("tags", Operator.CONTAINS, null, "production"),
+                                    filter("metadata", Operator.EQUAL, "model", "gpt")),
+                            List.of(filter("feedback_scores", Operator.LESS_THAN, "safety", "0.5"))))
                     .maxItemsInQueue(25)
                     .build();
 
             var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
 
             assertThat(readBack(queue.id()).automation()).isEqualTo(automation);
+        }
+
+        @Test
+        @DisplayName("should accept thread filters on a thread queue")
+        void persistsThreadFilters() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(List.of(List.of(
+                            filter("number_of_messages", Operator.GREATER_THAN_EQUAL, null, "3"))))
+                    .build();
+
+            var queue = createQueue(automation, AnnotationQueue.AnnotationScope.THREAD, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation().filterGroups()).isEqualTo(automation.filterGroups());
+        }
+
+        @Test
+        @DisplayName("should reject score conditions, which filter groups replaced, and create no queue")
+        void conditionsAreRejected() {
+            var queue = createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .conditions(JsonUtils.getJsonNodeFromString(
+                            "{\"groups\": [{\"conditions\": [{\"score_name\": \"safety\", \"operator\": \"<\", \"value\": 0.5}]}]}"))
+                    .build(), SC_UNPROCESSABLE_ENTITY);
+
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        /**
+         * A JSON null reaches the conditions field as a NullNode; a client that serialises unset fields as null
+         * is not sending conditions.
+         */
+        @Test
+        @DisplayName("should accept conditions sent as null")
+        void nullConditionsAreAccepted() {
+            var automation = AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(scoreBelow("safety", "0.5"))
+                    .conditions(NullNode.getInstance())
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation().filterGroups()).isEqualTo(automation.filterGroups());
+        }
+
+        @Test
+        @DisplayName("should clear the filter groups when an empty list is saved")
+        void emptyFilterGroupsClearTheFilters() {
+            var queue = createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(scoreBelow("safety", "0.5"))
+                    .build(), HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder().enabled(false).filterGroups(List.of())
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation().filterGroups()).isNull();
+
+            // Toggling it while off still works, with nothing stored to keep.
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder().enabled(false).build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Nothing is left to match on, so turning it back on without filters is refused.
+            annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
+                    AnnotationQueueUpdate.builder()
+                            .automation(AnnotationQueueAutomation.builder().enabled(true).build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+        }
+
+        private Stream<Arguments> invalidFilters() {
+            return Stream.of(
+                    arguments(AnnotationQueue.AnnotationScope.TRACE,
+                            filter("number_of_messages", Operator.GREATER_THAN, null, "3"), "thread-only field"),
+                    arguments(AnnotationQueue.AnnotationScope.THREAD,
+                            filter("llm_span_count", Operator.GREATER_THAN, null, "3"), "trace-only field"),
+                    arguments(AnnotationQueue.AnnotationScope.TRACE,
+                            filter("duration", Operator.CONTAINS, null, "3"), "operator the field does not take"),
+                    arguments(AnnotationQueue.AnnotationScope.TRACE,
+                            filter("metadata", Operator.EQUAL, null, "gpt"), "dictionary field without a key"));
+        }
+
+        @ParameterizedTest(name = "{2}")
+        @MethodSource("invalidFilters")
+        @DisplayName("should reject a filter the traces or threads filters would reject, and create no queue:")
+        void invalidFilterIsRejected(AnnotationQueue.AnnotationScope scope, AutomationFilter filter, String label) {
+            var queue = createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(List.of(List.of(filter)))
+                    .build(), scope, HttpStatus.SC_BAD_REQUEST);
+
+            annotationQueuesResourceClient.getAnnotationQueueById(
+                    queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should reject an enabled automation whose filter groups are empty")
+        void enabledWithEmptyFilterGroupsIsRejected() {
+            createQueue(AnnotationQueueAutomation.builder().enabled(true).filterGroups(List.of()).build(),
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("should reject a group with no filters")
+        void emptyGroupIsRejected() {
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(List.of(List.of()))
+                    .build(), SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should reject a null group or filter rather than failing on it")
+        void nullGroupOrFilterIsRejected() {
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(Collections.singletonList(null))
+                    .build(), SC_UNPROCESSABLE_ENTITY);
+            createQueue(AnnotationQueueAutomation.builder()
+                    .enabled(true)
+                    .filterGroups(List.of(Collections.singletonList(null)))
+                    .build(), SC_UNPROCESSABLE_ENTITY);
         }
 
         @Test
@@ -659,7 +794,7 @@ class AnnotationQueuesResourceTest {
         void automationWithoutCeiling() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("relevance", 0.8))
+                    .filterGroups(scoreBelow("relevance", "0.8"))
                     .build();
 
             var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
@@ -670,11 +805,11 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should keep conditions and the ceiling when a request only flips enabled off")
+        @DisplayName("should keep filter groups and the ceiling when a request only flips enabled off")
         void toggleOnlyPreservesTheRest() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(25)
                     .build();
 
@@ -689,15 +824,15 @@ class AnnotationQueuesResourceTest {
             var stored = readBack(queue.id()).automation();
             assertThat(stored.enabled()).isFalse();
             assertThat(stored.maxItemsInQueue()).isEqualTo(25);
-            assertThat(stored.conditions()).isEqualTo(automation.conditions());
+            assertThat(stored.filterGroups()).isEqualTo(automation.filterGroups());
         }
 
         @Test
-        @DisplayName("should keep conditions when a request only changes the ceiling")
-        void ceilingOnlyUpdatePreservesConditions() {
+        @DisplayName("should keep filter groups when a request only changes the ceiling")
+        void ceilingOnlyUpdatePreservesFilterGroups() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(25)
                     .build();
 
@@ -714,7 +849,7 @@ class AnnotationQueuesResourceTest {
 
             var stored = readBack(queue.id()).automation();
             assertThat(stored.maxItemsInQueue()).isEqualTo(4);
-            assertThat(stored.conditions()).isEqualTo(automation.conditions());
+            assertThat(stored.filterGroups()).isEqualTo(automation.filterGroups());
         }
 
         @Test
@@ -722,7 +857,7 @@ class AnnotationQueuesResourceTest {
         void ceilingIsRemovedWhenTheRequestClearsIt() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(25)
                     .build();
 
@@ -742,28 +877,28 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should keep the ceiling when a request restates the conditions without it")
-        void ceilingSurvivesAConditionsOnlyUpdate() {
+        @DisplayName("should keep the ceiling when a request restates the filter groups without it")
+        void ceilingSurvivesAFilterGroupsOnlyUpdate() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(25)
                     .build();
 
             var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
 
-            // Null means "leave it alone" here as everywhere else, so only the conditions change.
+            // Null means "leave it alone" here as everywhere else, so only the filter groups change.
             annotationQueuesResourceClient.updateAnnotationQueue(queue.id(),
                     AnnotationQueueUpdate.builder()
                             .automation(AnnotationQueueAutomation.builder()
                                     .enabled(true)
-                                    .conditions(conditionsOn("safety", 0.9))
+                                    .filterGroups(scoreBelow("safety", "0.9"))
                                     .build())
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             assertThat(readBack(queue.id()).automation())
-                    .isEqualTo(automation.toBuilder().conditions(conditionsOn("safety", 0.9)).build());
+                    .isEqualTo(automation.toBuilder().filterGroups(scoreBelow("safety", "0.9")).build());
         }
 
         @Test
@@ -771,7 +906,7 @@ class AnnotationQueuesResourceTest {
         void settingAndClearingTheCeilingTogetherIsRejected() {
             var automation = AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(25)
                     .build();
 
@@ -787,8 +922,8 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
-        @DisplayName("should reject an enabled automation that has never been given conditions, and create no queue")
-        void enabledWithoutConditionsIsRejected() {
+        @DisplayName("should reject an enabled automation that has never been given filters, and create no queue")
+        void enabledWithoutFiltersIsRejected() {
             var queue = createQueue(AnnotationQueueAutomation.builder().enabled(true).build(),
                     HttpStatus.SC_BAD_REQUEST);
 
@@ -798,78 +933,18 @@ class AnnotationQueuesResourceTest {
                     queue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
         }
 
-        private Stream<Arguments> nonFiniteThresholds() {
-            return Stream.of(
-                    arguments(Double.NaN, "NaN"),
-                    arguments(Double.POSITIVE_INFINITY, "+Infinity"),
-                    arguments(Double.NEGATIVE_INFINITY, "-Infinity"));
-        }
-
-        @ParameterizedTest(name = "{1}")
-        @MethodSource("nonFiniteThresholds")
-        @DisplayName("should reject a threshold that is not a finite number:")
-        void nonFiniteThresholdIsRejected(double value, String label) {
-            var conditions = Conditions.builder()
-                    .groups(List.of(ConditionGroup.builder()
-                            .conditions(List.of(ScoreCondition.builder()
-                                    .scoreName("safety")
-                                    .operator(ScoreConditionOperator.LESS_THAN)
-                                    .value(value)
-                                    .build()))
-                            .build()))
-                    .build();
-
-            // Non-finite values parse and pass @NotNull, and every comparison against NaN is false, so
-            // without this they would be stored and the automation would silently never match.
-            createQueue(AnnotationQueueAutomation.builder()
-                    .enabled(true)
-                    .conditions(conditions)
-                    .build(),
-                    HttpStatus.SC_BAD_REQUEST);
-        }
-
         @Test
         @DisplayName("should read an omitted enabled flag as disabled")
         void omittedEnabledFlagReadsAsDisabled() {
             // enabled is a primitive, so an absent field deserialises to false rather than being rejected.
             // Pinning it here because it is the observable consequence of that choice.
             var automation = AnnotationQueueAutomation.builder()
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .build();
 
             var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
 
             assertThat(readBack(queue.id()).automation().enabled()).isFalse();
-        }
-
-        @Test
-        @DisplayName("should reject a null condition group rather than failing on it")
-        void nullConditionGroupIsRejected() {
-            var conditions = Conditions.builder()
-                    .groups(Collections.<ConditionGroup>singletonList(null))
-                    .build();
-
-            createQueue(AnnotationQueueAutomation.builder()
-                    .enabled(true)
-                    .conditions(conditions)
-                    .build(),
-                    SC_UNPROCESSABLE_ENTITY);
-        }
-
-        @Test
-        @DisplayName("should reject a null score condition rather than failing on it")
-        void nullScoreConditionIsRejected() {
-            var conditions = Conditions.builder()
-                    .groups(List.of(ConditionGroup.builder()
-                            .conditions(Collections.<ScoreCondition>singletonList(null))
-                            .build()))
-                    .build();
-
-            createQueue(AnnotationQueueAutomation.builder()
-                    .enabled(true)
-                    .conditions(conditions)
-                    .build(),
-                    SC_UNPROCESSABLE_ENTITY);
         }
 
         private Stream<Arguments> invalidCeilings() {
@@ -882,7 +957,7 @@ class AnnotationQueuesResourceTest {
         void invalidCeilingIsRejected(int value, String label) {
             createQueue(AnnotationQueueAutomation.builder()
                     .enabled(true)
-                    .conditions(conditionsOn("safety", 0.5))
+                    .filterGroups(scoreBelow("safety", "0.5"))
                     .maxItemsInQueue(value)
                     .build(),
                     SC_UNPROCESSABLE_ENTITY);

@@ -175,6 +175,7 @@ export const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     id: "comments",
     field: "comments",
     label: "Comments",
+    addLabel: "Add comment",
     kind: "query-builder",
     columnType: COLUMN_TYPE.list,
     operators: COMMENTS_OPERATORS,
@@ -215,6 +216,7 @@ export const buildSharedDynamicChips = ({
   type,
   scoreOptions,
   feedbackScoresLabel,
+  feedbackScoresAddLabel,
   isGuardrailsEnabled,
   logsSource,
 }: {
@@ -222,6 +224,7 @@ export const buildSharedDynamicChips = ({
   type: TRACE_DATA_TYPE;
   scoreOptions: ChipOptionsResult;
   feedbackScoresLabel: string;
+  feedbackScoresAddLabel: string;
   isGuardrailsEnabled: boolean;
   // Required, though it may be undefined: a default would silently scope a new surface's tag,
   // error-type and metadata-path options to the SDK source, which is the footgun this parameter
@@ -270,6 +273,7 @@ export const buildSharedDynamicChips = ({
       id: "feedback_scores",
       field: COLUMN_FEEDBACK_SCORES_ID,
       label: feedbackScoresLabel,
+      addLabel: feedbackScoresAddLabel,
       kind: "query-builder",
       columnType: COLUMN_TYPE.numberDictionary,
       operators: FEEDBACK_SCORE_OPERATORS,
@@ -367,6 +371,7 @@ export const buildTraceChipDefinitions = ({
       type: TRACE_DATA_TYPE.traces,
       scoreOptions: traceScoreOptions,
       feedbackScoresLabel: "Trace feedback scores",
+      feedbackScoresAddLabel: "Add trace feedback score",
       isGuardrailsEnabled,
       logsSource,
     }),
@@ -374,6 +379,7 @@ export const buildTraceChipDefinitions = ({
       id: "span_feedback_scores",
       field: COLUMN_SPAN_FEEDBACK_SCORES_ID,
       label: "Span feedback scores",
+      addLabel: "Add span feedback score",
       kind: "query-builder",
       columnType: COLUMN_TYPE.numberDictionary,
       operators: FEEDBACK_SCORE_OPERATORS,
