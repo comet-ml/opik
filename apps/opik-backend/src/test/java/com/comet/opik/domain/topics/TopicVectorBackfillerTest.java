@@ -45,6 +45,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -429,6 +430,43 @@ class TopicVectorBackfillerTest {
                             .build();
                 })
                 .toList());
+    }
+
+    @Test
+    @DisplayName("a workspace whose backfill ends in a round has its progress recorded then: a phase cancelled during "
+            + "a later turn of another workspace keeps it")
+    void endedWorkspaceRecordedBeforeThePhaseEnds() {
+        var setup = new Setup();
+        var drains = ID_GENERATOR.generateId().toString();
+        var busy = ID_GENERATOR.generateId().toString();
+        var small = backfill(1, now).toBuilder().workspaceId(drains).build();
+        var large = backfill(1_000, now).toBuilder().workspaceId(busy).build();
+        // The small project's one read drains it; the large one's reads always stop at the cap (10).
+        when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
+            TopicVectorsFind find = invocation.getArgument(0);
+            int rows = find.projectId().equals(small.projectId()) ? 1 : 10;
+            return Flux.fromStream(IntStream.range(0, rows)
+                    .mapToObj(i -> candidate(find.workspaceId(), find.projectId())));
+        });
+        var busyTurns = new AtomicInteger();
+        when(setup.writer.embedAndWrite(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            List<Candidate> candidates = invocation.getArgument(1);
+            var write = Mono.just(new ChunkWrite(TickResult.written(candidates.size()),
+                    candidates.stream().map(VectorKey::of).collect(Collectors.toSet()), ArrivalSteps.OFF));
+            // The busy workspace's second turn never ends, as in a tick cancelled during it.
+            return candidates.getFirst().workspaceId().equals(busy) && busyTurns.incrementAndGet() == 2
+                    ? Mono.never()
+                    : write;
+        });
+
+        var phase = setup.backfiller.backfill(List.of(setup.workspaceBackfill(drains, List.of(small)),
+                setup.workspaceBackfill(busy, List.of(large))), setup.budget(50)).subscribe();
+        try {
+            verify(setup.backfills, timeout(5_000)).record(List.of(progress(drains, small, now, 1)));
+        } finally {
+            phase.dispose();
+        }
+        verify(setup.backfills, times(1)).record(any());
     }
 
     private static TopicBackfillProgress progress(String workspaceId, TopicBackfill project, Instant drainedAt,

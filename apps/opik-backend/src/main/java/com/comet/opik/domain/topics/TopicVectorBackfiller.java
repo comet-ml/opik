@@ -142,8 +142,9 @@ class TopicVectorBackfiller {
      * whole phase. Inside a workspace, its projects take their turns in {@link #order}; a project that wrote vectors
      * and still has more than one read's worth takes the workspace's next turn too, so one large project uses the time
      * the tick has, not one {@code maxTracesPerTick}. An embed call that fails ends the workspace's backfill for the
-     * tick. Each workspace's projects drained and vectors written are recorded in one write at the end; a failed write
-     * only means the projects are read again next tick.
+     * tick. Each workspace's projects drained and vectors written are recorded in one write when its backfill ends:
+     * in the round that ends it, or, for one the budget stopped, at the end of the phase, so a tick cancelled mid-phase
+     * keeps what the ended workspaces did. A failed write only means the projects are read again next tick.
      */
     Mono<TickResult> backfill(@NonNull List<WorkspaceBackfill> workspaces, @NonNull TickBudget budget) {
         var vectors = config.getVectors();
@@ -151,7 +152,7 @@ class TopicVectorBackfiller {
         var first = workspaces.stream()
                 .filter(workspace -> !workspace.projects().isEmpty())
                 .map(workspace -> new Lane(workspace, Run.start(workspace.projects().stream()
-                        .sorted(order(vectors.getMaxTracesPerTick())).toList(), workspace.arrival())))
+                        .sorted(order(vectors.getMaxTracesPerTick())).toList(), workspace.arrival()), false))
                 .toList();
         if (first.isEmpty()) {
             return Mono.just(TickResult.EMPTY);
@@ -162,12 +163,14 @@ class TopicVectorBackfiller {
                         ? round(lanes, budget, embedTimeout)
                         : Mono.empty())
                 .last()
-                .flatMapMany(lanes -> Flux.fromIterable(lanes).concatMap(this::record))
-                .reduce(TickResult.EMPTY, TickResult::plus);
+                .flatMap(lanes -> Flux.fromIterable(lanes).filter(lane -> !lane.recorded())
+                        .concatMap(this::record)
+                        .then(Mono.fromCallable(() -> lanes.stream().map(lane -> lane.run().result())
+                                .reduce(TickResult.EMPTY, TickResult::plus))));
     }
 
-    /** A workspace's backfill in a phase, and its run so far. */
-    private record Lane(@NonNull WorkspaceBackfill workspace, @NonNull Run run) {
+    /** A workspace's backfill in a phase, its run so far, and whether its progress is recorded. */
+    private record Lane(@NonNull WorkspaceBackfill workspace, @NonNull Run run, boolean recorded) {
 
         boolean active() {
             return !run.stopped() && !run.queue().isEmpty();
@@ -178,7 +181,14 @@ class TopicVectorBackfiller {
     private Mono<List<Lane>> round(List<Lane> lanes, TickBudget budget, Duration embedTimeout) {
         return Flux.fromIterable(lanes)
                 .flatMapSequential(lane -> lane.active() && budget.hasTimeForRead(embedTimeout)
-                        ? next(lane.workspace(), budget, lane.run()).map(run -> new Lane(lane.workspace(), run))
+                        ? next(lane.workspace(), budget, lane.run()).flatMap(run -> {
+                            var after = new Lane(lane.workspace(), run, false);
+                            // Its backfill ended this turn: recorded now, not after the other workspaces' turns.
+                            return after.active()
+                                    ? Mono.just(after)
+                                    : record(after).thenReturn(
+                                            new Lane(lane.workspace(), run, true));
+                        })
                         : Mono.just(lane), config.getVectors().getEmbedConcurrency())
                 .collectList();
     }
@@ -190,19 +200,17 @@ class TopicVectorBackfiller {
                 .map(turn -> run.after(project, turn));
     }
 
-    private Mono<TickResult> record(Lane lane) {
+    private Mono<Void> record(Lane lane) {
         var run = lane.run();
-        return Mono.fromCallable(() -> {
-            backfills.record(run.progress());
-            return run.result();
-        })
+        return Mono.fromRunnable(() -> backfills.record(run.progress()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(exception -> {
                     log.warn("Topic vectors backfill progress not recorded, reading them again next tick, "
                             + "workspace '{}', projects '{}'", lane.workspace().window().workspaceId(),
                             run.progress().size(), exception);
-                    return Mono.just(run.result());
-                });
+                    return Mono.empty();
+                })
+                .then();
     }
 
     /**
