@@ -110,6 +110,7 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
+        AiStudioCustomParameters.from(request.customParameters());
     }
 
     /// gemini throws RuntimeExceptions with message structure as follows:

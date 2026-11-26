@@ -1291,6 +1291,7 @@ export interface LLMGeminiConfigsType {
   throttling?: number;
   maxConcurrentRequests?: number;
   thinkingLevel?: GeminiThinkingLevel;
+  custom_parameters?: Record<string, unknown> | null;
 }
 
 export interface LLMVertexAIConfigsType {
@@ -1301,6 +1302,7 @@ export interface LLMVertexAIConfigsType {
   thinkingLevel?: GeminiThinkingLevel;
   throttling?: number;
   maxConcurrentRequests?: number;
+  custom_parameters?: Record<string, unknown> | null;
 }
 
 export interface LLMCustomConfigsType {

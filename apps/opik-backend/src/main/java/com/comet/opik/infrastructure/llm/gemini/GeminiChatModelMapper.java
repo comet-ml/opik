@@ -6,8 +6,10 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.NonNull;
+import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.factory.Mappers;
 
 import java.time.Duration;
@@ -45,4 +47,15 @@ interface GeminiChatModelMapper {
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
             boolean logRequests, boolean logResponses, HttpClientBuilder httpClientBuilder);
 
+    @AfterMapping
+    default void applyCustomParameters(ChatCompletionRequest request,
+            @MappingTarget GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder) {
+        AiStudioCustomParameters.from(request.customParameters()).applyTo(builder);
+    }
+
+    @AfterMapping
+    default void applyCustomParameters(ChatCompletionRequest request,
+            @MappingTarget GoogleAiGeminiStreamingChatModel.GoogleAiGeminiStreamingChatModelBuilder builder) {
+        AiStudioCustomParameters.from(request.customParameters()).applyTo(builder);
+    }
 }

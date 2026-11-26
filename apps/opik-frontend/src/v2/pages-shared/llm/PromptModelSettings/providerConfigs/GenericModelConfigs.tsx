@@ -68,6 +68,7 @@ interface GenericModelConfigsProps {
   configs: Record<string, unknown>;
   onChange: (configs: Record<string, unknown>) => void;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  children?: React.ReactNode;
 }
 
 const GenericModelConfigs = ({
@@ -77,6 +78,7 @@ const GenericModelConfigs = ({
   configs,
   onChange,
   unsupportedParams,
+  children,
 }: GenericModelConfigsProps) => {
   const supports = createSupports(unsupportedParams);
   const controls = getShownControls(
@@ -244,6 +246,8 @@ const GenericModelConfigs = ({
           }
         />
       )}
+
+      {children}
     </div>
   );
 };

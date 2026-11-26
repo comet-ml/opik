@@ -31,6 +31,7 @@ import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.client.Client;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
@@ -1042,6 +1043,150 @@ class VertexAIClientGeneratorTest {
                 }
             }
             return subset;
+        }
+    }
+
+    @Nested
+    @DisplayName("Custom parameters")
+    class CustomParameters {
+
+        private static final String STREAM_GENERATE_CONTENT_PATH = ".*:streamGenerateContent";
+
+        private static final Map<String, Object> GOOGLE_SETTINGS = Map.of(
+                "topK", 40,
+                "seed", 7,
+                "responseMimeType", "application/json",
+                "mediaResolution", "MEDIA_RESOLUTION_LOW",
+                "safetySettings", List.of(Map.of(
+                        "category", "HARM_CATEGORY_HATE_SPEECH", "threshold", "BLOCK_NONE", "method", "PROBABILITY")),
+                "labels", Map.of("team", "search"));
+
+        @Test
+        @DisplayName("chat: each setting of Google's config reaches Vertex AI under its own name")
+        void chatSendsGoogleSettings() {
+            provider().generate(request(MODEL, null, GOOGLE_SETTINGS), "workspace");
+
+            assertSentGoogleSettings(GENERATE_CONTENT_PATH);
+        }
+
+        @Test
+        @DisplayName("streaming: each setting of Google's config reaches Vertex AI under its own name")
+        void streamingSendsGoogleSettings() throws Exception {
+            wireMock.server().stubFor(post(urlPathMatching(STREAM_GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse()
+                            .withHeader("Content-Type", "text/event-stream")
+                            .withBody("data: " + GENERATE_CONTENT_RESPONSE.replace("\n", " ") + "\n\n")));
+            var closed = new CompletableFuture<Void>();
+
+            provider().generateStream(request(MODEL, null, GOOGLE_SETTINGS), "workspace", message -> {
+            }, () -> closed.complete(null), closed::completeExceptionally);
+            closed.get(10, TimeUnit.SECONDS);
+
+            assertSentGoogleSettings(STREAM_GENERATE_CONTENT_PATH);
+        }
+
+        @Test
+        @DisplayName("a custom temperature is sent instead of the panel's")
+        void customValueWinsOverThePanels() {
+            provider().generate(request(MODEL, 0.2, Map.of("temperature", 1.5)), "workspace");
+
+            assertThat(sentGenerationConfig().get("temperature").asDouble()).isEqualTo(1.5);
+        }
+
+        @Test
+        @DisplayName("the thinking level goes out next to the custom settings")
+        void thinkingLevelGoesWithCustomSettings() {
+            provider().generate(request(GEMINI_3_MODEL, null,
+                    Map.of("thinking", Map.of("level", "low"), "topK", 40)), "workspace");
+
+            var generationConfig = sentGenerationConfig();
+            assertThat(generationConfig.get("thinkingConfig"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"thinkingLevel\": \"low\"}"));
+            assertThat(generationConfig.get("topK").asInt()).isEqualTo(40);
+        }
+
+        @Test
+        @DisplayName("a custom thinkingConfig is sent instead of the thinking level")
+        void customThinkingConfigWinsOverTheLevel() {
+            provider().generate(request(MODEL, null,
+                    Map.of("thinking", Map.of("level", "medium"), "thinkingConfig", Map.of("thinkingBudget", 100))),
+                    "workspace");
+
+            assertThat(sentGenerationConfig().get("thinkingConfig"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"thinkingBudget\": 100}"));
+        }
+
+        static Stream<Arguments> refusedCases() {
+            return Stream.of(
+                    arguments(Map.of("top_k", 40),
+                            "custom_parameters.top_k isn't a Gemini setting. Use the names of Google's "
+                                    + "GenerateContentConfig, like topK or responseMimeType"),
+                    arguments(Map.of("seed", "seven"), "custom_parameters.seed has a value of the wrong type"),
+                    arguments(Map.of("httpOptions", Map.of("baseUrl", "https://example.com")),
+                            "custom_parameters.httpOptions is set by Opik from the request and cannot be replaced"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("refusedCases")
+        @DisplayName("a key Google doesn't take, or Opik sets, is refused before the call")
+        void refusesBeforeTheCall(Map<String, Object> customParameters, String message) {
+            assertThatThrownBy(() -> provider().validateRequest(request(MODEL, null, customParameters)))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage(message);
+            wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        @Test
+        @DisplayName("the judge path still reads only the thinking level")
+        void judgeReadsOnlyTheThinkingLevel() {
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null, JsonUtils.getJsonNodeFromString(
+                    "{\"thinking\": {\"level\": \"high\"}, \"topK\": 40, \"reasoning_effort\": \"high\"}"), null);
+
+            new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(apiConfig(), modelParameters)
+                    .chat(UserMessage.from("hello"));
+
+            var generationConfig = sentGenerationConfig();
+            assertThat(generationConfig.path("thinkingConfig").path("thinkingBudget").asInt()).isEqualTo(24576);
+            assertThat(generationConfig.has("topK")).isFalse();
+        }
+
+        private void assertSentGoogleSettings(String path) {
+            var generationConfig = sentGenerationConfig(path);
+            assertThat(generationConfig.get("topK").asInt()).isEqualTo(40);
+            assertThat(generationConfig.get("seed").asInt()).isEqualTo(7);
+            assertThat(generationConfig.get("responseMimeType").asText()).isEqualTo("application/json");
+            assertThat(generationConfig.get("mediaResolution").asText()).isEqualTo("MEDIA_RESOLUTION_LOW");
+            var body = JsonUtils.getJsonNodeFromString(
+                    wireMock.server().findAll(postRequestedFor(urlPathMatching(path))).getFirst().getBodyAsString());
+            assertThat(body.get("safetySettings")).isEqualTo(JsonUtils.getJsonNodeFromString(
+                    "[{\"category\": \"HARM_CATEGORY_HATE_SPEECH\", \"threshold\": \"BLOCK_NONE\", "
+                            + "\"method\": \"PROBABILITY\"}]"));
+            assertThat(body.get("labels")).isEqualTo(JsonUtils.getJsonNodeFromString("{\"team\": \"search\"}"));
+        }
+
+        private ChatCompletionRequest request(String model, Double temperature, Map<String, Object> customParameters) {
+            return ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hello")
+                    .temperature(temperature)
+                    .customParameters(customParameters)
+                    .build();
+        }
+
+        private LlmProviderVertexAI provider() {
+            return new LlmProviderVertexAI(
+                    new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                            LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
+                    apiConfig());
+        }
+
+        private LlmProviderClientApiConfig apiConfig() {
+            return LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
         }
     }
 

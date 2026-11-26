@@ -30,6 +30,7 @@ import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
+import GeminiExtraBodyParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiExtraBodyParameters";
 import {
   ANTHROPIC_PANEL,
   GEMINI_PANEL,
@@ -50,7 +51,10 @@ import {
   parseComposedProviderType,
 } from "@/lib/provider";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import {
+  createSupports,
+  hasVisibleControls,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 interface PromptModelConfigsProps {
   provider: COMPOSED_PROVIDER_TYPE;
@@ -88,6 +92,7 @@ const PromptModelConfigs = ({
   const renderCatalogPanel = (
     params: ModelParams,
     presentation: GenericPanelPresentation,
+    extraBody?: React.ReactNode,
   ) => (
     <GenericModelConfigs
       model={model}
@@ -96,8 +101,24 @@ const PromptModelConfigs = ({
       configs={configs as Record<string, unknown>}
       unsupportedParams={unsupportedParams}
       onChange={onChange}
-    />
+    >
+      {extraBody}
+    </GenericModelConfigs>
   );
+
+  const renderGeminiExtraBody = (
+    geminiProvider: PROVIDER_TYPE.GEMINI | PROVIDER_TYPE.VERTEX_AI,
+  ) =>
+    createSupports(unsupportedParams)("customParameters") && (
+      <GeminiExtraBodyParameters
+        provider={geminiProvider}
+        customParameters={
+          (configs as LLMGeminiConfigsType | LLMVertexAIConfigsType)
+            .custom_parameters
+        }
+        onChange={onChange}
+      />
+    );
 
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
@@ -149,7 +170,11 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.GEMINI) {
       const params = getGeminiOrVertexListedParams(model);
       if (params) {
-        return renderCatalogPanel(params, GEMINI_PANEL);
+        return renderCatalogPanel(
+          params,
+          GEMINI_PANEL,
+          renderGeminiExtraBody(PROVIDER_TYPE.GEMINI),
+        );
       }
       return (
         <GeminiModelConfigs
@@ -164,7 +189,11 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       const params = getGeminiOrVertexListedParams(model);
       if (params) {
-        return renderCatalogPanel(params, VERTEX_AI_PANEL);
+        return renderCatalogPanel(
+          params,
+          VERTEX_AI_PANEL,
+          renderGeminiExtraBody(PROVIDER_TYPE.VERTEX_AI),
+        );
       }
       return (
         <VertexAIModelConfigs

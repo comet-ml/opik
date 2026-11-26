@@ -18,27 +18,32 @@ export type ModelConfigParam =
   | "reasoningEffort"
   | "thinkingEffort"
   | "throttling"
-  | "maxConcurrentRequests";
+  | "maxConcurrentRequests"
+  | "customParameters";
 
 /**
  * An evaluator rule persists only LlmAsJudgeModelParameters — name, temperature, seed and the
  * free-form custom_parameters. Everything else the rule form used to render was dropped on save.
  * The efforts are kept because they are saved inside custom_parameters: Anthropic's under
- * output_config, OpenAI's as reasoning_effort and OpenRouter's under reasoning.
+ * output_config, OpenAI's as reasoning_effort and OpenRouter's under reasoning. The Gemini and
+ * Vertex AI extra body box is not: their judges read only the thinking level from custom_parameters.
  */
 export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
   "topP",
   "maxCompletionTokens",
   "throttling",
   "maxConcurrentRequests",
+  "customParameters",
 ]);
 
 /**
  * The optimizer forwards model parameters to the provider but schedules its own runs; throttling
- * and max concurrency belong to the playground's batch runner and reach nothing from here.
+ * and max concurrency belong to the playground's batch runner and reach nothing from here. It also
+ * calls Gemini and Vertex AI through LiteLLM, which doesn't read the Google names their extra body
+ * box takes.
  */
 export const OPTIMIZATION_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> =
-  new Set(["throttling", "maxConcurrentRequests"]);
+  new Set(["throttling", "maxConcurrentRequests", "customParameters"]);
 
 /**
  * A run against a dataset executes on the server, which schedules its own work: these two control

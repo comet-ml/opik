@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.domain.llm.ProviderFailures;
+import com.comet.opik.infrastructure.llm.GeminiCustomParameters;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
@@ -232,7 +233,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
-
+        GeminiCustomParameters.parse(request.customParameters());
     }
 
     /**

@@ -14,6 +14,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,6 +39,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -217,6 +219,126 @@ class GeminiClientGeneratorTest {
         assertThat(sentCalls.getFirst().path("thoughtSignature").asText()).isEqualTo(signature);
     }
 
+    private static final Map<String, Object> AI_STUDIO_SETTINGS = Map.ofEntries(
+            Map.entry("temperature", 1.5),
+            Map.entry("topP", 0.9),
+            Map.entry("topK", 40),
+            Map.entry("seed", 7),
+            Map.entry("frequencyPenalty", 0.4),
+            Map.entry("presencePenalty", 0.6),
+            Map.entry("maxOutputTokens", 300),
+            Map.entry("stopSequences", List.of("END")),
+            Map.entry("responseLogprobs", true),
+            Map.entry("logprobs", 3),
+            Map.entry("mediaResolution", "MEDIA_RESOLUTION_LOW"),
+            Map.entry("safetySettings", List.of(
+                    Map.of("category", "HARM_CATEGORY_HATE_SPEECH", "threshold", "BLOCK_NONE"))));
+
+    private static final String AI_STUDIO_GENERATION_CONFIG = """
+            {"temperature": 1.5, "topP": 0.9, "topK": 40, "seed": 7, "frequencyPenalty": 0.4, \
+            "presencePenalty": 0.6, "maxOutputTokens": 300, "stopSequences": ["END"], "responseLogprobs": true, \
+            "logprobs": 3, "mediaResolution": "MEDIA_RESOLUTION_LOW"}""";
+
+    private static final String[] AI_STUDIO_GENERATION_FIELDS = {"temperature", "topP", "topK", "seed",
+            "frequencyPenalty", "presencePenalty", "maxOutputTokens", "stopSequences", "responseLogprobs", "logprobs",
+            "mediaResolution"};
+
+    @Test
+    @DisplayName("playground chat: each custom setting AI Studio takes is sent instead of the panel's value")
+    void chatSendsTheCustomSettings() {
+        assertThat(only(sendChat(customRequest(AI_STUDIO_SETTINGS)), AI_STUDIO_GENERATION_FIELDS))
+                .isEqualTo(JsonUtils.getJsonNodeFromString(AI_STUDIO_GENERATION_CONFIG));
+        assertThat(sentBody(GENERATE_CONTENT_PATH).get("safetySettings")).isEqualTo(JsonUtils.getJsonNodeFromString(
+                "[{\"category\": \"HARM_CATEGORY_HATE_SPEECH\", \"threshold\": \"BLOCK_NONE\"}]"));
+    }
+
+    @Test
+    @DisplayName("playground streaming: each custom setting AI Studio takes is sent instead of the panel's value")
+    void streamingSendsTheCustomSettings() throws Exception {
+        assertThat(only(sendStreaming(customRequest(AI_STUDIO_SETTINGS)), AI_STUDIO_GENERATION_FIELDS))
+                .isEqualTo(JsonUtils.getJsonNodeFromString(AI_STUDIO_GENERATION_CONFIG));
+        assertThat(sentBody(STREAM_GENERATE_CONTENT_PATH).get("safetySettings")).isEqualTo(
+                JsonUtils.getJsonNodeFromString(
+                        "[{\"category\": \"HARM_CATEGORY_HATE_SPEECH\", \"threshold\": \"BLOCK_NONE\"}]"));
+    }
+
+    @Test
+    @DisplayName("playground chat: the thinking level goes out next to the custom settings")
+    void chatSendsTheThinkingLevelWithCustomSettings() {
+        var generationConfig = sendChat(
+                thinkingRequest(GEMINI_3_MODEL, Map.of("thinking", Map.of("level", "low"), "topK", 40)));
+
+        assertThat(only(generationConfig, "thinkingConfig", "topK")).isEqualTo(JsonUtils.getJsonNodeFromString(
+                "{\"thinkingConfig\": {\"thinkingLevel\": \"low\"}, \"topK\": 40}"));
+    }
+
+    static Stream<Arguments> refusedCases() {
+        return Stream.of(
+                arguments(Map.of("responseMimeType", "application/json"),
+                        "custom_parameters.responseMimeType can't be sent to Gemini on Google AI Studio, Vertex AI "
+                                + "takes it. AI Studio takes: temperature, topP, topK, seed, frequencyPenalty, "
+                                + "presencePenalty, maxOutputTokens, stopSequences, responseLogprobs, logprobs, "
+                                + "mediaResolution, safetySettings"),
+                arguments(Map.of("top_k", 40),
+                        "custom_parameters.top_k isn't a Gemini setting. Use the names of Google's "
+                                + "GenerateContentConfig, like topK or responseMimeType"),
+                arguments(Map.of("topK", 40.5), "custom_parameters.topK must be a whole number on Google AI Studio"),
+                arguments(Map.of("temperature", "hot"), "custom_parameters.temperature has a value of the wrong type"),
+                arguments(Map.of("mediaResolution", "MEDIA_RESOLUTION_TINY"),
+                        "custom_parameters.mediaResolution 'MEDIA_RESOLUTION_TINY' isn't one Google AI Studio takes"),
+                arguments(Map.of("safetySettings", List.of(Map.of("category", "HARM_CATEGORY_HATE_SPEECH",
+                        "threshold", "BLOCK_NONE", "method", "SEVERITY"))),
+                        "custom_parameters.safetySettings[0].method can't be sent to Gemini on Google AI Studio, "
+                                + "Vertex AI takes it"),
+                arguments(Map.of("safetySettings", List.of(Map.of("category", "HARM_CATEGORY_HATE_SPEECH"))),
+                        "custom_parameters.safetySettings[0].threshold is required"),
+                arguments(Map.of("systemInstruction", Map.of("parts", List.of(Map.of("text", "be brief")))),
+                        "custom_parameters.systemInstruction is set by Opik from the request and cannot be replaced"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("refusedCases")
+    @DisplayName("playground: a key AI Studio wouldn't get is refused before the call")
+    void refusesBeforeTheCall(Map<String, Object> customParameters, String message) {
+        var provider = new LlmProviderGemini(generator,
+                LlmProviderClientApiConfig.builder().apiKey("test-key").build());
+
+        assertThatThrownBy(() -> provider.validateRequest(customRequest(customParameters)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(message);
+        assertThatThrownBy(() -> generator.newGeminiStreamingClient("test-key", customRequest(customParameters)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(message);
+    }
+
+    @Test
+    @DisplayName("judge: still reads only the thinking level from custom_parameters")
+    void judgeReadsOnlyTheThinkingLevel() {
+        var modelParameters = new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null,
+                JsonUtils.getJsonNodeFromString(
+                        "{\"thinking\": {\"level\": \"high\"}, \"topK\": 40, \"reasoning_effort\": \"high\"}"),
+                null);
+        var judge = GeminiTestClients.pointedAt(
+                generator.generateChat(LlmProviderClientApiConfig.builder().apiKey("test-key").build(),
+                        modelParameters),
+                stubBaseUrl());
+
+        judge.chat(UserMessage.from("hello"));
+
+        assertThat(only(sentGenerationConfig(GENERATE_CONTENT_PATH), "thinkingConfig", "topK"))
+                .isEqualTo(JsonUtils.getJsonNodeFromString("{\"thinkingConfig\": {\"thinkingLevel\": \"high\"}}"));
+    }
+
+    private static ChatCompletionRequest customRequest(Map<String, Object> customParameters) {
+        return ChatCompletionRequest.builder()
+                .model(GEMINI_2_5_MODEL)
+                .addUserMessage("hello")
+                .temperature(0.2)
+                .maxCompletionTokens(1000)
+                .customParameters(customParameters)
+                .build();
+    }
+
     private static ChatCompletionRequest samplingRequest(Double temperature, Double topP) {
         return ChatCompletionRequest.builder()
                 .model(GEMINI_2_5_MODEL)
@@ -274,6 +396,12 @@ class GeminiClientGeneratorTest {
 
     private String stubBaseUrl() {
         return wireMock.runtimeInfo().getHttpBaseUrl() + "/v1beta";
+    }
+
+    private JsonNode sentBody(String path) {
+        var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(path)));
+        assertThat(requests).hasSize(1);
+        return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
     }
 
     private JsonNode sentGenerationConfig(String path) {
