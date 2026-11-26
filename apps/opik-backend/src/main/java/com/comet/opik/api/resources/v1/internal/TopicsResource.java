@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.domain.topics.TopicVectorsTickService;
 import com.comet.opik.domain.topics.TopicsRunPlanner;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -104,7 +103,7 @@ public class TopicsResource {
             throw new BadRequestException("night must not be after tomorrow, night '%s'".formatted(runNight));
         }
         // Older than the vectors backfill reaches, so the window holds no vectors.
-        var maxAgeDays = TopicVectorsTickService.longWindow(config.getVectors()).toJavaDuration().toDays();
+        var maxAgeDays = config.getVectors().backfillOrLongWindow().toDays();
         if (runNight.isBefore(today.minusDays(maxAgeDays))) {
             throw new BadRequestException("night must be within '%s' days before today, night '%s'"
                     .formatted(maxAgeDays, runNight));

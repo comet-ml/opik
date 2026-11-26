@@ -7,8 +7,8 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * One window read, of a workspace or of one project: the candidates, the newest slice's first and each slice's oldest
@@ -26,7 +26,7 @@ record WindowRead(@NonNull List<Candidate> candidates, boolean complete) {
     static Mono<WindowRead> read(@NonNull TopicVectorsDAO dao, @NonNull TopicVectorsFind find,
             @Nullable Duration sliceSize, @NonNull TickBudget budget, @NonNull Duration maxExecutionTime,
             @NonNull Duration reserve) {
-        return next(dao, find, sliceSize, budget, maxExecutionTime, reserve, null, new ArrayList<>());
+        return next(dao, find, sliceSize, budget, maxExecutionTime, reserve, null, List.of());
     }
 
     private static Mono<WindowRead> next(TopicVectorsDAO dao, TopicVectorsFind find, Duration sliceSize,
@@ -49,14 +49,14 @@ record WindowRead(@NonNull List<Candidate> candidates, boolean complete) {
                     .build())
                     .collectList()
                     .flatMap(rows -> {
-                        found.addAll(rows);
+                        var all = Stream.concat(found.stream(), rows.stream()).toList();
                         if (rows.size() >= remaining) {
-                            return Mono.just(new WindowRead(found, false));
+                            return Mono.just(new WindowRead(all, false));
                         }
                         if (!createdAfter.isAfter(find.createdAfter())) {
-                            return Mono.just(new WindowRead(found, true));
+                            return Mono.just(new WindowRead(all, true));
                         }
-                        return next(dao, find, sliceSize, budget, maxExecutionTime, reserve, createdAfter, found);
+                        return next(dao, find, sliceSize, budget, maxExecutionTime, reserve, createdAfter, all);
                     });
         });
     }

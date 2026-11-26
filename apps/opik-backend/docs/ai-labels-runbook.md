@@ -723,6 +723,18 @@ The gate reads two MySQL tables that only the vectors tick writes: the `backfill
 `vectors_checked_at` (the last time the tick discovered the workspace's projects, about once per
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`, `1d` by default).
 
+The tick decides from `vectors_checked_at` which workspaces are due for discovery, so a change of the ticking pod does
+not start them again. Discovery runs after the fresh phase, which leaves it `TOPICS_VECTORS_DISCOVERY_MIN_SHARE` of the
+tick's budget, and takes at most half the budget. A discovery must finish within one tick. One that the budget cuts
+short writes nothing, and the next tick starts it again from its first read; `vectors_checked_at` is set only when a
+discovery finishes. `topics.vectors.discoveries_total` counts each discovery by `outcome` (`complete`, `cut`,
+`failed`). A discovery makes two reads per slice of `TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE` over the backfill
+window plus `AI_LABELS_HORIZON` and `TOPICS_VECTORS_FIND_CREATED_AT_SLACK`: 6 reads with the defaults. A workspace
+whose `cut` count grows every tick never finishes its discovery, so raise `TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE`.
+
+A workspace with more projects in backfill than `TOPICS_VECTORS_MAX_EXCLUDED_PROJECTS` is left to its backfill: each
+tick counts it in `topics.vectors.workspaces_not_read_total` with `reason = over_excluded`.
+
 Each project gets one of four states. "Fresh" means the workspace's `vectors_checked_at` is within 2 ×
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`.
 

@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.infrastructure.db.HasValue;
 import com.comet.opik.infrastructure.inference.InferenceErrorCode;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
@@ -12,12 +13,13 @@ import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.List;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
@@ -51,6 +53,7 @@ class TopicVectorsMetrics {
     private final LongCounter embedFailures;
     private final LongCounter readFailures;
     private final LongCounter workspacesNotRead;
+    private final LongCounter discoveries;
     private final LongCounter longWindowMissed;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
@@ -76,8 +79,14 @@ class TopicVectorsMetrics {
                         + "type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read_total")
-                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
-                        + "ran out, or the workspace has more projects in backfill than the read can leave out")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by reason and workspace: "
+                        + "budget (the tick's budget ran out) or over_excluded (more projects in backfill than the "
+                        + "read can leave out)")
+                .build();
+        this.discoveries = meter.counterBuilder("topics.vectors.discoveries_total")
+                .setDescription("Project discoveries a tick started, by outcome and workspace: complete (its rows "
+                        + "written), cut (the tick's budget ended it before its last slice; the next tick starts it "
+                        + "again) or failed (a read or the write failed)")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed_total")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -141,8 +150,34 @@ class TopicVectorsMetrics {
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
-    void workspacesNotRead(@NonNull List<Workspace> workspaces) {
-        workspaces.forEach(workspace -> workspacesNotRead.add(1, workspace.attributes()));
+    void workspaceNotRead(@NonNull Workspace workspace, @NonNull NotRead reason) {
+        workspacesNotRead.add(1,
+                workspace.attributes().toBuilder().put(stringKey("reason"), reason.getValue()).build());
+    }
+
+    void discovery(@NonNull Workspace workspace, @NonNull DiscoveryOutcome outcome) {
+        discoveries.add(1, workspace.attributes().toBuilder().put(stringKey("outcome"), outcome.getValue()).build());
+    }
+
+    /** How a project discovery a tick started ended. */
+    @Getter
+    @RequiredArgsConstructor
+    enum DiscoveryOutcome implements HasValue {
+        COMPLETE("complete"),
+        CUT("cut"),
+        FAILED("failed");
+
+        private final String value;
+    }
+
+    /** Why a tick's workspace read did not read an enabled workspace. */
+    @Getter
+    @RequiredArgsConstructor
+    enum NotRead implements HasValue {
+        BUDGET("budget"),
+        OVER_EXCLUDED("over_excluded");
+
+        private final String value;
     }
 
     static AttributesBuilder workspace(@NonNull String workspaceId, @NonNull String workspaceName) {
