@@ -17,6 +17,12 @@ import java.util.function.Supplier;
 record TopicRunRows(@NonNull List<Topic> topics, PrototypeVectors otherVectors, @NonNull List<TraceTopic> traceTopics,
         double otherShare, @NonNull ObjectNode stats) {
 
+    /** The author task version the run's clustering recorded in its stats; null when it recorded none. */
+    Integer authorVersion() {
+        var version = stats.get("author_task_version");
+        return version != null && version.canConvertToInt() ? version.intValue() : null;
+    }
+
     /** Saved, but its project was deleted meanwhile: nothing more to write. */
     TopicRunRows discarded() {
         return toBuilder().traceTopics(List.of()).build();

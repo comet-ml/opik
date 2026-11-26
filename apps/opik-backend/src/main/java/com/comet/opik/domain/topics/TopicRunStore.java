@@ -264,8 +264,9 @@ class TopicRunStore {
     }
 
     /**
-     * Saves the list in one transaction: the list on the project's row, the new topics with their prototype vectors,
-     * and the run as {@code saved}. The list is a compare-and-set on an empty {@code list_run_id}, as a discovery run
+     * Saves the list in one transaction: the list on the project's row with the author task version that built it
+     * (which also ends a rebuild without the cache), the new topics with their prototype vectors, and the run as
+     * {@code saved}. The list is a compare-and-set on an empty {@code list_run_id}, as a discovery run
      * saves a project that has no list: if another run saved the project anyway, the save is a conflict. A run that is no
      * longer {@code running} (failed by its timeout, cancelled, abandoned or requeued) rolls the save back.
      *
@@ -273,7 +274,8 @@ class TopicRunStore {
      * ({@link #keepIfProjectExists}). A project deleted after that delete keeps its topics until {@code TopicsSweepJob}
      * deletes them.
      */
-    Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
+    Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors,
+            Integer authorVersion) {
         return jdbi(() -> {
             var now = Instant.now();
             template.inTransaction(WRITE, handle -> {
@@ -284,6 +286,7 @@ class TopicRunStore {
                         otherVectors, TopicEmbedding.MODEL) != 1) {
                     throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
                 }
+                projectDAO.recordDiscovery(run.workspaceId(), run.projectId(), run.runId(), authorVersion);
                 if (!topics.isEmpty()) {
                     topicDAO.insertTopics(topics);
                 }
@@ -514,6 +517,32 @@ class TopicRunStore {
                 return true;
             }));
         });
+    }
+
+    /**
+     * Forgets the saved lists of the workspace's projects, those built with an author task version below
+     * {@code authorVersionBelow} when it is set, in one transaction: each row as {@link #resetList}, then the topics
+     * of the rows that moved. A project with a run in flight keeps its list and is returned as skipped.
+     */
+    Mono<TopicsRunPlanner.WorkspaceReset> resetLists(@NonNull String workspaceId, Integer authorVersionBelow) {
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            var lists = projectDAO.findLists(workspaceId, authorVersionBelow).stream()
+                    .map(TopicProjectKey::projectId)
+                    .collect(Collectors.partitioningBy(
+                            projectId -> projectDAO.resetList(workspaceId, projectId, ENDED) == 1));
+            var reset = lists.get(true);
+            if (!reset.isEmpty()) {
+                handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, reset);
+            }
+            return new TopicsRunPlanner.WorkspaceReset(reset, lists.get(false));
+        }));
+    }
+
+    /** Whether the run is a rebuild after a reset by hand, which skips opik-inference's cache. */
+    Mono<Boolean> rebuildsUncached(@NonNull TopicRun run) {
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findRebuildUncached(run.workspaceId(), run.projectId()).orElse(false)));
     }
 
     /** Sets {@code labels_complete} for the run, only while the project still names it; false when it no longer does. */

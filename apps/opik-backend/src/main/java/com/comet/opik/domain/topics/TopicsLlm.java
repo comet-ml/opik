@@ -65,7 +65,7 @@ class TopicsLlm {
                     .orgId(run.workspaceId())
                     .workspaceId(run.workspaceId())
                     .requestId(run.runId() + ":" + tag)
-                    .cache(true)
+                    .cache(!run.uncached())
                     .lane(GenerateLane.BATCH)
                     .messages(List.of(Message.builder().role(Message.Role.USER).content(call.prompt()).build()))
                     .schema(call.schema())

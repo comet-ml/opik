@@ -711,6 +711,51 @@ so it counts under Other. The next plan, or the run endpoint above, builds the l
 | `204` | The list is forgotten and the project's topics are deleted. |
 | `409` | The workspace is not opted in at stage `build` or later (or topics are off), or the project has no `topic_projects` row or a run in flight. Nothing changed. The body's message says which. |
 
+### Recovering a bad list
+
+A first build can save a bad list, for example with topic names on the wrong groups. To build it again, reset the list.
+The next discovery run, planned or by hand, builds a new one.
+
+- **One project:** the project reset above.
+- **Many projects:** the workspace reset below.
+
+opik-inference caches LLM answers by prompt. A rebuild of the same window sends the same prompt, so with the cache it
+gets the same bad answer back. A reset therefore sets `rebuild_uncached` on the project's `topic_projects` row. The
+project's next discovery run sends its LLM calls with `cache: false` and logs `rebuilds a reset list without the
+inference cache`. Its save clears the flag. A run that fails keeps it, so the retry skips the cache too. Every other run
+uses the cache as before. In the `saved` log line of the rebuild, `llm_cache_hit` is `false`.
+
+The workspace reset forgets the lists of many projects in one transaction:
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/reset?workspace_id=<workspace_id>&author_version_below=<n>"
+```
+
+Without `author_version_below`, it resets every project of the workspace that has a list. With it, it resets only the
+lists built with an author task version below `<n>`. A list whose version was not recorded counts as below. The
+discovery save records the version in `list_author_version` on the project's row, and the nightly updates keep it. A
+project with a run in flight keeps its list. The answer lists it, so reset it again after its run ends. The same opt-in
+and stage rules apply as for the project reset.
+
+| Answer | Meaning |
+|---|---|
+| `200` | The body is `{"reset": <lists reset>, "skipped_in_flight": <projects skipped>, "in_flight_project_ids": [...]}`. |
+| `409` | The workspace is not opted in at stage `build` or later, or topics are off. Nothing changed. |
+| `400` | `author_version_below` is below 1. |
+
+What stays after a reset:
+
+- The row's run state and its `backfill_*` columns.
+- The project's `trace_topics` rows. The new run writes a newer row for each trace in its window. A trace outside the
+  new window keeps its old row, whose topic is gone, so it counts under Other.
+
+After a deploy that fixes the author prompt:
+
+1. Find the new version: `version` in `topics/tasks/author.yaml`, or `author_task_version` in a new run's `saved` log
+   line.
+2. For each opted-in workspace, call the workspace reset with `author_version_below=<new version>`.
+3. Call it again for the projects the answer lists as in flight, once their runs end.
+
 ### Discovery runs and the vectors backfill
 
 When a workspace is opted in, the topic vectors tick embeds the traces it already has in a backfill, project by
