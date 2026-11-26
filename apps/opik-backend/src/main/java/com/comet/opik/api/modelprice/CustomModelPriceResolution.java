@@ -1,5 +1,6 @@
 package com.comet.opik.api.modelprice;
 
+import com.comet.opik.domain.cost.CostSource;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,8 +15,7 @@ public record CustomModelPriceResolution(
         @NonNull String model,
         String provider,
         @Schema(description = "What a span with this usage costs, in USD") @NonNull String cost,
-        @Schema(allowableValues = {
-                "organization", "built_in", "none"}) @NonNull String costSource,
+        @NonNull CostSource costSource,
         @Schema(description = "The organization's list version it was priced with; 0 for the built-in list only") long listVersion,
         @Schema(description = "Absent when no row prices the model") Match match,
         @Schema(description = "The rates that went into the cost") @NonNull List<Line> lines) {
@@ -34,7 +34,6 @@ public record CustomModelPriceResolution(
     public record Line(
             @Schema(example = "input") @NonNull String name,
             @Schema(description = "USD per 1M tokens") @NonNull String ratePerMillion,
-            @Schema(allowableValues = {
-                    "organization", "built_in", "none"}) @NonNull String source) {
+            @NonNull CostSource source) {
     }
 }

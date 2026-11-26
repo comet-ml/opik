@@ -48,6 +48,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -96,7 +97,7 @@ class TestSuiteAssertionSamplerTest {
                     testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, testSuiteAssertionCounterService);
 
             // enqueueMessage is reactive now; the sampler composes it into the scoring chain.
-            lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+            lenient().when(onlineScorePublisher.enqueueMessage(any(), any(), any())).thenReturn(Mono.empty());
         }
 
         @Test
@@ -217,7 +218,8 @@ class TestSuiteAssertionSamplerTest {
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE),
+                    isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -244,7 +246,7 @@ class TestSuiteAssertionSamplerTest {
         }
 
         @Test
-        @DisplayName("judge messages carry the organization of the traces' event, and nothing else changes")
+        @DisplayName("judge messages are enqueued with the organization of the traces' event")
         void judgeMessagesCarryTheEventsOrganization() {
             var workspaceId = UUID.randomUUID().toString();
             var userName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -257,15 +259,12 @@ class TestSuiteAssertionSamplerTest {
             sampler.onTracesCreated(event.organizationId(resolver.organizationId()).build());
 
             @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher, times(2))
-                    .enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
-            var withoutOrganization = captor.getAllValues().getFirst();
-            var withOrganization = captor.getAllValues().getLast();
-            assertThat(withOrganization).containsExactly(
-                    withoutOrganization.getFirst().toBuilder().organizationId(organizationId).build());
-            assertThat(withoutOrganization).containsExactly(
-                    withOrganization.getFirst().toBuilder().organizationId(null).build());
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> messages = ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor<String> organizationIds = ArgumentCaptor.forClass(String.class);
+            verify(onlineScorePublisher, times(2)).enqueueMessage(messages.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), organizationIds.capture());
+            assertThat(messages.getAllValues().getLast()).isEqualTo(messages.getAllValues().getFirst());
+            assertThat(organizationIds.getAllValues()).containsExactly(null, organizationId);
             assertThat(resolver.lookups()).isOne();
         }
 
@@ -289,7 +288,7 @@ class TestSuiteAssertionSamplerTest {
                     .organizationId(resolver.organizationId())
                     .build());
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             assertThat(resolver.lookups()).isZero();
         }
 
@@ -367,7 +366,8 @@ class TestSuiteAssertionSamplerTest {
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE),
+                    isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(2);
@@ -401,7 +401,7 @@ class TestSuiteAssertionSamplerTest {
             sampler.onTracesCreated(event);
 
             verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
         }
 
         @Test
@@ -459,7 +459,7 @@ class TestSuiteAssertionSamplerTest {
             var event = new TracesCreated(List.of(trace), workspaceId, userName);
             sampler.onTracesCreated(event);
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             verify(datasetItemService, never()).get(any(UUID.class), any());
         }
 
@@ -563,7 +563,7 @@ class TestSuiteAssertionSamplerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(2);
@@ -676,7 +676,7 @@ class TestSuiteAssertionSamplerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(2);
@@ -773,7 +773,7 @@ class TestSuiteAssertionSamplerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -879,7 +879,7 @@ class TestSuiteAssertionSamplerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -955,7 +955,7 @@ class TestSuiteAssertionSamplerTest {
             sampler.onTracesCreated(new TracesCreated(List.of(incompleteTrace), workspaceId, userName));
 
             verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
 
             // Same trace arriving complete in a separate event — verifies scoring path
             var completeTrace = incompleteTrace.toBuilder()
@@ -966,7 +966,7 @@ class TestSuiteAssertionSamplerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE), isNull());
             assertThat(captor.getValue()).hasSize(1);
             assertThat(captor.getValue().getFirst().trace().id()).isEqualTo(traceId);
         }
@@ -1035,7 +1035,8 @@ class TestSuiteAssertionSamplerTest {
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE),
+                    isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -1110,7 +1111,8 @@ class TestSuiteAssertionSamplerTest {
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE),
+                    isNull());
 
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
@@ -1185,7 +1187,8 @@ class TestSuiteAssertionSamplerTest {
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE),
+                    isNull());
 
             var message = captor.getValue().getFirst();
             assertThat(message.llmAsJudgeCode().model().name())
@@ -1225,7 +1228,7 @@ class TestSuiteAssertionSamplerTest {
             var event = new TracesCreated(List.of(trace), workspaceId, userName);
             sampler.onTracesCreated(event);
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any(), any());
             verify(datasetVersionService, never()).resolveVersionId(any(), any(), any());
         }
     }

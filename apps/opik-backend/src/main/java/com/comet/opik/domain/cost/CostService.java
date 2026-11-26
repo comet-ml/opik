@@ -58,7 +58,7 @@ public class CostService {
                 .build();
     }
 
-    private static boolean hasUsage(@Nullable Map<String, Integer> usage) {
+    static boolean hasUsage(@Nullable Map<String, Integer> usage) {
         return usage != null && usage.values().stream().anyMatch(count -> count != null && count > 0);
     }
 

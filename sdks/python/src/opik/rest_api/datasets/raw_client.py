@@ -327,7 +327,7 @@ class RawDatasetsClient:
             Project ID. Takes precedence over project_name when both are provided.
 
         project_name : typing.Optional[str]
-            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created in the Default Project.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -1134,7 +1134,7 @@ class RawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         experiment_ids: typing.Optional[str] = None,
-        dataset_version: typing.Optional[str] = None,
+        dataset_versions: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -1154,7 +1154,7 @@ class RawDatasetsClient:
 
         experiment_ids : typing.Optional[str]
 
-        dataset_version : typing.Optional[str]
+        dataset_versions : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1179,7 +1179,7 @@ class RawDatasetsClient:
                 "page": page,
                 "size": size,
                 "experiment_ids": experiment_ids,
-                "dataset_version": dataset_version,
+                "dataset_versions": dataset_versions,
                 "filters": filters,
                 "sorting": sorting,
                 "search": search,
@@ -1710,6 +1710,116 @@ class RawDatasetsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    @contextlib.contextmanager
+    def stream_dataset_experiment_items(
+        self,
+        *,
+        dataset_id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        dataset_versions: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_experiment_id: typing.Optional[str] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
+        """
+        Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+        Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+        received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+        send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+        resume from the start of its experiment instead of from the start of the stream.
+
+        Parameters
+        ----------
+        dataset_id : typing.Optional[str]
+            Dataset ID. Set this or dataset_name
+
+        dataset_name : typing.Optional[str]
+            Dataset name. Set this or dataset_id
+
+        project_name : typing.Optional[str]
+            Project of the dataset, used with dataset_name
+
+        dataset_versions : typing.Optional[typing.Sequence[str]]
+            Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist
+
+        filters : typing.Optional[str]
+            JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference
+
+        limit : typing.Optional[int]
+            Maximum number of experiment items to return
+
+        last_retrieved_experiment_id : typing.Optional[str]
+            Optional hint: experiment_id of the last experiment item received. Used only if that item was deleted, to resume from the start of its experiment instead of from the start of the stream. Requires last_retrieved_id
+
+        last_retrieved_id : typing.Optional[str]
+            id of the last experiment item received
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[HttpResponse[typing.Iterator[bytes]]]
+            Experiment items stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/datasets/items/experiments/items/stream",
+            method="POST",
+            json={
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "project_name": project_name,
+                "dataset_versions": dataset_versions,
+                "filters": filters,
+                "limit": limit,
+                "last_retrieved_experiment_id": last_retrieved_experiment_id,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+
+            def stream() -> HttpResponse[typing.Iterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return HttpResponse(
+                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                        )
+                    _response.read()
+                    if _response.status_code == 404:
+                        raise NotFoundError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield stream()
 
     @contextlib.contextmanager
     def stream_dataset_items(
@@ -2567,7 +2677,7 @@ class AsyncRawDatasetsClient:
             Project ID. Takes precedence over project_name when both are provided.
 
         project_name : typing.Optional[str]
-            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created in the Default Project.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -3377,7 +3487,7 @@ class AsyncRawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         experiment_ids: typing.Optional[str] = None,
-        dataset_version: typing.Optional[str] = None,
+        dataset_versions: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -3397,7 +3507,7 @@ class AsyncRawDatasetsClient:
 
         experiment_ids : typing.Optional[str]
 
-        dataset_version : typing.Optional[str]
+        dataset_versions : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -3422,7 +3532,7 @@ class AsyncRawDatasetsClient:
                 "page": page,
                 "size": size,
                 "experiment_ids": experiment_ids,
-                "dataset_version": dataset_version,
+                "dataset_versions": dataset_versions,
                 "filters": filters,
                 "sorting": sorting,
                 "search": search,
@@ -3953,6 +4063,117 @@ class AsyncRawDatasetsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    @contextlib.asynccontextmanager
+    async def stream_dataset_experiment_items(
+        self,
+        *,
+        dataset_id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        dataset_versions: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_experiment_id: typing.Optional[str] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
+        """
+        Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+        Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Rows are ordered by experiment, then dataset item. To read the next page, send the id of the last row
+        received as last_retrieved_id; a page with fewer rows than the limit is the last one. Optionally also
+        send its experiment_id as last_retrieved_experiment_id: it is only used if that row was deleted, to
+        resume from the start of its experiment instead of from the start of the stream.
+
+        Parameters
+        ----------
+        dataset_id : typing.Optional[str]
+            Dataset ID. Set this or dataset_name
+
+        dataset_name : typing.Optional[str]
+            Dataset name. Set this or dataset_id
+
+        project_name : typing.Optional[str]
+            Project of the dataset, used with dataset_name
+
+        dataset_versions : typing.Optional[typing.Sequence[str]]
+            Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist
+
+        filters : typing.Optional[str]
+            JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference
+
+        limit : typing.Optional[int]
+            Maximum number of experiment items to return
+
+        last_retrieved_experiment_id : typing.Optional[str]
+            Optional hint: experiment_id of the last experiment item received. Used only if that item was deleted, to resume from the start of its experiment instead of from the start of the stream. Requires last_retrieved_id
+
+        last_retrieved_id : typing.Optional[str]
+            id of the last experiment item received
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]
+            Experiment items stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/datasets/items/experiments/items/stream",
+            method="POST",
+            json={
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "project_name": project_name,
+                "dataset_versions": dataset_versions,
+                "filters": filters,
+                "limit": limit,
+                "last_retrieved_experiment_id": last_retrieved_experiment_id,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+
+            async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return AsyncHttpResponse(
+                            response=_response,
+                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                        )
+                    await _response.aread()
+                    if _response.status_code == 404:
+                        raise NotFoundError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield await stream()
 
     @contextlib.asynccontextmanager
     async def stream_dataset_items(

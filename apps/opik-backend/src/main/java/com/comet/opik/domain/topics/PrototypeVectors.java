@@ -21,16 +21,44 @@ public record PrototypeVectors(@NonNull List<float @NonNull []> vectors) {
         var copies = new ArrayList<float[]>(vectors.size());
         for (int i = 0; i < vectors.size(); i++) {
             float[] vector = vectors.get(i);
-            if (vector == null) {
-                throw new IllegalArgumentException("prototype vector %d is null".formatted(i));
-            }
-            if (vector.length != TopicEmbedding.DIMENSIONS) {
+            if (vector == null || vector.length != TopicEmbedding.DIMENSIONS) {
                 throw new IllegalArgumentException("prototype vector %d has %d values, expected %d"
-                        .formatted(i, vector.length, TopicEmbedding.DIMENSIONS));
+                        .formatted(i, vector == null ? 0 : vector.length, TopicEmbedding.DIMENSIONS));
             }
             copies.add(vector.clone());
         }
         vectors = List.copyOf(copies);
+    }
+
+    /** How far from 1 a unit vector's norm may be: float32 rounding of a normalised vector. */
+    static final double UNIT_TOLERANCE = 1e-3;
+
+    /** {@value TopicEmbedding#DIMENSIONS} values of unit length; a NaN or infinite value fails. */
+    static boolean isUnit(@NonNull float[] values) {
+        return isUnit(values, TopicEmbedding.DIMENSIONS);
+    }
+
+    /** As {@link #isUnit(float[])}, for {@code dimensions} values: the night's check of its prototypes. */
+    static boolean isUnit(@NonNull float[] values, int dimensions) {
+        return values.length == dimensions && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
+    }
+
+    /** Fails unless prototype {@code index} is a unit vector of {@value TopicEmbedding#DIMENSIONS} values. */
+    static void checkUnit(int index, float[] values) {
+        if (values == null || !isUnit(values)) {
+            throw new IllegalArgumentException("prototype vector '%s' has '%s' values and norm '%s', expected '%s' "
+                    .formatted(index, values == null ? 0 : values.length, values == null ? 0 : norm(values),
+                            TopicEmbedding.DIMENSIONS)
+                    + "values of unit length");
+        }
+    }
+
+    static double norm(@NonNull float[] values) {
+        double sum = 0;
+        for (float value : values) {
+            sum += (double) value * value;
+        }
+        return Math.sqrt(sum);
     }
 
     public int size() {

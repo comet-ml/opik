@@ -12,7 +12,6 @@ import javax.annotation.Nullable;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -22,8 +21,7 @@ public record CustomModelPriceRow(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         String model,
         @Schema(description = "Empty means any provider") String provider,
-        @Schema(allowableValues = {
-                "fixed", "alias"}) String kind,
+        CustomModelPrice.Kind kind,
         @Schema(description = "USD per 1M input tokens; absent means the built-in rate", example = "1.25") String inputPrice,
         @Schema(description = "USD per 1M output tokens; absent means the built-in rate", example = "10") String outputPrice,
         @Schema(description = "USD per 1M cached input tokens read; absent means the built-in rate") String cacheReadPrice,
@@ -35,6 +33,7 @@ public record CustomModelPriceRow(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
+    @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record AliasOf(String model, @Schema(description = "Empty means the span's own provider") String provider) {
     }
@@ -54,13 +53,13 @@ public record CustomModelPriceRow(
         return CustomModelPriceRow.builder()
                 .model(price.modelName())
                 .provider(price.provider())
-                .kind(price.kind().name().toLowerCase(Locale.ROOT))
+                .kind(price.kind())
                 .inputPrice(plain(price.inputPerMillion()))
                 .outputPrice(plain(price.outputPerMillion()))
                 .cacheReadPrice(plain(price.cacheReadPerMillion()))
                 .cacheWritePrice(plain(price.cacheWritePerMillion()))
                 .aliasOf(price.kind() == CustomModelPrice.Kind.ALIAS
-                        ? new AliasOf(price.aliasModelName(), price.aliasProvider())
+                        ? AliasOf.builder().model(price.aliasModelName()).provider(price.aliasProvider()).build()
                         : null)
                 .build();
     }

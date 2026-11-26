@@ -43,6 +43,7 @@ public class ModelPriceTable {
     private static final Set<String> pricedProviders;
     private static final String pricesFingerprint;
     private static final Map<String, Map<String, List<String>>> prefixedModelNames;
+    private static final Map<String, Set<String>> providersByModelName;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     /**
@@ -69,10 +70,15 @@ public class ModelPriceTable {
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
         pricedProviders = modelProviderPrices.keySet().stream()
-                .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
+                .map(ModelPriceTable::providerOf)
                 .collect(Collectors.toUnmodifiableSet());
         pricesFingerprint = fingerprint(MODEL_PRICES_FILE, MODEL_PRICES_OPENROUTER_FILE, MODEL_PRICES_OVERRIDES_FILE);
         prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
+        providersByModelName = modelProviderPrices.keySet().stream()
+                .collect(Collectors.collectingAndThen(Collectors.groupingBy(
+                        ModelPriceTable::modelNameOf,
+                        Collectors.mapping(ModelPriceTable::providerOf, Collectors.toUnmodifiableSet())),
+                        Collections::unmodifiableMap));
     }
 
     static ModelPrice get(String modelName, String provider) {
@@ -111,6 +117,11 @@ public class ModelPriceTable {
         }
     }
 
+    /** The providers with a built-in price filed under exactly this model name. */
+    static Set<String> providersOf(@NonNull String modelName) {
+        return providersByModelName.getOrDefault(modelName, Set.of());
+    }
+
     /**
      * The model names filed under {@code provider} with a vendor prefix whose name without it is {@code modelName},
      * such as OpenRouter's {@code openai/gpt-4o-mini} for {@code gpt-4o-mini}, sorted.
@@ -122,14 +133,12 @@ public class ModelPriceTable {
     private static Map<String, Map<String, List<String>>> indexPrefixedModelNames(Set<String> keys) {
         Map<String, Map<String, List<String>>> index = new HashMap<>();
         for (String key : keys) {
-            int providerSeparator = key.lastIndexOf(MODEL_PROVIDER_SEPARATOR);
-            String modelName = key.substring(0, providerSeparator);
+            String modelName = modelNameOf(key);
             if (modelName.indexOf(MODEL_PROVIDER_SEPARATOR) <= 0) {
                 continue;
             }
-            index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
-                    .computeIfAbsent(parseModelName(modelName).trim().toLowerCase(Locale.ROOT),
-                            unused -> new ArrayList<>())
+            index.computeIfAbsent(providerOf(key), unused -> new HashMap<>())
+                    .computeIfAbsent(rowModelName(modelName), unused -> new ArrayList<>())
                     .add(modelName);
         }
         index.replaceAll((provider, byName) -> byName.entrySet().stream()
@@ -412,8 +421,21 @@ public class ModelPriceTable {
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
+    // Rows are saved under this name and prefixedModelNames is keyed by it, so the two always agree.
+    static String rowModelName(@NonNull String modelName) {
+        return parseModelName(modelName).trim().toLowerCase(Locale.ROOT);
+    }
+
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
+    }
+
+    private static String modelNameOf(String modelProviderKey) {
+        return modelProviderKey.substring(0, modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR));
+    }
+
+    private static String providerOf(String modelProviderKey) {
+        return modelProviderKey.substring(modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1);
     }
 
     private static boolean isValidModelProvider(String modelName, String provider) {
@@ -435,11 +457,11 @@ public class ModelPriceTable {
             BigDecimal audioInputCharacterPrice) {
 
         if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
-            return SpanCostCalculator::videoGenerationCost;
+            return SpanCostCalculator.VIDEO_GENERATION_CALCULATOR;
         }
 
         if (mode.isAudioSpeech() && isPositive(audioInputCharacterPrice)) {
-            return SpanCostCalculator::audioSpeechCost;
+            return SpanCostCalculator.AUDIO_SPEECH_CALCULATOR;
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice) || isPositive(cacheCreationInputTokenPrice)

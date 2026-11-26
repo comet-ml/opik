@@ -14,7 +14,7 @@ Report them through
 The report is visible only to you and the Opik maintainers, and we use that advisory
 to discuss details, develop a fix, and coordinate public disclosure with you.
 
-If you are unable to use GitHub Security Advisories, email **support@comet.com**.
+If you are unable to use GitHub Security Advisories, email **<support@comet.com>**.
 
 ### What to include
 

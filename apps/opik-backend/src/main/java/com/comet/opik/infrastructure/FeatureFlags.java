@@ -63,4 +63,14 @@ public class FeatureFlags {
             throw new ForbiddenException("Guardrails validation service is not enabled");
         }
     }
+
+    /**
+     * @throws ForbiddenException if the deployment does not let workspaces train guardrail models
+     */
+    public void checkGuardrailsTrainingEnabled() {
+        if (config.getServiceToggles() == null || !config.getServiceToggles().isGuardrailsTrainingEnabled()) {
+            log.warn("Guardrail model training is disabled, returning 403");
+            throw new ForbiddenException("Guardrail model training is not enabled");
+        }
+    }
 }

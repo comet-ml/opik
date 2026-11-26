@@ -1,5 +1,5 @@
 [project]
-name = "opik_optimizer"
+name = "opik-optimizer"
 version = "3.2.0"
 description = "Open-source automatic agent and prompt optimization toolkit with Opik"
 authors = [

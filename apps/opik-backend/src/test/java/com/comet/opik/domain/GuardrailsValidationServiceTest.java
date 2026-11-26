@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
@@ -13,8 +14,11 @@ import com.comet.opik.infrastructure.inference.DecideResponse;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.Question;
 import com.comet.opik.utils.JsonUtils;
+import io.dropwizard.util.Duration;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.ServiceUnavailableException;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,7 +28,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +54,10 @@ class GuardrailsValidationServiceTest {
     @BeforeEach
     void setUp() {
         configuration = new OpikConfiguration();
+        configuration.setInference(TestConfigUtils.loadConfigTest().getInference());
+        var realtime = configuration.getInference().getRealtime();
+        realtime.setDecideDeadline(Duration.milliseconds(RandomUtils.secure().randomLong(1, 5_001)));
+        realtime.setDecideMargin(Duration.milliseconds(RandomUtils.secure().randomLong(0, 5_001)));
         service = new GuardrailsValidationServiceImpl(inference, configuration);
     }
 
@@ -69,7 +76,9 @@ class GuardrailsValidationServiceTest {
                 "1.topic.allowed", choice(Map.of("billing", 0.65, "shipping", 0.05, "none of these", 0.3)),
                 "2.injection", noul(0.12)))));
 
+        var before = Instant.now();
         var response = validate(request);
+        var after = Instant.now();
 
         assertThat(response.validationPassed()).isFalse();
         assertThat(response.validations()).hasSize(3);
@@ -104,10 +113,11 @@ class GuardrailsValidationServiceTest {
         assertThat(sent.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(sent.state().asText()).isEqualTo(TEXT);
         assertThat(sent.lane()).isEqualTo(DecideRequest.REALTIME_LANE);
-        // opik-inference's longest realtime deadline, and a second more for the client.
-        assertThat(sent.deadlineMs()).isEqualTo(5_000L);
-        assertThat(Duration.between(Instant.now(), deadline.getValue()))
-                .isBetween(Duration.ofSeconds(5), Duration.ofSeconds(6));
+        // inference.realtime.decideDeadline, and decideMargin more for the client.
+        var realtime = configuration.getInference().getRealtime();
+        assertThat(sent.deadlineMs()).isEqualTo(realtime.getDecideDeadline().toMilliseconds());
+        var wait = realtime.getDecideDeadline().toJavaDuration().plus(realtime.getDecideMargin().toJavaDuration());
+        assertThat(deadline.getValue()).isBetween(before.plus(wait), after.plus(wait));
         var questions = sent.questions();
         assertThat(questions.keySet()).containsExactly(
                 "0.pii.EMAIL_ADDRESS", "0.pii.PHONE_NUMBER", "1.topic.restricted", "1.topic.allowed", "2.injection");
@@ -202,14 +212,14 @@ class GuardrailsValidationServiceTest {
     }
 
     @Test
-    void topicMissingFromTheAnswerFailsOpenWithTheError() {
+    void topicMissingFromTheAnswerFailsClosed() {
         var request = request(descriptor(GuardrailType.TOPIC, "{\"restricted_topics\":[\"legal advice\"]}"));
         when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of("0.topic.restricted",
                 choice(Map.of("Legal Advice", 0.9, GuardrailQuestions.NONE_OF_THESE, 0.1))))));
 
-        var response = validate(request);
-
-        assertThat(response.validations().get(0).error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
+        assertThatThrownBy(() -> validate(request))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE);
     }
 
     @Test
@@ -273,23 +283,20 @@ class GuardrailsValidationServiceTest {
         verifyNoInteractions(inference);
     }
 
+    // The cause rides along for the log and the error metric: the caller gets a stable message, not the upstream
+    // status or host.
     @Test
-    void inferenceFailureFailsOpenWithTheErrorOnEveryEntry() {
+    void inferenceFailureFailsClosedWithoutAVerdict() {
         var request = request(
                 descriptor(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\"]}"),
                 descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
         when(inference.decide(any(), any())).thenReturn(Mono.error(
                 new ServerErrorException("opik-inference decide request failed, status '503'", 503)));
 
-        var response = validate(request);
-
-        assertThat(response.validationPassed()).isTrue();
-        assertThat(response.validations()).hasSize(2).allSatisfy(result -> {
-            assertThat(result.validationPassed()).isTrue();
-            assertThat(result.error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
-            assertThat(result.validationDetails().path("error").asText())
-                    .isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
-        });
+        assertThatThrownBy(() -> validate(request))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasMessage(GuardrailsValidationServiceImpl.UNAVAILABLE_MESSAGE)
+                .hasCauseInstanceOf(ServerErrorException.class);
     }
 
     // The limits are the documented contract (254 topics of up to 256 characters), written out rather than read from
@@ -300,9 +307,10 @@ class GuardrailsValidationServiceTest {
                 .mapToObj(i -> i == 0 ? "t".repeat(256) : "topic " + i)
                 .toList();
         var request = request(topicDescriptor(topics));
+        // Accepted means the checks reach inference; what it answers is not this test's concern.
         when(inference.decide(any(), any())).thenReturn(Mono.error(new IllegalStateException("not answered")));
 
-        validate(request);
+        assertThatThrownBy(() -> validate(request)).isInstanceOf(ServiceUnavailableException.class);
 
         var captor = ArgumentCaptor.forClass(DecideRequest.class);
         verify(inference).decide(captor.capture(), any());

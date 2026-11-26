@@ -1,0 +1,98 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.TestConfigUtils;
+import com.comet.opik.domain.topics.TopicsBackfillGate.State;
+import com.comet.opik.infrastructure.TopicsConfig;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+/**
+ * The discovery run's gate and retry wait. With the test config, a workspace is fresh for 2 days (twice
+ * {@code longWindowInterval}), the longest backfill wait is 72 hours, and the retry waits are 1h, 6h and 1d.
+ */
+@DisplayName("topics discovery gate and retry wait")
+class TopicsBackfillGateTest {
+
+    private static final Instant NOW = Instant.now();
+    private static final TopicsConfig CONFIG = TestConfigUtils.loadConfigTest().getTopics();
+    private static final TopicsBackfillGate GATE = new TopicsBackfillGate(CONFIG);
+
+    private static ListlessProject.ListlessProjectBuilder project() {
+        return ListlessProject.builder().workspaceId(UUID.randomUUID().toString()).projectId(UUID.randomUUID());
+    }
+
+    private static Instant ago(long hours) {
+        return NOW.minus(Duration.ofHours(hours));
+    }
+
+    static Stream<Arguments> gates() {
+        return Stream.of(
+                Arguments.of("no backfill, fresh workspace", project().vectorsCheckedAt(ago(47)), State.OPEN),
+                Arguments.of("no backfill, stale workspace", project().vectorsCheckedAt(ago(49)),
+                        State.TIMED_OUT_WAITING),
+                Arguments.of("no backfill, never checked", project(), State.WAITING),
+                Arguments.of("drained, fresh workspace", project().vectorsCheckedAt(ago(1)).backfillStartedAt(ago(5))
+                        .backfillDrainedAt(ago(2)), State.OPEN),
+                Arguments.of("drained, stale workspace", project().vectorsCheckedAt(ago(49))
+                        .backfillStartedAt(ago(60)).backfillDrainedAt(ago(50)), State.TIMED_OUT_WAITING),
+                Arguments.of("past the longest wait with enough vectors, stale workspace", project()
+                        .vectorsCheckedAt(ago(49)).backfillStartedAt(ago(73)).backfillTracesTotal(1000)
+                        .backfillTracesDone(995), State.TIMED_OUT_WAITING),
+                Arguments.of("not drained within the longest wait", project().vectorsCheckedAt(ago(1))
+                        .backfillStartedAt(ago(72)).backfillTracesTotal(100).backfillTracesDone(100), State.WAITING),
+                Arguments.of("past the longest wait, enough vectors", project().vectorsCheckedAt(ago(1))
+                        .backfillStartedAt(ago(73)).backfillTracesTotal(1000).backfillTracesDone(995),
+                        State.TIMED_OUT_OPEN),
+                Arguments.of("past the longest wait, too few vectors", project().vectorsCheckedAt(ago(1))
+                        .backfillStartedAt(ago(73)).backfillTracesTotal(1000).backfillTracesDone(985),
+                        State.TIMED_OUT_WAITING),
+                Arguments.of("past the longest wait, nothing counted", project().vectorsCheckedAt(ago(1))
+                        .backfillStartedAt(ago(73)), State.TIMED_OUT_WAITING));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("gates")
+    @DisplayName("a project's gate state from its backfill and its workspace's last check")
+    void gate(String name, ListlessProject.ListlessProjectBuilder project, State expected) {
+        assertThat(GATE.discoveryGate(project.build(), NOW)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> retries() {
+        return Stream.of(
+                Arguments.of("never failed", project(), true),
+                Arguments.of("one failure, under 1h ago", project().failedRuns(1).runFinishedAt(NOW.minusSeconds(3599)),
+                        false),
+                Arguments.of("one failure, 1h ago", project().failedRuns(1).runFinishedAt(ago(1)), true),
+                Arguments.of("two failures, 5h ago", project().failedRuns(2).runFinishedAt(ago(5)), false),
+                Arguments.of("two failures, 6h ago", project().failedRuns(2).runFinishedAt(ago(6)), true),
+                Arguments.of("five failures, 23h ago", project().failedRuns(5).runFinishedAt(ago(23)), false),
+                Arguments.of("five failures, 1d ago", project().failedRuns(5).runFinishedAt(ago(24)), true));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("retries")
+    @DisplayName("a failed discovery run waits 1h, then 6h, then 1d before the next")
+    void retryDue(String name, ListlessProject.ListlessProjectBuilder project, boolean due) {
+        assertThat(TopicsDiscoveryCandidates.retryDue(CONFIG.getDiscovery().retryDelays(), project.build(), NOW))
+                .isEqualTo(due);
+    }
+
+    @Test
+    @DisplayName("the wait counts from the backfill start, or from the workspace's last check without a backfill")
+    void waited() {
+        assertThat(TopicsBackfillGate.waited(project().vectorsCheckedAt(ago(1)).backfillStartedAt(ago(73)).build(),
+                NOW)).isEqualTo(Duration.ofHours(73));
+        assertThat(TopicsBackfillGate.waited(project().vectorsCheckedAt(ago(49)).build(), NOW))
+                .isEqualTo(Duration.ofHours(49));
+        assertThat(TopicsBackfillGate.waited(project().build(), NOW)).isEqualTo(Duration.ZERO);
+    }
+}

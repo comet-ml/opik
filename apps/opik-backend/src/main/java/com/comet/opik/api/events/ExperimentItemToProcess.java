@@ -3,6 +3,7 @@ package com.comet.opik.api.events;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.OpikPromptEntry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -26,7 +27,7 @@ public record ExperimentItemToProcess(
         List<OpikPromptEntry> opikPrompts,
         Boolean testSuite,
         List<UUID> selectedRuleIds,
-        String organizationId) implements OrganizationScopedMessage {
+        @Nullable String organizationId) implements OrganizationScopedMessage {
 
     /**
      * Null on messages published before regular datasets could run server-side, when every run was a test

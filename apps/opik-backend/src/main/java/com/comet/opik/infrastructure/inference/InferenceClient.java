@@ -2,8 +2,11 @@ package com.comet.opik.infrastructure.inference;
 
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.InferenceConfig;
+import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.utils.RetryUtils;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
@@ -22,7 +25,6 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.input.BoundedInputStream;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -44,11 +46,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Client for the opik-inference v1 API: the batch endpoints, {@code /v1/embed}, and the synchronous {@link #decide} that
- * guardrail checks use. Its retries mirror the Python client's: up to {@code inference.retry.maxRetries}, backing off
- * {@code baseBackoff} and doubling it, or honoring {@code Retry-After}, except that a submit or embed answered with
- * {@code quota_exceeded} fails at once, so the caller can back that one workspace off. What one call may carry is
- * {@code inference.limits}.
+ * Client for the opik-inference v1 API: the batch endpoints, {@code /v1/embed}, {@code /v1/generate}, and the
+ * synchronous {@link #decide} that guardrail checks use. Its retries mirror the Python client's: up to
+ * {@code inference.retry.maxRetries}, backing off {@code baseBackoff} doubled per retry and jittered, or honoring
+ * {@code Retry-After},
+ * except that a submit, embed or generate answered with {@code quota_exceeded} fails at once, so the caller can back
+ * that one workspace off. What one call may carry is {@code inference.limits}.
  * <p>
  * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
  * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
@@ -62,7 +65,8 @@ import java.util.function.Function;
  * {@link #decide}, which a request waits on, goes through the shared client like every other call, but as a synchronous
  * call on threads of its own, so it never queues behind batch calls for one of the client's threads. There are
  * {@code maxConcurrentDecides} of them, the most decide calls in flight; a call over it fails with {@code client_busy}
- * after the usual retries. When guardrail validations are on, that cap plus the load and embed concurrency of
+ * after the usual retries. {@link #generate}, which holds its connection for the model's whole answer, gets the same
+ * isolation with {@code maxConcurrentGenerates} threads, so it never holds one of the shared async threads. When guardrail validations are on, that cap plus the load and embed concurrency of
  * ai-labels and Topics, when they are on, is kept below the shared pool's connections per route, so these calls
  * together can't take every connection to opik-inference.
  * <p>
@@ -77,13 +81,14 @@ import java.util.function.Function;
 @Singleton
 public class InferenceClient {
 
-    private static final int DECIDE_THREAD_TTL_SECONDS = 60;
+    private static final int POOL_THREAD_TTL_SECONDS = 60;
     private static final String DECIDE_PATH = "v1/decide";
     private static final String BATCH_DECIDE_PATH = "v1/batch/decide";
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
     private static final String EMBED_PATH = "v1/embed";
+    private static final String GENERATE_PATH = "v1/generate";
 
     /**
      * A relaxed guard checks no address or scheme: opik-inference is an internal service. It is set on every request
@@ -97,8 +102,8 @@ public class InferenceClient {
     private final @NonNull Client client;
     private final @NonNull InferenceConfig config;
     private final @NonNull AiLabelsConfig aiLabels;
-    private final @NonNull Semaphore decidePermits;
-    private final @NonNull Scheduler decideScheduler;
+    private final @NonNull Pool decidePool;
+    private final @NonNull Pool generatePool;
 
     @Inject
     public InferenceClient(@NonNull Client client, @NonNull @Config("inference") InferenceConfig config,
@@ -106,11 +111,8 @@ public class InferenceClient {
         this.client = client;
         this.config = config;
         this.aiLabels = aiLabels;
-        this.decidePermits = new Semaphore(config.getMaxConcurrentDecides());
-        // The permits keep calls within the threads, so none waits in the queue. Daemon threads, with Reactor's
-        // default idle TTL, so a decide call still reading never holds up shutdown.
-        this.decideScheduler = Schedulers.newBoundedElastic(config.getMaxConcurrentDecides(),
-                config.getMaxConcurrentDecides(), "opik-inference-decide", DECIDE_THREAD_TTL_SECONDS, true);
+        this.decidePool = Pool.of(config.getMaxConcurrentDecides(), "opik-inference-decide");
+        this.generatePool = Pool.of(config.getMaxConcurrentGenerates(), "opik-inference-generate");
     }
 
     public Mono<BatchSubmitResponse> submitDecide(@NonNull BatchDecideRequest request, @NonNull Instant deadline) {
@@ -207,6 +209,49 @@ public class InferenceClient {
     }
 
     /**
+     * One completion, answered in the call. Retried like a submit: a retry sends the same bytes, so the same
+     * {@code request_id}, and a {@code quota_exceeded} answer fails at once. So does {@code schema_violation}: the
+     * service checks the answer against the schema, and the same bytes at temperature 0 give the same answer. The
+     * request's {@code deadline_ms} is the time left before {@code deadline}, cut to the
+     * lane's maximum; the read timeout is the base read timeout plus that deadline, as the service holds the connection
+     * until the model answers. An early {@code deadline_exceeded} (the call waited in the service's queue) fails at
+     * once. It runs on its own bounded pool, like {@link #decide}.
+     */
+    public Mono<GenerateResponse> generate(@NonNull GenerateRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.messages().isEmpty(), "a generate call takes at least one message");
+        Preconditions.checkArgument(
+                request.maxTokens() >= BatchGenerateItem.MIN_MAX_TOKENS
+                        && request.maxTokens() <= BatchGenerateItem.MAX_MAX_TOKENS,
+                "max_tokens must be between '%s' and '%s', maxTokens '%s'", BatchGenerateItem.MIN_MAX_TOKENS,
+                BatchGenerateItem.MAX_MAX_TOKENS, request.maxTokens());
+        return Mono.defer(() -> {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.toMillis() < 1) {
+                return Mono.error(InferenceException.outOfTime());
+            }
+            var deadlineMs = Math.min(left.toMillis(), maxDeadline(request.lane()).toMillis());
+            var withId = request.toBuilder()
+                    .requestId(request.requestId() == null ? UUID.randomUUID().toString() : request.requestId())
+                    .build();
+            var body = InferenceJson.writeBytes(new GenerateBody(withId, deadlineMs));
+            return execute(Call.<GenerateResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(GENERATE_PATH)
+                    .target(base -> base.path(GENERATE_PATH))
+                    .body(body)
+                    .readTimeout(config.getReadTimeout().toJavaDuration()
+                            .plusMillis(deadlineMs))
+                    .deadline(deadline)
+                    .type(GenerateResponse.class)
+                    .failFastOnQuotaExceeded(true)
+                    .failFastOnSchemaViolation(true)
+                    .failFastOnDeadlineExceeded(true)
+                    .pool(generatePool)
+                    .build());
+        });
+    }
+
+    /**
      * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()}, when
      * set, is the time the service may spend; {@code deadline} bounds the client, retries included, and should leave
      * room for one retry on top of the service's.
@@ -229,7 +274,7 @@ public class InferenceClient {
                     .deadline(deadline)
                     .type(DecideResponse.class)
                     .failFastOnDeadlineExceeded(true)
-                    .realtime(true)
+                    .pool(decidePool)
                     .build());
         });
     }
@@ -264,7 +309,7 @@ public class InferenceClient {
             var left = Duration.between(Instant.now(), call.deadline());
             // A body that trickles in escapes the socket timeouts: this frees the caller at the deadline, and the
             // cancel closes the response.
-            return attempt(call, 0)
+            return attempt(call)
                     .timeout(left.isNegative() ? Duration.ZERO : left)
                     .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime())
                     // A socket timeout cut to the time left can beat the cut above by a moment: a failure at or past
@@ -274,41 +319,42 @@ public class InferenceClient {
         });
     }
 
-    private <T> Mono<T> attempt(Call<T> call, int attempt) {
+    private <T> Mono<T> attempt(Call<T> call) {
+        var retry = config.getRetry();
         return Mono.defer(() -> {
             var left = Duration.between(Instant.now(), call.deadline());
             // Under 1 ms is out of time: Jersey's timeouts are whole milliseconds, so the attempt would outlast it.
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
-        }).onErrorResume(InferenceException.class, exception -> {
-            var retry = config.getRetry();
-            if (attempt >= retry.getMaxRetries() || !exception.isRetryable()
-                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
-                    || (call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded())) {
-                return Mono.error(exception);
-            }
-            var backoff = exception.getRetryAfter() != null
-                    ? exception.getRetryAfter()
-                    : retry.getBaseBackoff().toJavaDuration().multipliedBy(1L << attempt);
-            if (!Instant.now().plus(backoff).isBefore(call.deadline())) {
-                return Mono.error(exception);
-            }
-            // DEBUG: a retry that recovers is routine, and the caller logs a call that fails for good.
-            log.debug("Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
-                    call.method(), call.path(), exception.getCode(), exception.getHttpStatus(), attempt + 1);
-            return Mono.delay(backoff).then(Mono.defer(() -> attempt(call, attempt + 1)));
-        });
+        }).retryWhen(RetryUtils.untilDeadline(retry.getMaxRetries(), retry.getBaseBackoff().toJavaDuration(),
+                call.deadline(),
+                failure -> failure instanceof InferenceException exception && isRetried(call, exception),
+                failure -> failure instanceof InferenceException exception ? exception.getRetryAfter() : null,
+                (failure, attempt) -> {
+                    var exception = (InferenceException) failure;
+                    // DEBUG: a retry that recovers is routine, and the caller logs a call that fails for good.
+                    log.debug(
+                            "Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
+                            call.method(), call.path(), exception.getCode(), exception.getHttpStatus(), attempt);
+                }));
+    }
+
+    /** A failure the call may retry: the service marked it so, and no fail-fast rule of the call matches it. */
+    private static boolean isRetried(Call<?> call, InferenceException exception) {
+        return exception.isRetryable()
+                && !(call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                && !(call.failFastOnSchemaViolation() && exception.isSchemaViolation())
+                && !(call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded());
     }
 
     private <T> Mono<T> send(Call<T> call, Duration left) {
-        Preconditions.checkState(StringUtils.isNotBlank(config.getUrl()),
-                "inference.url must be set to call opik-inference");
-        Preconditions.checkState(StringUtils.isNotBlank(config.getCredential()),
-                "inference.credential must be set to call opik-inference");
-        if (call.realtime() && !decidePermits.tryAcquire()) {
+        Preconditions.checkState(config.isConfigured(),
+                "inference.url and inference.credential must be set to call opik-inference");
+        var pool = call.pool();
+        if (pool != null && !pool.permits().tryAcquire()) {
             return Mono.error(InferenceException.clientBusy());
         }
-        // A decide call keeps its slot until its thread is done: a cancel closes the response, which ends the read.
-        Runnable release = call.realtime() ? decidePermits::release : () -> {
+        // A pooled call keeps its slot until its thread is done: a cancel closes the response, which ends the read.
+        Runnable release = pool != null ? pool.permits()::release : () -> {
         };
         return Mono.<T>create(sink -> {
             var cancelled = new AtomicBoolean();
@@ -337,27 +383,33 @@ public class InferenceClient {
                         // Cancelled before the response arrived: the read below then fails at once.
                         closeQuietly(response);
                     }
-                    T value;
+                    // The slot is given back only once the result is delivered: the thread is busy until then.
                     try {
-                        value = read(call, response);
-                    } catch (RuntimeException exception) {
-                        sink.error(exception);
-                        return;
+                        T value;
+                        try {
+                            value = read(call, response);
+                        } catch (RuntimeException exception) {
+                            sink.error(exception);
+                            return;
+                        }
+                        sink.success(value);
                     } finally {
                         release.run();
                     }
-                    sink.success(value);
                 }
 
                 @Override
                 public void failed(Throwable throwable) {
-                    release.run();
-                    sink.error(InferenceException.transport(throwable));
+                    try {
+                        sink.error(InferenceException.transport(throwable));
+                    } finally {
+                        release.run();
+                    }
                 }
             };
             try {
-                if (call.realtime()) {
-                    decideScheduler.schedule(() -> {
+                if (pool != null) {
+                    pool.scheduler().schedule(() -> {
                         if (cancelled.get()) {
                             release.run();
                             return;
@@ -553,7 +605,32 @@ public class InferenceClient {
             /** Throws on an answer that parses but breaks the contract; it fails like one that doesn't parse. */
             Consumer<T> check,
             boolean failFastOnQuotaExceeded,
+            boolean failFastOnSchemaViolation,
             boolean failFastOnDeadlineExceeded,
-            boolean realtime) {
+            /** A synchronous call on threads of its own; null for a call on the shared client's async threads. */
+            Pool pool) {
+    }
+
+    /**
+     * Threads for synchronous calls of one kind, and as many permits: the permits keep calls within the threads, so
+     * none waits in the queue. Daemon threads, with an idle TTL, so a call still reading never holds up shutdown.
+     */
+    private record Pool(Semaphore permits, Scheduler scheduler) {
+
+        static Pool of(int size, String name) {
+            return new Pool(new Semaphore(size),
+                    Schedulers.newBoundedElastic(size, size, name, POOL_THREAD_TTL_SECONDS, true));
+        }
+    }
+
+    /** The generate body on the wire: the caller's request and the deadline the client sets. */
+    private record GenerateBody(@JsonUnwrapped GenerateRequest request, long deadlineMs) {
+    }
+
+    private Duration maxDeadline(GenerateLane lane) {
+        return switch (lane) {
+            case REALTIME -> config.getLimits().getMaxGenerateRealtimeDeadline().toJavaDuration();
+            case BATCH -> config.getLimits().getMaxGenerateBatchDeadline().toJavaDuration();
+        };
     }
 }

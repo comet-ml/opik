@@ -35,7 +35,8 @@ def detect_hosted_mcp_server(
     case the caller falls back to the local ``uvx`` server.
 
     The MCP endpoint itself is the Opik REST base (``api_url``) plus ``v1/mcp``
-    (e.g. ``https://dev.comet.com/opik/api/`` -> ``…/opik/api/v1/mcp``).
+    (e.g. ``https://dev.comet.com/opik/api/`` -> ``…/opik/api/v1/mcp``). It is
+    probed as well, because a deployment can serve the metadata without it.
 
     ``check_tls_certificate`` comes from the already-loaded ``OpikConfig`` so this
     probe does not re-read configuration.
@@ -45,14 +46,7 @@ def detect_hosted_mcp_server(
     )
 
     try:
-        # The probe is a bodyless GET, so request compression does not apply.
-        with httpx_client.get(
-            workspace=None,
-            api_key=None,
-            check_tls_certificate=check_tls_certificate,
-            compress_json_requests=False,
-        ) as client:
-            response = client.get(well_known_url, timeout=PROBE_TIMEOUT_SECONDS)
+        response = _probe(well_known_url, check_tls_certificate)
     except (httpx.HTTPError, OSError):
         # Network/TLS/timeout failures mean "no reachable hosted server" — fall
         # back to the local server. Anything else (bugs, KeyboardInterrupt) is
@@ -78,6 +72,29 @@ def detect_hosted_mcp_server(
     if not isinstance(metadata, dict) or "authorization_endpoint" not in metadata:
         return None
 
-    return urllib.parse.urljoin(
+    mcp_url = urllib.parse.urljoin(
         url_helpers.ensure_ending_slash(api_url), MCP_ENDPOINT_PATH
     )
+    # The Opik backend serves the metadata, while the MCP server is a service of
+    # its own: with MCP OAuth on and no server deployed, the backend answers 404
+    # at the MCP path. Only that answer rules the server out, so an outage does
+    # not move a user to the local server; the post-install check reports it.
+    try:
+        mcp_response = _probe(mcp_url, check_tls_certificate)
+    except (httpx.HTTPError, OSError):
+        return mcp_url
+    if mcp_response.status_code == 404:
+        return None
+
+    return mcp_url
+
+
+def _probe(url: str, check_tls_certificate: bool) -> httpx.Response:
+    # The probes are bodyless GETs, so request compression does not apply.
+    with httpx_client.get(
+        workspace=None,
+        api_key=None,
+        check_tls_certificate=check_tls_certificate,
+        compress_json_requests=False,
+    ) as client:
+        return client.get(url, timeout=PROBE_TIMEOUT_SECONDS)

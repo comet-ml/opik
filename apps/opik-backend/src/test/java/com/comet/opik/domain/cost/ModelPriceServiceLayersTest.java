@@ -5,6 +5,8 @@ import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
+import io.opentelemetry.api.common.Attributes;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -27,6 +29,7 @@ class ModelPriceServiceLayersTest {
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
     private final OrganizationResolver organizationResolver = mock(OrganizationResolver.class);
     private final ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
+    private final String organizationId = RandomStringUtils.secure().nextAlphanumeric(10);
 
     private ModelPriceService service(boolean enabled) {
         serviceToggles.setModelPricesEnabled(enabled);
@@ -50,20 +53,26 @@ class ModelPriceServiceLayersTest {
 
     @Test
     void knownOrganizationPricesWithItsList() {
-        when(organizationResolver.organizationId()).thenReturn(Mono.just("org-1"));
-        doReturn(new ModelPriceList("org-1", 3, List.of())).when(transactionTemplate)
-                .inTransaction(any(TxConfig.class), any());
+        var list = ModelPriceList.builder()
+                .organizationId(organizationId)
+                .version(3)
+                .rows(List.of(CustomModelPrice.builder()
+                        .modelName(RandomStringUtils.secure().nextAlphanumeric(10))
+                        .provider(CustomModelPrice.ANY_PROVIDER)
+                        .kind(CustomModelPrice.Kind.FIXED)
+                        .build()))
+                .build();
+        when(organizationResolver.organizationId()).thenReturn(Mono.just(organizationId));
+        doReturn(list).when(transactionTemplate).inTransaction(any(TxConfig.class), any());
 
         var layers = service(true).layersFor().block();
 
-        assertThat(layers.getOrigin()).isEqualTo(PriceLayers.Origin.ORGANIZATION);
-        assertThat(layers.getOrganizationId()).isEqualTo("org-1");
-        assertThat(layers.getListVersion()).isEqualTo(3);
+        assertThat(layers).usingRecursiveComparison().isEqualTo(list.toLayers());
     }
 
     @Test
     void failedLoadPricesWithBuiltInAndSaysSo() {
-        when(organizationResolver.organizationId()).thenReturn(Mono.just("org-1"));
+        when(organizationResolver.organizationId()).thenReturn(Mono.just(organizationId));
         doThrow(new IllegalStateException("MySQL is down")).when(transactionTemplate)
                 .inTransaction(any(TxConfig.class), any());
 
@@ -83,12 +92,15 @@ class ModelPriceServiceLayersTest {
 
     @Test
     void loadFailureWithABlankWorkspaceNameIsLabelledWithTheWorkspaceId() {
-        var attributes = ModelPriceServiceImpl.loadFailureAttributes(new IllegalStateException("down"),
-                Context.of(RequestContext.WORKSPACE_ID, "workspace-1", RequestContext.WORKSPACE_NAME, ""));
+        var workspaceId = RandomStringUtils.secure().nextAlphanumeric(10);
 
-        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_ID_KEY)).isEqualTo("workspace-1");
-        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_NAME_KEY)).isEqualTo("workspace-1");
-        assertThat(attributes.get(ErrorMetricsResolver.ERROR_TYPE_KEY)).isEqualTo("IllegalStateException");
+        var attributes = ModelPriceServiceImpl.loadFailureAttributes(new IllegalStateException("down"),
+                Context.of(RequestContext.WORKSPACE_ID, workspaceId, RequestContext.WORKSPACE_NAME, ""));
+
+        assertThat(attributes).isEqualTo(Attributes.of(
+                ErrorMetricsResolver.WORKSPACE_ID_KEY, workspaceId,
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY, workspaceId,
+                ErrorMetricsResolver.ERROR_TYPE_KEY, "IllegalStateException"));
     }
 
     @Test
@@ -96,7 +108,9 @@ class ModelPriceServiceLayersTest {
         var attributes = ModelPriceServiceImpl.loadFailureAttributes(new IllegalStateException("down"),
                 Context.empty());
 
-        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_ID_KEY)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
-        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_NAME_KEY)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
+        assertThat(attributes).isEqualTo(Attributes.of(
+                ErrorMetricsResolver.WORKSPACE_ID_KEY, ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY, ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.ERROR_TYPE_KEY, "IllegalStateException"));
     }
 }

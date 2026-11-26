@@ -131,8 +131,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
-                // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
-                // internal retry nor the outer retry policy keeps hitting an exhausted key.
+                .maxRetries(llmProviderClientConfig.getJudgeMaxRetries())
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable so the judge's retries do not keep
+                // hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder(
                         ProviderHeadersHttpClient.builder(httpClientBuilders.builder(), config.headers())))
                 .logRequests(llmProviderClientConfig.getLogRequests())
@@ -177,7 +178,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 config,
                 LlmAsJudgeModelParameters.builder().name(PROXY_MODEL_NAME_PLACEHOLDER).build(),
                 strictJsonSchema,
-                extraBody)
+                extraBody,
+                null)
                 .build();
     }
 
@@ -188,7 +190,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                         OpenAiResponsesExtraBody.fromJudgeCustomParameters(modelParameters.customParameters()))
                 .build());
         var builder = newResponsesApiChatModelBuilder(config, modelParameters, false,
-                judgeRequest.customParameters());
+                judgeRequest.customParameters(), llmProviderClientConfig.getJudgeMaxRetries());
         // A judge sets its own response_format on every request, which wins over a model default, so of the moved
         // settings only these two can apply.
         Optional.ofNullable(judgeRequest.maxCompletionTokens()).ifPresent(builder::maxOutputTokens);
@@ -201,9 +203,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     private OpenAiOfficialResponsesChatModel.Builder newResponsesApiChatModelBuilder(
             LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema,
-            @Nullable Map<String, Object> extraBody) {
+            @Nullable Map<String, Object> extraBody, @Nullable Integer maxRetries) {
         var builder = OpenAiOfficialResponsesChatModel.builder()
-                .client(newResponsesApiClient(config, modelParameters.name(), extraBody, false))
+                .client(newResponsesApiClient(config, modelParameters.name(), extraBody, false, maxRetries))
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
@@ -222,7 +224,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config,
             boolean strictJsonSchema, @Nullable Map<String, Object> extraBody) {
         return OpenAiOfficialResponsesStreamingChatModel.builder()
-                .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody, true))
+                .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody, true, null))
                 .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
                 .strictJsonSchema(strictJsonSchema)
                 .build();
@@ -230,14 +232,15 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     // Built here, with the settings the langchain4j builder would pass to this same setup call, so that the extra
     // body can wrap the client; a builder given its own client ignores the connection settings.
+    // maxRetries null keeps the SDK's own default.
     OpenAIClient newResponsesApiClient(@NonNull LlmProviderClientApiConfig config, @NonNull String modelName,
-            @Nullable Map<String, Object> extraBody, boolean streaming) {
+            @Nullable Map<String, Object> extraBody, boolean streaming, @Nullable Integer maxRetries) {
         var baseUrl = customBaseUrl(config).orElse(null);
         var timeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .map(Duration::toJavaDuration)
                 .orElse(null);
         var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
-                false, modelName, timeout, null, null, config.headers())
+                false, modelName, timeout, maxRetries, null, config.headers())
                 .withOptions(options -> {
                     options.httpClient(responsesApiHttpClient);
                     // its request log prints every header value but a few known credentials

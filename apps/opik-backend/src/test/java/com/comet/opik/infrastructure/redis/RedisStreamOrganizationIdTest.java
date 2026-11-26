@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("The organization ID on stream messages, across producer versions")
 class RedisStreamOrganizationIdTest {
 
-    private static final String ORGANIZATION_ID = "organization-1";
+    private static final String ORGANIZATION_ID = UUID.randomUUID().toString();
     private static final PodamFactory PODAM = PodamFactoryUtils.newPodamFactory();
 
     private final ObjectMapper mapper = RedisStreamCodec.buildStreamMapper();

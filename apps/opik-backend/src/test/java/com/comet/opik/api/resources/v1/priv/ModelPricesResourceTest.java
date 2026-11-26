@@ -14,7 +14,11 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.cost.CostSource;
+import com.comet.opik.domain.cost.CustomModelPrice;
 import com.comet.opik.domain.cost.CustomModelPriceValidator;
+import com.comet.opik.domain.cost.ModelPriceHistoryAction;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.utils.JsonUtils;
@@ -36,10 +40,12 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +56,8 @@ import static org.assertj.core.api.Assertions.tuple;
 class ModelPricesResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/model-prices";
+    private static final String[] SERVER_SET_FIELDS = {"id", "createdAt", "createdBy", "lastUpdatedAt",
+            "lastUpdatedBy"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -85,6 +93,37 @@ class ModelPricesResourceTest {
         this.client = client;
 
         ClientSupportUtils.config(client);
+    }
+
+    private static CustomModelPriceRow listedFixed(String model, String provider, String inputPrice,
+            String outputPrice) {
+        return CustomModelPriceRow.builder()
+                .model(model)
+                .provider(provider)
+                .kind(CustomModelPrice.Kind.FIXED)
+                .inputPrice(inputPrice)
+                .outputPrice(outputPrice)
+                .build();
+    }
+
+    private static CustomModelPriceRow listedAlias(String model, String provider, String targetModel,
+            String targetProvider) {
+        return CustomModelPriceRow.builder()
+                .model(model)
+                .provider(provider)
+                .kind(CustomModelPrice.Kind.ALIAS)
+                .aliasOf(CustomModelPriceRow.AliasOf.builder().model(targetModel).provider(targetProvider).build())
+                .build();
+    }
+
+    private static CustomModelPriceHistoryPage.Entry.EntryBuilder historyEntry(long listVersion, UUID rowId,
+            ModelPriceHistoryAction action) {
+        return CustomModelPriceHistoryPage.Entry.builder()
+                .listVersion(listVersion)
+                .rowId(rowId)
+                .action(action)
+                .createdAt(Instant.EPOCH)
+                .createdBy(ProjectService.DEFAULT_USER);
     }
 
     private static ObjectNode fixed(String model, String provider, String inputPrice, String outputPrice) {
@@ -130,6 +169,11 @@ class ModelPricesResourceTest {
         }
     }
 
+    private static CustomModelPriceResolution.Line line(String name, String ratePerMillion, CostSource source) {
+        return CustomModelPriceResolution.Line.builder().name(name).ratePerMillion(ratePerMillion).source(source)
+                .build();
+    }
+
     private CustomModelPriceResolution resolve(String model, String provider, Map<String, Integer> usage) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI) + "/resolve")
                 .request()
@@ -147,22 +191,22 @@ class ModelPricesResourceTest {
         var result = replace(List.of(alias("aide-gpt-5-mini", "azure", "gpt-5-mini", "azure"),
                 fixed("gpt-5-mini", "azure", "1.00", "10.00")));
 
+        var expectedRows = List.of(listedAlias("aide-gpt-5-mini", "azure", "gpt-5-mini", "azure"),
+                listedFixed("gpt-5-mini", "azure", "1", "10"));
         assertThat(result.saved()).isTrue();
         assertThat(result.version()).isEqualTo(before + 1);
-        assertThat(result.created()).extracting(CustomModelPriceRow::model)
-                .containsExactlyInAnyOrder("aide-gpt-5-mini", "gpt-5-mini");
+        assertThat(result.created())
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SERVER_SET_FIELDS)
+                .containsExactlyInAnyOrderElementsOf(expectedRows);
         var list = find();
         assertThat(list.version()).isEqualTo(before + 1);
-        assertThat(list.rows()).hasSize(2).allSatisfy(row -> {
+        assertThat(list.rows())
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SERVER_SET_FIELDS)
+                .containsExactlyElementsOf(expectedRows);
+        assertThat(list.rows()).allSatisfy(row -> {
             assertThat(row.id()).isNotNull();
             assertThat(row.createdAt()).isNotNull();
         });
-        assertThat(list.rows()).filteredOn(row -> row.kind().equals("fixed")).singleElement()
-                .satisfies(row -> {
-                    assertThat(row.inputPrice()).isEqualTo("1");
-                    assertThat(row.outputPrice()).isEqualTo("10");
-                    assertThat(row.cacheReadPrice()).isNull();
-                });
     }
 
     @Test
@@ -193,10 +237,14 @@ class ModelPricesResourceTest {
 
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(result.saved()).isFalse();
-            assertThat(result.created()).extracting(CustomModelPriceRow::model).containsExactly("gpt-4.1");
+            assertThat(result.created())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SERVER_SET_FIELDS)
+                    .containsExactly(listedFixed("gpt-4.1", "openai", "1", "4"));
             assertThat(result.updated()).singleElement().satisfies(change -> {
-                assertThat(change.before().inputPrice()).isEqualTo("2");
-                assertThat(change.after().inputPrice()).isEqualTo("3");
+                assertThat(change.before()).usingRecursiveComparison().ignoringFields(SERVER_SET_FIELDS)
+                        .isEqualTo(listedFixed("gpt-4o", "openai", "2", "8"));
+                assertThat(change.after()).usingRecursiveComparison().ignoringFields(SERVER_SET_FIELDS)
+                        .isEqualTo(listedFixed("gpt-4o", "openai", "3", "8"));
             });
         }
         assertThat(find()).isEqualTo(before);
@@ -231,9 +279,9 @@ class ModelPricesResourceTest {
                     .extracting(CustomModelPriceValidator.Problem::row, CustomModelPriceValidator.Problem::field,
                             CustomModelPriceValidator.Problem::code)
                     .contains(
-                            tuple(0, "input_prise", "unknown_field"),
-                            tuple(1, "cache_read_price", "cache_price_not_positive"),
-                            tuple(2, "organization_id", "unknown_field"));
+                            tuple(0, "input_prise", CustomModelPriceValidator.Code.UNKNOWN_FIELD),
+                            tuple(1, "cache_read_price", CustomModelPriceValidator.Code.CACHE_PRICE_NOT_POSITIVE),
+                            tuple(2, "organization_id", CustomModelPriceValidator.Code.UNKNOWN_FIELD));
         }
         assertThat(find()).isEqualTo(before);
     }
@@ -243,6 +291,7 @@ class ModelPricesResourceTest {
         replace(List.of());
         replace(List.of(fixed("gpt-4o", "openai", "2.00", "8.00")));
         long version = replace(List.of(fixed("gpt-4o", "openai", "3.00", "8.00"))).version();
+        var rowId = find().rows().getFirst().id();
 
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI) + "/history")
                 .queryParam("size", 2)
@@ -251,19 +300,17 @@ class ModelPricesResourceTest {
             var history = response.readEntity(CustomModelPriceHistoryPage.class);
 
             assertThat(response.getStatus()).isEqualTo(200);
-            assertThat(history.content()).hasSize(2);
             assertThat(history.total()).isGreaterThanOrEqualTo(2);
-            assertThat(history.content().getFirst()).satisfies(entry -> {
-                assertThat(entry.listVersion()).isEqualTo(version);
-                assertThat(entry.action()).isEqualTo("updated");
-                assertThat(entry.before().inputPrice()).isEqualTo("2");
-                assertThat(entry.after().inputPrice()).isEqualTo("3");
-            });
-            assertThat(history.content().get(1)).satisfies(entry -> {
-                assertThat(entry.listVersion()).isEqualTo(version - 1);
-                assertThat(entry.action()).isEqualTo("created");
-                assertThat(entry.before()).isNull();
-            });
+            assertThat(history.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("createdAt")
+                    .containsExactly(
+                            historyEntry(version, rowId, ModelPriceHistoryAction.UPDATED)
+                                    .before(listedFixed("gpt-4o", "openai", "2", "8"))
+                                    .after(listedFixed("gpt-4o", "openai", "3", "8"))
+                                    .build(),
+                            historyEntry(version - 1, rowId, ModelPriceHistoryAction.CREATED)
+                                    .after(listedFixed("gpt-4o", "openai", "2", "8"))
+                                    .build());
         }
     }
 
@@ -331,15 +378,24 @@ class ModelPricesResourceTest {
         var resolution = resolve("aide-gpt-5-mini", "azure", Map.of("prompt_tokens", 1_000_000,
                 "prompt_tokens_details.cached_tokens", 500_000, "completion_tokens", 100_000));
 
-        assertThat(new BigDecimal(resolution.cost())).isEqualByComparingTo("1.5125");
-        assertThat(resolution.costSource()).isEqualTo("organization");
-        assertThat(resolution.listVersion()).isEqualTo(version);
-        assertThat(resolution.match().row().kind()).isEqualTo("alias");
-        assertThat(resolution.match().targetRow().model()).isEqualTo("gpt-5-mini");
-        assertThat(resolution.lines()).extracting(CustomModelPriceResolution.Line::name,
-                CustomModelPriceResolution.Line::source)
-                .contains(tuple("input", "organization"),
-                        tuple("cache_read", "built_in"));
+        assertThat(resolution).isEqualTo(CustomModelPriceResolution.builder()
+                .model("aide-gpt-5-mini")
+                .provider("azure")
+                .cost("1.5125")
+                .costSource(CostSource.ORGANIZATION)
+                .listVersion(version)
+                .match(CustomModelPriceResolution.Match.builder()
+                        .provider("azure")
+                        .nameForm("exact")
+                        .row(listedAlias("aide-gpt-5-mini", "azure", "gpt-5-mini", "azure"))
+                        .targetRow(listedFixed("gpt-5-mini", "azure", "1", "10"))
+                        .build())
+                .lines(List.of(
+                        line("input", "1", CostSource.ORGANIZATION),
+                        line("output", "10", CostSource.ORGANIZATION),
+                        line("cache_read", "0.025", CostSource.BUILT_IN),
+                        line("cache_write", "0", CostSource.NONE)))
+                .build());
     }
 
     @Test
@@ -350,7 +406,7 @@ class ModelPricesResourceTest {
         var resolution = resolve("gpt-5-mini", "openai", Map.of("prompt_tokens", 1000, "completion_tokens", 500));
 
         assertThat(new BigDecimal(resolution.cost())).isEqualByComparingTo("0.00125");
-        assertThat(resolution.costSource()).isEqualTo("built_in");
+        assertThat(resolution.costSource()).isEqualTo(CostSource.BUILT_IN);
         assertThat(resolution.match().row()).isNull();
     }
 }

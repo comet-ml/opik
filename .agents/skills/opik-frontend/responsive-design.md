@@ -3,6 +3,7 @@
 ## When to Add Phone Support
 
 Phone support is **NOT required by default**. Only add when:
+
 - Explicitly requested in Jira ticket
 - Working on onboarding features
 - Component already has phone support

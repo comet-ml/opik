@@ -3,6 +3,7 @@
 ## Bundle Optimization
 
 ### Lazy Load Heavy Components
+
 Use `React.lazy` for components not needed on initial render.
 
 ```tsx
@@ -26,6 +27,7 @@ function CodePanel({ code }: { code: string }) {
 ## Rendering Performance
 
 ### Animate SVG Wrappers
+
 Browsers don't hardware-accelerate CSS animations on SVG elements.
 
 ```tsx
@@ -41,6 +43,7 @@ Browsers don't hardware-accelerate CSS animations on SVG elements.
 ## Re-render Optimization
 
 ### Defer State Reads
+
 Don't subscribe to state only used in callbacks.
 
 ```tsx
@@ -65,6 +68,7 @@ function ShareButton({ id }: Props) {
 ```
 
 ### Extract Memoized Components
+
 Move expensive work after early returns.
 
 ```tsx
@@ -92,6 +96,7 @@ Note: If React Compiler is enabled, manual memoization isn't necessary.
 ## Data Fetching
 
 ### Don't refetch what the parent already has
+
 If a parent already holds an entity (typically from a list query), pass it down instead of having the child refetch by id. Keep the per-id fetch as a fallback for when the entity isn't in the list.
 
 ```tsx
@@ -117,6 +122,7 @@ const CompactLoadedPrompt = ({ promptId, prompt }: Props) => {
 **Why:** A list query already returns full `Prompt` objects with `latest_version`, `template_structure`, and `version_count`. Refetching by id costs an extra round-trip per loaded prompt and creates a cache slot duplicating the list's data. The `enabled` guard lets the child still fetch when used in a context that doesn't have the entity in scope.
 
 ### Don't narrow query invalidation past correctness
+
 After a mutation that has cross-entity side effects, invalidating the whole keyspace is sometimes the only correct option — narrowing it is a regression, not a cleanup.
 
 ```ts

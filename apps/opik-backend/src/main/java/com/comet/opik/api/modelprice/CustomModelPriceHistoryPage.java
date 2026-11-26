@@ -1,6 +1,7 @@
 package com.comet.opik.api.modelprice;
 
 import com.comet.opik.api.Page;
+import com.comet.opik.domain.cost.ModelPriceHistoryAction;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -24,8 +25,7 @@ public record CustomModelPriceHistoryPage(int page, int size, long total, @NonNu
     public record Entry(
             @Schema(description = "The list version this change produced") long listVersion,
             @NonNull UUID rowId,
-            @Schema(allowableValues = {
-                    "created", "updated", "deleted"}) @NonNull String action,
+            @NonNull ModelPriceHistoryAction action,
             @Schema(description = "The row before the change, in the shape the list returns; absent for a created row") @Nullable CustomModelPriceRow before,
             @Schema(description = "The row after the change, in the shape the list returns; absent for a deleted row") @Nullable CustomModelPriceRow after,
             @NonNull Instant createdAt,
