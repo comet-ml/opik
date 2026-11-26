@@ -151,8 +151,8 @@ class TopicVectorBackfiller {
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
         var first = workspaces.stream()
                 .filter(workspace -> !workspace.projects().isEmpty())
-                .map(workspace -> new Lane(workspace, Run.start(workspace.projects().stream()
-                        .sorted(order(vectors.getMaxTracesPerTick())).toList(), workspace.arrival()), false))
+                .map(workspace -> Lane.builder().workspace(workspace).run(Run.start(workspace.projects().stream()
+                        .sorted(order(vectors.getMaxTracesPerTick())).toList(), workspace.arrival())).build())
                 .toList();
         if (first.isEmpty()) {
             return Mono.just(TickResult.EMPTY);
@@ -170,6 +170,7 @@ class TopicVectorBackfiller {
     }
 
     /** A workspace's backfill in a phase, its run so far, and whether its progress is recorded. */
+    @Builder(toBuilder = true)
     private record Lane(@NonNull WorkspaceBackfill workspace, @NonNull Run run, boolean recorded) {
 
         boolean active() {
@@ -182,12 +183,11 @@ class TopicVectorBackfiller {
         return Flux.fromIterable(lanes)
                 .flatMapSequential(lane -> lane.active() && budget.hasTimeForRead(embedTimeout)
                         ? next(lane.workspace(), budget, lane.run()).flatMap(run -> {
-                            var after = new Lane(lane.workspace(), run, false);
+                            var after = lane.toBuilder().run(run).build();
                             // Its backfill ended this turn: recorded now, not after the other workspaces' turns.
                             return after.active()
                                     ? Mono.just(after)
-                                    : record(after).thenReturn(
-                                            new Lane(lane.workspace(), run, true));
+                                    : record(after).thenReturn(after.toBuilder().recorded(true).build());
                         })
                         : Mono.just(lane), config.getVectors().getEmbedConcurrency())
                 .collectList();

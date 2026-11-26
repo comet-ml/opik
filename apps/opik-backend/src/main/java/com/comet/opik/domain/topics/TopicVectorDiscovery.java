@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * The topic vectors backfill's project discovery: about once per {@code longWindowInterval} per workspace, the
@@ -182,10 +181,12 @@ class TopicVectorDiscovery {
                         : Mono.just(Optional.<Map<UUID, Long>>empty())))
                 .takeUntil(Optional::isEmpty)
                 .collectList()
-                .map(counts -> counts.stream().anyMatch(Optional::isEmpty)
-                        ? discovery
-                        : discovery.afterCounted(counts.stream().flatMap(count -> count.orElseThrow().entrySet()
-                                .stream()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))));
+                .flatMap(counts -> counts.stream().anyMatch(Optional::isEmpty)
+                        ? Mono.just(discovery)
+                        : Flux.fromIterable(counts).map(Optional::orElseThrow)
+                                .flatMapIterable(Map::entrySet)
+                                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                                .map(discovery::afterCounted));
     }
 
     private Mono<Void> save(String workspaceId, Discovery discovery, Duration interval) {
