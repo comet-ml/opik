@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -115,11 +116,16 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                             .prototypes(topic.groups().stream().map(group -> centre(centres, group)).toList())
                             .build())
                     .toList();
-            var topicPrototypes = topics.stream().flatMap(topic -> topic.prototypes().stream()).toList();
-            var owners = ownerOfEach(topics.stream().map(topic -> topic.prototypes().size()).toList());
             var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
-            var assigner = assigner(topicPrototypes, owners, otherPrototypes);
+            var assigner = assigner(topics, otherPrototypes);
+            var merges = TopicMerger.merges(vectors, assigner.assign(vectors), topics.size(),
+                    IntStream.range(0, topics.size()).toArray(), TopicEmbedding.DIMENSIONS, config.getMergeCosine());
+            if (!merges.isEmpty()) {
+                topics = merged(topics, merges);
+                assigner = assigner(topics, otherPrototypes);
+            }
             var finishStats = JsonUtils.createObjectNode();
+            finishStats.put("merged", merges.size());
             finishStats.put("other_groups", applied.other().size());
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
@@ -198,6 +204,24 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     private int authorExampleCount(int k) {
         return Math.min(config.getAuthorMaxExamples(), Math.max(config.getAuthorMinExamples(),
                 (int) Math.round((double) config.getAuthorBudget() / k)));
+    }
+
+    private PrototypeAssigner assigner(List<NewTopic> topics, List<float[]> otherPrototypes) {
+        return assigner(topics.stream().flatMap(topic -> topic.prototypes().stream()).toList(),
+                ownerOfEach(topics.stream().map(topic -> topic.prototypes().size()).toList()), otherPrototypes);
+    }
+
+    /** The topics after {@code merges}: a kept topic takes the prototypes of each one folded into it, in merge order. */
+    private static List<NewTopic> merged(List<NewTopic> topics, List<TopicMerger.Merge> merges) {
+        var prototypes = topics.stream().map(topic -> new ArrayList<>(topic.prototypes())).toList();
+        var gone = new boolean[topics.size()];
+        for (var merge : merges) {
+            prototypes.get(merge.kept()).addAll(prototypes.get(merge.absorbed()));
+            gone[merge.absorbed()] = true;
+        }
+        return IntStream.range(0, topics.size()).filter(t -> !gone[t])
+                .mapToObj(t -> topics.get(t).toBuilder().prototypes(List.copyOf(prototypes.get(t))).build())
+                .toList();
     }
 
     private PrototypeAssigner assigner(List<float[]> topicPrototypes, List<Integer> owners,
