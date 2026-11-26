@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.topics.TopicVectorWriter.ChunkWrite;
@@ -42,6 +44,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("topic vectors backfiller")
 class TopicVectorBackfillerTest {
 
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
     private final Instant now = TopicsTestClock.randomInstant();
 
     @Test
@@ -78,8 +82,8 @@ class TopicVectorBackfillerTest {
         var backfiller = new TopicVectorBackfiller(config, dao, backfills, mock(TopicVectorWriter.class),
                 mock(TopicVectorsMetrics.class));
         var clock = new TopicsTestClock(now);
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
         var newer = new Slice(now.minus(7, ChronoUnit.DAYS), null);
         var older = new Slice(now.minus(14, ChronoUnit.DAYS), now.minus(7, ChronoUnit.DAYS));
         when(dao.slices(any())).thenReturn(List.of(newer, older));
@@ -157,14 +161,14 @@ class TopicVectorBackfillerTest {
     void discoveriesPerTick() {
         var setup = new Setup();
         setup.slices(2);
-        var inProgress = UUID.randomUUID().toString();
+        var inProgress = ID_GENERATOR.generateId().toString();
         setup.readsTake(java.time.Duration.ofSeconds(5));
         // 11s: one of its four reads, then less than half is left.
         setup.backfiller.discover(List.of(inProgress), now, now, setup.budget(11)).block();
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
         setup.readsTake(java.time.Duration.ZERO);
         var fresh = IntStream.range(0, TopicVectorBackfiller.MAX_DISCOVERIES_PER_TICK)
-                .mapToObj(i -> UUID.randomUUID().toString()).toList();
+                .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
         var workspaces = new ArrayList<>(fresh);
         workspaces.add(inProgress);
 
@@ -290,7 +294,7 @@ class TopicVectorBackfillerTest {
         private final TopicVectorWriter writer = mock(TopicVectorWriter.class);
         private final TopicVectorsMetrics metrics = mock(TopicVectorsMetrics.class);
         private final TopicsTestClock clock = new TopicsTestClock(now);
-        private final String workspaceId = UUID.randomUUID().toString();
+        private final String workspaceId = ID_GENERATOR.generateId().toString();
         private final TopicsConfig config = new TopicsConfig();
         private final TopicVectorBackfiller backfiller;
         private java.time.Duration readTime = java.time.Duration.ZERO;
@@ -307,7 +311,7 @@ class TopicVectorBackfillerTest {
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
             when(dao.findBackfillProjects(any(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
                 clock.advance(readTime);
-                return Flux.just(new BackfillProject(UUID.randomUUID(), 1, now));
+                return Flux.just(new BackfillProject(ID_GENERATOR.generateId(), 1, now));
             });
             when(dao.countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
                 clock.advance(readTime);
@@ -340,14 +344,14 @@ class TopicVectorBackfillerTest {
     }
 
     private Candidate candidate(String workspaceId, UUID projectId) {
-        return Candidate.builder().workspaceId(workspaceId).projectId(projectId).traceId(UUID.randomUUID())
+        return Candidate.builder().workspaceId(workspaceId).projectId(projectId).traceId(ID_GENERATOR.generateId())
                 .traceCreatedAt(now).taskVersion(1).statusUpdatedAt(now).summary("summary").build();
     }
 
     private static TopicBackfill backfill(long remaining, Instant lastDoneAt) {
         return TopicBackfill.builder()
-                .workspaceId(UUID.randomUUID().toString())
-                .projectId(UUID.randomUUID())
+                .workspaceId(ID_GENERATOR.generateId().toString())
+                .projectId(ID_GENERATOR.generateId())
                 .backfillStartedAt(lastDoneAt)
                 .backfillLastDoneAt(lastDoneAt)
                 .backfillTracesTotal(remaining)
