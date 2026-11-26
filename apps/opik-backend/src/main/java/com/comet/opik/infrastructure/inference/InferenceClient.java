@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.InferenceConfig;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,7 +25,6 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.input.BoundedInputStream;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -48,7 +48,8 @@ import java.util.function.Function;
 /**
  * Client for the opik-inference v1 API: the batch endpoints, {@code /v1/embed}, {@code /v1/generate}, and the
  * synchronous {@link #decide} that guardrail checks use. Its retries mirror the Python client's: up to
- * {@code inference.retry.maxRetries}, backing off {@code baseBackoff} and doubling it, or honoring {@code Retry-After},
+ * {@code inference.retry.maxRetries}, backing off {@code baseBackoff} doubled per retry and jittered, or honoring
+ * {@code Retry-After},
  * except that a submit, embed or generate answered with {@code quota_exceeded} fails at once, so the caller can back
  * that one workspace off. What one call may carry is {@code inference.limits}.
  * <p>
@@ -308,7 +309,7 @@ public class InferenceClient {
             var left = Duration.between(Instant.now(), call.deadline());
             // A body that trickles in escapes the socket timeouts: this frees the caller at the deadline, and the
             // cancel closes the response.
-            return attempt(call, 0)
+            return attempt(call)
                     .timeout(left.isNegative() ? Duration.ZERO : left)
                     .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime())
                     // A socket timeout cut to the time left can beat the cut above by a moment: a failure at or past
@@ -318,37 +319,36 @@ public class InferenceClient {
         });
     }
 
-    private <T> Mono<T> attempt(Call<T> call, int attempt) {
+    private <T> Mono<T> attempt(Call<T> call) {
+        var retry = config.getRetry();
         return Mono.defer(() -> {
             var left = Duration.between(Instant.now(), call.deadline());
             // Under 1 ms is out of time: Jersey's timeouts are whole milliseconds, so the attempt would outlast it.
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
-        }).onErrorResume(InferenceException.class, exception -> {
-            var retry = config.getRetry();
-            if (attempt >= retry.getMaxRetries() || !exception.isRetryable()
-                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
-                    || (call.failFastOnSchemaViolation() && exception.isSchemaViolation())
-                    || (call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded())) {
-                return Mono.error(exception);
-            }
-            var backoff = exception.getRetryAfter() != null
-                    ? exception.getRetryAfter()
-                    : retry.getBaseBackoff().toJavaDuration().multipliedBy(1L << attempt);
-            if (!Instant.now().plus(backoff).isBefore(call.deadline())) {
-                return Mono.error(exception);
-            }
-            // DEBUG: a retry that recovers is routine, and the caller logs a call that fails for good.
-            log.debug("Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
-                    call.method(), call.path(), exception.getCode(), exception.getHttpStatus(), attempt + 1);
-            return Mono.delay(backoff).then(Mono.defer(() -> attempt(call, attempt + 1)));
-        });
+        }).retryWhen(RetryUtils.untilDeadline(retry.getMaxRetries(), retry.getBaseBackoff().toJavaDuration(),
+                call.deadline(),
+                failure -> failure instanceof InferenceException exception && isRetried(call, exception),
+                failure -> failure instanceof InferenceException exception ? exception.getRetryAfter() : null,
+                (failure, attempt) -> {
+                    var exception = (InferenceException) failure;
+                    // DEBUG: a retry that recovers is routine, and the caller logs a call that fails for good.
+                    log.debug(
+                            "Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
+                            call.method(), call.path(), exception.getCode(), exception.getHttpStatus(), attempt);
+                }));
+    }
+
+    /** A failure the call may retry: the service marked it so, and no fail-fast rule of the call matches it. */
+    private static boolean isRetried(Call<?> call, InferenceException exception) {
+        return exception.isRetryable()
+                && !(call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                && !(call.failFastOnSchemaViolation() && exception.isSchemaViolation())
+                && !(call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded());
     }
 
     private <T> Mono<T> send(Call<T> call, Duration left) {
-        Preconditions.checkState(StringUtils.isNotBlank(config.getUrl()),
-                "inference.url must be set to call opik-inference");
-        Preconditions.checkState(StringUtils.isNotBlank(config.getCredential()),
-                "inference.credential must be set to call opik-inference");
+        Preconditions.checkState(config.isConfigured(),
+                "inference.url and inference.credential must be set to call opik-inference");
         var pool = call.pool();
         if (pool != null && !pool.permits().tryAcquire()) {
             return Mono.error(InferenceException.clientBusy());
@@ -383,22 +383,28 @@ public class InferenceClient {
                         // Cancelled before the response arrived: the read below then fails at once.
                         closeQuietly(response);
                     }
-                    T value;
+                    // The slot is given back only once the result is delivered: the thread is busy until then.
                     try {
-                        value = read(call, response);
-                    } catch (RuntimeException exception) {
-                        sink.error(exception);
-                        return;
+                        T value;
+                        try {
+                            value = read(call, response);
+                        } catch (RuntimeException exception) {
+                            sink.error(exception);
+                            return;
+                        }
+                        sink.success(value);
                     } finally {
                         release.run();
                     }
-                    sink.success(value);
                 }
 
                 @Override
                 public void failed(Throwable throwable) {
-                    release.run();
-                    sink.error(InferenceException.transport(throwable));
+                    try {
+                        sink.error(InferenceException.transport(throwable));
+                    } finally {
+                        release.run();
+                    }
                 }
             };
             try {

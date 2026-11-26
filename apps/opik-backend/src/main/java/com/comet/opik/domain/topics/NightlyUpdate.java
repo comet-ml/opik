@@ -290,47 +290,70 @@ class NightlyUpdate {
         for (boolean r : recent) {
             recentTotal += r ? 1 : 0;
         }
-        var out = new ArrayList<LiveTopic>();
-        for (int t : state.live()) {
-            var topic = state.topic(t);
-            int recentCount = 0;
-            var members = new ArrayList<Integer>();
-            for (int i = 0; i < n; i++) {
-                if (before[i] == t) {
-                    members.add(i);
-                    recentCount += recent[i] ? 1 : 0;
-                }
+        // One pass over the window buckets each live topic's members, in trace order.
+        var live = state.live();
+        var slot = new int[state.getTopics().size()];
+        Arrays.fill(slot, -1);
+        for (int k = 0; k < live.length; k++) {
+            slot[live[k]] = k;
+        }
+        var counts = new int[live.length];
+        var recentCounts = new int[live.length];
+        for (int i = 0; i < n; i++) {
+            int k = before[i] >= 0 && before[i] < slot.length ? slot[before[i]] : -1;
+            if (k >= 0) {
+                counts[k]++;
+                recentCounts[k] += recent[i] ? 1 : 0;
             }
-            int count = members.size();
+        }
+        var members = new int[live.length][];
+        for (int k = 0; k < live.length; k++) {
+            members[k] = new int[counts[k]];
+        }
+        var filled = new int[live.length];
+        for (int i = 0; i < n; i++) {
+            int k = before[i] >= 0 && before[i] < slot.length ? slot[before[i]] : -1;
+            if (k >= 0) {
+                members[k][filled[k]++] = i;
+            }
+        }
+        var out = new ArrayList<LiveTopic>(live.length);
+        for (int k = 0; k < live.length; k++) {
+            var topic = state.topic(live[k]);
             out.add(LiveTopic.builder()
-                    .topic(t)
+                    .topic(live[k])
                     .name(topic.getName())
                     .definition(topic.getDefinition())
-                    .share((double) count / n)
-                    .recentShare((double) recentCount / Math.max(1, recentTotal))
-                    .examples(examples(window, members.stream().mapToInt(Integer::intValue).toArray(),
-                            topic.getPrototypes(), examples))
+                    .share((double) counts[k] / n)
+                    .recentShare((double) recentCounts[k] / Math.max(1, recentTotal))
+                    .examples(examples(window, members[k], topic.getPrototypes(), examples))
                     .build());
         }
         return out;
     }
 
-    /** A topic's {@code examples} prompt texts among its member traces, picked as a group's. */
+    /**
+     * A topic's {@code examples} prompt texts among its member traces, picked as a group's: the texts, counts and first
+     * members of {@link IntentMerger#group}, so no vector is copied. Each text's nearness reads its first member's row
+     * in the window.
+     */
     private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes, int examples) {
         if (members.length == 0) {
             return List.of();
         }
         int d = window.dimensions();
-        var merged = IntentMerger.merge(window.texts(members), window.rows(members), d);
-        var sims = new double[merged.size()];
+        var groups = IntentMerger.group(window.texts(members));
+        var first = groups.firstIndex();
+        var sims = new double[groups.size()];
         for (int u = 0; u < sims.length; u++) {
+            int row = members[first[u]] * d;
             sims[u] = Double.NEGATIVE_INFINITY;
             for (var prototype : prototypes) {
-                sims[u] = Math.max(sims[u], VectorMath.dot(merged.vectors(), u * d, prototype, 0, d));
+                sims[u] = Math.max(sims[u], VectorMath.dot(window.vectors(), row, prototype, 0, d));
             }
         }
-        return GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0, merged.size(),
-                merged.weights(), sims, examples, examples);
+        return GroupSummaries.pick(groups.texts(), first, IntStream.range(0, groups.size()).toArray(), 0,
+                groups.size(), groups.weights(), sims, examples, examples);
     }
 
     /**

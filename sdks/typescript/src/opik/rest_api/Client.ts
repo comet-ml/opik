@@ -5,6 +5,7 @@ import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client
 import { AgentInsightsEnrollmentClient } from "./api/resources/agentInsightsEnrollment/client/Client.js";
 import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
+import { AnalyticsQueriesClient } from "./api/resources/analyticsQueries/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
 import { AssertionResultsClient } from "./api/resources/assertionResults/client/Client.js";
 import { AttachmentsClient } from "./api/resources/attachments/client/Client.js";
@@ -67,11 +68,13 @@ export class OpikApiClient {
     protected _agentInsightsEnrollment: AgentInsightsEnrollmentClient | undefined;
     protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
     protected _dashboardSavedQueries: DashboardSavedQueriesClient | undefined;
+    protected _topics: TopicsClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
     protected _agentInsights: AgentInsightsClient | undefined;
     protected _alerts: AlertsClient | undefined;
+    protected _analyticsQueries: AnalyticsQueriesClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
     protected _assertionResults: AssertionResultsClient | undefined;
     protected _attachments: AttachmentsClient | undefined;
@@ -103,7 +106,6 @@ export class OpikApiClient {
     protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
     protected _spans: SpansClient | undefined;
-    protected _topics: TopicsClient | undefined;
     protected _traces: TracesClient | undefined;
     protected _views: ViewsClient | undefined;
     protected _welcomeWizard: WelcomeWizardClient | undefined;
@@ -131,6 +133,10 @@ export class OpikApiClient {
         return (this._dashboardSavedQueries ??= new DashboardSavedQueriesClient(this._options));
     }
 
+    public get topics(): TopicsClient {
+        return (this._topics ??= new TopicsClient(this._options));
+    }
+
     public get systemUsage(): SystemUsageClient {
         return (this._systemUsage ??= new SystemUsageClient(this._options));
     }
@@ -149,6 +155,10 @@ export class OpikApiClient {
 
     public get alerts(): AlertsClient {
         return (this._alerts ??= new AlertsClient(this._options));
+    }
+
+    public get analyticsQueries(): AnalyticsQueriesClient {
+        return (this._analyticsQueries ??= new AnalyticsQueriesClient(this._options));
     }
 
     public get annotationQueues(): AnnotationQueuesClient {
@@ -273,10 +283,6 @@ export class OpikApiClient {
 
     public get spans(): SpansClient {
         return (this._spans ??= new SpansClient(this._options));
-    }
-
-    public get topics(): TopicsClient {
-        return (this._topics ??= new TopicsClient(this._options));
     }
 
     public get traces(): TracesClient {

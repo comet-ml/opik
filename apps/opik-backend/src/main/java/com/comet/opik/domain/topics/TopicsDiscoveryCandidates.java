@@ -83,10 +83,7 @@ class TopicsDiscoveryCandidates {
     Mono<Long> windowVectors(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
         return windowDAO.countByProject(workspaceId, Set.of(projectId), windowFrom(night), windowTo(night),
                 countSeconds())
-                .filter(count -> count.projectId().equals(projectId))
-                .map(TopicWindowDAO.ProjectCount::traces)
-                .next()
-                .defaultIfEmpty(0L);
+                .map(counts -> counts.get(projectId));
     }
 
     /** The project's row as the planner reads it, empty when a discovery run cannot be queued for it. */
@@ -190,13 +187,7 @@ class TopicsDiscoveryCandidates {
 
     /** Every project of {@code projectIds}, 0 when it has no vector in the window. */
     private Mono<Map<UUID, Long>> countAll(String workspaceId, List<UUID> projectIds, Instant from, Instant to) {
-        return windowDAO.countByProject(workspaceId, projectIds, from, to, countSeconds())
-                .collectMap(TopicWindowDAO.ProjectCount::projectId, TopicWindowDAO.ProjectCount::traces,
-                        LinkedHashMap::new)
-                .map(counts -> {
-                    projectIds.forEach(projectId -> counts.putIfAbsent(projectId, 0L));
-                    return counts;
-                });
+        return windowDAO.countByProject(workspaceId, projectIds, from, to, countSeconds());
     }
 
     /** One item of each list in turn, in the lists' order; a shorter list drops out when it runs out. */

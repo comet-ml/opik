@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { NATIVE_UNDO_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 
 type ScoreNameTitleProps = {
   name: string;
@@ -39,6 +40,7 @@ const ScoreNameTitle: React.FC<ScoreNameTitleProps> = ({
           }
         }}
         aria-label="Score name"
+        {...{ [NATIVE_UNDO_ATTRIBUTE]: "" }}
         className="comet-body-xs h-6 min-w-0 flex-1 rounded border border-primary bg-background px-1.5 text-foreground outline-none"
       />
     );

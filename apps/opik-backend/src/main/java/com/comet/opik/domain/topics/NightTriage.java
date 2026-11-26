@@ -68,12 +68,13 @@ final class NightTriage {
     }
 
     /**
-     * Whether the project's last {@code failures} runs or more failed in a row, the latest started at or after
-     * {@code since}. A run whose pod died counts once the planner's reconciler records it {@code abandoned}, which each
-     * plan does before its night pass.
+     * Whether the project's last {@code failures} discovery runs or updates or more failed in a row, the latest at or
+     * after {@code since}. A labelling pass changes neither. A run whose pod died counts once the planner's reconciler
+     * records it {@code abandoned}, which each plan does before its night pass. With no {@code last_failed_at} the
+     * project is not paused.
      */
     private static boolean paused(TopicProject row, int failures, Instant since) {
-        return row.failedRuns() >= failures && row.runStartedAt() != null && !row.runStartedAt().isBefore(since);
+        return row.failedRuns() >= failures && row.lastFailedAt() != null && !row.lastFailedAt().isBefore(since);
     }
 
     /** Whether the saved list's window already ends at or after {@code windowTo}: the night would count it twice. */

@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -129,6 +130,8 @@ class TopicsRunsIntegrationTest {
     private TransactionTemplate template;
     private TopicsRunPlanner planner;
     private TopicRunStore store;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
     private TopicsTestData data;
     private ProjectResourceClient projects;
 
@@ -138,8 +141,10 @@ class TopicsRunsIntegrationTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
             @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicsNightPass nightPass,
-            ClientSupport client) {
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm, ClientSupport client) {
         this.nightPass = nightPass;
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         ClientSupportUtils.config(client);
         this.projects = new ProjectResourceClient(client, TestUtils.getBaseUrl(client),
                 PodamFactoryUtils.newPodamFactory());
@@ -205,6 +210,7 @@ class TopicsRunsIntegrationTest {
                 .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
+        data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, built, buildRun, tomorrowStart());
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
         }
@@ -486,6 +492,7 @@ class TopicsRunsIntegrationTest {
         // One topic whose only vector is far from every trace: no trace tonight, so it retires.
         // A list of the night before the update's: a pod skips an update whose night the list already covers.
         data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
+        var listRows = insertListRows(workspaceId, projectId);
         store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
 
@@ -498,7 +505,7 @@ class TopicsRunsIntegrationTest {
         assertThat(project.listRunId()).isNull();
         assertThat(project.savedRuns()).isEqualTo(2);
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
+        assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(listRows);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
         assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
@@ -619,6 +626,29 @@ class TopicsRunsIntegrationTest {
     /** The planner's window end: tomorrow (UTC). */
     private static LocalDate tomorrow() {
         return LocalDate.now(ZoneOffset.UTC).plusDays(1);
+    }
+
+    /**
+     * The rows the saved list's run left: every trace seeded for {@link #tomorrowStart()} on the list's first topic,
+     * as that run's.
+     */
+    private List<TraceTopic> insertListRows(String workspaceId, UUID projectId) {
+        var listRunId = data.topicProject(projectId).listRunId();
+        var topicId = data.topics(projectId).getFirst().id();
+        var shift = Duration.between(FIXTURE.night, tomorrowStart());
+        var rows = IntStream.range(0, FIXTURE.size())
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(FIXTURE.traceIds.get(i))
+                        .traceCreatedAt(FIXTURE.createdAt.get(i).plus(shift))
+                        .topicId(topicId)
+                        .source(TraceTopic.Source.RUN)
+                        .runId(listRunId)
+                        .build())
+                .toList();
+        store.insertTraceTopics(new TopicsMetrics.Workspace(workspaceId, workspaceId), rows).block();
+        return rows;
     }
 
     private static Instant tomorrowStart() {

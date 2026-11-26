@@ -268,6 +268,25 @@ class InferenceClientDecideTest {
     }
 
     @Test
+    void callHoldsItsSlotUntilItsAnswerIsDelivered() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
+        var singleSlotConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
+        singleSlotConfig.getInference().setMaxConcurrentDecides(1);
+        var singleSlot = newClient(TestHttpClientUtils.client(), singleSlotConfig);
+
+        // A call made while the first answer is still being delivered, on the slot's one thread, finds the slot taken.
+        // Had the first given it back before delivering, the second would queue behind that thread and run out of time.
+        var second = singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5))
+                .map(first -> singleSlot.decide(request(noulQuestion()), Instant.now().plusMillis(500))
+                        .map(response -> "answered")
+                        .onErrorResume(InferenceException.class, exception -> Mono.just(exception.getCode()))
+                        .block())
+                .block();
+
+        assertThat(second).isEqualTo(InferenceException.CLIENT_BUSY);
+    }
+
+    @Test
     void callOverTheCapRetriesThenFailsWithoutReachingTheService() {
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(1_000)));
         var cappedConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());

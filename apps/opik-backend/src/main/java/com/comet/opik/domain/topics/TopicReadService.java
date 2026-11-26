@@ -1,16 +1,22 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -125,10 +131,40 @@ public class TopicReadService {
             @NonNull Instant to) {
         var read = config.getRead();
         return windowDAO.countByProject(workspaceId, Set.of(projectId), from, to, read, read.getBudget().toSeconds())
-                .next()
-                .map(TopicWindowDAO.ProjectCount::traces)
-                .defaultIfEmpty(0L)
+                .map(counts -> counts.get(projectId))
                 .timeout(clientTimeout());
+    }
+
+    /**
+     * The scope of a trace query filtered by topic. Empty, with no read, without a {@code topic_id} filter. Also empty
+     * when the filter can match no trace: topics off, a workspace not opted in to topics or to ai-labels or listed
+     * below the {@code ui} stage, a project with no live topic. Reads MySQL at most twice on a bounded elastic thread,
+     * with the workspace id from the Reactor context.
+     */
+    public Mono<TopicFilterScope> filterScope(@Nullable List<? extends Filter> filters, @NonNull UUID projectId) {
+        if (filters == null || FilterQueryBuilder.hasField(filters, TraceField.TOPIC_ID).isEmpty()) {
+            return Mono.empty();
+        }
+        return Mono.deferContextual(ctx -> Mono.fromCallable(
+                () -> readFilterScope(ctx.get(RequestContext.WORKSPACE_ID), projectId))
+                .subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(Mono::justOrEmpty);
+    }
+
+    private Optional<TopicFilterScope> readFilterScope(String workspaceId, UUID projectId) {
+        if (!workspaces.reaches(workspaceId, TopicsStage.UI)) {
+            return Optional.empty();
+        }
+        var live = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findByProject(workspaceId, projectId));
+        if (live.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(TopicFilterScope.builder()
+                .liveIds(live.stream().map(Topic::id).toList())
+                .maxExecutionSeconds(config.getFilter().getMaxExecutionTime().toSeconds())
+                .maxMemoryUsage(config.getFilter().getMaxMemoryUsage())
+                .build());
     }
 
     private ProjectTopics read(String workspaceId, UUID projectId) {

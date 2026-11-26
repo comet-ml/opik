@@ -55,6 +55,19 @@ class TestWriteFile:
         assert "+++ b/" in diff
         assert "@@" in diff
 
+    def test_write_file__nested_existing_file__diff_headers_use_forward_slashes(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src" / "pkg").mkdir(parents=True)
+        (tmp_path / "src" / "pkg" / "code.py").write_text("a\n")
+        handler = self._handler(tmp_path)
+        result = handler.execute(
+            {"path": "src/pkg/code.py", "content": "b\n"}, timeout=30.0
+        )
+        diff = result["diff"]
+        assert diff.startswith("--- a/src/pkg/code.py\n")
+        assert "+++ b/src/pkg/code.py\n" in diff
+
     def test_write_file__path_traversal__raises_error(self, tmp_path: Path) -> None:
         handler = self._handler(tmp_path)
         with pytest.raises(CommandError) as exc_info:

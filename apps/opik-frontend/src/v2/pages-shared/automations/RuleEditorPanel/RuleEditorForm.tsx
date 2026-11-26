@@ -23,9 +23,10 @@ import FilteringSamplingCard from "@/v2/pages-shared/automations/RuleEditorPanel
 import ScoreConfigurationCard from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreConfigurationCard";
 import CostLimitField from "@/v2/pages-shared/automations/RuleEditorPanel/CostLimitField";
 import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelPromptField";
-import DecisionModelQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsCard";
+import DecisionModelQuestionsField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsField";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
+import { UNDO_SCOPE_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
@@ -60,6 +61,12 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     form,
     changeScope,
     applyTemplate,
+    startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
+    showContent,
+    clearHistory,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -82,6 +89,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   );
 
   const handleSubmit = useCallback(async () => {
+    clearHistory();
     prepareForSubmit();
     await form.handleSubmit(() => {
       const { scope, triggerScope, projectIds, enabled } = form.getValues();
@@ -107,7 +115,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
           },
         },
       );
-    })();
+    }, showContent)();
   }, [
     rule,
     isEdit,
@@ -119,19 +127,33 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     showRuleCreatedToast,
     onRuleCreated,
     onClose,
+    showContent,
+    clearHistory,
   ]);
+
+  const templateActions = {
+    applyTemplate,
+    startBlank,
+    isPickingTemplate,
+    openTemplates,
+    openContent,
+  };
 
   const isLLMJudge = ruleType === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const isDecisionModelRule =
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
+  const hasPrompt = form.watch("llmJudgeDetails.messages").length > 0;
   const isCodeBlocked =
     ruleType === UI_EVALUATORS_RULE_TYPE.python_code &&
     !isPythonEvaluatorEnabled;
 
   return (
     <Form {...form}>
-      <div className="flex size-full flex-col">
+      <div
+        className="flex size-full flex-col"
+        {...{ [UNDO_SCOPE_ATTRIBUTE]: "" }}
+      >
         <div className="min-h-0 flex-1 px-5">
           <ResizablePanelGroup
             direction="horizontal"
@@ -144,16 +166,15 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   {isLLMJudge && (
                     <JudgePromptField
                       form={form}
-                      onSelectTemplate={applyTemplate}
+                      templateActions={templateActions}
                       mergeInfo={promptMergeInfo}
                       datasetColumnNames={datasetColumnNames}
                     />
                   )}
                   {isDecisionModelRule && (
-                    <DecisionModelPromptField
+                    <DecisionModelQuestionsField
                       form={form}
-                      onSelectTemplate={applyTemplate}
-                      datasetColumnNames={datasetColumnNames}
+                      templateActions={templateActions}
                     />
                   )}
                   {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
@@ -181,8 +202,11 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
                   {isLLMJudge && <ScoreConfigurationCard form={form} />}
-                  {isDecisionModelRule && (
-                    <DecisionModelQuestionsCard form={form} />
+                  {isDecisionModelRule && hasPrompt && (
+                    <DecisionModelPromptField
+                      form={form}
+                      datasetColumnNames={datasetColumnNames}
+                    />
                   )}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>

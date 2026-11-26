@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -200,6 +201,8 @@ class TopicsNightPass implements Managed {
     /** Within the budget: the cheap skips first, then the counts and queues while slots are free. */
     private Mono<Integer> decide(TopicsNight night, Collection<String> workspaceIds, Instant now, Instant budgetEnd,
             int free, Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+        // The plan's clock starts before its read, so the read's time counts against the budget too.
+        long began = System.nanoTime();
         return jdbi(() -> {
             var read = due(night, workspaceIds);
             read.failed().forEach((workspaceId, error) -> log.error("Topics night '{}' could not read workspace '{}'; "
@@ -214,16 +217,16 @@ class TopicsNightPass implements Managed {
                     if (free <= 0 || due.isEmpty()) {
                         return Mono.just(0);
                     }
-                    // A plan stops counting after topics.runs.planBudget, and none counts past the budget.
+                    // A plan stops counting and queueing after topics.runs.planBudget, and none goes past the budget.
                     var planEnd = now.plus(config.getRuns().getPlanBudget().toJavaDuration());
                     var stopAt = planEnd.isBefore(budgetEnd) ? planEnd : budgetEnd;
-                    long began = System.nanoTime();
+                    BooleanSupplier inTime = () -> now.plusNanos(System.nanoTime() - began).isBefore(stopAt);
                     var byWorkspace = due.stream().collect(Collectors.groupingBy(
                             NightTriage.NightCandidate::workspaceId, LinkedHashMap::new,
                             Collectors.mapping(NightTriage.NightCandidate::projectId, Collectors.toList())));
                     // One count per workspace; a workspace not counted in time waits for a later plan.
                     return Flux.fromIterable(byWorkspace.entrySet())
-                            .takeWhile(workspace -> now.plusNanos(System.nanoTime() - began).isBefore(stopAt))
+                            .takeWhile(workspace -> inTime.getAsBoolean())
                             .concatMap(workspace -> candidates
                                     .windowVectors(workspace.getKey(), workspace.getValue(), night.date())
                                     .map(counts -> Map.entry(workspace.getKey(), counts)))
@@ -232,7 +235,7 @@ class TopicsNightPass implements Managed {
                                     .filter(candidate -> counts.containsKey(candidate.workspaceId()))
                                     .concatMap(candidate -> decideOne(candidate,
                                             counts.get(candidate.workspaceId()).get(candidate.projectId()), night,
-                                            queue))
+                                            inTime, queue))
                                     .filter(Boolean::booleanValue)
                                     .take(free)
                                     .count())
@@ -252,7 +255,7 @@ class TopicsNightPass implements Managed {
      */
     private NightRead due(TopicsNight night, Collection<String> workspaceIds) {
         var rows = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date()));
+                handle -> handle.attach(TopicProjectDAO.class).findNightDue(workspaceIds, night.date(), night.start()));
         var existing = new HashSet<TopicProjectKey>();
         var failed = new HashMap<String, RuntimeException>();
         rows.stream().collect(Collectors.groupingBy(TopicProject::workspaceId,
@@ -272,9 +275,13 @@ class TopicsNightPass implements Managed {
                 failed);
     }
 
-    /** Decides on the project with its window count, null when its count failed; true when it queued it. */
+    /**
+     * Decides on the project with its window count, null when its count failed; true when it queued it. Past the plan's
+     * time ({@code inTime} false) it queues nothing and records nothing: a later plan decides it, or the night's end
+     * records it not reached.
+     */
     private Mono<Boolean> decideOne(NightTriage.NightCandidate candidate, Long vectors, TopicsNight night,
-            Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+            BooleanSupplier inTime, Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         var key = new TopicProjectKey(candidate.workspaceId(), candidate.projectId());
         if (vectors == null) {
             return jdbi(() -> {
@@ -287,6 +294,9 @@ class TopicsNightPass implements Managed {
                 record(night, List.of(key), NightDecision.SKIP, NightSkipReason.SMALL);
                 return false;
             });
+        }
+        if (!inTime.getAsBoolean()) {
+            return Mono.just(false);
         }
         return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(candidate.workspaceId())
                 .projectId(candidate.projectId()).mode(RunMode.UPDATE).night(night.date()).windowTraces(vectors)
@@ -308,29 +318,31 @@ class TopicsNightPass implements Managed {
 
     /**
      * After the budget: records the projects with a list the night did not look at as not reached (once per night,
-     * whichever plan writes it). The plan that takes the night's end key then counts the night finished and logs it,
-     * once; a Redis error is logged and the next plan tries again.
+     * whichever plan writes it). Each such plan reads the night's counts; the one that takes the night's end key then
+     * counts the night finished and logs it, once. A failed read or a Redis error leaves the key for the next plan.
      */
     private Mono<Void> end(TopicsNight night, Collection<String> workspaceIds, Instant now) {
         var endKey = new LockService.Lock("topics:nightly:end:" + night.date());
         return jdbi(() -> {
             var left = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                    .findNotReached(workspaceIds, night.date()));
+                    .findNotReached(workspaceIds, night.date(), night.start()));
             if (!left.isEmpty()) {
                 record(night, left, NightDecision.NOT_REACHED, null);
             }
             return night;
         })
+                // Counted before the key: a failed count leaves the key free for the next plan.
+                .then(jdbi(() -> template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(TopicProjectDAO.class).countNight(workspaceIds, night.date(),
+                                night.start()))))
                 // The key outlives every plan of the night: no later plan sees this night as current.
-                .then(Mono.defer(() -> lockService.lockUsingToken(endKey, Duration.between(now, night.currentUntil())))
+                .filterWhen(counts -> Mono
+                        .defer(() -> lockService.lockUsingToken(endKey, Duration.between(now, night.currentUntil())))
                         .onErrorResume(error -> {
                             log.warn("Topics night '{}' could not take its end key '{}'; the next plan tries again",
                                     night.date(), endKey.key(), error);
                             return Mono.just(false);
                         }))
-                .filter(Boolean::booleanValue)
-                .flatMap(__ -> jdbi(() -> template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(TopicProjectDAO.class).countNight(workspaceIds, night.date()))))
                 .doOnNext(counts -> {
                     metrics.night(NightOutcome.FINISHED, 1);
                     log.info("Topics night '{}' ended, started '{}', projects looked at '{}', not reached '{}'",
@@ -340,8 +352,8 @@ class TopicsNightPass implements Managed {
     }
 
     /**
-     * Counts, logs and writes one decision on several projects: one log line and one write per workspace. A write that
-     * fails is logged and the pass goes on: a later plan of the night decides those projects again.
+     * Logs, writes and counts one decision on several projects: one log line and one write per workspace. A write that
+     * fails is logged and not counted, and the pass goes on: a later plan of the night decides those projects again.
      */
     private void record(TopicsNight night, Collection<TopicProjectKey> keys, NightDecision decision,
             NightSkipReason reason) {
@@ -351,7 +363,6 @@ class TopicsNightPass implements Managed {
                     var reasonValue = reason == null ? null : reason.getValue();
                     log.info("Topics night '{}' decided, workspace '{}', projects '{}', decision '{}', reason '{}'",
                             night.date(), workspaceId, projectIds, decision.getValue(), reasonValue);
-                    metrics.nightlyDecision(workspace(workspaceId), decision, reason, projectIds.size());
                     try {
                         template.inTransaction(WRITE, handle -> {
                             var dao = handle.attach(TopicProjectDAO.class);
@@ -359,6 +370,8 @@ class TopicsNightPass implements Managed {
                                     ? dao.markNotReached(workspaceId, projectIds, night.date())
                                     : dao.markLooked(workspaceId, projectIds, night.date());
                         });
+                        // Counted once written: a project whose write failed is decided again by a later plan.
+                        metrics.nightlyDecision(workspace(workspaceId), decision, reason, projectIds.size());
                     } catch (RuntimeException exception) {
                         log.warn("Topics night '{}' could not write its decision '{}', workspace '{}'", night.date(),
                                 decision.getValue(), workspaceId, exception);

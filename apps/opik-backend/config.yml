@@ -578,8 +578,9 @@ authentication:
   requestRetryMaxBackoff: ${AUTH_REQUEST_RETRY_MAX_BACKOFF:-1s}
   # Default: 10m
   # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
-  #   Used for organization settings such as custom model prices. A workspace moved to another organization picks
-  #   up the new one within this time. Between 1m and 60m.
+  #   Used for organization settings such as custom model prices. After this time, requests still get the old
+  #   answer at once while Comet is asked again in the background, so a workspace moved to another organization
+  #   picks up the new one shortly after this time. Between 1m and 60m.
   organizationCacheTTL: ${AUTH_ORGANIZATION_CACHE_TTL:-10m}
   # Default: 60m
   # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
@@ -588,8 +589,10 @@ authentication:
   organizationCacheStaleTTL: ${AUTH_ORGANIZATION_CACHE_STALE_TTL:-60m}
   # Default: 30s
   # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
-  #   Each attempt already retries per requestMaxRetries with backoff, so this is the pause between those rounds:
-  #   shorter notices recovery sooner but sends more calls to a failing Comet. Between 1s and 5m.
+  #   When Comet itself fails (a 5xx, or no answer in time), a workspace with no known organization gets none for
+  #   this time, without asking Comet. Each attempt already retries per requestMaxRetries with backoff, so this is
+  #   the pause between those rounds: shorter notices recovery sooner but sends more calls to a failing Comet.
+  #   Between 1s and 5m; a value above organizationCacheStaleTTL is capped at it.
   organizationCacheRetryAfterFailure: ${AUTH_ORGANIZATION_CACHE_RETRY_AFTER_FAILURE:-30s}
 
 # Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)
@@ -2648,6 +2651,10 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 5s
+    #  Description: The most deadline_ms a realtime-lane decide call sends (the service's
+    #  decide_realtime_max_deadline_ms). inference.realtime.decideDeadline must not be above it
+    maxDecideRealtimeDeadline: ${OPIK_INFERENCE_MAX_DECIDE_REALTIME_DEADLINE:-5s}
     #  Default: 60s
     #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
     maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
@@ -2667,12 +2674,23 @@ inference:
     #  quota_exceeded is never retried
     maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
     #  Default: 100ms
-    #  Description: The wait before the first retry, doubled for each one after, unless the service sends Retry-After
+    #  Description: The wait before the first retry, doubled for each one after and jittered by up to half either way,
+    #  unless the service sends Retry-After
     baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
     #  Default: 1048576 (1 MiB)
     #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
     #  per this many bytes sent
     submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+  # The synchronous calls a request waits on
+  realtime:
+    #  Default: 5s
+    #  Description: The deadline a guardrail check's decide call sends, the time the service may spend on it. At most
+    #  inference.limits.maxDecideRealtimeDeadline
+    decideDeadline: ${OPIK_INFERENCE_REALTIME_DECIDE_DEADLINE:-5s}
+    #  Default: 1s
+    #  Description: Room past decideDeadline for the answer to arrive, or for a quick retry of an overloaded call. A
+    #  check not answered by then fails closed. At most 5s, so a request never waits on a check much past 10s
+    decideMargin: ${OPIK_INFERENCE_REALTIME_DECIDE_MARGIN:-1s}
 
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
@@ -2877,7 +2895,8 @@ topics:
     nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
     #  Default: 25
     #  Description: Nightly: the verify call's tokens per pair it checks, on top of the max_tokens of
-    #  topics/tasks/verify.yaml
+    #  topics/tasks/verify.yaml. That max_tokens + this x nightlyMaxGroups must be at most 4096, the inference
+    #  service's limit: checked at startup
     nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
     #  Default: 4
     #  Description: Nightly: member texts a live topic shows in the naming prompt
@@ -3063,6 +3082,17 @@ topics:
     #  Default: 5s
     #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
     requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 4m. A longer query outlives
+    #  the progress headers the driver can take at the default databaseAnalytics.httpHeadersProgressIntervalMs
+    maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
+    #  At most 68719476736 (64 GiB)
+    maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After
@@ -3113,6 +3143,20 @@ topics:
   #  workspace runs only while it is also enabled in the ai_label_workspaces table. Set in Helm, so a change needs a
   #  deploy
   enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
+  #  Topic on arrival: after the vectors of one workspace read are written, every live trace of a project with a
+  #  saved topic list gets the topic of its nearest saved prototype (trace_topics, source arrival, no run_id). The
+  #  next run's row for the trace wins. Only for a workspace listed at the arrival stage or a later one in
+  #  enabledWorkspaces
+  arrival:
+    #  Default: 5s
+    #  Description: The arrival steps of one workspace in one vectors tick (the saved lists read and the trace_topics
+    #  insert after each workspace read's vectors) take this in total, and each ends before the tick's budget ends.
+    #  Any failure stops arrival for the workspace for the rest of the tick
+    timeout: ${TOPICS_ARRIVAL_TIMEOUT:-5s}
+    #  Default: 1s
+    #  Description: A step starts only with at least this much left of topics.arrival.timeout and of the tick's
+    #  budget; otherwise its traces count as over_budget. Must not be above topics.arrival.timeout
+    minStepTime: ${TOPICS_ARRIVAL_MIN_STEP_TIME:-1s}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each

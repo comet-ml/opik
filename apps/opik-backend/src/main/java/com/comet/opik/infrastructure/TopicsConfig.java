@@ -48,6 +48,9 @@ public class TopicsConfig {
     private RunConfig run;
 
     @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
+    @Valid @NotNull @JsonProperty
     private ReadConfig read;
 
     @Valid @NotNull @JsonProperty
@@ -61,6 +64,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private NightlyConfig nightly;
+
+    @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
 
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
@@ -168,6 +174,18 @@ public class TopicsConfig {
             return nightlyFrequent <= nightlyExamples;
         }
 
+        /** Verify shows a topic's examples from the ones naming picked for it. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyTopicExamples must not be above nightlyTopicExamples") public boolean isVerifyTopicExamplesOrdered() {
+            return verifyTopicExamples <= nightlyTopicExamples;
+        }
+
+        /** Verify shows a group's examples from the ones its summary picked. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyGroupExamples must not be above nightlyExamples") public boolean isVerifyGroupExamplesOrdered() {
+            return verifyGroupExamples <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;
@@ -205,6 +223,35 @@ public class TopicsConfig {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private volatile ParsedWorkspaces parsedWorkspaces;
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /**
+         * The arrival steps of one workspace in one vectors tick (the saved lists read and the insert after each
+         * workspace read's vectors) end within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
+
+        /**
+         * A step starts only with at least this much left of {@code timeout} and of the tick's budget: one that starts
+         * with almost no time would time out and count as a failure when it only ran out of budget.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration minStepTime;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.arrival.minStepTime must not be above topics.arrival.timeout") public boolean isMinStepTimeValid() {
+            return minStepTime == null || timeout == null
+                    || minStepTime.toNanoseconds() <= timeout.toNanoseconds();
+        }
+    }
 
     /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
@@ -417,6 +464,33 @@ public class TopicsConfig {
         @MinDuration(value = 10, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration sweepTimeout;
+    }
+
+    /**
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /**
+         * ClickHouse's {@code max_execution_time}, in whole seconds. At most 4 minutes: a longer query outlives the
+         * progress headers the r2dbc driver can take ({@code databaseAnalytics.httpHeadersProgressIntervalMs}), so it
+         * fails to parse instead of answering 503.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 4, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
+        }
     }
 
     /**

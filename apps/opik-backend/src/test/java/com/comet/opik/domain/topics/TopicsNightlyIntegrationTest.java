@@ -164,7 +164,7 @@ class TopicsNightlyIntegrationTest {
             "runStartedAt", "runFinishedAt", "runQueuedAt", "deadlineAt", "heartbeatAt"};
     /** The times a failed attempt sets; its run id and code are known, so they are compared. */
     private static final String[] FAILED_FIELDS = {"runStartedAt", "runFinishedAt", "runQueuedAt", "deadlineAt",
-            "heartbeatAt", "firstFailedAt"};
+            "heartbeatAt", "firstFailedAt", "lastFailedAt"};
 
     /** The time and run fields a saved nightly update sets, when its row keeps that run. */
     private static final String[] SAVED_FIELDS = {"lastSuccessAt", "runStartedAt", "runFinishedAt", "runQueuedAt",
@@ -192,15 +192,20 @@ class TopicsNightlyIntegrationTest {
     private final List<Logger> loggers = Stream.of(TopicsRunService.class, TopicRunOutcomes.class, TopicsLlm.class,
             TopicWindowLabelService.class, TopicsNightPass.class, TopicRunStore.class)
             .map(type -> (Logger) LoggerFactory.getLogger(type)).toList();
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
             @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicWorkspaceService workspaceService,
             @Jit TopicsDiscoveryCandidates candidates, @Jit WorkspaceNameService workspaceNames,
-            @Jit ProjectService projectService, @Jit LockService lockService, @Jit TraceTopicsDAO traceTopicsDAO) {
+            @Jit ProjectService projectService, @Jit LockService lockService, @Jit TraceTopicsDAO traceTopicsDAO,
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         this.store = store;
         this.workspaceService = workspaceService;
         this.candidates = candidates;
@@ -253,7 +258,8 @@ class TopicsNightlyIntegrationTest {
 
     @Test
     @DisplayName("two plans of one night queue one nightly update per project with a list, and skip one under "
-            + "minVectors; a pod saves each update and then runs its labelling pass; a plan after that queues nothing")
+            + "minVectors; a pod saves each update and then runs its labelling pass, whose labels topic on arrival gives "
+            + "too; a plan after that queues nothing")
     void oneNightlyUpdatePerProjectPerNight() {
         var workspaceId = enabledWorkspace();
         var first = discoveredYesterday(workspaceId);
@@ -277,7 +283,9 @@ class TopicsNightlyIntegrationTest {
             Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(data.topicProject(projectId)).usingRecursiveComparison()
                             .ignoringFields(RUN_FIELDS).isEqualTo(expected));
-            assertThat(data.topicProject(projectId).listRunId()).isNotEqualTo(before.get(projectId).listRunId());
+            var listRunId = data.topicProject(projectId).listRunId();
+            assertThat(listRunId).isNotEqualTo(before.get(projectId).listRunId());
+            data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, projectId, listRunId, todayStart());
         }
         assertThat(data.topicProject(small)).isEqualTo(smallBefore.toBuilder().lastNight(today()).build());
 
@@ -973,13 +981,13 @@ class TopicsNightlyIntegrationTest {
         return projectId;
     }
 
-    /** {@code runs} update runs of the project that failed, the last one now. */
+    /** {@code runs} update runs of the project that failed on the nights before, the last one yesterday. */
     private void failRuns(String workspaceId, UUID projectId, int runs) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
             for (int i = 0; i < runs; i++) {
                 var runId = ID_GENERATOR.generateId();
-                var at = Instant.now();
+                var at = yesterdayStart().plusSeconds(i);
                 TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.UPDATE, at);
                 dao.markFailed(workspaceId, projectId, runId, at, TopicProject.RunError.LLM_ERROR);
             }
@@ -1053,8 +1061,11 @@ class TopicsNightlyIntegrationTest {
 
     /** The project's row is {@code before} after tonight's nightly update {@code runId} failed with {@code code}. */
     private void assertFailedNight(UUID projectId, TopicProject before, UUID runId, TopicProject.RunError code) {
-        assertThat(data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(FAILED_FIELDS)
+        var row = data.topicProject(projectId);
+        assertThat(row).usingRecursiveComparison().ignoringFields(FAILED_FIELDS)
                 .isEqualTo(failedNight(before, runId, code));
+        // The pause counts from the last failure: the failed run's end.
+        assertThat(row.lastFailedAt()).isEqualTo(row.runFinishedAt());
     }
 
     /** {@code before} after tonight's nightly update {@code runId} failed with {@code code}: the list stays. */

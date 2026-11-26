@@ -19,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -45,7 +46,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * The night pass's faults that real containers cannot produce, with every store mocked: a failed count, a failed read,
- * one workspace's failed check. Also the night the schedule gives. The decisions on real storage are in
+ * one workspace's failed check, a count that ends past the budget, a failed decision write, a failed night count. Also
+ * the night the schedule gives. The decisions on real storage are in
  * {@link TopicsNightlyIntegrationTest}.
  */
 @DisplayName("topics night pass")
@@ -70,6 +72,7 @@ class TopicsNightPassTest {
     private TopicWorkspaceService workspaceService;
     private TopicsDiscoveryCandidates candidates;
     private ProjectService projectService;
+    private LockService lockService;
     private TopicsNightPass pass;
 
     @BeforeEach
@@ -84,7 +87,7 @@ class TopicsNightPassTest {
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
 
         // As the query: a saved list, not looked at on the night, no run in flight.
-        when(projectDAO.findNightDue(anyCollection(), any())).thenAnswer(invocation -> rows.values().stream()
+        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenAnswer(invocation -> rows.values().stream()
                 .filter(row -> row.listRunId() != null)
                 .filter(row -> row.lastNight() == null || row.lastNight().isBefore(invocation.getArgument(1)))
                 .filter(row -> row.runStatus() == null || !row.runStatus().inFlight())
@@ -110,8 +113,9 @@ class TopicsNightPassTest {
         var workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(anyString()))
                 .thenAnswer(invocation -> "name of " + invocation.<String>getArgument(0));
+        lockService = mock(LockService.class);
         pass = new TopicsNightPass(config, template, workspaceService, candidates,
-                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, mock(LockService.class));
+                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
     }
 
     /** A project with a list saved for the night before, and its window count. */
@@ -145,11 +149,12 @@ class TopicsNightPassTest {
             + "fire that day; a schedule that fired on neither day gives none")
     void currentNight() {
         assertThat(TopicsNight.current("0 0 2 * * ?", Instant.parse("2026-11-02T03:00:00Z")))
-                .contains(new TopicsNight(NIGHT, START));
+                .contains(TopicsNight.builder().date(NIGHT).start(START).build());
         assertThat(TopicsNight.current("0 0 2 * * ?", Instant.parse("2026-11-02T01:00:00Z")))
-                .contains(new TopicsNight(NIGHT.minusDays(1), START.minusSeconds(86_400)));
+                .contains(TopicsNight.builder().date(NIGHT.minusDays(1))
+                        .start(START.minusSeconds(86_400)).build());
         assertThat(TopicsNight.current("0 0 * * * ?", Instant.parse("2026-11-02T05:30:00Z")))
-                .contains(new TopicsNight(NIGHT, NIGHT_START));
+                .contains(TopicsNight.builder().date(NIGHT).start(NIGHT_START).build());
         // 2026-11-02 is a Monday: a Friday-only schedule fired on neither day.
         assertThat(TopicsNight.current("0 0 2 ? * FRI", Instant.parse("2026-11-02T05:30:00Z"))).isEmpty();
     }
@@ -171,14 +176,14 @@ class TopicsNightPassTest {
     @DisplayName("a pass whose read fails is counted as a failed night and queues nothing; with no workspace at stage "
             + "nightly nothing is read")
     void failedReadAndNoNightlyWorkspace() {
-        when(projectDAO.findNightDue(anyCollection(), any())).thenThrow(new IllegalStateException("MySQL down"));
+        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenThrow(new IllegalStateException("MySQL down"));
 
         assertThat(plan(IN_BUDGET, 2)).isZero();
         assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
 
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of());
         assertThat(plan(IN_BUDGET, 2)).isZero();
-        verify(projectDAO).findNightDue(anyCollection(), any());
+        verify(projectDAO).findNightDue(anyCollection(), any(), any());
     }
 
     @Test
@@ -199,5 +204,55 @@ class TopicsNightPassTest {
                 TopicProject.RunMode.UPDATE, NIGHT, 500));
         assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
         verify(projectDAO, never()).markLooked(eq(brokenWorkspace), any(), any());
+    }
+
+    @Test
+    @DisplayName("a window count that ends after the budget queues nothing and decides nothing: the night's end "
+            + "records the project not reached")
+    void countEndsAfterTheBudget() {
+        listed(500L);
+        when(candidates.windowVectors(anyString(), anyCollection(), any())).thenAnswer(invocation -> Mono
+                .delay(Duration.ofMillis(300))
+                .map(__ -> invocation.<Collection<UUID>>getArgument(1).stream()
+                        .collect(Collectors.toMap(id -> id, vectors::get))));
+        var budgetEnd = START.plus(config.getNightly().getBudget().toJavaDuration());
+
+        assertThat(plan(budgetEnd.minusMillis(100), 2)).isZero();
+
+        assertThat(queued).isEmpty();
+        verify(projectDAO, never()).markLooked(anyString(), any(), any());
+        assertThat(decisions("update", null)).isZero();
+    }
+
+    @Test
+    @DisplayName("a decision whose write fails is not counted; the next plan decides the project again and counts it "
+            + "once written")
+    void failedWriteIsNotCounted() {
+        var small = listed(5L);
+        when(projectDAO.markLooked(WORKSPACE_ID, Set.of(small), NIGHT))
+                .thenThrow(new IllegalStateException("MySQL down")).thenReturn(1);
+
+        plan(IN_BUDGET, 2);
+        assertThat(decisions("skip", "small")).isZero();
+
+        plan(IN_BUDGET, 2);
+        assertThat(decisions("skip", "small")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("after the budget, a failed count of the night leaves its end key for the next plan, which ends the "
+            + "night once")
+    void failedNightCountKeepsTheEndKey() {
+        var afterBudget = START.plus(config.getNightly().getBudget().toJavaDuration()).plusSeconds(60);
+        when(projectDAO.findNotReached(anyCollection(), any(), any())).thenReturn(List.of());
+        when(projectDAO.countNight(anyCollection(), any(), any())).thenThrow(new IllegalStateException("MySQL down"))
+                .thenReturn(new TopicProjectDAO.NightCounts(1, 0));
+        when(lockService.lockUsingToken(any(), any())).thenReturn(Mono.just(true));
+
+        plan(afterBudget, 2);
+        verify(lockService, never()).lockUsingToken(any(), any());
+
+        plan(afterBudget, 2);
+        assertThat(sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
     }
 }

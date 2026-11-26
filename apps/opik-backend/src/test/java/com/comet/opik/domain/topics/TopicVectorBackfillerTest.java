@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -224,12 +225,13 @@ class TopicVectorBackfillerTest {
         var candidates = IntStream.range(0, 2).mapToObj(i -> candidate(setup.workspaceId, project.projectId()))
                 .toList();
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.fromIterable(candidates));
-        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
-                TickResult.written(2), candidates.stream().map(VectorKey::of).collect(Collectors.toSet()))));
+        when(setup.writer.embedAndWrite(any(), any(), any(), any(), any())).thenReturn(Mono.just(new ChunkWrite(
+                TickResult.written(2), candidates.stream().map(VectorKey::of).collect(Collectors.toSet()),
+                ArrivalSteps.OFF)));
         doThrow(new IllegalStateException("mysql")).when(setup.backfills).record(any());
 
         var result = setup.backfiller.backfill(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
-                List.of(project), setup.window(10), setup.budget(50)).block();
+                List.of(project), setup.window(10), setup.budget(50), ArrivalSteps.OFF).block();
 
         assertThat(result.written()).isEqualTo(2);
         verify(setup.backfills).record(List.of(TopicBackfillProgress.builder().workspaceId(setup.workspaceId)
@@ -256,7 +258,8 @@ class TopicVectorBackfillerTest {
                 .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
         when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
-        when(setup.writer.embedAndWrite(any(), any(), any(), any())).thenReturn(Mono.just(ChunkWrite.EMPTY));
+        when(setup.writer.embedAndWrite(any(), any(), any(), any(), any()))
+                .thenReturn(Mono.just(new ChunkWrite(TickResult.EMPTY, Set.of(), ArrivalSteps.OFF)));
         var workspaces = mock(TopicWorkspaceService.class);
         when(workspaces.enabledWorkspaceIds()).thenReturn(List.of(setup.workspaceId));
         when(workspaces.vectorsWatermarks(any())).thenReturn(Map.of());

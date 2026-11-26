@@ -2,6 +2,8 @@ import { z } from "zod";
 import { EvaluationScoreResult } from "../../types";
 import { BaseMetric } from "../BaseMetric";
 
+const INVALID_SUBSTRING = "substring must be a non-empty string";
+
 const validationSchema = z.object({
   output: z.string(),
   substring: z.string(),
@@ -32,9 +34,14 @@ export class Contains extends BaseMetric {
    * Calculates a score based on whether output contains substring
    * @param input Actual output to evaluate, must include `output` and `substring` properties
    * @returns Score result (1.0 if found, 0.0 if not found)
+   * @throws {TypeError} If the substring is not a non-empty string
    */
   async score(input: Input): Promise<EvaluationScoreResult> {
     const { output, substring } = input;
+    // Check the value here so evaluation reports a scoring error for an empty substring.
+    if (typeof substring !== "string" || substring.length === 0) {
+      throw new TypeError(INVALID_SUBSTRING);
+    }
 
     const handledOutput = this.caseSensitive ? output : output.toLowerCase();
     const handledExpected = this.caseSensitive
