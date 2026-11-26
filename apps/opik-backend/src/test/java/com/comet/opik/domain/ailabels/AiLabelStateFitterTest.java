@@ -308,6 +308,24 @@ class AiLabelStateFitterTest {
         assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
     }
 
+    /** A text request beside a long list of long items: the list is cut, and the request stays whole. */
+    @Test
+    void fitKeepsTheRequestWholeWhileCappingALongOutputList() {
+        var fixtures = new AiLabelRenderFixtures(16, false);
+        var output = NODE_FACTORY.arrayNode();
+        for (int i = 0; i < 400; i++) {
+            output.addObject().put("id", i).put("text", fixtures.text(6_000));
+        }
+        var trace = trace("{\"request\":\"" + fixtures.text(3_000) + "\"}", output.toString());
+
+        var fitted = fitTwice(trace, 16_000);
+
+        int items = capOf(fitted, "output_arrays_capped:", MIN_ITEMS);
+        assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
+        assertThat(fitted.state().get("output")).hasSize(items + 1);
+        assertThat(fitted.state().get("output").get(items).get("id").intValue()).isEqualTo(399);
+    }
+
     /** The larger field becomes text first, so a short answer beside a huge input is kept. */
     @Test
     void fitTurnsTheLargerFieldIntoTextFirst() {
@@ -377,7 +395,8 @@ class AiLabelStateFitterTest {
                 assertThat(full).isGreaterThan(budget);
                 assertThat(fitted.compactionLevel()).matches("arrays_capped:\\d+|spans_pruned:\\d+|spans_summarized"
                         + "|history_outputs_dropped:\\d+|history_turns:\\d+|output_truncated:\\d+|input_truncated:\\d+"
-                        + "|truncated_arrays_capped:\\d+|output_as_text|input_as_text|fields_as_text");
+                        + "|(output|input)_arrays_capped:\\d+|(truncated_)?(output|input)_as_text"
+                        + "|truncated_arrays_capped:\\d+|fields_as_text");
                 assertThat(AiLabelsTickService.levelOf(fitted.compactionLevel())).matches("[a-z_]+");
             }
         }

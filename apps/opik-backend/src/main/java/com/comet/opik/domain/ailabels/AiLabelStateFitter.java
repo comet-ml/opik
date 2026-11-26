@@ -31,9 +31,14 @@ import java.util.stream.Collectors;
  *   <li>{@code output_truncated:<L>}: every string in the output keeps its first L code points, followed by a
  *       {@code …[N chars truncated]…} marker; L is the largest that fits, never below 64.</li>
  *   <li>{@code input_truncated:<L>}: the output at 64, and the input's strings cut the same way.</li>
+ *   <li>{@code output_arrays_capped:<N>} or {@code input_arrays_capped:<N>}: the smaller of the two fields (by its
+ *       uncut size) back whole, and the larger one's arrays capped as in step 2, its strings still at 64. A short
+ *       request or answer is the part a summary needs most, so it isn't cut to make room for the bulk.</li>
+ *   <li>{@code output_as_text} or {@code input_as_text}: the smaller field still whole, and the larger one its
+ *       canonical JSON as one string, cut in the middle to fit.</li>
  *   <li>{@code truncated_arrays_capped:<N>}: both at 64, and the arrays capped as in step 2.</li>
- *   <li>{@code output_as_text} or {@code input_as_text}: the larger of the two fields becomes its canonical JSON as one
- *       string, cut in the middle to fit; {@code fields_as_text} when the smaller one must become text too.</li>
+ *   <li>{@code truncated_output_as_text} or {@code truncated_input_as_text}: the larger field as text beside the
+ *       smaller one cut; {@code fields_as_text} when the smaller one must become text too.</li>
  * </ol>
  * Without history, steps 4 and 5 are skipped. A step with nothing to remove is passed through. A state still over
  * budget after the last step (its name alone too big) is {@link OverBudget}.
@@ -87,7 +92,7 @@ final class AiLabelStateFitter {
 
         var uncapped = new LinkedHashMap<String, JsonNode>();
         FIELDS.stream().filter(state::has).forEach(key -> uncapped.put(key, state.get(key)));
-        var capped = capArrays(state, stateBytes, budget - historyBytes);
+        var capped = capArrays(state, FIELDS, stateBytes, budget - historyBytes);
         if (capped.fits()) {
             return new Fitted(state, history, capped.stateBytes() + historyBytes, "arrays_capped:" + capped.cap());
         }
@@ -141,20 +146,39 @@ final class AiLabelStateFitter {
         if (input.fits()) {
             return new Fitted(state, history, input.stateBytes() + historyBytes, "input_truncated:" + input.cap());
         }
-        var both = capArrays(state, input.stateBytes(), room);
+        // The larger field goes first, so a short answer isn't lost to a huge input, or the other way round.
+        var bySize = sizeOf(uncapped.get(INPUT)) > sizeOf(uncapped.get(OUTPUT)) ? List.of(INPUT, OUTPUT) : FIELDS;
+        String largerKey = bySize.getFirst();
+        String smallerKey = bySize.getLast();
+        if (uncapped.containsKey(smallerKey)) {
+            var cutFields = new LinkedHashMap<String, JsonNode>();
+            FIELDS.stream().filter(state::has).forEach(key -> cutFields.put(key, state.get(key)));
+            state.set(smallerKey, uncapped.get(smallerKey));
+            stateBytes = input.stateBytes() - sizeOf(cutFields.get(smallerKey)) + sizeOf(uncapped.get(smallerKey));
+            var largerCapped = capArrays(state, List.of(largerKey), stateBytes, room);
+            if (largerCapped.fits()) {
+                return new Fitted(state, history, largerCapped.stateBytes() + historyBytes,
+                        largerKey + "_arrays_capped:" + largerCapped.cap());
+            }
+            var largerText = asText(state, largerKey, largerCapped.stateBytes(), room);
+            if (largerText.fits()) {
+                return new Fitted(state, history, largerText.stateBytes() + historyBytes, largerKey + "_as_text");
+            }
+            state.setAll(cutFields);
+        }
+
+        var both = capArrays(state, FIELDS, input.stateBytes(), room);
         if (both.fits()) {
             return new Fitted(state, history, both.stateBytes() + historyBytes,
                     "truncated_arrays_capped:" + both.cap());
         }
-
-        // The larger field goes first, so a short answer isn't lost to a huge input, or the other way round.
         stateBytes = both.stateBytes();
-        var bySize = sizeOf(state.get(INPUT)) > sizeOf(state.get(OUTPUT)) ? List.of(INPUT, OUTPUT) : FIELDS;
-        var larger = asText(state, bySize.getFirst(), stateBytes, room);
+        var larger = asText(state, largerKey, stateBytes, room);
         if (larger.fits()) {
-            return new Fitted(state, history, larger.stateBytes() + historyBytes, bySize.getFirst() + "_as_text");
+            return new Fitted(state, history, larger.stateBytes() + historyBytes,
+                    "truncated_" + largerKey + "_as_text");
         }
-        var smaller = asText(state, bySize.getLast(), larger.stateBytes(), room);
+        var smaller = asText(state, smallerKey, larger.stateBytes(), room);
         if (smaller.fits()) {
             return new Fitted(state, history, smaller.stateBytes() + historyBytes, "fields_as_text");
         }
@@ -209,10 +233,10 @@ final class AiLabelStateFitter {
     private record Cut(boolean fits, int cap, long stateBytes) {
     }
 
-    /** Caps every array in the input and output at the largest element count that fits, or at {@link #MIN_ITEMS}. */
-    private static Cut capArrays(ObjectNode state, long stateBytes, long budget) {
-        int longest = FIELDS.stream().mapToInt(key -> longestArray(state.get(key))).max().orElse(0);
-        return search(state, FIELDS, stateBytes, budget, MIN_ITEMS, longest - 1,
+    /** Caps every array under {@code keys} at the largest element count that fits, or at {@link #MIN_ITEMS}. */
+    private static Cut capArrays(ObjectNode state, List<String> keys, long stateBytes, long budget) {
+        int longest = keys.stream().mapToInt(key -> longestArray(state.get(key))).max().orElse(0);
+        return search(state, keys, stateBytes, budget, MIN_ITEMS, longest - 1,
                 (field, items) -> cut(field, items, Integer.MAX_VALUE));
     }
 
