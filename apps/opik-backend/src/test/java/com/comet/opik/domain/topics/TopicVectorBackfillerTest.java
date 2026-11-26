@@ -205,6 +205,34 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
+    @DisplayName("each vector count read starts only with time left for it: with three chunks and time for one, the "
+            + "discovery reads one, writes nothing and counts as cut")
+    void vectorCountChunksStopAtTheBudget() {
+        var setup = new Setup();
+        setup.slices(1);
+        var projects = IntStream.range(0, 2 * MAX_EXCLUDED_PROJECTS + 5)
+                .mapToObj(i -> new BackfillProject(ID_GENERATOR.generateId(), 3, now)).toList();
+        // 20s: a read starts with half the budget (10s) plus 1s left. The projects' read takes 4s (16s left) and the
+        // first count 6s (10s left), so the second count does not start.
+        when(setup.dao.findBackfillProjects(any(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
+            setup.clock.advance(java.time.Duration.ofSeconds(4));
+            return Flux.fromIterable(projects);
+        });
+        when(setup.dao.countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong()))
+                .thenAnswer(invocation -> {
+                    setup.clock.advance(java.time.Duration.ofSeconds(6));
+                    return Mono.just(Map.<UUID, Long>of());
+                });
+
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(20));
+
+        verify(setup.dao, times(1)).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
+        verify(setup.backfills, never()).discovered(any(), any(), any(), any());
+        verify(setup.metrics).discovery(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
+                DiscoveryOutcome.CUT);
+    }
+
+    @Test
     @DisplayName("a tick reads new traces before any discovery read; with a workspace due for discovery its fresh "
             + "read leaves discoveryMinShare of the budget, without one it may use the whole budget")
     void freshPhaseBeforeDiscovery() {

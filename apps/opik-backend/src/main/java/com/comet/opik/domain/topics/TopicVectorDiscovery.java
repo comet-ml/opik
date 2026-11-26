@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The topic vectors backfill's project discovery: about once per {@code longWindowInterval} per workspace, the
@@ -159,7 +160,8 @@ class TopicVectorDiscovery {
 
     /**
      * The next slice: the projects' slices first, then their vector counts, for {@code maxExcludedProjects} project ids
-     * per read, so a read's id list stays bounded.
+     * per read, so a read's id list stays bounded. Each count read starts only with time left for it; a slice whose
+     * counts the budget stops is returned as not read, so the discovery is cut short.
      */
     private Mono<Discovery> readSlice(String workspaceId, Discovery discovery, TickBudget budget,
             Duration maxExecutionTime, Duration discoveryReserve) {
@@ -170,14 +172,20 @@ class TopicVectorDiscovery {
                     .map(discovery::afterFound);
         }
         var slice = discovery.toCount().getFirst();
-        return Flux.fromIterable(Lists.partition(List.copyOf(discovery.projects().keySet()),
-                config.getVectors().getMaxExcludedProjects()))
-                .concatMap(projectIds -> Mono.defer(() -> dao.countTracesWithVectorsByProject(workspaceId,
-                        TopicEmbedding.SUMMARY_TASK, slice, projectIds,
-                        budget.readSeconds(maxExecutionTime, discoveryReserve))))
-                .flatMapIterable(Map::entrySet)
-                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
-                .map(discovery::afterCounted);
+        var chunks = Lists.partition(List.copyOf(discovery.projects().keySet()),
+                config.getVectors().getMaxExcludedProjects());
+        return Flux.fromIterable(chunks)
+                .concatMap(projectIds -> Mono.defer(() -> budget.hasTimeForRead(discoveryReserve)
+                        ? dao.countTracesWithVectorsByProject(workspaceId, TopicEmbedding.SUMMARY_TASK, slice,
+                                projectIds, budget.readSeconds(maxExecutionTime, discoveryReserve))
+                                .map(Optional::of)
+                        : Mono.just(Optional.<Map<UUID, Long>>empty())))
+                .takeUntil(Optional::isEmpty)
+                .collectList()
+                .map(counts -> counts.stream().anyMatch(Optional::isEmpty)
+                        ? discovery
+                        : discovery.afterCounted(counts.stream().flatMap(count -> count.orElseThrow().entrySet()
+                                .stream()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))));
     }
 
     private Mono<Void> save(String workspaceId, Discovery discovery, Duration interval) {
