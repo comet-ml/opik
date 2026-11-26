@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
+import com.comet.opik.domain.topics.TopicVectorsMetrics.NotRead;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
@@ -179,7 +180,8 @@ public class TopicVectorsTickService {
             boolean longWindow, @Nullable Instant missedBefore, TickBudget budget, boolean arrival) {
         var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
         if (!budget.hasTimeForRead(embedTimeout)) {
-            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), longWindow, false,
+            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), NotRead.BUDGET,
+                    longWindow, false,
                     ArrivalSteps.OFF));
         }
         var steps = arrival ? ArrivalSteps.STARTED : ArrivalSteps.OFF;
@@ -188,7 +190,7 @@ public class TopicVectorsTickService {
             var readableWithout = backfiller.readableWithout(workspaceId, undrained);
             if (readableWithout.isEmpty()) {
                 // Its traces are the backfill's for now; it does not hold the long-window pass.
-                return Mono.just(Visit.notRead(workspace, longWindow, true, steps));
+                return Mono.just(Visit.notRead(workspace, NotRead.OVER_EXCLUDED, longWindow, true, steps));
             }
             long readStarted = System.nanoTime();
             return WindowRead.read(dao,
@@ -197,13 +199,13 @@ public class TopicVectorsTickService {
                     vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
                     .flatMap(read -> !read.complete() && read.candidates().isEmpty()
                             // The budget ran out before the read: nothing was read, so the watermark stays.
-                            ? Mono.just(Visit.notRead(workspace, longWindow, false, steps))
+                            ? Mono.just(Visit.notRead(workspace, NotRead.BUDGET, longWindow, false, steps))
                             : serve(workspace, read, find, longWindow, missedBefore, budget, readStarted, steps))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
                                 workspaceId, exception);
-                        return Mono.just(new Visit(workspace, longWindow, true, false, TickResult.EMPTY, List.of(),
+                        return Mono.just(new Visit(workspace, longWindow, null, false, TickResult.EMPTY, List.of(),
                                 since(readStarted), Duration.ZERO, steps));
                     });
         });
@@ -223,7 +225,7 @@ public class TopicVectorsTickService {
             return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, steps)
                     .flatMap(written -> {
                         var complete = read.complete() && !written.leftForLater(served.candidates());
-                        var visit = new Visit(workspace, longWindow, true, complete, written.result(), served.started(),
+                        var visit = new Visit(workspace, longWindow, null, complete, written.result(), served.started(),
                                 readTime, since(embedStarted), written.arrival());
                         if (longWindow) {
                             return complete
@@ -277,22 +279,24 @@ public class TopicVectorsTickService {
     }
 
     private Mono<TickResult> finish(List<Visit> visits) {
-        var notRead = new ArrayList<TopicVectorsMetrics.Workspace>();
+        int notRead = 0;
+        int overExcluded = 0;
         var result = TickResult.EMPTY;
         var read = Duration.ZERO;
         var embed = Duration.ZERO;
         for (var visit : visits) {
-            if (!visit.reached()) {
-                notRead.add(visit.workspace());
+            if (visit.notRead() != null) {
+                metrics.workspaceNotRead(visit.workspace(), visit.notRead());
+                notRead++;
+                overExcluded += visit.notRead() == NotRead.OVER_EXCLUDED ? 1 : 0;
             }
             result = result.plus(visit.result());
             read = read.plus(visit.readTime());
             embed = embed.plus(visit.embedTime());
         }
-        if (!notRead.isEmpty()) {
-            metrics.workspacesNotRead(notRead);
-            log.warn("Topic vectors workspace reads did not read workspaces '{}' of '{}'", notRead.size(),
-                    visits.size());
+        if (notRead > 0) {
+            log.warn("Topic vectors workspace reads did not read workspaces '{}' of '{}', of them over the "
+                    + "excluded-projects limit, left to the backfill '{}'", notRead, visits.size(), overExcluded);
         }
         metrics.phase("find", read);
         metrics.phase("embed", embed);
@@ -301,19 +305,21 @@ public class TopicVectorsTickService {
 
     /**
      * One workspace's part of the fresh phase. {@code longWindow} when it was the long-window pass's read;
-     * {@code reached} is false when the budget left no time to read it, or it has too many projects in backfill;
+     * {@code notRead} why the workspace read did not read it, null when it did;
      * {@code complete} when its read saw its whole window and left none of its traces for a later tick, or it was left
      * to the backfill; {@code started} the projects its read saw for the first time; {@code arrival} its topic on
      * arrival, which the backfill phase goes on with.
      */
-    private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean reached,
+    private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean longWindow,
+            @Nullable NotRead notRead,
             boolean complete, @NonNull TickResult result, @NonNull List<TopicBackfill> started,
             @NonNull Duration readTime,
             @NonNull Duration embedTime, @NonNull ArrivalSteps arrival) {
 
-        static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean complete,
+        static Visit notRead(TopicVectorsMetrics.Workspace workspace, NotRead reason, boolean longWindow,
+                boolean complete,
                 ArrivalSteps arrival) {
-            return new Visit(workspace, longWindow, false, complete, TickResult.EMPTY, List.of(), Duration.ZERO,
+            return new Visit(workspace, longWindow, reason, complete, TickResult.EMPTY, List.of(), Duration.ZERO,
                     Duration.ZERO, arrival);
         }
     }

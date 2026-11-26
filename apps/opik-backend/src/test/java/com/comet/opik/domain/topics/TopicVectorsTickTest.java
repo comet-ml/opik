@@ -953,6 +953,21 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a new pod's tick does not discover again a workspace the last pod discovered within "
+            + "longWindowInterval: the discovery mark is read from topic_workspaces")
+    void discoveryMarkAcrossPods() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 1, 1);
+        tick();
+        var checked = backfillService.findChecked(List.of(workspaceId));
+        assertThat(checked).containsOnlyKeys(workspaceId);
+
+        tickWith(arrival(InMemoryMetricReader.create())).tick(Instant.now()).block();
+
+        assertThat(backfillService.findChecked(List.of(workspaceId))).isEqualTo(checked);
+    }
+
+    @Test
     @DisplayName("a trace deleted while its embed call is in flight, after the cascade found no vector, has no vector "
             + "after the tick; the other trace of the chunk keeps its own")
     void traceDeletedDuringEmbed() {

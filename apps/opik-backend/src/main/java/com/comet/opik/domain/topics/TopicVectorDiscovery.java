@@ -38,35 +38,33 @@ class TopicVectorDiscovery {
     private final @NonNull TopicVectorsMetrics metrics;
 
     /**
-     * When this pod last discovered each workspace's projects. Only a hint for when to discover again: a new leader
-     * starts empty and discovers every workspace once more, which changes no row's drained mark.
+     * The discoveries a tick's budget cut short, resumed by the next tick. Only this pod's: when the ticking pod
+     * changes, the new one starts them again from their first slice, which changes no row's drained mark.
      */
-    private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
-    /** The discoveries a tick's budget cut short, resumed by the next tick; a new leader starts them again. */
     private final Map<String, Discovery> discoveries = new ConcurrentHashMap<>();
 
     /**
-     * Discovers the projects of the workspaces due for it, one at a time: never discovered by this pod, or not for
-     * {@code longWindowInterval}, those a tick cut short first. Per workspace, two plain aggregates over the backfill
+     * Discovers the projects of the workspaces due for it, one at a time: never discovered, or not for
+     * {@code longWindowInterval} ({@code topic_workspaces.vectors_checked_at}), those a tick cut short first, then the
+     * longest not discovered. When that mark cannot be read, every workspace is due, as for a pod that never ran. Per workspace, two plain aggregates over the backfill
      * window, a slice at a time: the projects with done statuses, and their vector counts. A workspace's rows not
      * checked for twice the interval start again, because the tick did not run for it meanwhile. A workspace no longer
-     * enabled is forgotten, so one enabled again is discovered at its first tick.
+     * enabled loses its discovery in progress.
      *
      * @param lowerBound the backfill window's start
      * @param createdAfter the backfill window's {@code trace_created_at} bound
      */
     Mono<Void> discover(@NonNull List<String> workspaceIds, @NonNull Instant lowerBound,
             @NonNull Instant createdAfter, @NonNull TickBudget budget) {
-        return Mono.defer(() -> {
-            var enabled = new HashSet<>(workspaceIds);
-            discoveredAt.keySet().retainAll(enabled);
-            discoveries.keySet().retainAll(enabled);
+        return checked(workspaceIds).flatMap(checked -> {
+            discoveries.keySet().retainAll(new HashSet<>(workspaceIds));
             var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
             var due = workspaceIds.stream()
-                    .filter(id -> Optional.ofNullable(discoveredAt.get(id))
+                    .filter(id -> Optional.ofNullable(checked.get(id))
                             .map(last -> Duration.between(last, budget.start()).compareTo(interval) >= 0)
                             .orElse(true))
-                    .sorted(Comparator.comparing(id -> !discoveries.containsKey(id)))
+                    .sorted(Comparator.comparing((String id) -> !discoveries.containsKey(id))
+                            .thenComparing(id -> checked.getOrDefault(id, Instant.MIN)))
                     .limit(config.getVectors().getMaxDiscoveriesPerTick())
                     .toList();
             long started = System.nanoTime();
@@ -75,6 +73,16 @@ class TopicVectorDiscovery {
                     .then(Mono.fromRunnable(() -> metrics.phase("discover",
                             Duration.ofNanos(System.nanoTime() - started))));
         });
+    }
+
+    private Mono<Map<String, Instant>> checked(List<String> workspaceIds) {
+        return Mono.fromCallable(() -> backfills.findChecked(workspaceIds))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(exception -> {
+                    log.warn("Topic vectors discovery marks not read, every workspace is due for discovery, "
+                            + "workspaces '{}'", workspaceIds.size(), exception);
+                    return Mono.just(Map.of());
+                });
     }
 
     /**
@@ -160,7 +168,6 @@ class TopicVectorDiscovery {
                         log.info("Topic vectors backfill rows of deleted projects removed, workspace '{}', rows "
                                 + "'{}'", workspaceId, removed);
                     }
-                    discoveredAt.put(workspaceId, start);
                     discoveries.remove(workspaceId);
                 })
                 .then();

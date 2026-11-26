@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,9 +42,6 @@ class TopicVectorBackfiller {
     private final @NonNull TopicVectorBackfillService backfills;
     private final @NonNull TopicVectorWriter writer;
     private final @NonNull TopicVectorsMetrics metrics;
-
-    /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
-    private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
     /** A workspace read's candidates to serve, and the projects it saw for the first time and started. */
     record Served(@NonNull List<Candidate> candidates, @NonNull List<TopicBackfill> started) {
@@ -83,18 +79,8 @@ class TopicVectorBackfiller {
      * under, and its traces are the backfill's for now.
      */
     Optional<List<UUID>> readableWithout(@NonNull String workspaceId, @NonNull List<TopicBackfill> undrained) {
-        int limit = config.getVectors().getMaxExcludedProjects();
-        if (undrained.size() > limit) {
-            if (overExcluded.add(workspaceId)) {
-                log.warn("Topic vectors workspace reads skipped until the backfill brings the projects in backfill "
-                        + "under the limit, workspace '{}', projects in backfill '{}', limit '{}'", workspaceId,
-                        undrained.size(), limit);
-            }
+        if (undrained.size() > config.getVectors().getMaxExcludedProjects()) {
             return Optional.empty();
-        }
-        if (overExcluded.remove(workspaceId)) {
-            log.info("Topic vectors workspace reads resumed, workspace '{}', projects in backfill '{}'", workspaceId,
-                    undrained.size());
         }
         return Optional.of(undrained.stream().map(TopicBackfill::projectId).toList());
     }

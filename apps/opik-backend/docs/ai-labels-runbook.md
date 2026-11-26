@@ -661,6 +661,12 @@ The gate reads two MySQL tables that only the vectors tick writes: the `backfill
 `vectors_checked_at` (the last time the tick discovered the workspace's projects, about once per
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`, `1d` by default).
 
+The tick decides from `vectors_checked_at` which workspaces are due for discovery, so a change of the ticking pod does
+not start them again. A discovery that one tick's budget cuts short resumes on the next tick of the same pod. When the
+ticking pod changes, the new pod starts that discovery again from its first read; `vectors_checked_at` is set only when
+a discovery finishes. A workspace with more projects in backfill than `TOPICS_VECTORS_MAX_EXCLUDED_PROJECTS` is left to
+its backfill: each tick counts it in `topics.vectors.workspaces_not_read_total` with `reason = over_excluded`.
+
 Each project gets one of four states. "Fresh" means the workspace's `vectors_checked_at` is within 2 ×
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`.
 

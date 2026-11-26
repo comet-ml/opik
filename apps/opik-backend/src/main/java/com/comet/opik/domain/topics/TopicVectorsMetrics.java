@@ -17,7 +17,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.List;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
@@ -76,8 +75,9 @@ class TopicVectorsMetrics {
                         + "type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read_total")
-                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
-                        + "ran out, or the workspace has more projects in backfill than the read can leave out")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by reason and workspace: "
+                        + "budget (the tick's budget ran out) or over_excluded (more projects in backfill than the "
+                        + "read can leave out)")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed_total")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -141,8 +141,20 @@ class TopicVectorsMetrics {
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
-    void workspacesNotRead(@NonNull List<Workspace> workspaces) {
-        workspaces.forEach(workspace -> workspacesNotRead.add(1, workspace.attributes()));
+    void workspaceNotRead(@NonNull Workspace workspace, @NonNull NotRead reason) {
+        workspacesNotRead.add(1, workspace.attributes().toBuilder().put(stringKey("reason"), reason.value).build());
+    }
+
+    /** Why a tick's workspace read did not read an enabled workspace. */
+    enum NotRead {
+        BUDGET("budget"),
+        OVER_EXCLUDED("over_excluded");
+
+        private final String value;
+
+        NotRead(String value) {
+            this.value = value;
+        }
     }
 
     static AttributesBuilder workspace(@NonNull String workspaceId, @NonNull String workspaceName) {

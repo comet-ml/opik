@@ -158,6 +158,40 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
+    @DisplayName("a workspace one pod discovered is not due on a new pod before longWindowInterval: the mark is the "
+            + "store's, not the pod's")
+    void discoveryDueAcrossPods() {
+        var setup = new Setup();
+        setup.slices(1);
+        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        setup.clock.advance(java.time.Duration.ofHours(23));
+
+        new TopicVectorDiscovery(setup.config, setup.dao, setup.backfills, setup.metrics)
+                .discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+
+        verify(setup.backfills, times(1)).discovered(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("when the discovery marks cannot be read, every workspace is due, up to maxDiscoveriesPerTick, as on "
+            + "a pod that never ran")
+    void discoveryMarksUnreadable() {
+        var setup = new Setup();
+        setup.slices(1);
+        var workspaces = IntStream.range(0, DEFAULTS.getMaxDiscoveriesPerTick() + 1)
+                .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
+        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+        setup.discovery.discover(List.of(workspaces.getLast()), now, now, setup.budget(50)).block();
+        verify(setup.backfills, times(workspaces.size())).discovered(any(), any(), any(), any());
+        when(setup.backfills.findChecked(any())).thenThrow(new IllegalStateException("mysql"));
+
+        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+
+        verify(setup.backfills, times(workspaces.size() + DEFAULTS.getMaxDiscoveriesPerTick()))
+                .discovered(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("a tick discovers at most maxDiscoveriesPerTick workspaces, a discovery in progress before a new "
             + "one")
     void discoveriesPerTick() {
@@ -184,8 +218,8 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("a workspace no longer enabled is forgotten, with its discovery in progress, and is discovered from "
-            + "the start when it comes back")
+    @DisplayName("a workspace no longer enabled loses its discovery in progress, which starts from the first slice "
+            + "when it comes back; once discovered, it is due again only by its discovery mark")
     void disabledWorkspaceForgotten() {
         var setup = new Setup();
         var slices = setup.slices(2);
@@ -201,8 +235,11 @@ class TopicVectorBackfillerTest {
                 anyLong());
         verify(setup.backfills).discovered(eq(setup.workspaceId), any(), any(), any());
 
-        // Discovered, disabled and enabled again before longWindowInterval: discovered again.
+        // Discovered, disabled and enabled again: due by its discovery mark, as any workspace.
         setup.discovery.discover(List.of(), now, now, setup.budget(50)).block();
+        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        verify(setup.backfills, times(1)).discovered(eq(setup.workspaceId), any(), any(), any());
+        setup.clock.advance(java.time.Duration.ofDays(1));
         setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
 
         verify(setup.backfills, times(2)).discovered(eq(setup.workspaceId), any(), any(), any());
@@ -343,6 +380,8 @@ class TopicVectorBackfillerTest {
 
         verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
         verify(pass).finish(start, true);
+        verify(setup.metrics).workspaceNotRead(argThat(workspace -> workspace.id().equals(setup.workspaceId)),
+                eq(TopicVectorsMetrics.NotRead.OVER_EXCLUDED));
     }
 
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */
@@ -358,6 +397,8 @@ class TopicVectorBackfillerTest {
         private final TopicVectorBackfiller backfiller;
         private final TopicVectorDiscovery discovery;
         private java.time.Duration readTime = java.time.Duration.ZERO;
+        /** The store's discovery marks, which every pod reads. */
+        private final Map<String, Instant> checked = new java.util.concurrent.ConcurrentHashMap<>();
 
         private Setup() {
             var find = new TopicsConfig.FindConfig();
@@ -370,6 +411,11 @@ class TopicVectorBackfillerTest {
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
             discovery = new TopicVectorDiscovery(config, dao, backfills, metrics);
+            when(backfills.discovered(any(), any(), any(), any())).thenAnswer(invocation -> {
+                checked.put(invocation.getArgument(0), invocation.getArgument(2));
+                return 0;
+            });
+            when(backfills.findChecked(any())).thenAnswer(invocation -> Map.copyOf(checked));
             when(dao.findBackfillProjects(any(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
                 clock.advance(readTime);
                 return Flux.just(new BackfillProject(ID_GENERATOR.generateId(), 1, now));
