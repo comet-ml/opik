@@ -54,7 +54,10 @@ public class TopicWindowLabelService {
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
 
-    /** The saved list a pass labels with: the traces created in {@code [from, to)}, the run's window. */
+    /**
+     * The saved list a pass labels with: the traces created in {@code [from, to)}. {@code from} is the run's window
+     * start; {@code to} is its window end or its save, whichever is later.
+     */
     private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller) {
     }
 
@@ -140,9 +143,16 @@ public class TopicWindowLabelService {
                 });
     }
 
+    /**
+     * The traces a saved list labels run from its window start to its window end or its save, whichever is later. A
+     * nightly update saves after its window's end: its pass also labels the traces vectored since, which arrival
+     * labelled by the list before the save. A discovery run's window ends at tomorrow's start, after its save.
+     */
     private Saved saved(TopicRunStore.SavedList list) {
-        var to = list.project().windowUntil();
-        var from = to.minus(Duration.ofDays(config.getRun().getWindowDays()));
+        var windowUntil = list.project().windowUntil();
+        var lastSuccessAt = list.project().lastSuccessAt();
+        var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
+        var from = windowUntil.minus(Duration.ofDays(config.getRun().getWindowDays()));
         return new Saved(list.project().listRunId(), from, to,
                 algorithm.labeller(list.topics(), list.project().otherVectors()));
     }

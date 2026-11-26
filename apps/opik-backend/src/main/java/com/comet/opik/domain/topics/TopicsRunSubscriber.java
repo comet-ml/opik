@@ -140,21 +140,29 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
 
     private Mono<Void> run(TopicsRunMessage message, Instant deadline) {
         return switch (message.mode()) {
-            case DISCOVERY -> runService.discover(message.runId(), message.projectId(), message.night(),
-                    message.windowTraces())
-                    .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
-                    // A build saved after its project was deleted is discarded: nothing is left to label. When the
-                    // check fails, the labelling run is queued, and the planner cancels it if the project is gone.
-                    .filterWhen(outcome -> store.projectExists(message.projectId()).onErrorReturn(true))
-                    // The saved list's labelling pass is a run of its own: one place keeps it apart from a build.
-                    .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
-                            .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
-                            .build()))
-                    .then();
+            case DISCOVERY -> thenLabels(message, runService.discover(message.runId(), message.projectId(),
+                    message.night(), message.windowTraces()));
+            case UPDATE -> thenLabels(message, runService.nightlyUpdate(message.runId(), message.projectId(),
+                    message.night(), message.windowTraces()));
             case LABELS -> label(message, deadline);
-            case UPDATE -> Mono.error(
-                    new IllegalStateException("no handler for run mode '%s'".formatted(message.mode())));
         };
+    }
+
+    /**
+     * After a saved discovery run or nightly update, queues the saved list's labelling pass as a run of its own. A
+     * nightly update that cleared the list leaves nothing to label: the queue takes a labelling run only for a project
+     * with a saved list.
+     */
+    private Mono<Void> thenLabels(TopicsRunMessage message, Mono<TopicRunOutcome> run) {
+        return run
+                .filter(outcome -> outcome.status() == TopicProject.RunStatus.SAVED)
+                // A run saved after its project was deleted is discarded: nothing is left to label. When the check
+                // fails, the labelling run is queued, and the planner cancels it if the project is gone.
+                .filterWhen(outcome -> store.projectExists(message.projectId()).onErrorReturn(true))
+                .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                        .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
+                        .build()))
+                .then();
     }
 
     /**

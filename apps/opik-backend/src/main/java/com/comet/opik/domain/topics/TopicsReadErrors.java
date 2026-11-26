@@ -8,6 +8,8 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Set;
@@ -23,6 +25,7 @@ import static com.comet.opik.infrastructure.db.ClickHouseErrorCodes.TOO_MANY_ROW
  * How a failed ClickHouse read of the Topics DAOs shows after {@code block()}. The DAOs read through the r2dbc http
  * driver, which fails with the v1 client's checked {@link ClickHouseException}; Reactor wraps it in a runtime exception.
  */
+@Slf4j
 @UtilityClass
 public class TopicsReadErrors {
 
@@ -66,6 +69,20 @@ public class TopicsReadErrors {
     static boolean isLimit(@NonNull Throwable error) {
         return hasCode(error, LIMIT_CODES) || Throwables.getCausalChain(error).stream()
                 .anyMatch(TimeoutException.class::isInstance);
+    }
+
+    /**
+     * Answers a guard trip of {@code topics.filter} ({@link #isLimit}) as a 503 with Retry-After when the query is
+     * filtered by topic. Other errors, the rows and bytes limits included, pass as they are.
+     */
+    public static <T> Mono<T> busyOnFilterGuard(boolean topicFiltered, @NonNull Mono<T> read) {
+        if (!topicFiltered) {
+            return read;
+        }
+        return read.onErrorMap(TopicsReadErrors::isLimit, error -> {
+            log.warn("Trace query filtered by topic hit a guard", error);
+            return busy();
+        });
     }
 
     static ServiceUnavailableException busy() {

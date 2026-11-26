@@ -13,6 +13,7 @@ import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
@@ -179,7 +180,8 @@ class TraceServiceImplEventsTest {
         opikConfiguration.setDatabaseAnalyticsDataModel(DatabaseAnalyticsDataModelConfig.builder().build());
         return new TraceServiceImpl(traceDao, deletionEventDAO, template, projectService, ID_GENERATOR,
                 new WriteSignallingLockService(), eventBus, new TraceSortingFactory(), attachmentStripperService,
-                attachmentService, attachmentReinjectorService, opikConfiguration, organizationResolver);
+                attachmentService, attachmentReinjectorService, opikConfiguration, organizationResolver,
+                mock(TopicReadService.class));
     }
 
     private Mono<?> write(TraceServiceImpl traceService, Write write) {
