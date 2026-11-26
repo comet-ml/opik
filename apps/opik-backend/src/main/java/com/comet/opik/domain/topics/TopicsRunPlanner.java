@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -99,11 +100,7 @@ public class TopicsRunPlanner {
     public Mono<UUID> runByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             boolean ignoreBackfill) {
         var now = Instant.now();
-        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(enabled -> enabled
-                        ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(notOptedIn(workspaceId, TopicsStage.BUILD)))
+        return optedIn(workspaceId, TopicsStage.BUILD, () -> candidates.findListless(workspaceId, projectId, night))
                 .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
                         + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
@@ -141,11 +138,8 @@ public class TopicsRunPlanner {
      *                                     again
      */
     public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.NIGHTLY))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(enabled -> enabled
-                        ? nightPass.byHand(workspaceId, projectId, night, this::queueByHand)
-                        : Mono.error(notOptedIn(workspaceId, TopicsStage.NIGHTLY)));
+        return optedIn(workspaceId, TopicsStage.NIGHTLY,
+                () -> nightPass.byHand(workspaceId, projectId, night, this::queueByHand));
     }
 
     /**
@@ -158,11 +152,7 @@ public class TopicsRunPlanner {
     public Mono<Void> resetByHand(@NonNull UUID projectId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(enabled -> enabled
-                            ? store.resetList(projectId)
-                            : Mono.error(notOptedIn(workspaceId, TopicsStage.BUILD)))
+            return optedIn(workspaceId, TopicsStage.BUILD, () -> store.resetList(projectId))
                     .filter(Boolean::booleanValue)
                     .switchIfEmpty(Mono.error(() -> new ConflictException(
                             "Project '%s' has no topics row or a run in flight".formatted(projectId))))
@@ -172,10 +162,20 @@ public class TopicsRunPlanner {
         });
     }
 
+    /**
+     * {@code then} once the workspace reaches {@code stage}, checked on a bounded-elastic thread (a config and MySQL
+     * read); a {@link ConflictException} otherwise.
+     */
+    private <T> Mono<T> optedIn(String workspaceId, TopicsStage stage, Supplier<Mono<T>> then) {
+        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, stage))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(enabled -> enabled ? then.get() : Mono.error(notOptedIn(workspaceId, stage)));
+    }
+
     private static ConflictException notOptedIn(String workspaceId, TopicsStage stage) {
-        return new ConflictException(("Workspace '%s' is not opted in to topics runs at stage %s: it needs to be in "
-                + "topics.enabledWorkspaces at stage %s or later, and enabled in ai_label_workspaces")
-                .formatted(workspaceId, stage.configName(), stage.configName()));
+        return new ConflictException(("Workspace is not opted in to topics runs: it needs to be in "
+                + "topics.enabledWorkspaces at the stage or later, and enabled in ai_label_workspaces, workspace "
+                + "'%s', stage '%s'").formatted(workspaceId, stage.configName()));
     }
 
     /**

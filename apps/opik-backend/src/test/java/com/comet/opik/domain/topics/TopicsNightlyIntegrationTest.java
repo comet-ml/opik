@@ -484,7 +484,7 @@ class TopicsNightlyIntegrationTest {
         assertThatThrownBy(() -> planner.nightByHand(vectorsOnly, skipped, today()).block())
                 .isInstanceOfSatisfying(ConflictException.class, error -> assertThat(
                         ((ErrorMessage) error.getResponse().getEntity()).getMessage())
-                        .contains("not opted in to topics runs at stage nightly"));
+                        .startsWith("Workspace is not opted in to topics runs:").endsWith("stage 'nightly'"));
     }
 
     @Test
