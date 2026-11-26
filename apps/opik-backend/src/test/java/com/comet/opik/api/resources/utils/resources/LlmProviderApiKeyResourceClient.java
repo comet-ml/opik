@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.OpenRouterRegionResponse;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -171,6 +172,24 @@ public class LlmProviderApiKeyResourceClient {
             }
 
             return null;
+        }
+    }
+
+    public Response callGetOpenRouterRegion(String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("openrouter")
+                .path("region")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public OpenRouterRegionResponse getOpenRouterRegion(String apiKey, String workspaceName) {
+        try (var actualResponse = callGetOpenRouterRegion(apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(OpenRouterRegionResponse.class);
         }
     }
 

@@ -14,6 +14,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterRegion;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -61,6 +62,8 @@ public interface LlmProviderApiKeyService {
     void delete(Set<UUID> ids, String workspaceId);
 
     ProviderAuthCheck.Result testAuthConfig(ProviderAuthCheck request, String workspaceId);
+
+    OpenRouterRegion getOpenRouterRegion(String workspaceId);
 }
 
 @Slf4j
@@ -99,6 +102,16 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
             return repository.findByProviders(workspaceId, providers);
         });
+    }
+
+    /** The key the OpenRouter client would pick: the same lookup as {@code LlmProviderFactoryImpl}. */
+    @Override
+    public OpenRouterRegion getOpenRouterRegion(@NonNull String workspaceId) {
+        var workspaceBaseUrl = findByProviders(workspaceId, Set.of(LlmProvider.OPEN_ROUTER)).stream()
+                .findFirst()
+                .map(ProviderApiKey::baseUrl)
+                .orElse(null);
+        return OpenRouterRegion.effective(workspaceBaseUrl, configuration.getLlmProviderClient().getOpenRouterUrl());
     }
 
     @Override
