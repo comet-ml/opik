@@ -1,0 +1,98 @@
+name: Docker arm64 Build
+run-name: "Docker arm64 Build ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+# The other PR image builds are amd64 only, but build_apps.yml also publishes arm64 on main. An arm64
+# build breaks on its own only when an input resolves per arch: a base image whose pinned digest has no
+# arm64 manifest, or a dependency with no arm64 wheel or native binary. So arm64 is built when one of
+# those inputs changes, not on every source change.
+on:
+  pull_request:
+    paths:
+      - "apps/opik-backend/Dockerfile"
+      - "apps/opik-frontend/Dockerfile"
+      - "apps/opik-frontend/package.json"
+      - "apps/opik-frontend/package-lock.json"
+      - "apps/opik-python-backend/Dockerfile"
+      - "apps/opik-python-backend/requirements.txt"
+      - "apps/opik-sandbox-executor-python/Dockerfile"
+      - "apps/opik-sandbox-executor-python/requirements.txt"
+      - ".github/workflows/build_docker_arm64.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  detect:
+    name: Select images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      images: ${{ steps.select.outputs.images }}
+    steps:
+      - name: Select images whose arch-sensitive inputs changed
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          WORKFLOW_FILE: .github/workflows/build_docker_arm64.yml
+        run: |
+          # opik-guardrails-backend is left out: build_apps.yml publishes it amd64 only.
+          all=(opik-backend opik-frontend opik-python-backend opik-sandbox-executor-python)
+          files=""
+          if [[ "$EVENT" == "pull_request" ]]; then
+            files=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+          fi
+          selected=()
+          for image in "${all[@]}"; do
+            if [[ "$EVENT" != "pull_request" ]] \
+              || grep -qxF "$WORKFLOW_FILE" <<<"$files" \
+              || grep -qE "^apps/${image}/(Dockerfile|package(-lock)?\.json|requirements\.txt)$" <<<"$files"; then
+              selected+=("$image")
+            fi
+          done
+          echo "images=$(jq -cn '$ARGS.positional' --args "${selected[@]}")" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.image }} (arm64)
+    needs: detect
+    if: needs.detect.outputs.images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.detect.outputs.images) }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Build ${{ matrix.image }} image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          DOCKER_BUILD_SUMMARY: false
+        with:
+          context: apps/${{ matrix.image }}
+          file: apps/${{ matrix.image }}/Dockerfile
+          platforms: linux/arm64
+          push: false
+          load: false
+          provenance: false
+          # The backend's `mvn versions:set` fails on an empty version.
+          build-args: |
+            OPIK_VERSION=latest
