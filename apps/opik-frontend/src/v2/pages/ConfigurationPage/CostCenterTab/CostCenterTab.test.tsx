@@ -1267,6 +1267,74 @@ describe("CostCenterTab", () => {
       expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     });
 
+    describe("a name_normalized warning", () => {
+      const NAME_NOTES = [
+        [
+          "today's backend",
+          "Saved as 'gpt-4o', the form spans are looked up in",
+        ],
+        [
+          "the backend that keeps names as typed",
+          "Matches spans whose model, without the part before its first '/', is 'gpt-4o'",
+        ],
+      ];
+      const nameNote = (message: string) => ({
+        row: 0,
+        field: "model",
+        code: "name_normalized",
+        message,
+      });
+
+      it.each(NAME_NOTES)(
+        "saves without asking to confirm it, with %s",
+        async (_, message) => {
+          mutateAsync.mockImplementation(async ({ dryRun }) =>
+            replaceResult(dryRun, [nameNote(message)]),
+          );
+          renderTab(ADMIN);
+
+          openRow("gpt-4o");
+          fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+          await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+          expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false);
+          expect(
+            screen.queryByRole("button", { name: "Save anyway" }),
+          ).toBeNull();
+        },
+      );
+
+      it("shows it as a note next to a warning that does need confirming", async () => {
+        mutateAsync.mockImplementation(async ({ dryRun }) =>
+          replaceResult(dryRun, [
+            nameNote(NAME_NOTES[1][1]),
+            {
+              row: 0,
+              field: "input_price",
+              code: "price_out_of_range",
+              message: "Input changes by more than 50%",
+            },
+          ]),
+        );
+        renderTab(ADMIN);
+
+        openRow("gpt-4o");
+        fireEvent.change(priceInput("Input"), { target: { value: "0.5" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+        const warnings = await screen.findByTestId("model-price-warnings");
+        expect(warnings).toHaveTextContent("Input changes by more than 50%");
+        expect(warnings).not.toHaveTextContent("Matches spans");
+        expect(screen.getByTestId("model-price-notes")).toHaveTextContent(
+          NAME_NOTES[1][1],
+        );
+        expect(
+          screen.getByRole("button", { name: "Save anyway" }),
+        ).toBeVisible();
+      });
+    });
+
     it("asks before saving a model with warnings, then saves without another preview", async () => {
       mutateAsync.mockImplementation(async ({ dryRun }) =>
         replaceResult(dryRun, [
@@ -1854,6 +1922,31 @@ describe("CostCenterTab", () => {
         "acme-llama-70b",
         "team-model",
       ]);
+    });
+
+    it("lists a name_normalized warning as a note, not as something to check", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun, request }) => ({
+        ...replaceResult(dryRun, [
+          {
+            row: 3,
+            field: "model",
+            code: "name_normalized",
+            message:
+              "Matches spans whose model, without the part before its first '/', is 'llama3.2'",
+          },
+        ]),
+        created: [request.rows[3]],
+      }));
+      renderTab(ADMIN);
+
+      pasteAndPreview(
+        "model,provider,input_price_per_1m\nlocal/llama3.2,ollama,0.1",
+      );
+
+      expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
+        "local/llama3.2 on ollama: Matches spans whose model, without the part before its first '/', is 'llama3.2'",
+      );
+      expect(screen.queryByTestId("batch-preview-warnings")).toBeNull();
     });
 
     it("explains what is wrong with the file instead of sending it", () => {
