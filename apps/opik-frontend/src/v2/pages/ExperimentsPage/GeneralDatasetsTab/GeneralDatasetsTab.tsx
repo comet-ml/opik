@@ -761,7 +761,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       )}
       {selectedRows.length > 0 ? (
         <SelectionActionBar
-          className="pb-6 pt-4"
           selectedCount={selectedRows.length}
           onDeselectAll={() => setRowSelection({})}
         >
@@ -776,7 +775,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         </SelectionActionBar>
       ) : (
         <PageBodyStickyContainer
-          className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+          className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-2"
           direction="bidirectional"
           limitWidth
         >
