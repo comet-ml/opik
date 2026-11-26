@@ -40,8 +40,9 @@ import java.util.UUID;
 /**
  * Public entry point for saving and reading the queries Ollie chart widgets run, called by the Opik MCP server and by
  * API keys directly. Saving checks the SQL as a widget run would before storing it; a saved query only ever runs
- * through a widget, by reference, never through this resource. Save spends the same per-workspace rate limit as
- * {@link AnalyticsQueriesPublicResource}: its checks query ClickHouse as the EXTENDED user too.
+ * through a widget, by reference, never through this resource. Save spends the same per-workspace rate limit and
+ * concurrent-query slots as {@link AnalyticsQueriesPublicResource}: its checks query ClickHouse as the EXTENDED user
+ * too. Ollie's internal save is not counted against the slots, like the rest of its chart authoring.
  */
 @Path("/v1/private/dashboard-saved-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -73,7 +74,7 @@ public class DashboardSavedQueriesPublicResource {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/dashboard-saved-queries/{id}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many analytics queries; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many analytics queries, or too many running in the workspace; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Custom Charts or its public endpoints are not enabled")})
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
     @RateLimited(value = "analyticsQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
@@ -81,7 +82,7 @@ public class DashboardSavedQueriesPublicResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))) @NotNull @Valid DashboardSavedQuery query,
             @Context UriInfo uriInfo) {
         requireEnabled();
-        var saved = dashboardSavedQueryService.create(query);
+        var saved = dashboardSavedQueryService.createInWorkspaceSlot(query);
         var uri = uriInfo.getAbsolutePathBuilder().path(saved.id().toString()).build();
         return Response.created(uri).entity(saved).build();
     }

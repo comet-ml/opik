@@ -14,10 +14,12 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.annotation.Nullable;
@@ -42,11 +44,13 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -72,6 +76,13 @@ class DashboardSavedQueriesPublicResourceTest {
     private static final String API_KEY_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
+
+    // Only the concurrency test uses this workspace, so the slots it takes block no other test.
+    private static final String API_KEY_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_NAME_C = UUID.randomUUID().toString();
+    private static final String WORKSPACE_ID_C = UUID.randomUUID().toString();
+
+    private static final int MAX_CONCURRENT_QUERIES = 2;
 
     private static final String WINDOWED_QUERY = "SELECT toJSONString(map('id', toString(id))) AS result FROM traces"
             + " WHERE start_time >= {{window_start}} AND start_time <= {{window_end}}";
@@ -116,7 +127,9 @@ class DashboardSavedQueriesPublicResourceTest {
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
-                                new CustomConfig("customCharts.publicEndpointsEnabled", "true")))
+                                new CustomConfig("customCharts.publicEndpointsEnabled", "true"),
+                                new CustomConfig("customCharts.maxConcurrentQueriesPerWorkspace",
+                                        String.valueOf(MAX_CONCURRENT_QUERIES))))
                         .build());
     }
 
@@ -125,12 +138,14 @@ class DashboardSavedQueriesPublicResourceTest {
     private ClientSupport client;
     private String baseURI;
     private AnalyticsQueriesClient analyticsQueriesClient;
+    private LockService lockService;
 
     private UUID projectIdA;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, LockService lockService) {
         this.client = client;
+        this.lockService = lockService;
         baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -138,6 +153,7 @@ class DashboardSavedQueriesPublicResourceTest {
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B, USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_C, WORKSPACE_NAME_C, WORKSPACE_ID_C, USER);
 
         projectIdA = new ProjectResourceClient(client, baseURI, factory)
                 .createProject(UUID.randomUUID().toString(), API_KEY_A, WORKSPACE_NAME_A);
@@ -285,6 +301,31 @@ class DashboardSavedQueriesPublicResourceTest {
             assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
             assertThat(response.readEntity(String.class)).contains(RATE_LIMIT_MESSAGE);
         }
+    }
+
+    @Test
+    @DisplayName("with every workspace slot taken, save returns 429 with Retry-After, and saves once a slot is freed")
+    void saveDashboardQuery__whenWorkspaceSlotsTaken__thenTooManyRequestsUntilOneFrees() {
+        var lock = FreeFormSqlConcurrencyLimiter.slotLock(WORKSPACE_ID_C, MAX_CONCURRENT_QUERIES);
+        // Longer than the test can run, so only the release below can free a slot.
+        var permits = IntStream.range(0, MAX_CONCURRENT_QUERIES)
+                .mapToObj(i -> lockService.tryAcquireSlot(lock, MAX_CONCURRENT_QUERIES, Duration.ofMinutes(10)).block())
+                .toList();
+        assertThat(permits).doesNotContainNull();
+
+        try (var response = callSave(WINDOWED_QUERY, null, API_KEY_C, WORKSPACE_NAME_C)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+            assertThat(response.readEntity(ErrorMessage.class))
+                    .isEqualTo(new ErrorMessage(List.of(FreeFormSqlConcurrencyLimiter.TOO_MANY_QUERIES_MESSAGE)));
+        }
+
+        lockService.releaseSlot(lock, permits.getFirst()).block();
+
+        try (var response = callSave(WINDOWED_QUERY, null, API_KEY_C, WORKSPACE_NAME_C)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
+        }
+        lockService.releaseSlot(lock, permits.getLast()).block();
     }
 
     private Response callSave(String sql, @Nullable UUID projectId, String apiKey, String workspaceName) {

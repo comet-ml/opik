@@ -16,7 +16,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -29,6 +31,13 @@ public interface DashboardSavedQueryService {
      * refused with the same 400 and message instead of being stored.
      */
     DashboardSavedQuery create(DashboardSavedQuery query);
+
+    /**
+     * {@link #create}, with the checks run in one of the workspace's concurrent-query slots, as for the public API:
+     * they query ClickHouse as the EXTENDED user, like a run. Ollie's internal save uses {@link #create} and is not
+     * counted, like the rest of its chart authoring.
+     */
+    DashboardSavedQuery createInWorkspaceSlot(DashboardSavedQuery query);
 
     Optional<DashboardSavedQuery> findById(UUID id);
 
@@ -45,11 +54,21 @@ class DashboardSavedQueryServiceImpl implements DashboardSavedQueryService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
+    private final @NonNull FreeFormSqlConcurrencyLimiter concurrencyLimiter;
 
     @Override
     public DashboardSavedQuery create(@NonNull DashboardSavedQuery query) {
+        return create(query, false);
+    }
+
+    @Override
+    public DashboardSavedQuery createInWorkspaceSlot(@NonNull DashboardSavedQuery query) {
+        return create(query, true);
+    }
+
+    private DashboardSavedQuery create(DashboardSavedQuery query, boolean inWorkspaceSlot) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        validate(workspaceId, query);
+        validate(workspaceId, query, inWorkspaceSlot);
         var saved = query.toBuilder()
                 .id(idGenerator.generateId())
                 .createdBy(requestContext.get().getUserName())
@@ -69,10 +88,14 @@ class DashboardSavedQueryServiceImpl implements DashboardSavedQueryService {
      * Checks the query as a widget run would: the EXTENDED account, its project, and the date range placeholders
      * bound. Any bound dates do, as the checks look at the query's shape, not its rows.
      */
-    private void validate(String workspaceId, DashboardSavedQuery query) {
+    private void validate(String workspaceId, DashboardSavedQuery query, boolean inWorkspaceSlot) {
         String sql = DashboardWidgetQueryServiceImpl.bindWindow(query.sql(), Instant.EPOCH, Instant.EPOCH);
+        // Takes everything it needs as arguments: in a slot it runs on the thread that granted the slot, outside the
+        // request scope.
+        Supplier<CompletableFuture<Void>> checks = () -> freeFormSqlQueryService
+                .validate(FreeFormSqlAccount.EXTENDED, workspaceId, query.projectId(), sql);
         try {
-            freeFormSqlQueryService.validate(FreeFormSqlAccount.EXTENDED, workspaceId, query.projectId(), sql).join();
+            (inWorkspaceSlot ? concurrencyLimiter.run(workspaceId, checks) : checks.get()).join();
         } catch (CompletionException e) {
             // Unwrap so the mapped WebApplicationException, and its HTTP status, reaches the JAX-RS handling.
             Throwables.throwIfUnchecked(e.getCause());
