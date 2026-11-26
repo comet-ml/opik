@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -18,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -423,9 +425,9 @@ class TopicRunStore {
     }
 
     /**
-     * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass. A transient error is
-     * retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per trace); any other
-     * fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
+     * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass, or of topic on arrival. A
+     * transient error is retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per
+     * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
      */
     Mono<Void> insertTraceTopics(@NonNull TopicsMetrics.Workspace workspace, @NonNull List<TraceTopic> rows) {
         if (rows.isEmpty()) {
@@ -436,9 +438,12 @@ class TopicRunStore {
                 .timeout(runConfig.getReadTimeout().toJavaDuration())
                 .retryWhen(RetryUtils.handleClickHouseErrors(runConfig.getInsertRetries(), backoff,
                         backoff.multipliedBy(1L << runConfig.getInsertRetries()))
-                        .doBeforeRetry(signal -> log.warn("Topics retries a trace_topics insert, run '{}', project "
-                                + "'{}', attempt '{}'", rows.getFirst().runId(), rows.getFirst().projectId(),
-                                signal.totalRetries() + 2, signal.failure())))
+                        .doBeforeRetry(signal -> log.warn(
+                                "Topics retries a trace_topics insert, source '{}', run '{}', "
+                                        + "project '{}', attempt '{}'",
+                                rows.getFirst().source().getValue(),
+                                rows.getFirst().runId(), rows.getFirst().projectId(), signal.totalRetries() + 2,
+                                signal.failure())))
                 .doOnSuccess(__ -> {
                     metrics.saved(workspace, "trace_topics", rows.size());
                     metrics.traceTopicsInsert(workspace, true);
@@ -456,10 +461,40 @@ class TopicRunStore {
         return jdbi(() -> template.inTransaction(READ_ONLY, handle -> {
             var project = handle.attach(TopicProjectDAO.class).findProjects(workspaceId, List.of(projectId)).stream()
                     .findFirst()
-                    .filter(found -> found.listRunId() != null && found.windowUntil() != null);
+                    .filter(TopicRunStore::hasSavedList);
             return project.map(found -> new SavedList(found,
                     handle.attach(TopicDAO.class).findByProject(workspaceId, projectId))).orElse(null);
         }));
+    }
+
+    /**
+     * The saved lists of those of {@code projectIds} that have one, read in one transaction so each is of one save. A
+     * list's topics are in the order assignment breaks ties by.
+     */
+    Mono<List<SavedList>> readSavedLists(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds) {
+        if (projectIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> SavedRows.builder()
+                .projects(handle.attach(TopicProjectDAO.class).findProjects(workspaceId, projectIds))
+                .topics(handle.attach(TopicDAO.class).findByProjects(workspaceId, projectIds))
+                .build()))
+                .map(rows -> {
+                    var topics = rows.topics().stream().collect(Collectors.groupingBy(Topic::projectId));
+                    return rows.projects().stream()
+                            .filter(TopicRunStore::hasSavedList)
+                            .map(project -> new SavedList(project,
+                                    topics.getOrDefault(project.projectId(), List.of())))
+                            .toList();
+                });
+    }
+
+    @Builder(toBuilder = true)
+    private record SavedRows(@NonNull List<TopicProject> projects, @NonNull List<Topic> topics) {
+    }
+
+    private static boolean hasSavedList(TopicProject project) {
+        return project.listRunId() != null && project.windowUntil() != null;
     }
 
     /**

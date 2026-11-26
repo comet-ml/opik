@@ -134,13 +134,18 @@ class TopicsNightlyIntegrationTest {
     private WorkspaceNameService workspaceNames;
     private ProjectService projectService;
     private LockService lockService;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
             @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicWorkspaceService workspaceService,
             @Jit TopicsDiscoveryCandidates candidates, @Jit WorkspaceNameService workspaceNames,
-            @Jit ProjectService projectService, @Jit LockService lockService) {
+            @Jit ProjectService projectService, @Jit LockService lockService, @Jit TopicWindowDAO windowDAO,
+            @Jit TopicAlgorithm algorithm) {
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         this.store = store;
         this.workspaceService = workspaceService;
         this.candidates = candidates;
@@ -179,7 +184,8 @@ class TopicsNightlyIntegrationTest {
 
     @Test
     @DisplayName("two plans of one night queue one nightly update per project with a list, and skip one under "
-            + "minVectors; a pod saves each update and then runs its labelling pass; a plan after that queues nothing")
+            + "minVectors; a pod saves each update and then runs its labelling pass, whose labels topic on arrival gives "
+            + "too; a plan after that queues nothing")
     void oneNightlyUpdatePerProjectPerNight() {
         var workspaceId = enabledWorkspace();
         var first = builtYesterday(workspaceId);
@@ -203,7 +209,9 @@ class TopicsNightlyIntegrationTest {
             Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(data.topicProject(projectId)).usingRecursiveComparison()
                             .ignoringFields(RUN_FIELDS).isEqualTo(expected));
-            assertThat(data.topicProject(projectId).listRunId()).isNotEqualTo(before.get(projectId).listRunId());
+            var listRunId = data.topicProject(projectId).listRunId();
+            assertThat(listRunId).isNotEqualTo(before.get(projectId).listRunId());
+            data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, projectId, listRunId, todayStart());
         }
         assertThat(data.topicProject(small)).isEqualTo(smallBefore.toBuilder().lastNight(today()).build());
 

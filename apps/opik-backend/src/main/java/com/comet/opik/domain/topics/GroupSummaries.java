@@ -129,11 +129,16 @@ public class GroupSummaries {
      */
     static List<String> pick(MergedIntents merged, int[] members, int from, int to, int[] counts,
             double[] sims, int frequent, int total) {
+        return pick(merged.texts(), merged.firstIndex(), members, from, to, counts, sims, frequent, total);
+    }
+
+    /** {@link #pick(MergedIntents, int[], int, int, int[], double[], int, int)} on the merge's texts and first traces. */
+    static List<String> pick(String[] texts, int[] first, int[] members, int from, int to, int[] counts,
+            double[] sims, int frequent, int total) {
         int capacity = Math.max(0, Math.min(total, to - from));
         if (capacity == 0) {
             return List.of();
         }
-        var first = merged.firstIndex();
         Order byCount = (a, b) -> counts[a] > counts[b];
         Order byNearness = (a, b) -> nearer(a, b, sims, first);
         var best = new Best(capacity);
@@ -155,7 +160,6 @@ public class GroupSummaries {
                 best.offer(u, byNearness);
             }
         }
-        var texts = merged.texts();
         var out = new String[best.size];
         for (int e = 0; e < best.size; e++) {
             out[e] = texts[best.items[e]];

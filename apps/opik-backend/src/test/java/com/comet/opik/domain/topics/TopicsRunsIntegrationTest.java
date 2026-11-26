@@ -130,6 +130,8 @@ class TopicsRunsIntegrationTest {
     private TransactionTemplate template;
     private TopicsRunPlanner planner;
     private TopicRunStore store;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
     private TopicsTestData data;
     private ProjectResourceClient projects;
 
@@ -139,8 +141,10 @@ class TopicsRunsIntegrationTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
             @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicsNightPass nightPass,
-            ClientSupport client) {
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm, ClientSupport client) {
         this.nightPass = nightPass;
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         ClientSupportUtils.config(client);
         this.projects = new ProjectResourceClient(client, TestUtils.getBaseUrl(client),
                 PodamFactoryUtils.newPodamFactory());
@@ -206,6 +210,7 @@ class TopicsRunsIntegrationTest {
                 .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
+        data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, built, buildRun, tomorrowStart());
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
         }

@@ -65,6 +65,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private NightlyConfig nightly;
 
+    @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
+
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
      * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
@@ -171,6 +174,18 @@ public class TopicsConfig {
             return nightlyFrequent <= nightlyExamples;
         }
 
+        /** Verify shows a topic's examples from the ones naming picked for it. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyTopicExamples must not be above nightlyTopicExamples") public boolean isVerifyTopicExamplesOrdered() {
+            return verifyTopicExamples <= nightlyTopicExamples;
+        }
+
+        /** Verify shows a group's examples from the ones its summary picked. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyGroupExamples must not be above nightlyExamples") public boolean isVerifyGroupExamplesOrdered() {
+            return verifyGroupExamples <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;
@@ -208,6 +223,35 @@ public class TopicsConfig {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private volatile ParsedWorkspaces parsedWorkspaces;
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /**
+         * The arrival steps of one workspace in one vectors tick (the saved lists read and the insert after each
+         * workspace read's vectors) end within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
+
+        /**
+         * A step starts only with at least this much left of {@code timeout} and of the tick's budget: one that starts
+         * with almost no time would time out and count as a failure when it only ran out of budget.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration minStepTime;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.arrival.minStepTime must not be above topics.arrival.timeout") public boolean isMinStepTimeValid() {
+            return minStepTime == null || timeout == null
+                    || minStepTime.toNanoseconds() <= timeout.toNanoseconds();
+        }
+    }
 
     /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data

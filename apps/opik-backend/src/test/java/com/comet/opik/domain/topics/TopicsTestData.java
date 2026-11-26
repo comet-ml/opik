@@ -30,10 +30,12 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The seeds and reads that the topics container tests share: vectors seeded into {@code topic_vectors}, the per-table
@@ -246,6 +248,32 @@ final class TopicsTestData {
                 .bind("projectId", projectId.toString())
                 .mapTo(String.class)
                 .list();
+    }
+
+    /**
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
+     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
+     * {@code trace_topics}. {@code night} is the end of the run's window.
+     */
+    void assertArrivalEqualsTheRun(TopicWindowDAO windowDAO, TopicAlgorithm algorithm, String workspaceId,
+            UUID projectId, UUID runId, Instant night) {
+        var labels = traceTopics(workspaceId, projectId).stream()
+                .filter(row -> runId.equals(row.runId()))
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        // Wider than the test's window: only the run's traces are compared.
+        var window = windowDAO.readWindow(projectId, night.minus(Duration.ofDays(90)), night.plus(Duration.ofDays(1)),
+                100_000, 120)
+                .contextWrite(context(workspaceId))
+                .collectList().block()
+                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
+        assertThat(window).hasSize(labels.size()).isNotEmpty();
+
+        var arrived = algorithm.labeller(topics(projectId), topicProject(projectId).otherVectors())
+                .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
+        for (int i = 0; i < window.size(); i++) {
+            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
+                    .isEqualTo(labels.get(window.get(i).traceId()));
+        }
     }
 
     /**

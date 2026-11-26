@@ -129,7 +129,7 @@ class TopicVectorsFixtures {
     }
 
     /** {@link #rawVector} of the text, scaled to length 1. */
-    private static float[] expectedVector(String text) {
+    static float[] expectedVector(String text) {
         var raw = rawVector(text);
         double sum = 0;
         for (var value : raw) {
