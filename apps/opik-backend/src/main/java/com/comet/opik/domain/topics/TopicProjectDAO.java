@@ -520,6 +520,10 @@ public interface TopicProjectDAO {
     int skipUpdate(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId, @Bind("now") Instant now, @Bind("windowTo") Instant windowTo);
 
+    /** The workspaces among {@code workspaceIds} that have a row: those with Topics data, for retention. */
+    @SqlQuery("SELECT DISTINCT workspace_id FROM topic_projects WHERE workspace_id IN (<workspaceIds>)")
+    List<String> findWorkspacesWithProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
+
     /** The projects' whole rows: a deleted project has no topics state left. */
     @SqlUpdate("DELETE FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
