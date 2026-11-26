@@ -338,8 +338,8 @@ needs a deploy.
 ## Topics discovery runs
 
 A discovery run makes the topic list of a project that has none yet, from the project's topic vectors. A project
-with a saved list gets no second discovery run: updating a list is the nightly update's work, which is not shipped
-yet. Discovery runs read the same workspaces as ai-labels, only those listed in `TOPICS_ENABLED_WORKSPACES` at stage
+with a saved list gets no second discovery run: the nightly update updates it (see "Topics nightly updates"). Discovery
+runs read the same workspaces as ai-labels, only those listed in `TOPICS_ENABLED_WORKSPACES` at stage
 `build` or later (an id with no `:stage` suffix is at every stage), and run only with `TOPICS_ENABLED=true`.
 
 A discovery run reads the project's window: the 30 whole UTC days before the window's end. The planner's window ends at
@@ -714,7 +714,7 @@ move between pods, so read the counters with `sum` across pods.
 | `topics.trace_topics.inserts` by `outcome` | `trace_topics` inserts after a save and per labelling page: `ok`, or `failed` after the retries. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No threshold is set. |
 
-A failed window count logs a WARN (`Topics discovery runs count failed`) with the workspace. The planner then counts
+A failed window count logs a WARN (`Topics window count failed`) with the workspace. The planner then counts
 each project of that workspace alone. The Prometheus names replace the dots with underscores, for example
 `topics_runs_total`. ClickHouse queries of the runs have a `log_comment` that starts with `topics:`.
 
@@ -737,6 +737,48 @@ Topic on arrival (see "Topic on arrival") writes rows only for traces whose vect
 live. A trace deleted between that check and the arrival insert can still get an arrival row after the delete
 cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that exist), and
 retention removes it.
+
+## Topics nightly updates
+
+Once a night, each project with a saved list gets one nightly update: a run of mode `update` that updates its list
+with the night's window. The nightly updates go through the same queue as the discovery runs and share
+`TOPICS_RUNS_MAX_IN_FLIGHT`. They run for the workspaces listed in `TOPICS_ENABLED_WORKSPACES` at stage `nightly` or
+later.
+
+The night is the UTC date of the `TOPICS_NIGHTLY_SCHEDULE` fire that starts it. From the night's start until
+`TOPICS_NIGHTLY_BUDGET` after it, each plan of the leader does this, before the discovery runs:
+
+1. Reads the projects with a saved list that the night has not looked at (`last_night`) and that have no run in
+   flight.
+2. Skips, with no window count, a project that is deleted (`deleted`), a list that already covers the night
+   (`already_saved`), and a project whose last `TOPICS_NIGHTLY_PAUSE_FAILURES` runs failed within
+   `TOPICS_NIGHTLY_PAUSE_NIGHTS` nights (`paused`).
+3. Counts the windows, one ClickHouse count per workspace, while slots are free. It skips a project under
+   `TOPICS_RUN_MIN_VECTORS` (`small`) and queues the rest, the oldest `window_until` first. A project whose count
+   fails is decided `count_failed` and waits for the next night.
+
+Each decision writes `last_night` on the project's row, so later plans of the night leave it alone. A pod skips a
+queued update whose list covers the night by the time it claims it: the run ends `failed` with `cancelled` and is
+not counted in `failed_runs`.
+
+After the budget, no update is queued. The first plan after it adds the night to `not_reached_nights` of each project
+the night did not look at, unless its list already covers the night (saved after the budget). One plan logs the night's end (`Topics night '<date>' ended`) with the projects looked at
+and not reached; the Redis key `topics:nightly:end:<date>` makes it one.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_NIGHTLY_SCHEDULE` | `0 0 2 * * ?` | Quartz cron, UTC. The night starts at its first fire of the day. |
+| `TOPICS_NIGHTLY_BUDGET` | `2h` | How long after the night's start updates are queued. From `1m` to `20h`. |
+| `TOPICS_NIGHTLY_PAUSE_FAILURES` | `3` | Failed runs in a row that pause a project's nightly updates. From `1` to `100`. |
+| `TOPICS_NIGHTLY_PAUSE_NIGHTS` | `7` | A pause ends when the last failed run is older than this many nights. From `1` to `90`. |
+
+To stop the nightly updates for a workspace, list it in `TOPICS_ENABLED_WORKSPACES` at a stage before `nightly`, for
+example `<workspace_id>:arrival` (a deploy). Its saved list stays as it is.
+
+| Metric | Meaning |
+|---|---|
+| `topics.nightly.decisions` by `decision`, `reason` | Projects the night decided on: `update`, `skip` (with `reason`), `not_reached`, `count_failed`. |
+| `topics.nightly.nights` by `outcome` | `finished` once per night, after its budget; `failed` for each plan whose read failed, for every workspace or for one. |
 
 ## Topic on arrival
 

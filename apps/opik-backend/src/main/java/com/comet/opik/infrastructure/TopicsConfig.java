@@ -12,6 +12,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -21,6 +22,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
@@ -59,6 +61,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private RunsConfig runs;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
     private ArrivalConfig arrival;
@@ -586,6 +591,37 @@ public class TopicsConfig {
             } catch (IllegalArgumentException exception) {
                 return false;
             }
+        }
+    }
+
+    /**
+     * The nightly update of each project that has a topic list: each plan of the leader queues the night's updates as
+     * runs of mode {@code update}, for the workspaces listed at stage {@code nightly} or later.
+     */
+    @Data
+    public static class NightlyConfig {
+
+        /** Quartz cron, UTC. The night is the UTC date it fires on and starts at its first fire that day. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project is queued after this much of the night, from its start; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+
+        /** A project whose last this many discovery runs or nightly updates failed in a row is paused. */
+        @JsonProperty
+        @Min(1) @Max(100) private int pauseFailures;
+
+        /** A paused project waits this many nights from the night its last failed run started. */
+        @JsonProperty
+        @Min(1) @Max(90) private int pauseNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
+            return schedule == null || CronExpression.isValidExpression(schedule);
         }
     }
 

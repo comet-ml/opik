@@ -90,6 +90,45 @@ class TopicRunStore {
     }
 
     /**
+     * {@code queued -> running} for a nightly update, re-checking the night's skips on the row: a run that finds its
+     * project without a list, or its list already covering the night, ends {@code failed} with {@code cancelled} (not
+     * counted in {@code failed_runs}) and is counted as that skip in {@code topics.nightly.decisions}.
+     */
+    Mono<NightClaim> claimUpdate(@NonNull TopicsRunMessage message, @NonNull Instant deadline) {
+        var windowTo = TopicsNight.windowTo(message.night());
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            var now = Instant.now();
+            if (dao.claimUpdate(message.workspaceId(), message.projectId(), message.runId(), now, deadline,
+                    windowTo) == 1) {
+                return NightClaim.CLAIMED;
+            }
+            if (dao.skipUpdate(message.workspaceId(), message.projectId(), message.runId(), now, windowTo) != 1) {
+                return NightClaim.LOST;
+            }
+            return dao.findProjects(message.workspaceId(), List.of(message.projectId())).stream()
+                    .anyMatch(project -> project.listRunId() != null)
+                            ? NightClaim.ALREADY_SAVED
+                            : NightClaim.NO_LIST;
+        }))
+                .flatMap(claim -> {
+                    var reason = switch (claim) {
+                        case NO_LIST -> NightSkipReason.NO_LIST;
+                        case ALREADY_SAVED -> NightSkipReason.ALREADY_SAVED;
+                        case CLAIMED, LOST -> null;
+                    };
+                    if (reason == null) {
+                        return Mono.just(claim);
+                    }
+                    log.info("Topics run '{}' skipped at its claim, project '{}', night '{}', reason '{}'",
+                            message.runId(), message.projectId(), message.night(), reason.getValue());
+                    return resolveWorkspace(message.workspaceId())
+                            .doOnNext(workspace -> metrics.nightlyDecision(workspace, NightDecision.SKIP, reason, 1))
+                            .thenReturn(claim);
+                });
+    }
+
+    /**
      * True while the run should go on: its row is still running, or the run saved it itself. A saved run still has
      * its {@code trace_topics} insert and its labels run to queue, so a heartbeat between the save and the end of the
      * run must not stop it. False once the row was cancelled, abandoned or requeued.

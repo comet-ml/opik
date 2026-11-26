@@ -83,10 +83,7 @@ class TopicsDiscoveryCandidates {
     Mono<Long> windowVectors(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
         return windowDAO.countByProject(workspaceId, Set.of(projectId), windowFrom(night), windowTo(night),
                 countSeconds())
-                .filter(count -> count.projectId().equals(projectId))
-                .map(TopicWindowDAO.ProjectCount::traces)
-                .next()
-                .defaultIfEmpty(0L);
+                .map(counts -> counts.get(projectId));
     }
 
     /** The project's row as the planner reads it, empty when a discovery run cannot be queued for it. */
@@ -147,24 +144,9 @@ class TopicsDiscoveryCandidates {
                                 .max(Comparator.naturalOrder()).orElse(Duration.ZERO).toSeconds()));
     }
 
-    /**
-     * The workspace's projects with enough vectors, the most first. One count for the workspace; when it fails (a
-     * large workspace can trip {@code max_rows_to_read}), one per project, so a large project fails only its own.
-     */
+    /** The workspace's projects with enough vectors, the most first. */
     private Mono<List<Candidate>> count(String workspaceId, List<UUID> projectIds, Instant from, Instant to) {
-        return countAll(workspaceId, projectIds, from, to)
-                .onErrorResume(error -> {
-                    log.warn("Topics discovery runs count failed, counting each project; workspace '{}', projects '{}'",
-                            workspaceId, projectIds.size(), error);
-                    return Flux.fromIterable(projectIds)
-                            .concatMap(projectId -> countAll(workspaceId, List.of(projectId), from, to)
-                                    .onErrorResume(projectError -> {
-                                        log.warn("Topics discovery runs count failed, counted again the next plan; "
-                                                + "workspace '{}', project '{}'", workspaceId, projectId, projectError);
-                                        return Mono.just(Map.of());
-                                    }))
-                            .collect(LinkedHashMap<UUID, Long>::new, Map::putAll);
-                })
+        return counts(workspaceId, projectIds, from, to)
                 .map(counts -> counts.entrySet().stream()
                         .filter(entry -> entry.getValue() >= config.getRun().getMinVectors())
                         .map(entry -> Candidate.builder().workspaceId(workspaceId).projectId(entry.getKey())
@@ -174,9 +156,38 @@ class TopicsDiscoveryCandidates {
                         .toList());
     }
 
+    /**
+     * The window vectors of the workspace's projects, 0 for none, for the window that ends at {@code night}'s start.
+     * One count for the workspace; when it fails, one per project. A project whose own count fails is left out.
+     */
+    Mono<Map<UUID, Long>> windowVectors(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+            @NonNull LocalDate night) {
+        return counts(workspaceId, List.copyOf(projectIds), windowFrom(night), windowTo(night));
+    }
+
+    /**
+     * One count for the workspace; when it fails (a large workspace can trip {@code max_rows_to_read}), one per
+     * project, so a large project fails only its own and is left out.
+     */
+    private Mono<Map<UUID, Long>> counts(String workspaceId, List<UUID> projectIds, Instant from, Instant to) {
+        return countAll(workspaceId, projectIds, from, to)
+                .onErrorResume(error -> {
+                    log.warn("Topics window count failed, counting each project; workspace '{}', projects '{}'",
+                            workspaceId, projectIds.size(), error);
+                    return Flux.fromIterable(projectIds)
+                            .concatMap(projectId -> countAll(workspaceId, List.of(projectId), from, to)
+                                    .onErrorResume(projectError -> {
+                                        log.warn("Topics window count failed, counted again the next plan; "
+                                                + "workspace '{}', project '{}'", workspaceId, projectId, projectError);
+                                        return Mono.just(Map.of());
+                                    }))
+                            .collect(LinkedHashMap<UUID, Long>::new, Map::putAll);
+                });
+    }
+
+    /** Every project of {@code projectIds}, 0 when it has no vector in the window. */
     private Mono<Map<UUID, Long>> countAll(String workspaceId, List<UUID> projectIds, Instant from, Instant to) {
-        return windowDAO.countByProject(workspaceId, projectIds, from, to, countSeconds())
-                .collectMap(TopicWindowDAO.ProjectCount::projectId, TopicWindowDAO.ProjectCount::traces);
+        return windowDAO.countByProject(workspaceId, projectIds, from, to, countSeconds());
     }
 
     /** One item of each list in turn, in the lists' order; a shorter list drops out when it runs out. */

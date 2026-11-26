@@ -1147,6 +1147,11 @@ topics:
     backfillMaxWait: 72h
     timedOutShare: 0.99
     retryDelays: 1h,6h,1d
+  nightly:
+    schedule: "0 0 2 * * ?"
+    budget: 2h
+    pauseFailures: 3
+    pauseNights: 7
   runs:
     streamName: topics-runs
     consumerGroupName: topics-runs-consumers

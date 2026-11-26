@@ -92,7 +92,9 @@ class TopicsRunReconciler {
 
     /**
      * Publishes a run queued before {@code topics.runs.republishAfter} again. A discovery run is counted again for
-     * {@code night}, as the stream entry carries the window's count.
+     * {@code night}, as the stream entry carries the window's count; a nightly update for the current night, which
+     * the row does not keep. A nightly update with no current night is dropped as {@code deadline}: run on a day the schedule did not fire, it would move the list's
+     * window past the next scheduled night.
      */
     private Mono<Boolean> republishIfStale(InFlightRun run, LocalDate night, Instant now) {
         var queuedBefore = now.minus(config.getRuns().getRepublishAfter().toJavaDuration());
@@ -101,10 +103,20 @@ class TopicsRunReconciler {
         }
         var message = TopicsRunMessage.builder().runId(run.runId()).workspaceId(run.workspaceId())
                 .projectId(run.projectId()).mode(run.runMode());
-        var ready = run.runMode() == RunMode.DISCOVERY
-                ? candidates.windowVectors(run.workspaceId(), run.projectId(), night)
-                        .map(vectors -> message.night(night).windowTraces(vectors).build())
-                : Mono.just(message.build());
+        var current = TopicsNight.current(config.getNightly().getSchedule(), now).map(TopicsNight::date);
+        if (run.runMode() == RunMode.UPDATE && current.isEmpty()) {
+            return store.dropQueued(run.workspaceId(), run.projectId(), run.runId(), CancelReason.DEADLINE)
+                    .map(dropped -> !dropped);
+        }
+        var counted = switch (run.runMode()) {
+            case DISCOVERY -> night;
+            case UPDATE -> current.get();
+            case LABELS -> null;
+        };
+        var ready = counted == null
+                ? Mono.just(message.build())
+                : candidates.windowVectors(run.workspaceId(), run.projectId(), counted)
+                        .map(vectors -> message.night(counted).windowTraces(vectors).build());
         return ready.flatMap(built -> store.write(dao -> dao.republish(run.workspaceId(), run.projectId(),
                 run.runId(), queuedBefore, now))
                 .flatMap(marked -> {

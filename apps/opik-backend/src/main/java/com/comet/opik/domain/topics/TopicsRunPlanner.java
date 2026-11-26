@@ -31,8 +31,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 /**
  * Plans the Topics runs of the workspaces listed at stage {@code build} or later. One plan, on the leader only:
  * settle the runs in flight ({@link TopicsRunReconciler}), then fill the free slots of {@code topics.runs.maxInFlight},
- * across the cluster, with labelling passes that did not finish and discovery runs ({@link TopicsDiscoveryCandidates}),
- * one of each in turn. Each run is written
+ * across the cluster: first with the night's nightly updates while the night's budget lasts ({@link TopicsNightPass},
+ * for the workspaces at stage {@code nightly} or later), then with labelling passes that did not finish and discovery
+ * runs ({@link TopicsDiscoveryCandidates}), one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -48,6 +49,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsDiscoveryCandidates candidates;
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
+    private final @NonNull TopicsNightPass nightPass;
 
     /** A run to queue: its message once queued, which gives it its id. */
     @Builder(toBuilder = true)
@@ -68,12 +70,19 @@ public class TopicsRunPlanner {
                         .flatMap(runs -> reconciler.reconcile(runs, workspaceIds, night, start))
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
-                            if (free <= 0 || workspaceIds.isEmpty()) {
-                                return Mono.just(0);
-                            }
-                            return labelsDue(workspaceIds, start)
-                                    .zipWith(candidates.find(workspaceIds, night, start))
-                                    .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night), free));
+                            // The night pass runs with no free slot too: its skips and its end need none.
+                            return nightPass.plan(start, free, this::queueOne)
+                                    .flatMap(nightly -> {
+                                        int left = free - nightly;
+                                        if (left <= 0 || workspaceIds.isEmpty()) {
+                                            return Mono.just(nightly);
+                                        }
+                                        return labelsDue(workspaceIds, start)
+                                                .zipWith(candidates.find(workspaceIds, night, start))
+                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
+                                                        left))
+                                                .map(queued -> nightly + queued);
+                                    });
                         }))
                 .doOnNext(queued -> log.info("Topics plan done, window until '{}', runs queued '{}'", night, queued));
     }
