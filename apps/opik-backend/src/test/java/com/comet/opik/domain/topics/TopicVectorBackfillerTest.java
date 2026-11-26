@@ -11,10 +11,13 @@ import com.comet.opik.domain.topics.TopicVectorsDAO.Slice;
 import com.comet.opik.domain.topics.TopicVectorsMetrics.DiscoveryOutcome;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.redisson.api.RBucketsReactive;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -491,6 +494,21 @@ class TopicVectorBackfillerTest {
                 && find.lowerBound().equals(start.minus(15, ChronoUnit.MINUTES))));
     }
 
+    @Test
+    @DisplayName("when the long-read retry keys cannot be read, a workspace due for its long read gets its fresh read")
+    void longReadRetryKeysFail() {
+        var setup = new Setup();
+        var start = Instant.now();
+        var tick = tickOnMocks(setup);
+        when(setup.workspaces.vectorsWatermarks(any())).thenReturn(Map.of(setup.workspaceId, start));
+        when(setup.buckets.get(any(String[].class))).thenReturn(Mono.error(new IllegalStateException("redis")));
+
+        tick.tick(start).block();
+
+        verify(setup.dao).findUnvectored(argThat(find -> find.projectId() == null
+                && find.lowerBound().equals(start.minus(15, ChronoUnit.MINUTES))));
+    }
+
     /**
      * A tick on the setup's mocks, on the system clock as in production: one enabled workspace, its fresh read and the
      * backfill finding nothing unless a test says otherwise, no long read unless a test says otherwise.
@@ -520,7 +538,8 @@ class TopicVectorBackfillerTest {
                 ChronoUnit.DAYS))));
         when(registry.find(TopicEmbedding.SUMMARY_TASK)).thenReturn(Optional.of(task));
         return new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
-                setup.writer, setup.discovery, setup.backfiller, setup.metrics);
+                setup.writer, setup.discovery, setup.backfiller, setup.metrics,
+                new LongReadRetry(setup.config, setup.lockService, setup.redis));
     }
 
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */
@@ -531,6 +550,9 @@ class TopicVectorBackfillerTest {
         private final TopicVectorWriter writer = mock(TopicVectorWriter.class);
         private final TopicVectorsMetrics metrics = mock(TopicVectorsMetrics.class);
         private final TopicWorkspaceService workspaces = mock(TopicWorkspaceService.class);
+        private final LockService lockService = mock(LockService.class);
+        private final RedissonReactiveClient redis = mock(RedissonReactiveClient.class);
+        private final RBucketsReactive buckets = mock(RBucketsReactive.class);
         private final TopicsTestClock clock = new TopicsTestClock(now);
         private final String workspaceId = ID_GENERATOR.generateId().toString();
         private final TopicsConfig config = new TopicsConfig();
@@ -555,6 +577,9 @@ class TopicVectorBackfillerTest {
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
             when(backfills.findUndrained(any())).thenReturn(Map.of());
+            when(redis.getBuckets()).thenReturn(buckets);
+            when(buckets.get(any(String[].class))).thenReturn(Mono.just(Map.of()));
+            when(lockService.lockUsingToken(any(), any())).thenReturn(Mono.just(true));
             when(metrics.workspace(any())).thenAnswer(
                     invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
             discovery = new TopicVectorDiscovery(config, dao, backfills, metrics);
