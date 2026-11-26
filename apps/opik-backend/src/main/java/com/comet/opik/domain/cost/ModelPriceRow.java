@@ -7,7 +7,6 @@ import javax.annotation.Nullable;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -58,11 +57,6 @@ public record ModelPriceRow(
                 .aliasModelName(aliasModelName)
                 .aliasProvider(aliasProvider)
                 .build();
-    }
-
-    // The column spells the kind as the API does.
-    public String kindValue() {
-        return kind.name().toLowerCase(Locale.ROOT);
     }
 
     // Prices compare by value: MySQL hands back 1.0000000000 for a stored 1.00, which is no change.

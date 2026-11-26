@@ -78,6 +78,7 @@ class CustomLlmProviderTest {
         wireMock.start();
 
         var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setJudgeMaxRetries(0);
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
         var relaxedGuard = ProviderBaseUrlGuard.builder()
@@ -244,6 +245,24 @@ class CustomLlmProviderTest {
         assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
         assertThat(StringUtils.countMatches(rawBody, "\"seed\"")).isEqualTo(1);
         assertThat(body.get("seed").asInt()).isEqualTo(42);
+    }
+
+    /** The judge builds its own client, so it must call the way the model's own client would. */
+    @Test
+    void judgeCallsWithTheKeyAndTheUserAgentOfTheModelsOwnClient() {
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl(wireMock.baseUrl() + "/v1")
+                .configuration(Map.of("provider_name", PROVIDER_NAME))
+                .build();
+
+        clientGenerator.generateChat(config,
+                LlmAsJudgeModelParameters.builder().name("custom-llm/" + PROVIDER_NAME + "/" + MODEL).build())
+                .chat("hello");
+
+        var request = wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH))).getFirst();
+        assertThat(request.getHeader("Authorization")).isEqualTo("Bearer test-key");
+        assertThat(request.getHeader("User-Agent")).isEqualTo("langchain4j-openai");
     }
 
     @ParameterizedTest(name = "{0} rejects custom_parameters.{1}")

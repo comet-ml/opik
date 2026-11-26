@@ -4,9 +4,7 @@ import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
-import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
-import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,87 +30,49 @@ class OrganizationIdStamperTest {
     @ValueSource(strings = "   ")
     @DisplayName("Stamps the organization onto a message that has none")
     void stampsAMessageWithoutOne(String carried) {
-        var resolver = FixedOrganizationResolver.of(organizationId);
         var message = message(carried);
 
-        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
-
-        assertThat(stamped).isEqualTo(message.toBuilder().organizationId(organizationId).build());
+        assertThat(OrganizationIdStamper.stamp(message, organizationId))
+                .isEqualTo(message.toBuilder().organizationId(organizationId).build());
     }
 
     @Test
-    @DisplayName("Keeps the organization a message carries, without a lookup")
+    @DisplayName("Keeps the organization a message carries")
     void keepsTheMessagesOwnOrganization() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
         var message = message(UUID.randomUUID().toString());
 
-        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
-
-        assertThat(stamped).isEqualTo(message);
-        assertThat(resolver.lookups()).isZero();
+        assertThat(OrganizationIdStamper.stamp(message, organizationId)).isEqualTo(message);
     }
 
-    @Test
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "   ")
     @DisplayName("Leaves a message as it is when no organization is known")
-    void leavesTheMessageWhenNoneIsKnown() {
+    void leavesTheMessageWhenNoneIsKnown(String organizationId) {
         var message = message(null);
 
-        var stamped = new OrganizationIdStamper(FixedOrganizationResolver.none().organizationId()).stamp(message)
-                .block();
-
-        assertThat(stamped).isEqualTo(message);
+        assertThat(OrganizationIdStamper.stamp(message, organizationId)).isEqualTo(message);
     }
 
     @Test
-    @DisplayName("Passes a message that isn't a stream message through, without a lookup")
+    @DisplayName("Passes a message that isn't a stream message through")
     void passesOtherMessagesThrough() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
         var message = UUID.randomUUID().toString();
 
-        var stamped = new OrganizationIdStamper(resolver.organizationId()).stamp(message).block();
-
-        assertThat(stamped).isEqualTo(message);
-        assertThat(resolver.lookups()).isZero();
+        assertThat(OrganizationIdStamper.stamp(message, organizationId)).isEqualTo(message);
     }
 
     @Test
-    @DisplayName("Skips the lookup for messages that can't carry an organization")
-    void skipsTheLookupForMessagesThatCannotCarryOne() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
-        var messages = List.of(
+    @DisplayName("Leaves messages that can't carry an organization as they are")
+    void leavesMessagesThatCannotCarryOne() {
+        List<Object> messages = List.of(
                 PODAM_FACTORY.manufacturePojo(SpanToScoreLlmAsJudge.class),
                 PODAM_FACTORY.manufacturePojo(SpanToScoreUserDefinedMetricPython.class),
                 PODAM_FACTORY.manufacturePojo(TraceToScoreUserDefinedMetricPython.class),
                 PODAM_FACTORY.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class));
 
-        var stamped = new OrganizationIdStamper(resolver.organizationId()).stampAll(messages).block();
-
-        assertThat(stamped).containsExactlyElementsOf(messages);
-        assertThat(resolver.lookups()).isZero();
-    }
-
-    @Test
-    @DisplayName("Looks the organization up once for all the messages it stamps, skipping the ones that can't carry it")
-    void looksUpOnce() {
-        var resolver = FixedOrganizationResolver.of(organizationId);
-        var span = PODAM_FACTORY.manufacturePojo(SpanToScoreLlmAsJudge.class);
-        var trace = PODAM_FACTORY.manufacturePojo(TraceToScoreLlmAsJudge.class).toBuilder()
-                .organizationId(null)
-                .build();
-        var python = PODAM_FACTORY.manufacturePojo(TraceToScoreUserDefinedMetricPython.class);
-        var threads = List.of(message(null), message(null));
-
-        var stamped = new OrganizationIdStamper(resolver.organizationId())
-                .stampAll(List.of(span, trace, python, threads.getFirst(), threads.getLast()))
-                .block();
-
-        assertThat(stamped).containsExactly(
-                span,
-                trace.toBuilder().organizationId(organizationId).build(),
-                python,
-                threads.getFirst().toBuilder().organizationId(organizationId).build(),
-                threads.getLast().toBuilder().organizationId(organizationId).build());
-        assertThat(resolver.lookups()).isOne();
+        assertThat(messages.stream().map(message -> OrganizationIdStamper.stamp(message, organizationId)).toList())
+                .containsExactlyElementsOf(messages);
     }
 
     private static TraceThreadToScoreLlmAsJudge message(String organizationId) {

@@ -47,6 +47,8 @@ public class DatasetItemResultMapper {
     /** Tuple index for execution_policy, added after description (index 17) in the experiment_items_array */
     private static final int EXECUTION_POLICY_INDEX = 18;
     private static final int ASSERTIONS_INDEX = 19;
+    // Only the dataset experiment-item stream sends it: its rows aren't nested under their dataset item
+    private static final int DATASET_ITEM_DATA_INDEX = 20;
 
     private DatasetItemResultMapper() {
     }
@@ -92,6 +94,9 @@ public class DatasetItemResultMapper {
                                             Optional.ofNullable(experimentItem.get(EXECUTION_POLICY_INDEX))
                                                     .map(Object::toString)
                                                     .orElse(null))
+                                    : null)
+                            .datasetItemData(experimentItem.size() > DATASET_ITEM_DATA_INDEX
+                                    ? toData(experimentItem.get(DATASET_ITEM_DATA_INDEX))
                                     : null)
                             .build();
                     var assertionsJson = experimentItem.size() > ASSERTIONS_INDEX
@@ -259,14 +264,14 @@ public class DatasetItemResultMapper {
     }
 
     private static Map<String, JsonNode> getData(Row row) {
-
-        Optional<Map> data = Optional.ofNullable(row.get("data", Map.class));
-
         if (row.getMetadata().contains("data_final")) {
-            data = Optional.ofNullable(row.get("data_final", Map.class));
+            return toData(row.get("data_final", Map.class));
         }
+        return toData(row.get("data", Map.class));
+    }
 
-        return data
+    private static Map<String, JsonNode> toData(Object rawData) {
+        return Optional.ofNullable((Map<?, ?>) rawData)
                 .filter(s -> !s.isEmpty())
                 .map(value -> (Map<String, String>) value)
                 .stream()

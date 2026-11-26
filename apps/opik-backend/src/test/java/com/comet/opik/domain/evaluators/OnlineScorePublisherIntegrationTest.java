@@ -10,8 +10,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
-import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
-import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -51,8 +49,6 @@ class OnlineScorePublisherIntegrationTest {
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
     private final ServiceTogglesConfig serviceTogglesConfig = new ServiceTogglesConfig();
-
-    private OrganizationResolver organizationResolver = FixedOrganizationResolver.none();
 
     /**
      * Required by the publisher's constructor but never exercised: these tests use the overload that takes an
@@ -117,7 +113,7 @@ class OnlineScorePublisherIntegrationTest {
         var rule = llmRule();
         var projectId = idGenerator.generateId();
 
-        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
+        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user", null).block();
 
         // The resolved-rule overload must never reach the rule service; without this the bare mock would
         // return null, the ruleId overload would map that to an empty Mono, and the test would still pass.
@@ -159,7 +155,7 @@ class OnlineScorePublisherIntegrationTest {
         var projectId = idGenerator.generateId();
         var rule = pythonRule();
 
-        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user").block();
+        publisher.enqueueThreadMessage(threadIds, rule, projectId, "workspace", "user", null).block();
 
         verifyNoInteractions(automationRuleEvaluatorService);
 
@@ -185,13 +181,11 @@ class OnlineScorePublisherIntegrationTest {
     @DisplayName("The organization a judge message carries survives the stream codec")
     void enqueueThreadMessageKeepsTheOrganizationThroughTheCodec() {
         var organizationId = UUID.randomUUID().toString();
-        organizationResolver = FixedOrganizationResolver.of(organizationId);
         var publisher = newPublisher();
         var threadIds = List.of("thread-a-" + suffix(), "thread-b-" + suffix());
 
         publisher.enqueueThreadMessage(threadIds, llmRule(), idGenerator.generateId(), UUID.randomUUID().toString(),
-                RandomStringUtils.secure().nextAlphanumeric(10)).block();
-        organizationResolver = FixedOrganizationResolver.none();
+                RandomStringUtils.secure().nextAlphanumeric(10), organizationId).block();
 
         assertThat(readStream()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
                 .containsExactly(organizationId, organizationId);
@@ -217,7 +211,7 @@ class OnlineScorePublisherIntegrationTest {
         redissonClient.getStream(streamName, RedisStreamCodec.JAVA.getCodec()).delete().block();
         redissonClient.getStream(pythonStreamName, RedisStreamCodec.JAVA.getCodec()).delete().block();
         return new OnlineScorePublisherImpl(config, serviceTogglesConfig, redissonClient,
-                automationRuleEvaluatorService, organizationResolver);
+                automationRuleEvaluatorService);
     }
 
     private List<TraceThreadToScoreLlmAsJudge> readStream() {

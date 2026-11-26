@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.validation.SecureHttpUrl;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -10,6 +12,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.ToString;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -48,6 +51,13 @@ public class InferenceConfig {
     @Min(1) private int maxConcurrentDecides;
 
     /**
+     * Synchronous generate calls in flight from this instance, each on a thread of its own for the model's whole
+     * answer. They share the {@code jerseyClient} connection pool with the other calls to opik-inference.
+     */
+    @JsonProperty
+    @Min(1) private int maxConcurrentGenerates;
+
+    /**
      * The most of a response body, success or error, that a call reads; a longer one fails the call unread. Every call
      * in flight can hold up to this much heap, so it is capped at 64 MiB.
      */
@@ -59,6 +69,14 @@ public class InferenceConfig {
 
     @Valid @NotNull @JsonProperty
     private RetryConfig retry;
+    @Valid @NotNull @JsonProperty
+    private RealtimeConfig realtime;
+
+    /** Whether a feature can call opik-inference: the URL and the credential are both set. */
+    @JsonIgnore
+    public boolean isConfigured() {
+        return StringUtils.isNotBlank(url) && StringUtils.isNotBlank(credential);
+    }
 
     /**
      * What the service accepts in one call. The defaults are the contract's limits; a deployment whose service is set
@@ -76,6 +94,24 @@ public class InferenceConfig {
         @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
         private Duration maxEmbedDeadline;
 
+        /**
+         * The most {@code deadline_ms} a realtime-lane decide call sends; the service's
+         * {@code decide_realtime_max_deadline_ms}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxDecideRealtimeDeadline;
+
+        /** The most {@code deadline_ms} a realtime-lane generate call sends. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxGenerateRealtimeDeadline;
+
+        /** The most {@code deadline_ms} a batch-lane generate call sends. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration maxGenerateBatchDeadline;
+
         /** Items in one batch submit. */
         @JsonProperty
         @Min(1) private int maxBatchItems;
@@ -92,7 +128,10 @@ public class InferenceConfig {
         @JsonProperty
         @Min(0) @Max(10) private int maxRetries;
 
-        /** The wait before the first retry, doubled for each one after, unless the service sends Retry-After. */
+        /**
+         * The wait before the first retry, doubled for each one after and jittered by up to half either way, unless
+         * the service sends Retry-After.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
         private Duration baseBackoff;
@@ -103,5 +142,22 @@ public class InferenceConfig {
          */
         @JsonProperty
         @Min(1) private long submitBytesPerSecond;
+    }
+
+    /** The synchronous calls a request waits on: what a guardrail check's decide call asks of the service. */
+    @Data
+    public static class RealtimeConfig {
+        /**
+         * The deadline a decide call sends, the time the service may spend on it; at most
+         * {@code limits.maxDecideRealtimeDeadline}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        private Duration decideDeadline;
+        /** Room past that deadline for the answer to arrive, or for a quick retry of an overloaded call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+        private Duration decideMargin;
     }
 }

@@ -24,12 +24,12 @@ import java.math.BigDecimal;
  * the limit slightly — by design. There is no per-call pre-estimation and no hard kill.
  *
  * <p>Cost is computed fully in-process via {@link CostService#price} from the {@link ChatResponse}'s own
- * token usage, with the price layers the scorer loaded once for the evaluation (the organization's
- * prices over the built-in table) — no DB / network / provider round-trip per call. Everything is fail-open: a resolution or pricing failure degrades to
- * "no limit" and never disturbs the scoring call. A successful-but-unpriced lookup (model resolves
- * but the {@code (model, provider)} pair has no price-table entry) prices at zero, so the limit is
- * silently ineffective — this case has no exception to log, so {@link #charge(ChatResponse)} warns
- * once per guard to keep it operator-visible.
+ * token usage, with the price layers the scorer loaded once for the evaluation (the organization's prices
+ * over the built-in table) — no DB / network / provider round-trip per call. Everything is fail-open: a
+ * resolution or pricing failure degrades to "no limit" and never disturbs the scoring call. A
+ * successful-but-unpriced lookup (model resolves but the {@code (model, provider)} pair has no
+ * price-table entry) prices at zero, so the limit is silently ineffective — this case has no exception to
+ * log, so {@link #charge(ChatResponse)} warns once per guard to keep it operator-visible.
  *
  * <p>A limited guard is created once per evaluation and mutated sequentially on the reactive chain
  * (one LLM call completes before the next starts), so the plain {@code spentUsd} field is safe —

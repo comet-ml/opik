@@ -1,18 +1,27 @@
 import type { ModelPriceRow, PriceField } from "./types";
 import { PRICE_FIELDS } from "./types";
 import type { BuiltInPrice } from "./litellm";
-import { canonicalPrice, identityOf } from "./rows";
+import { canonicalPrice, identityOf, priceKeyOf } from "./rows";
 import type { BuiltInOf } from "./describe";
 
-export type CatalogType = "default" | "override" | "custom";
+export type CatalogType = "default" | "override" | "custom" | "alias";
 
-export const CATALOG_TYPES: CatalogType[] = ["default", "override", "custom"];
+export const CATALOG_TYPES: CatalogType[] = [
+  "default",
+  "override",
+  "custom",
+  "alias",
+];
 
 export const CATALOG_TYPE_LABELS: Record<CatalogType, string> = {
   default: "Default",
   override: "Override",
   custom: "Custom",
+  alias: "Alias",
 };
+
+export const NOT_DEFAULT_TYPE = "not_default";
+export const NOT_DEFAULT_LABEL = "Not default";
 
 export interface CatalogEntry {
   key: string;
@@ -23,6 +32,8 @@ export interface CatalogEntry {
   builtIn?: BuiltInPrice;
   row?: ModelPriceRow;
   prices: Partial<Record<PriceField, string>>;
+  aliasPrices?: Partial<Record<PriceField, string>>;
+  shadowsBuiltIn?: boolean;
   lastUpdatedAt?: string;
 }
 
@@ -30,6 +41,22 @@ const EXTRA_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
 
 const identityOfPrice = (price: BuiltInPrice) =>
   identityOf({ model: price.model, provider: price.provider, kind: "fixed" });
+
+const indexBuiltIns = (builtIns: BuiltInPrice[]) => {
+  const byIdentity = new Map<string, BuiltInPrice>();
+  const byPriceKey = new Map<string, BuiltInPrice[]>();
+  builtIns.forEach((price) => {
+    const identity = identityOfPrice(price);
+    if (byIdentity.has(identity)) return;
+    byIdentity.set(identity, price);
+    const key = priceKeyOf(price);
+    byPriceKey.set(key, [...(byPriceKey.get(key) ?? []), price]);
+  });
+  const find = (row: Pick<ModelPriceRow, "model" | "provider">) =>
+    byIdentity.get(identityOf({ ...row, kind: "fixed" })) ??
+    byPriceKey.get(priceKeyOf(row))?.[0];
+  return { byIdentity, byPriceKey, find };
+};
 
 export const effectivePrices = (
   builtIn: BuiltInPrice | undefined,
@@ -52,35 +79,41 @@ export const buildCatalog = (
   builtIns: BuiltInPrice[],
   rows: ModelPriceRow[],
 ): CatalogEntry[] => {
-  const byIdentity = new Map<string, BuiltInPrice>();
-  builtIns.forEach((price) => {
-    const identity = identityOfPrice(price);
-    if (!byIdentity.has(identity)) {
-      byIdentity.set(identity, price);
-    }
-  });
+  const index = indexBuiltIns(builtIns);
   const overridden = new Set<string>();
   const entries: CatalogEntry[] = rows.map((row) => {
     const identity = identityOf(row);
-    const builtIn = row.kind === "alias" ? undefined : byIdentity.get(identity);
+    const found = row.kind === "alias" ? undefined : index.find(row);
+    const builtIn =
+      found && !overridden.has(identityOfPrice(found)) ? found : undefined;
     if (builtIn) {
-      overridden.add(identity);
+      // Every built-in under the same lookup key prices the same spans, so
+      // the row replaces all of them, not only the one it was matched to.
+      index.byPriceKey
+        .get(priceKeyOf(builtIn))
+        ?.forEach((price) => overridden.add(identityOfPrice(price)));
     }
     return {
       // Keyed by model and provider, not by row, so a default that gets
       // overridden keeps its table row (and focus) instead of remounting.
-      key: row.kind === "alias" ? `alias:${identity}` : identity,
+      key:
+        row.kind === "alias"
+          ? `alias:${identity}`
+          : builtIn
+            ? identityOfPrice(builtIn)
+            : identity,
       model: row.model,
       provider: row.provider ?? "",
-      type: builtIn ? "override" : "custom",
+      type: row.kind === "alias" ? "alias" : builtIn ? "override" : "custom",
       mode: builtIn?.mode,
       builtIn,
       row,
       prices: effectivePrices(builtIn, row),
+      ...(row.kind === "alias" && index.find(row) && { shadowsBuiltIn: true }),
       lastUpdatedAt: row.last_updated_at ?? row.created_at ?? undefined,
     };
   });
-  byIdentity.forEach((builtIn, identity) => {
+  index.byIdentity.forEach((builtIn, identity) => {
     if (!overridden.has(identity)) {
       entries.push({
         key: identity,
@@ -93,6 +126,28 @@ export const buildCatalog = (
       });
     }
   });
+  const priced = entries.filter((entry) => entry.type !== "alias");
+  const pricedByKey = new Map(priced.map((entry) => [entry.key, entry]));
+  const pricedByPriceKey = new Map<string, CatalogEntry>();
+  priced.forEach((entry) => {
+    const key = priceKeyOf(entry);
+    if (!pricedByPriceKey.has(key)) pricedByPriceKey.set(key, entry);
+  });
+  entries.forEach((entry) => {
+    const target = entry.type === "alias" ? entry.row?.alias_of : undefined;
+    // Without a provider the alias follows each span's own provider, so there
+    // is no single price to show.
+    if (!target?.provider) return;
+    entry.aliasPrices = (
+      pricedByKey.get(
+        identityOf({
+          model: target.model,
+          provider: target.provider,
+          kind: "fixed",
+        }),
+      ) ?? pricedByPriceKey.get(priceKeyOf(target))
+    )?.prices;
+  });
   return entries;
 };
 
@@ -102,18 +157,16 @@ export const findBuiltIn = (
   provider: string,
 ): BuiltInPrice | undefined => {
   const identity = identityOf({ model, provider, kind: "fixed" });
-  return builtIns.find((price) => identityOfPrice(price) === identity);
+  const priceKey = priceKeyOf({ model, provider });
+  return (
+    builtIns.find((price) => identityOfPrice(price) === identity) ??
+    builtIns.find((price) => priceKeyOf(price) === priceKey)
+  );
 };
 
 export const builtInLookup = (builtIns: BuiltInPrice[]): BuiltInOf => {
-  const byIdentity = new Map<string, BuiltInPrice>();
-  builtIns.forEach((price) => {
-    const identity = identityOfPrice(price);
-    if (!byIdentity.has(identity)) {
-      byIdentity.set(identity, price);
-    }
-  });
-  return (row) => byIdentity.get(identityOf(row));
+  const { find } = indexBuiltIns(builtIns);
+  return (row) => find(row);
 };
 
 export const extraFields = (entry: CatalogEntry): PriceField[] =>
@@ -132,10 +185,12 @@ export interface CatalogFilter {
   filters?: CatalogFieldFilter[];
 }
 
-const TYPE_BY_LABEL: Record<string, CatalogType> = {
+const TYPE_BY_LABEL: Record<string, string> = {
   default: "default",
   override: "override",
   custom: "custom",
+  alias: "alias",
+  [NOT_DEFAULT_LABEL.toLowerCase()]: NOT_DEFAULT_TYPE,
 };
 
 const PRICE_FILTER_FIELDS: Record<string, PriceField> = {
@@ -211,16 +266,17 @@ const matchesFieldFilters = (
     }
     const actual = textOf(entry, field);
     if (actual === undefined) return true;
+    const matches = (filter: CatalogFieldFilter) => {
+      const expected = normalizedValue(field, filter.value);
+      return field === "type" && expected === NOT_DEFAULT_TYPE
+        ? actual !== "default"
+        : expected === actual;
+    };
     const included = group.filter((filter) => filter.operator === "=");
     const excluded = group.filter((filter) => filter.operator === "!=");
     return (
-      (!included.length ||
-        included.some(
-          (filter) => normalizedValue(field, filter.value) === actual,
-        )) &&
-      excluded.every(
-        (filter) => normalizedValue(field, filter.value) !== actual,
-      )
+      (!included.length || included.some(matches)) &&
+      excluded.every((filter) => !matches(filter))
     );
   });
 };

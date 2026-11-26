@@ -9,6 +9,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.OpenAiTokenUsage;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -164,7 +165,7 @@ class BudgetGuardTest {
     }
 
     private static PriceLayers organizationPricingGpt4oAt1And10() {
-        return PriceLayers.of("org-1", 1, List.of(CustomModelPrice.builder()
+        return PriceLayers.of(RandomStringUtils.secure().nextAlphanumeric(10), 1, List.of(CustomModelPrice.builder()
                 .modelName("gpt-4o")
                 .provider("openai")
                 .kind(CustomModelPrice.Kind.FIXED)

@@ -12,7 +12,7 @@ import { perMillionToPerToken } from "./litellm";
 import { canonicalPrice, identityOf, isSameRow, toEditableRow } from "./rows";
 import { effectivePrices } from "./catalog";
 import { PRICE_LABELS, rowLabel } from "./describe";
-import { MAX_PRICE_PER_MILLION } from "./validation";
+import { MAX_PRICE_PER_MILLION, MAX_ROWS } from "./validation";
 
 export interface SingleSave {
   request: ModelPriceReplace;
@@ -100,6 +100,7 @@ export const rebaseValues = (
 export interface BatchSave {
   request: ModelPriceReplace;
   positions: number[];
+  duplicates: string[];
 }
 
 export const upsertMany = (
@@ -109,8 +110,13 @@ export const upsertMany = (
   const byIdentity = new Map<string, ModelPriceRow>();
   list.rows.forEach((row) => byIdentity.set(identityOf(row), row));
   const uploaded = new Set<string>();
+  const duplicated = new Map<string, ModelPriceRow>();
   incoming.forEach((row) => {
     const identity = identityOf(row);
+    if (uploaded.has(identity)) {
+      duplicated.set(identity, row);
+      return;
+    }
     const saved = byIdentity.get(identity);
     byIdentity.set(identity, saved ? { ...saved, ...row } : row);
     uploaded.add(identity);
@@ -124,7 +130,25 @@ export const upsertMany = (
     positions: identities
       .map((identity, position) => (uploaded.has(identity) ? position : -1))
       .filter((position) => position >= 0),
+    duplicates: Array.from(duplicated.values()).map(
+      (row) =>
+        `${rowLabel(row)} appears more than once. Keep one row per model and provider.`,
+    ),
   };
+};
+
+export const describeRowLimit = (
+  list: ModelPriceList,
+  request: ModelPriceReplace,
+): string | undefined => {
+  const total = request.rows.length;
+  if (total <= MAX_ROWS) return undefined;
+  const format = (count: number) => count.toLocaleString("en-US");
+  return `The price list can hold at most ${format(
+    MAX_ROWS,
+  )} models. With this update it would have ${format(total)}: ${format(
+    list.rows.length,
+  )} saved now and ${format(total - list.rows.length)} new.`;
 };
 
 export const problemsForRows = (

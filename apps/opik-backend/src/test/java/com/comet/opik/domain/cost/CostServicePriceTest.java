@@ -2,14 +2,17 @@ package com.comet.opik.domain.cost;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -20,6 +23,10 @@ class CostServicePriceTest {
     private static final String GATEWAY_HOST = "llm-gateway.example.com";
     private static final JsonNode HALF_A_DOLLAR_METADATA = new ObjectMapper().valueToTree(
             Map.of("cost", Map.of("currency", "USD", "total_cost", 0.5)));
+
+    private static String customName() {
+        return "aide-" + RandomStringUtils.secure().nextAlphanumeric(32).toLowerCase(Locale.ROOT);
+    }
 
     private static CustomModelPrice fixed(String modelName, String provider, String inputPerMillion,
             String outputPerMillion) {
@@ -111,6 +118,81 @@ class CostServicePriceTest {
 
         assertThat(priced.cost()).isEqualByComparingTo("0.00125");
         assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
+    }
+
+    private static void assertPriced(PricedCost actual, PricedCost expected) {
+        assertThat(actual).usingRecursiveComparison()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .isEqualTo(expected);
+    }
+
+    private static Stream<Arguments> rowsNamedLikeAModelPricedPerUnit() {
+        // tts-1 bills 1000 characters at 1.5e-5, sora-2 bills 10 seconds at 0.1.
+        var characters = Map.of("input_characters", 1000);
+        var seconds = Map.of("video_duration_seconds", 10);
+        return Stream.of(
+                Arguments.of("fixed row, per character", "tts-1", characters,
+                        layers(fixed("tts-1", "openai", "1.00", "1.00")), "0.015"),
+                Arguments.of("fixed row, per second", "sora-2", seconds,
+                        layers(fixed("sora-2", "openai", "1.00", "1.00")), "1.0"),
+                Arguments.of("alias to a token-priced model, per character", "tts-1", characters,
+                        layers(alias("tts-1", "openai", "gpt-4o", "openai")), "0.015"),
+                Arguments.of("alias to a token-priced model, per second", "sora-2", seconds,
+                        layers(alias("sora-2", "openai", "gpt-4o", "openai")), "1.0"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rowsNamedLikeAModelPricedPerUnit")
+    void priceOfAModelPricedPerUnitIgnoresARowsTokenRates(String description, String modelName,
+            Map<String, Integer> usage, PriceLayers layers, String expectedCost) {
+        var priced = CostService.price(modelName, "openai", usage, null, layers);
+
+        assertPriced(priced, new PricedCost(new BigDecimal(expectedCost), CostSource.BUILT_IN));
+    }
+
+    @Test
+    void priceOfAnAliasToAModelPricedPerUnitBillsItsUnits() {
+        String aliasName = customName();
+
+        var priced = CostService.price(aliasName, "openai", Map.of("input_characters", 1000), null,
+                layers(alias(aliasName, "openai", "tts-1", "openai")));
+
+        assertPriced(priced, new PricedCost(new BigDecimal("0.015"), CostSource.ORGANIZATION));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"openai", "azure", "github_copilot"})
+    void priceOfAnAnyProviderAliasUsesItsTargetUnderTheSpansProvider(String spanProvider) {
+        String aliasName = customName();
+        var builtIn = CostService.price("gpt-5-mini", spanProvider, usage(1000, 0, 500), null,
+                PriceLayers.BUILT_IN_ONLY);
+
+        var priced = CostService.price(aliasName, spanProvider, usage(1000, 0, 500), null,
+                layers(alias(aliasName, CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+                        CustomModelPrice.SPAN_PROVIDER)));
+
+        assertThat(builtIn.source()).isEqualTo(CostSource.BUILT_IN);
+        assertPriced(priced, new PricedCost(builtIn.cost(), CostSource.ORGANIZATION));
+    }
+
+    @Test
+    void priceOfAnAnyProviderAliasIsNothingUnderAProviderWithoutTheTarget() {
+        String aliasName = customName();
+
+        var priced = CostService.price(aliasName, "anthropic", usage(1000, 0, 500), null,
+                layers(alias(aliasName, CustomModelPrice.ANY_PROVIDER, "gpt-5-mini",
+                        CustomModelPrice.SPAN_PROVIDER)));
+
+        assertPriced(priced, new PricedCost(BigDecimal.ZERO, CostSource.NONE));
+    }
+
+    @Test
+    void priceOfAModelBilledPerCharacterKeepsItsMetadataCostOverAFixedRow() {
+        var priced = CostService.price("tts-1", "openai", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
+                layers(fixed("tts-1", "openai", "1.00", "1.00")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.5");
+        assertThat(priced.source()).isEqualTo(CostSource.METADATA);
     }
 
     @Test

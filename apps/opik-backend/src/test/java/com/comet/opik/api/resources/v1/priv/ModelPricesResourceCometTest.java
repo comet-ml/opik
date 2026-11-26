@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.cost.CostSource;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.utils.JsonUtils;
@@ -149,7 +150,7 @@ class ModelPricesResourceCometTest {
             assertThat(response.getStatus()).isEqualTo(200);
             // 1000*2.5e-7 + 500*2e-6
             assertThat(new BigDecimal(resolution.cost())).isEqualByComparingTo("0.00125");
-            assertThat(resolution.costSource()).isEqualTo("built_in");
+            assertThat(resolution.costSource()).isEqualTo(CostSource.BUILT_IN);
             assertThat(resolution.listVersion()).isZero();
         }
     }

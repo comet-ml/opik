@@ -26,4 +26,5 @@ export const TYPE_TAG_VARIANT: Record<CatalogType, TagProps["variant"]> = {
   default: "gray",
   override: "yellow",
   custom: "green",
+  alias: "blue",
 };

@@ -53,13 +53,14 @@ type SheetTopBarVariant = "form" | "info";
 
 type SheetTopBarProps = {
   title?: React.ReactNode;
+  titleSuffix?: React.ReactNode;
   leftIcon?: React.ReactNode;
   children?: React.ReactNode;
   variant?: SheetTopBarVariant;
 };
 
 const SheetTopBar = React.forwardRef<HTMLDivElement, SheetTopBarProps>(
-  ({ title, leftIcon, children, variant = "form" }, ref) => {
+  ({ title, titleSuffix, leftIcon, children, variant = "form" }, ref) => {
     const CloseIcon = variant === "info" ? ChevronsRight : X;
     return (
       <div
@@ -79,6 +80,7 @@ const SheetTopBar = React.forwardRef<HTMLDivElement, SheetTopBarProps>(
               {title}
             </SheetTitle>
           )}
+          {titleSuffix}
         </div>
         {children !== undefined && (
           <div className="flex shrink-0 items-center gap-2 pl-4">

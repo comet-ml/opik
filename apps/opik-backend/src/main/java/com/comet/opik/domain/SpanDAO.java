@@ -46,7 +46,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
@@ -2183,7 +2182,7 @@ public class SpanDAO {
 
                         return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost.cost(),
                                 cost.version(), spanColumnsNonNullable(),
-                                configuration.getResponseFormatting().getTruncationSize());
+                                configuration.getResponseFormatting().getTruncationSize(), streamPayloads());
                     });
         });
     }
@@ -2202,9 +2201,7 @@ public class SpanDAO {
                     .bind("start_time", span.startTime().toString())
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
                     .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-            StreamedPayload.bind(statement,
-                    TruncationUtils.toJsonString(span.input()),
-                    TruncationUtils.toJsonString(span.output()),
+            StreamedPayload.bind(statement, streamPayloads(), span.input(), span.output(),
                     Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
@@ -2481,11 +2478,13 @@ public class SpanDAO {
                 .ifPresent(environment -> statement.bind("environment", environment));
     }
 
-    private static void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
-        StreamedPayload.bind(statement,
-                Objects.toString(spanUpdate.input(), null),
-                Objects.toString(spanUpdate.output(), null),
+    private void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
+        StreamedPayload.bind(statement, streamPayloads(), spanUpdate.input(), spanUpdate.output(),
                 Objects.toString(spanUpdate.metadata(), null));
+    }
+
+    private boolean streamPayloads() {
+        return configuration.getDatabaseAnalytics().isStreamPayloads();
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, Optional<SpanCost> cost, String queryName,
@@ -3046,7 +3045,7 @@ public class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
         var priced = CostService.price(model, span.provider(), span.usage(), span.metadata(), priceLayers);
-        return new SpanCost(priced.cost(), CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(span.usage())));
+        return new SpanCost(priced.cost(), CostVersion.of(priced, priceLayers, span.usage()));
     }
 
     // An update recomputes the cost only for a span whose cost the client never set, and only when the new cost is
@@ -3064,7 +3063,7 @@ public class SpanDAO {
             return Optional.empty();
         }
         return Optional.of(new SpanCost(priced.cost(),
-                CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(spanUpdate.usage()))));
+                CostVersion.of(priced, priceLayers, spanUpdate.usage())));
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {

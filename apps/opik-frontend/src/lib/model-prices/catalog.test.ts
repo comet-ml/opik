@@ -3,6 +3,7 @@ import {
   builtInLookup,
   extraFields,
   filterCatalog,
+  findBuiltIn,
   providersOf,
   sortCatalog,
 } from "./catalog";
@@ -10,6 +11,7 @@ import {
   blockingWarnings,
   describeBatchProblem,
   describePerToken,
+  describeRowLimit,
   overrideFields,
   problemsForRow,
   problemsForRows,
@@ -78,10 +80,28 @@ describe("buildCatalog", () => {
     ).toEqual([]);
   });
 
-  it("marks rows without a built-in price, including aliases, as custom", () => {
+  it("marks rows without a built-in price as custom, and aliases as alias", () => {
     expect(byModel("acme-llama", "").type).toBe("custom");
-    expect(byModel("gpt-5", "bifrost").type).toBe("custom");
+    expect(byModel("gpt-5", "bifrost").type).toBe("alias");
     expect(byModel("gpt-5", "bifrost").prices).toEqual({});
+    expect(byModel("gpt-5", "bifrost").aliasPrices).toEqual(
+      byModel("GPT-5", "openai").prices,
+    );
+  });
+
+  it("shows no alias price when the alias follows each span's provider", () => {
+    const [alias] = buildCatalog(
+      [],
+      [
+        {
+          model: "x",
+          provider: "",
+          kind: "alias",
+          alias_of: { model: "gpt-5" },
+        },
+      ],
+    );
+    expect(alias.aliasPrices).toBeUndefined();
   });
 
   it("lists built-in models nobody changed as defaults", () => {
@@ -118,6 +138,111 @@ describe("buildCatalog", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  describe("a built-in whose name has a provider prefix", () => {
+    const azure = [
+      {
+        model: "azure/gpt-4.1-mini",
+        provider: "azure",
+        input_price: "0.4",
+        output_price: "1.6",
+      },
+      {
+        model: "gpt-4.1-mini",
+        provider: "openai",
+        input_price: "0.4",
+        output_price: "1.6",
+      },
+    ];
+    const defaultKey = buildCatalog(azure, []).find(
+      (entry) => entry.provider === "azure",
+    )!.key;
+
+    it.each([
+      ["the lookup key, as the backend saves it today", "gpt-4.1-mini"],
+      ["the name as typed", "azure/gpt-4.1-mini"],
+      ["another prefix", "my-gateway/GPT-4.1-mini"],
+    ])("shows one override row when the row is saved under %s", (_, model) => {
+      const catalog = buildCatalog(azure, [
+        { model, provider: "azure", kind: "fixed", input_price: "0.3" },
+      ]);
+      const onAzure = catalog.filter((entry) => entry.provider === "azure");
+
+      expect(onAzure).toHaveLength(1);
+      expect(onAzure[0]).toMatchObject({
+        key: defaultKey,
+        type: "override",
+        prices: { input_price: "0.3", output_price: "1.6" },
+      });
+      expect(catalog.find((entry) => entry.provider === "openai")?.type).toBe(
+        "default",
+      );
+    });
+
+    it("replaces every built-in that prices the same spans", () => {
+      const catalog = buildCatalog(
+        [
+          { model: "deepseek-chat", provider: "deepseek", input_price: "0.28" },
+          {
+            model: "deepseek/deepseek-chat",
+            provider: "deepseek",
+            input_price: "0.28",
+          },
+        ],
+        [
+          {
+            model: "deepseek-chat",
+            provider: "deepseek",
+            kind: "fixed",
+            input_price: "0.2",
+          },
+        ],
+      );
+
+      expect(catalog.map((entry) => [entry.model, entry.type])).toEqual([
+        ["deepseek-chat", "override"],
+      ]);
+    });
+
+    it("shows the prices an alias follows when its target is saved without the prefix", () => {
+      const alias = buildCatalog(azure, [
+        {
+          model: "team-mini",
+          provider: "gateway",
+          kind: "alias",
+          alias_of: { model: "gpt-4.1-mini", provider: "azure" },
+        },
+      ]).find((entry) => entry.type === "alias")!;
+
+      expect(alias.aliasPrices).toEqual({
+        input_price: "0.4",
+        output_price: "1.6",
+      });
+    });
+
+    it("marks an alias that takes the place of a built-in", () => {
+      const catalog = buildCatalog(azure, [
+        {
+          model: "gpt-4.1-mini",
+          provider: "azure",
+          kind: "alias",
+          alias_of: { model: "gpt-4.1-mini", provider: "openai" },
+        },
+        {
+          model: "team-mini",
+          provider: "gateway",
+          kind: "alias",
+          alias_of: { model: "gpt-4.1-mini", provider: "openai" },
+        },
+      ]);
+      const aliases = catalog.filter((entry) => entry.type === "alias");
+
+      expect(aliases.map((entry) => entry.shadowsBuiltIn)).toEqual([
+        true,
+        undefined,
+      ]);
+    });
+  });
+
   it("counts the extra price fields beyond input and output", () => {
     expect(extraFields(byModel("GPT-5", "openai"))).toEqual([
       "cache_read_price",
@@ -143,7 +268,16 @@ describe("buildCatalog", () => {
     ).toEqual(["claude-haiku-4-5"]);
     expect(
       models(filterCatalog(catalog, { filters: [is("type", "Custom")] })),
-    ).toEqual(["acme-llama", "gpt-5"]);
+    ).toEqual(["acme-llama"]);
+    expect(
+      models(filterCatalog(catalog, { filters: [is("type", "alias")] })),
+    ).toEqual(["gpt-5"]);
+    expect(
+      models(filterCatalog(catalog, { filters: [is("type", "not_default")] })),
+    ).not.toContain("claude-haiku-4-5");
+    expect(
+      filterCatalog(catalog, { filters: [is("type", "Not default")] }),
+    ).toHaveLength(3);
     expect(sortCatalog(catalog, "desc")[0].model).toBe("GPT-5");
   });
 
@@ -274,6 +408,36 @@ describe("saving one model", () => {
     expect(positions).toEqual([0, 3]);
   });
 
+  it("reports a model uploaded twice instead of keeping the last row", () => {
+    const { duplicates } = upsertMany(list, [
+      { model: "dup", provider: "acme", kind: "fixed", input_price: "1" },
+      { model: "fresh", provider: "x", kind: "fixed", input_price: "1" },
+      { model: " DUP", provider: "Acme", kind: "fixed", input_price: "3" },
+      { model: "dup", provider: "acme", kind: "fixed", input_price: "4" },
+    ]);
+    expect(duplicates).toEqual([
+      "dup on acme appears more than once. Keep one row per model and provider.",
+    ]);
+  });
+
+  it("explains the row limit with the saved and the new rows", () => {
+    const fresh = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        model: `bulk-${i}`,
+        provider: "acme",
+        kind: "fixed" as const,
+        input_price: "1",
+      }));
+    const tooMany = upsertMany(list, fresh(998)).request;
+
+    expect(describeRowLimit(list, tooMany)).toBe(
+      "The price list can hold at most 1,000 models. With this update it would have 1,001: 3 saved now and 998 new.",
+    );
+    expect(
+      describeRowLimit(list, upsertMany(list, fresh(997)).request),
+    ).toBeUndefined();
+  });
+
   it("keeps only the warnings about the uploaded rows or the whole list", () => {
     const warnings = [
       { row: 1, field: "provider", code: "a", message: "existing row" },
@@ -388,5 +552,22 @@ describe("builtInLookup", () => {
     expect(
       builtInOf({ model: "gpt-4o", provider: "azure", kind: "fixed" }),
     ).toBeUndefined();
+  });
+
+  it("finds the built-in of a row saved without the name's provider prefix", () => {
+    const azure = {
+      model: "azure/gpt-4o",
+      provider: "azure",
+      input_price: "2.5",
+    };
+
+    expect(
+      builtInLookup([azure])({
+        model: "gpt-4o",
+        provider: "azure",
+        kind: "fixed",
+      }),
+    ).toBe(azure);
+    expect(findBuiltIn([azure], "gpt-4o", "azure")).toBe(azure);
   });
 });

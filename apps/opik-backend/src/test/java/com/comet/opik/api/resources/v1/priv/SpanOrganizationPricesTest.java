@@ -137,6 +137,7 @@ class SpanOrganizationPricesTest {
     private record StoredCost(BigDecimal cost, String version) {
     }
 
+    // total_estimated_cost_version is in no span JSON view, so the API can't return it: read the stored row.
     private StoredCost storedCost(UUID spanId) {
         return templateAsync.nonTransaction(connection -> {
             var statement = connection.createStatement("""
