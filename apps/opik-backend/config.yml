@@ -904,9 +904,10 @@ rateLimit:
       errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
     analyticsQueries:
       # Default: 120
-      # Description: how many queries the public analytics-queries endpoint (API keys and the Opik MCP server) allows
-      #   per workspace in the specified time bucket. Separate from dashboardWidgetQueries, so programmatic callers
-      #   cannot use up the budget of dashboard and insights view viewers.
+      # Description: how many runs and saves the public analytics-queries and dashboard-saved-queries endpoints (API
+      #   keys and the Opik MCP server) allow per workspace in the specified time bucket, together: both query
+      #   ClickHouse as the EXTENDED user. Separate from dashboardWidgetQueries, so programmatic callers cannot use up
+      #   the budget of dashboard and insights view viewers.
       limit: ${RATE_LIMIT_ANALYTICS_QUERIES_PER_WORKSPACE_LIMIT:-120}
       # Default: 60
       # Description: Time bucket size in seconds

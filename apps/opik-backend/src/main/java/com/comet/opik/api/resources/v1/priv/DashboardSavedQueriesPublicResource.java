@@ -40,7 +40,8 @@ import java.util.UUID;
 /**
  * Public entry point for saving and reading the queries Ollie chart widgets run, called by the Opik MCP server and by
  * API keys directly. Saving checks the SQL as a widget run would before storing it; a saved query only ever runs
- * through a widget, by reference, never through this resource.
+ * through a widget, by reference, never through this resource. Save spends the same per-workspace rate limit as
+ * {@link AnalyticsQueriesPublicResource}: its checks query ClickHouse as the EXTENDED user too.
  */
 @Path("/v1/private/dashboard-saved-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -72,9 +73,10 @@ public class DashboardSavedQueriesPublicResource {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/dashboard-saved-queries/{id}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many analytics queries; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Custom Charts or its public endpoints are not enabled")})
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
-    @RateLimited
+    @RateLimited(value = "analyticsQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response save(
             @RequestBody(content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))) @NotNull @Valid DashboardSavedQuery query,
             @Context UriInfo uriInfo) {
@@ -87,7 +89,8 @@ public class DashboardSavedQueriesPublicResource {
     /**
      * Public so an MCP client or API user can read back what a chart runs, to explain it or to save a changed copy:
      * saved queries are never edited in place. It returns the stored SQL, placeholders included, and runs nothing,
-     * so it needs no SQL checks and no free-form SQL budget; a widget run re-checks the query every time.
+     * so it needs no SQL checks and stays off the analytics-queries rate limit; a widget run re-checks the query
+     * every time.
      */
     @GET
     @Path("/{id}")

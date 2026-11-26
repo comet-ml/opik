@@ -12,9 +12,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -43,6 +45,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -73,6 +76,11 @@ class DashboardSavedQueriesPublicResourceTest {
     private static final String WINDOWED_QUERY = "SELECT toJSONString(map('id', toString(id))) AS result FROM traces"
             + " WHERE start_time >= {{window_start}} AND start_time <= {{window_end}}";
 
+    // Per workspace, shared by save and run. Above what workspace A spends across this class, so only the rate-limit
+    // test reaches it.
+    private static final int RATE_LIMIT = 20;
+    private static final String RATE_LIMIT_MESSAGE = "You have exceeded the rate limit for analytics queries in this workspace. Please try again later.";
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -99,6 +107,12 @@ class DashboardSavedQueriesPublicResourceTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
+                        .rateLimitEnabled(true)
+                        .limit(10_000L)
+                        .workspaceLimit(10_000L)
+                        .limitDurationInSeconds(60L)
+                        .customLimits(Map.of("analyticsQueries", new LimitConfig("Analytics-Queries",
+                                "analytics_queries", RATE_LIMIT, 60, RATE_LIMIT_MESSAGE)))
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
                                 new CustomConfig("customCharts.enabled", "true"),
@@ -110,6 +124,7 @@ class DashboardSavedQueriesPublicResourceTest {
 
     private ClientSupport client;
     private String baseURI;
+    private AnalyticsQueriesClient analyticsQueriesClient;
 
     private UUID projectIdA;
 
@@ -119,6 +134,7 @@ class DashboardSavedQueriesPublicResourceTest {
         baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
+        analyticsQueriesClient = new AnalyticsQueriesClient(client, baseURI);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B, USER);
@@ -244,6 +260,30 @@ class DashboardSavedQueriesPublicResourceTest {
 
         try (var response = callGet(UUID.randomUUID(), apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.FORBIDDEN.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("saves spend the run endpoint's per-workspace budget: once saves use it up, a run gets 429")
+    void saveDashboardQuery__whenAnalyticsQueriesBudgetSpent__thenSaveAndRunTooManyRequests() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspaceWithPermissions(wireMock.server(), apiKey, workspaceName,
+                UUID.randomUUID().toString(), USER, List.of(WorkspaceUserPermission.ORIGINAL_DATA_VIEW.getValue()));
+
+        for (int i = 0; i < RATE_LIMIT; i++) {
+            try (var response = callSave(WINDOWED_QUERY, null, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
+            }
+        }
+        try (var response = callSave(WINDOWED_QUERY, null, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.readEntity(String.class)).contains(RATE_LIMIT_MESSAGE);
+        }
+        try (var response = analyticsQueriesClient.callRun(null,
+                "SELECT toJSONString(map('id', toString(id))) AS result FROM traces", apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            assertThat(response.readEntity(String.class)).contains(RATE_LIMIT_MESSAGE);
         }
     }
 
