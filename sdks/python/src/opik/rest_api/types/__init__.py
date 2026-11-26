@@ -649,6 +649,7 @@ from .retention_rule_page_public import RetentionRulePagePublic
 from .retention_rule_public import RetentionRulePublic
 from .retention_rule_public_level import RetentionRulePublicLevel
 from .retention_rule_public_retention import RetentionRulePublicRetention
+from .scoped_analytics_query_request import ScopedAnalyticsQueryRequest
 from .score_condition import ScoreCondition
 from .score_condition_operator import ScoreConditionOperator
 from .score_condition_public import ScoreConditionPublic
@@ -1410,6 +1411,7 @@ __all__ = [
     "RetentionRulePublic",
     "RetentionRulePublicLevel",
     "RetentionRulePublicRetention",
+    "ScopedAnalyticsQueryRequest",
     "ScoreCondition",
     "ScoreConditionOperator",
     "ScoreConditionPublic",
