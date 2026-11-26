@@ -444,7 +444,8 @@ class TopicsNightlyIntegrationTest {
         assertThat(data.topicProject(skipped)).isEqualTo(before);
         assertThatThrownBy(() -> planner.nightByHand(vectorsOnly, skipped, today()).block())
                 .isInstanceOfSatisfying(ConflictException.class, error -> assertThat(
-                        ((ErrorMessage) error.getResponse().getEntity()).getMessage()).contains("not opted in"));
+                        ((ErrorMessage) error.getResponse().getEntity()).getMessage())
+                        .contains("not opted in to topics runs at stage nightly"));
     }
 
     @Test

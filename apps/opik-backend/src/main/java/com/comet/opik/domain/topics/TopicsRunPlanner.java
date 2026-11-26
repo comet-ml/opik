@@ -103,7 +103,7 @@ public class TopicsRunPlanner {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> enabled
                         ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(notOptedIn(workspaceId)))
+                        : Mono.error(notOptedIn(workspaceId, TopicsStage.BUILD)))
                 .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
                         + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
@@ -141,7 +141,11 @@ public class TopicsRunPlanner {
      *                                     again
      */
     public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return nightPass.byHand(workspaceId, projectId, night, this::queueByHand);
+        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.NIGHTLY))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(enabled -> enabled
+                        ? nightPass.byHand(workspaceId, projectId, night, this::queueByHand)
+                        : Mono.error(notOptedIn(workspaceId, TopicsStage.NIGHTLY)));
     }
 
     /**
@@ -156,7 +160,9 @@ public class TopicsRunPlanner {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
                     .subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(enabled -> enabled ? store.resetList(projectId) : Mono.error(notOptedIn(workspaceId)))
+                    .flatMap(enabled -> enabled
+                            ? store.resetList(projectId)
+                            : Mono.error(notOptedIn(workspaceId, TopicsStage.BUILD)))
                     .filter(Boolean::booleanValue)
                     .switchIfEmpty(Mono.error(() -> new ConflictException(
                             "Project '%s' has no topics row or a run in flight".formatted(projectId))))
@@ -166,10 +172,10 @@ public class TopicsRunPlanner {
         });
     }
 
-    private static ConflictException notOptedIn(String workspaceId) {
-        return new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs to be in "
-                + "topics.enabledWorkspaces at stage build or later, and enabled in ai_label_workspaces")
-                .formatted(workspaceId));
+    private static ConflictException notOptedIn(String workspaceId, TopicsStage stage) {
+        return new ConflictException(("Workspace '%s' is not opted in to topics runs at stage %s: it needs to be in "
+                + "topics.enabledWorkspaces at stage %s or later, and enabled in ai_label_workspaces")
+                .formatted(workspaceId, stage.configName(), stage.configName()));
     }
 
     /**

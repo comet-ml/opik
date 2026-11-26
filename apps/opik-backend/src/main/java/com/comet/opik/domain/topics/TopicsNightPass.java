@@ -153,18 +153,14 @@ class TopicsNightPass implements Managed {
      * Queues the project's nightly update for {@code night} now and returns its run id. {@code topics.runs.maxInFlight}
      * and the night's budget do not apply, and the night fields are not written: it is one project's run, not a night.
      *
-     * @throws ConflictException when the workspace is not opted in at stage {@code nightly} or later, the project is
-     *                           gone or has no list, its list already covers the night, its window has too few
-     *                           vectors, or it has a run in flight
+     * The caller checks that the workspace is opted in at stage {@code nightly} or later.
+     *
+     * @throws ConflictException when the project is gone or has no list, its list already covers the night, its window
+     *                           has too few vectors, or it has a run in flight
      */
     Mono<UUID> byHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         return jdbi(() -> {
-            if (!workspaceService.reaches(workspaceId, TopicsStage.NIGHTLY)) {
-                throw new ConflictException(("Workspace '%s' is not opted in to topics nightly updates: it needs to be "
-                        + "in topics.enabledWorkspaces at stage nightly or later, and enabled in ai_label_workspaces")
-                        .formatted(workspaceId));
-            }
             // A deleted project keeps its rows until the sweep: run only a project that exists.
             var row = projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()
                     ? null
