@@ -49,8 +49,8 @@ import java.util.stream.Collectors;
  * workspace due for project discovery, it leaves {@code discoveryMinShare} of the budget to the discovery.</li>
  * <li>Project discovery of the due workspaces ({@link TopicVectorDiscovery}), after the fresh phase, so new traces get
  * their vectors first. The backfill phase reads the rows it writes.</li>
- * <li>The backfill phase, with the budget the others left: per workspace, its projects not drained yet
- * ({@link TopicVectorBackfiller}).</li>
+ * <li>The backfill phase, with the budget the others left: per workspace, its projects not drained yet, one turn per
+ * workspace per round ({@link TopicVectorBackfiller}).</li>
  * </ul>
  * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
  * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
@@ -295,20 +295,24 @@ public class TopicVectorsTickService {
     private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<TopicBackfill>> undrained,
             Instant lowerBound, TickBudget budget) {
         long started = System.nanoTime();
-        return Flux.fromIterable(visits)
-                .flatMap(visit -> {
+        var workspaces = visits.stream()
+                .filter(visit -> !visit.result().skipped().containsKey(SkipReason.EMBED_FAILED))
+                .map(visit -> {
                     var workspaceId = visit.workspace().id();
                     var projects = new ArrayList<>(undrained.getOrDefault(workspaceId, List.of()));
                     // After a discovery the backfills read again already hold the projects the fresh phase started.
                     var known = projects.stream().map(TopicBackfill::projectId).collect(Collectors.toSet());
                     visit.started().stream().filter(project -> !known.contains(project.projectId()))
                             .forEach(projects::add);
-                    return visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
-                            ? Mono.just(TickResult.EMPTY)
-                            : backfiller.backfill(visit.workspace(), projects,
-                                    find(workspaceId, lowerBound, budget.start()), budget, visit.arrival());
-                }, config.getVectors().getEmbedConcurrency())
-                .reduce(TickResult.EMPTY, TickResult::plus)
+                    return TopicVectorBackfiller.WorkspaceBackfill.builder()
+                            .workspace(visit.workspace())
+                            .projects(projects)
+                            .window(find(workspaceId, lowerBound, budget.start()))
+                            .arrival(visit.arrival())
+                            .build();
+                })
+                .toList();
+        return backfiller.backfill(workspaces, budget)
                 .doOnNext(__ -> metrics.phase("backfill", since(started)));
     }
 

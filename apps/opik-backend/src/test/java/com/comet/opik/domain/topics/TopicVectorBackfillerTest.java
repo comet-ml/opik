@@ -365,9 +365,8 @@ class TopicVectorBackfillerTest {
                     ArrivalSteps.OFF.toBuilder().spent(java.time.Duration.ofSeconds(turns.incrementAndGet())).build()));
         });
 
-        var result = setup.backfiller.backfill(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
-                List.of(largeOlder, largeRecent, smallest, small), setup.window(10), setup.budget(50),
-                ArrivalSteps.OFF).block();
+        var result = setup.backfiller.backfill(List.of(setup.workspaceBackfill(setup.workspaceId,
+                List.of(largeOlder, largeRecent, smallest, small))), setup.budget(50)).block();
 
         assertThat(result).isEqualTo(TickResult.written(19));
         var finds = ArgumentCaptor.forClass(TopicVectorsFind.class);
@@ -391,6 +390,45 @@ class TopicVectorBackfillerTest {
                 progress(setup.workspaceId, largeOlder, now, 3)));
     }
 
+    @Test
+    @DisplayName("with embedConcurrency 1, the workspaces take their backfill turns in rounds, one turn each, so one "
+            + "with a large backlog does not take the whole phase")
+    void turnsAlternateAcrossWorkspaces() {
+        var setup = new Setup();
+        var first = ID_GENERATOR.generateId().toString();
+        var second = ID_GENERATOR.generateId().toString();
+        var firstProject = backfill(1_000, now).toBuilder().workspaceId(first).build();
+        var secondProject = backfill(1_000, now).toBuilder().workspaceId(second).build();
+        // Every read stops at the cap (10), so each project always has more.
+        when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
+            TopicVectorsFind find = invocation.getArgument(0);
+            return Flux.fromStream(IntStream.range(0, 10)
+                    .mapToObj(i -> candidate(find.workspaceId(), find.projectId())));
+        });
+        // Each turn takes 5s of the tick: 50s fit ten turns, each started with an embed call's reserve left.
+        when(setup.writer.embedAndWrite(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            setup.clock.advance(java.time.Duration.ofSeconds(5));
+            List<Candidate> candidates = invocation.getArgument(1);
+            return Mono.just(new ChunkWrite(TickResult.written(candidates.size()),
+                    candidates.stream().map(VectorKey::of).collect(Collectors.toSet()), ArrivalSteps.OFF));
+        });
+
+        setup.backfiller.backfill(List.of(setup.workspaceBackfill(first, List.of(firstProject)),
+                setup.workspaceBackfill(second, List.of(secondProject))), setup.budget(50)).block();
+
+        var finds = ArgumentCaptor.forClass(TopicVectorsFind.class);
+        verify(setup.dao, times(10)).findUnvectored(finds.capture());
+        // Each read gets the seconds left less the embed call's reserve, at most the 30s cap.
+        assertThat(finds.getAllValues()).isEqualTo(IntStream.range(0, 10)
+                .mapToObj(turn -> {
+                    var project = turn % 2 == 0 ? firstProject : secondProject;
+                    return setup.window(10).toBuilder().workspaceId(project.workspaceId())
+                            .projectId(project.projectId()).maxExecutionSeconds(Math.min(30, 50 - 5 * turn - 1))
+                            .build();
+                })
+                .toList());
+    }
+
     private static TopicBackfillProgress progress(String workspaceId, TopicBackfill project, Instant drainedAt,
             int written) {
         return TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(project.projectId())
@@ -410,8 +448,8 @@ class TopicVectorBackfillerTest {
                 ArrivalSteps.OFF)));
         doThrow(new IllegalStateException("mysql")).when(setup.backfills).record(any());
 
-        var result = setup.backfiller.backfill(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
-                List.of(project), setup.window(10), setup.budget(50), ArrivalSteps.OFF).block();
+        var result = setup.backfiller.backfill(List.of(setup.workspaceBackfill(setup.workspaceId, List.of(project))),
+                setup.budget(50)).block();
 
         assertThat(result.written()).isEqualTo(2);
         verify(setup.backfills).record(List.of(TopicBackfillProgress.builder().workspaceId(setup.workspaceId)
@@ -496,6 +534,7 @@ class TopicVectorBackfillerTest {
             vectors.setEmbedTimeout(Duration.seconds(1));
             vectors.setLongWindowInterval(Duration.days(1));
             vectors.setMaxTracesPerTick(10);
+            vectors.setEmbedConcurrency(1);
             vectors.setMaxExcludedProjects(MAX_EXCLUDED_PROJECTS);
             vectors.setMaxDiscoveriesPerTick(MAX_DISCOVERIES_PER_TICK);
             vectors.setOneSliceMaxTraces(250_000);
@@ -539,6 +578,16 @@ class TopicVectorBackfillerTest {
             return TopicVectorsFind.builder().workspaceId(workspaceId).task(TopicEmbedding.SUMMARY_TASK)
                     .lowerBound(now.minus(7, ChronoUnit.DAYS)).upperBound(now)
                     .createdAfter(now.minus(7, ChronoUnit.DAYS)).limit(limit).build();
+        }
+
+        private TopicVectorBackfiller.WorkspaceBackfill workspaceBackfill(String workspaceId,
+                List<TopicBackfill> projects) {
+            return TopicVectorBackfiller.WorkspaceBackfill.builder()
+                    .workspace(TopicVectorsMetrics.Workspace.unnamed(workspaceId))
+                    .projects(projects)
+                    .window(window(10).toBuilder().workspaceId(workspaceId).build())
+                    .arrival(ArrivalSteps.OFF)
+                    .build();
         }
 
         private TickBudget budget(int seconds) {

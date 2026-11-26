@@ -8,10 +8,12 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
@@ -123,49 +125,84 @@ class TopicVectorBackfiller {
     }
 
     /**
-     * One workspace's backfill: its projects not drained yet, one at a time, in {@link #order}, while the tick has time
-     * for an embed call. A project that wrote vectors and still has more than one read's worth takes the next turn
-     * too, so one large project uses the time the tick has, not one {@code maxTracesPerTick}. An embed call that fails
-     * ends the workspace's backfill for the tick. The projects drained and the vectors written are recorded in one
-     * write at the end; a failed write only means the projects are read again next tick.
+     * One workspace's part of the backfill phase.
      *
      * @param window the backfill window's bounds and the workspace
      * @param arrival the workspace's topic on arrival after its fresh phase
      */
-    Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace,
-            @NonNull Collection<TopicBackfill> projects,
-            @NonNull TopicVectorsFind window, @NonNull TickBudget budget, @NonNull ArrivalSteps arrival) {
-        if (projects.isEmpty()) {
-            return Mono.just(TickResult.EMPTY);
-        }
+    @Builder(toBuilder = true)
+    record WorkspaceBackfill(@NonNull TopicVectorsMetrics.Workspace workspace,
+            @NonNull Collection<TopicBackfill> projects, @NonNull TopicVectorsFind window,
+            @NonNull ArrivalSteps arrival) {
+    }
+
+    /**
+     * The backfill phase: each workspace's projects not drained yet, one turn per workspace per round, the workspaces
+     * up to {@code embedConcurrency} at a time, while the tick has time for an embed call, so no workspace takes the
+     * whole phase. Inside a workspace, its projects take their turns in {@link #order}; a project that wrote vectors
+     * and still has more than one read's worth takes the workspace's next turn too, so one large project uses the time
+     * the tick has, not one {@code maxTracesPerTick}. An embed call that fails ends the workspace's backfill for the
+     * tick. Each workspace's projects drained and vectors written are recorded in one write at the end; a failed write
+     * only means the projects are read again next tick.
+     */
+    Mono<TickResult> backfill(@NonNull List<WorkspaceBackfill> workspaces, @NonNull TickBudget budget) {
         var vectors = config.getVectors();
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
-        var first = Run.start(projects.stream().sorted(order(vectors.getMaxTracesPerTick())).toList(), arrival);
-        // Each step takes one turn and gives the run after it; expand() runs the steps one after another.
-        return next(workspace, window, budget, first)
-                .expand(run -> !run.stopped() && !run.queue().isEmpty() && budget.hasTimeForRead(embedTimeout)
-                        ? next(workspace, window, budget, run)
+        var first = workspaces.stream()
+                .filter(workspace -> !workspace.projects().isEmpty())
+                .map(workspace -> new Lane(workspace, Run.start(workspace.projects().stream()
+                        .sorted(order(vectors.getMaxTracesPerTick())).toList(), workspace.arrival())))
+                .toList();
+        if (first.isEmpty()) {
+            return Mono.just(TickResult.EMPTY);
+        }
+        // Each step is one round, one turn per workspace with work left; expand() runs the rounds one after another.
+        return Mono.just(first)
+                .expand(lanes -> lanes.stream().anyMatch(Lane::active) && budget.hasTimeForRead(embedTimeout)
+                        ? round(lanes, budget, embedTimeout)
                         : Mono.empty())
                 .last()
-                .flatMap(run -> Mono.fromCallable(() -> {
-                    backfills.record(run.progress());
-                    return run.result();
-                })
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .onErrorResume(exception -> {
-                            log.warn("Topic vectors backfill progress not recorded, reading them again next tick, "
-                                    + "workspace '{}', projects '{}'", window.workspaceId(), run.progress().size(),
-                                    exception);
-                            return Mono.just(run.result());
-                        }));
+                .flatMapMany(lanes -> Flux.fromIterable(lanes).concatMap(this::record))
+                .reduce(TickResult.EMPTY, TickResult::plus);
+    }
+
+    /** A workspace's backfill in a phase, and its run so far. */
+    private record Lane(@NonNull WorkspaceBackfill workspace, @NonNull Run run) {
+
+        boolean active() {
+            return !run.stopped() && !run.queue().isEmpty();
+        }
+    }
+
+    /** One round: a turn for each workspace with work left, while the tick has time for one; in workspace order. */
+    private Mono<List<Lane>> round(List<Lane> lanes, TickBudget budget, Duration embedTimeout) {
+        return Flux.fromIterable(lanes)
+                .flatMapSequential(lane -> lane.active() && budget.hasTimeForRead(embedTimeout)
+                        ? next(lane.workspace(), budget, lane.run()).map(run -> new Lane(lane.workspace(), run))
+                        : Mono.just(lane), config.getVectors().getEmbedConcurrency())
+                .collectList();
     }
 
     /** The run after its first project's turn. */
-    private Mono<Run> next(TopicVectorsMetrics.Workspace workspace, TopicVectorsFind window, TickBudget budget,
-            Run run) {
+    private Mono<Run> next(WorkspaceBackfill workspace, TickBudget budget, Run run) {
         var project = run.queue().getFirst();
-        return turn(workspace, project, window, budget, run.settled(), run.arrival()).map(turn -> run.after(project,
-                turn));
+        return turn(workspace.workspace(), project, workspace.window(), budget, run.settled(), run.arrival())
+                .map(turn -> run.after(project, turn));
+    }
+
+    private Mono<TickResult> record(Lane lane) {
+        var run = lane.run();
+        return Mono.fromCallable(() -> {
+            backfills.record(run.progress());
+            return run.result();
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(exception -> {
+                    log.warn("Topic vectors backfill progress not recorded, reading them again next tick, "
+                            + "workspace '{}', projects '{}'", lane.workspace().window().workspaceId(),
+                            run.progress().size(), exception);
+                    return Mono.just(run.result());
+                });
     }
 
     /**
