@@ -40,6 +40,9 @@ import {
   ColumnsStatistic,
   HeaderIconType,
   OnChangeFn,
+  COLUMN_ACTIONS_ID,
+  COLUMN_PIN_ID,
+  COLUMN_SELECT_ID,
   ROW_HEIGHT,
 } from "@/types/shared";
 import {
@@ -59,10 +62,17 @@ import useCustomRowClick from "@/shared/DataTable/useCustomRowClick";
 import useColumnVirtualization, {
   ColumnVirtualizationConfig,
   ColumnSpacerCell,
+  getColumnWidths,
   isColumnSpacer,
   sliceColumnWindow,
   sliceColumnWindowHeaders,
 } from "@/shared/DataTable/columnVirtualization";
+
+const FIXED_WIDTH_COLUMN_IDS = new Set([
+  COLUMN_SELECT_ID,
+  COLUMN_PIN_ID,
+  COLUMN_ACTIONS_ID,
+]);
 
 declare module "@tanstack/react-table" {
   interface TableMeta<TData extends RowData> {
@@ -282,6 +292,11 @@ const DataTable = <TData, TValue>({
     supported: !isFunction(renderCustomRow),
   });
 
+  const colWidths = useMemo(
+    () => getColumnWidths(cols, columnWindow, FIXED_WIDTH_COLUMN_IDS),
+    [cols, columnWindow],
+  );
+
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
   const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
@@ -455,7 +470,7 @@ const DataTable = <TData, TValue>({
           >
             <colgroup>
               {sliceColumnWindow(cols, columnWindow).map((i) => (
-                <col key={i.id} style={{ width: `${i.size}px` }} />
+                <col key={i.id} style={{ width: colWidths[i.id] }} />
               ))}
             </colgroup>
             <TableHeader
