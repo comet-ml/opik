@@ -37,6 +37,9 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore:\\nThe hypothesis contains 0 counts of 2-gram overlaps\\.:UserWarning"
 )
 
+# Each of these is the wrong shape wherever a text metric expects a string.
+_NON_STRING_VALUES = [None, 5, 3.5, {"text": "hello"}, ["token"]]
+
 
 class CustomTokenizer:
     def __init__(self, delimiter=" "):
@@ -543,6 +546,36 @@ def test_corpus_bleu__empty_sequences__raise_metric_error(
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
     assert str(exc_info.value) == expected_message
+
+
+@pytest.mark.parametrize("bad_output", _NON_STRING_VALUES)
+def test_corpus_bleu__non_string_output_item__raises_metric_error(bad_output):
+    # CorpusBLEU strips each candidate directly, so a non-string item surfaced
+    # as a bare AttributeError instead of a MetricComputationError.
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)output"):
+        metric.score(output=[bad_output], reference=["valid reference"])
+
+
+@pytest.mark.parametrize("bad_reference", _NON_STRING_VALUES)
+def test_corpus_bleu__non_string_reference_item__raises_metric_error(bad_reference):
+    # A reference entry is either one string or a list of strings; the leaf is
+    # stripped either way, so a non-string leaf must be rejected too.
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output=["valid output"], reference=[[bad_reference]])
+
+
+@pytest.mark.parametrize("bad_value", [None, 5, 3.5, {"text": "hello"}])
+def test_corpus_bleu__non_sequence_argument__raises_metric_error(bad_value):
+    # A list is the valid container at the top level, so only the other shapes
+    # are checked here. len() used to raise a bare TypeError, and a dict was
+    # silently iterated over its keys.
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)output"):
+        metric.score(output=bad_value, reference=["valid reference"])
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output=["valid output"], reference=bad_value)
 
 
 def test_js_divergence_identical_text():
@@ -1111,6 +1144,29 @@ def test_chrf_metric__multiple_references__each_clamped_independently():
     assert result.value == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize("bad_output", _NON_STRING_VALUES)
+def test_chrf__non_string_output__raises_metric_error(bad_output):
+    metric = ChrF(chrf_fn=lambda candidate, references: 0.5, track=False)
+    with pytest.raises(MetricComputationError, match="(?i)output"):
+        metric.score(output=bad_output, reference="valid reference")
+
+
+@pytest.mark.parametrize("bad_reference", _NON_STRING_VALUES)
+def test_chrf__non_string_reference_item__raises_metric_error(bad_reference):
+    metric = ChrF(chrf_fn=lambda candidate, references: 0.5, track=False)
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output="valid output", reference=[bad_reference])
+
+
+@pytest.mark.parametrize("bad_reference", [None, 5, 3.5, {"text": "hello"}])
+def test_chrf__non_string_reference_argument__raises_metric_error(bad_reference):
+    # A list of strings is a valid reference; the remaining shapes are not. A
+    # dict used to be turned into its keys and silently scored.
+    metric = ChrF(chrf_fn=lambda candidate, references: 0.5, track=False)
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output="valid output", reference=bad_reference)
+
+
 def test_spearman_ranking_metric():
     metric = SpearmanRanking(track=False)
     result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
@@ -1387,6 +1443,29 @@ def test_rouge_score_for_invalid_reference_type():
         str(exc_info.value).lower()
         == "reference must be a string or a list of strings."
     )
+
+
+@pytest.mark.parametrize("bad_output", _NON_STRING_VALUES)
+def test_rouge__non_string_output__raises_metric_error(bad_output):
+    metric = rouge.ROUGE(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)output"):
+        metric.score(output=bad_output, reference="valid reference")
+
+
+@pytest.mark.parametrize("bad_reference", _NON_STRING_VALUES)
+def test_rouge__non_string_reference_item__raises_metric_error(bad_reference):
+    metric = rouge.ROUGE(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output="valid output", reference=[bad_reference])
+
+
+@pytest.mark.parametrize("bad_reference", [None, 5, 3.5, {"text": "hello"}])
+def test_rouge__non_string_reference_argument__raises_metric_error(bad_reference):
+    # A list of strings is valid; the other shapes fell through to rouge_score
+    # and raised a bare TypeError (or silently scored a dict's keys).
+    metric = rouge.ROUGE(track=False)
+    with pytest.raises(MetricComputationError, match="(?i)reference"):
+        metric.score(output="valid output", reference=bad_reference)
 
 
 @pytest.mark.parametrize(

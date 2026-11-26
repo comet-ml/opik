@@ -288,6 +288,17 @@ class CorpusBLEU(BaseBLEU):
                 - If a candidate or reference is empty.
                 - If the number of candidates does not match the number of references.
         """
+        if not isinstance(output, (list, tuple)):
+            raise MetricComputationError(
+                f"CorpusBLEU metric requires a list 'output' argument, "
+                f"got {type(output).__name__}"
+            )
+        if not isinstance(reference, (list, tuple)):
+            raise MetricComputationError(
+                f"CorpusBLEU metric requires a list 'reference' argument, "
+                f"got {type(reference).__name__}"
+            )
+
         if len(output) != len(reference):
             raise MetricComputationError(
                 "Mismatch: number of candidates != number of references (corpus BLEU)."
@@ -300,6 +311,11 @@ class CorpusBLEU(BaseBLEU):
         all_references: List[List[List[str]]] = []
 
         for candidate_str, ref_item in zip(output, reference):
+            if not isinstance(candidate_str, str):
+                raise MetricComputationError(
+                    f"CorpusBLEU metric requires string 'output' items, "
+                    f"got {type(candidate_str).__name__}"
+                )
             if not candidate_str.strip():
                 raise MetricComputationError("Candidate is empty (corpus BLEU).")
 
@@ -310,17 +326,27 @@ class CorpusBLEU(BaseBLEU):
                 if not ref_item.strip():
                     raise MetricComputationError("Reference is empty (corpus BLEU).")
                 ref_lists = [ref_item.lower().split()]
-            else:
+            elif isinstance(ref_item, (list, tuple)):
                 # multiple references
                 if not ref_item:
                     raise MetricComputationError("Reference is empty (corpus BLEU).")
                 ref_lists = []
                 for r_line in ref_item:
+                    if not isinstance(r_line, str):
+                        raise MetricComputationError(
+                            f"CorpusBLEU metric requires string 'reference' items, "
+                            f"got {type(r_line).__name__}"
+                        )
                     if not r_line.strip():
                         raise MetricComputationError(
                             "Encountered empty reference (corpus BLEU)."
                         )
                     ref_lists.append(r_line.lower().split())
+            else:
+                raise MetricComputationError(
+                    f"CorpusBLEU metric requires string 'reference' items, "
+                    f"got {type(ref_item).__name__}"
+                )
 
             all_candidates.append(candidate_tokens)
             all_references.append(ref_lists)

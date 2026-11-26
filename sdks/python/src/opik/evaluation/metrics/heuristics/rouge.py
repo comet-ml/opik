@@ -153,6 +153,11 @@ class ROUGE(base_metric.BaseMetric):
                 - If the candidate or any reference is empty.
                 - If the reference is not a string or a list of strings.
         """
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"ROUGE metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty.")
 
@@ -173,6 +178,12 @@ class ROUGE(base_metric.BaseMetric):
             for ref_str in reference:
                 if not ref_str.strip():
                     raise MetricComputationError("Encountered empty reference.")
+        else:
+            # A dict fell through to rouge_score, which silently scored its keys.
+            raise MetricComputationError(
+                f"ROUGE metric requires a string or list of strings 'reference' "
+                f"argument, got {type(reference).__name__}"
+            )
 
         rouge_score_type = self._rouge_type
         if self._rouge is None:

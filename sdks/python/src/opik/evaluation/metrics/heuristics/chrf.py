@@ -192,12 +192,31 @@ class ChrF(BaseMetric):
         reference: Union[str, Sequence[str]],
         **ignored_kwargs: Any,
     ) -> ScoreResult:
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"ChrF metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
         if not output.strip():
             raise MetricComputationError("Candidate is empty (chrF metric).")
+
         if isinstance(reference, str):
             references = [reference]
-        else:
+        elif isinstance(reference, (list, tuple)):
             references = list(reference)
+        else:
+            # Iterating any other iterable here used to turn a dict into its keys
+            # and score those, so only the documented container shapes are parsed.
+            raise MetricComputationError(
+                f"ChrF metric requires a string or list of strings 'reference' "
+                f"argument, got {type(reference).__name__}"
+            )
+        for ref in references:
+            if not isinstance(ref, str):
+                raise MetricComputationError(
+                    f"ChrF metric requires string 'reference' items, "
+                    f"got {type(ref).__name__}"
+                )
         if not references or any(not ref.strip() for ref in references):
             raise MetricComputationError("Reference is empty (chrF metric).")
 
