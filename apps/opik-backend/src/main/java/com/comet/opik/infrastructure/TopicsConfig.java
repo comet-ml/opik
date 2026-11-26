@@ -705,7 +705,10 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.HOURS)
         private Duration republishAfter;
 
-        /** The planner stops counting candidates after this, and queues what it found. */
+        /**
+         * One plan's deadline, for its night and discovery phases together: past it, the planner cuts the count still
+         * running and queues nothing more.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)

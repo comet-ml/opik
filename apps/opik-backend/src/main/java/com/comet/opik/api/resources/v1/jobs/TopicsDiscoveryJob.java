@@ -105,9 +105,9 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
     }
 
     /**
-     * How long the leader lock lasts, and the plan with it: the planner stops counting candidates after
-     * {@code topics.runs.planBudget}, a count started just before that ends within {@code topics.run.countTimeout},
-     * and {@code topics.runs.leaseSlack} covers the queue writes and publishes after it.
+     * How long the leader lock lasts, and the plan with it: the plan's one deadline, {@code topics.runs.planBudget},
+     * cuts its counts and stops its queueing, {@code topics.run.countTimeout} covers the reconcile's counts before it,
+     * and {@code topics.runs.leaseSlack} the queue write and publish in flight at it.
      */
     Duration leaderLease() {
         return config.getRuns().getPlanBudget().toJavaDuration()

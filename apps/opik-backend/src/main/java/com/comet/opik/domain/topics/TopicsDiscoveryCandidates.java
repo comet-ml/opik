@@ -53,12 +53,12 @@ class TopicsDiscoveryCandidates {
 
     /**
      * The candidates for the window that ends at {@code night}'s start. The workspaces are counted in random order
-     * until {@code topics.runs.planBudget}, so a slow count never starves the same workspaces. The result takes one
+     * until the plan's deadline, which cuts a count still running, so a slow count never starves the same workspaces. The result takes one
      * project of each workspace in turn, the most vectors first within a workspace, so one large workspace does not
      * take every free slot.
      */
     Mono<List<Candidate>> find(@NonNull Collection<String> workspaceIds, @NonNull LocalDate night,
-            @NonNull Instant now) {
+            @NonNull Instant now, @NonNull PlanDeadline deadline) {
         if (workspaceIds.isEmpty()) {
             return Mono.just(List.of());
         }
@@ -74,7 +74,7 @@ class TopicsDiscoveryCandidates {
                     return Flux.fromIterable(workspaces)
                             .concatMap(workspaceId -> count(workspaceId, open.get(workspaceId), from, to));
                 })
-                .take(config.getRuns().getPlanBudget().toJavaDuration())
+                .takeUntilOther(deadline.timer())
                 .collectList()
                 .map(TopicsDiscoveryCandidates::roundRobin);
     }

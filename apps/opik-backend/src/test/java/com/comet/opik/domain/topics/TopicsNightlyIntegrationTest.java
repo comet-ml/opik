@@ -101,6 +101,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicsNightlyIntegrationTest {
 
+    private static final java.time.Duration PLAN_BUDGET = java.time.Duration.ofMinutes(2);
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
@@ -322,7 +324,8 @@ class TopicsNightlyIntegrationTest {
         var reader = InMemoryMetricReader.create();
         var queued = new ArrayList<PlannedRun>();
 
-        assertThat(pass(reader).plan(Instant.now(), 10, capture(queued)).block()).isEqualTo(1);
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, capture(queued)).block())
+                .isEqualTo(1);
 
         assertThat(queued).containsExactly(new PlannedRun(workspaceId, built,
                 TopicProject.RunMode.UPDATE, today(), FIXTURE.size()));
@@ -362,7 +365,8 @@ class TopicsNightlyIntegrationTest {
 
         // Tomorrow's night, within its budget: a failed update queued tonight waits for it.
         var tomorrowNight = todayStart().plusSeconds(86_400 + 2 * 3_600 + 60);
-        pass(InMemoryMetricReader.create()).plan(tomorrowNight, 10, capture(queued)).block();
+        pass(InMemoryMetricReader.create()).plan(tomorrowNight, PlanDeadline.after(PLAN_BUDGET), 10, capture(queued))
+                .block();
 
         assertThat(queued).noneMatch(planned -> planned.projectId().equals(projectId));
         var events = logEvents();
@@ -397,14 +401,18 @@ class TopicsNightlyIntegrationTest {
         var reader = InMemoryMetricReader.create();
         var queued = new ArrayList<PlannedRun>();
 
-        assertThat(pass(reader).plan(Instant.now(), 0, capture(queued)).block()).isZero();
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 0, capture(queued)).block())
+                .isZero();
         assertThat(data.topicProject(gone).lastNight()).isEqualTo(today());
         assertThat(queued).isEmpty();
 
-        assertThat(pass(reader).plan(Instant.now(), 1, planned -> Mono.empty()).block()).isZero();
+        assertThat(
+                pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 1, planned -> Mono.empty()).block())
+                .isZero();
         assertThat(data.topicProject(older).lastNight()).isNull();
 
-        assertThat(pass(reader).plan(Instant.now(), 1, capture(queued)).block()).isEqualTo(1);
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 1, capture(queued)).block())
+                .isEqualTo(1);
         assertThat(queued).extracting(PlannedRun::projectId).containsExactly(older);
         assertThat(data.topicProject(newer).lastNight()).isNull();
     }
@@ -429,8 +437,10 @@ class TopicsNightlyIntegrationTest {
         var reader = InMemoryMetricReader.create();
         var pass = pass(reader);
 
-        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
-        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
+        assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, planned -> Mono.empty()).block())
+                .isZero();
+        assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, planned -> Mono.empty()).block())
+                .isZero();
 
         assertThat(data.topicProject(notReached))
                 .isEqualTo(notReachedBefore.toBuilder().notReachedNights(1).build());

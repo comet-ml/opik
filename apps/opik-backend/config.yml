@@ -3069,7 +3069,8 @@ topics:
     #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
     republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
     #  Default: 2m
-    #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
+    #  Description: One plan's deadline, for its nightly and discovery phases together: past it, the planner cuts the
+    #  count still running and queues nothing more. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
     #  Default: 5m
     #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them

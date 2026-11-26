@@ -120,12 +120,13 @@ class TopicsNightPass implements Managed {
     }
 
     /**
-     * One plan's night pass at {@code now}: queues up to {@code free} nightly updates through {@code queue} and
-     * returns how many it queued. Nothing when no night is on or no workspace is listed at stage {@code nightly} or
+     * One plan's night pass at {@code now}: queues up to {@code free} nightly updates through {@code queue} until the
+     * plan's {@code deadline} and returns how many it queued. Nothing when no night is on or no workspace is listed at stage {@code nightly} or
      * later. A read that fails, for every workspace or for one, is logged and counted as a failed night once; the other
      * workspaces go on, and the next plan reads the failed ones again.
      */
-    Mono<Integer> plan(@NonNull Instant now, int free, @NonNull Function<PlannedRun, Mono<UUID>> queue) {
+    Mono<Integer> plan(@NonNull Instant now, @NonNull PlanDeadline deadline, int free,
+            @NonNull Function<PlannedRun, Mono<UUID>> queue) {
         var nightly = config.getNightly();
         var found = TopicsNight.current(nightly.getSchedule(), now);
         if (found.isEmpty()) {
@@ -139,7 +140,8 @@ class TopicsNightPass implements Managed {
                         return Mono.just(0);
                     }
                     return now.isBefore(budgetEnd)
-                            ? decide(night, workspaceIds, now, budgetEnd, free, queue)
+                            ? decide(night, workspaceIds, deadline.atMost(Duration.between(now, budgetEnd)), free,
+                                    queue)
                             : end(night, workspaceIds, now).thenReturn(0);
                 });
         return pass.onErrorResume(error -> {
@@ -204,11 +206,12 @@ class TopicsNightPass implements Managed {
                 .formatted(projectId, night, reason.getValue()));
     }
 
-    /** Within the budget: the cheap skips first, then the counts and queues while slots are free. */
-    private Mono<Integer> decide(TopicsNight night, Collection<String> workspaceIds, Instant now, Instant budgetEnd,
-            int free, Function<PlannedRun, Mono<UUID>> queue) {
-        // The plan's clock starts before its read, so the read's time counts against the budget too.
-        long began = System.nanoTime();
+    /**
+     * Within the budget: the cheap skips first, then the counts and queues while slots are free, until {@code
+     * deadline}: the plan's, or the night budget's end when that comes first.
+     */
+    private Mono<Integer> decide(TopicsNight night, Collection<String> workspaceIds, PlanDeadline deadline, int free,
+            Function<PlannedRun, Mono<UUID>> queue) {
         return jdbi(() -> {
             var read = due(night, workspaceIds);
             read.failed().forEach((workspaceId, error) -> log.error("Topics night '{}' could not read workspace '{}'; "
@@ -223,18 +226,16 @@ class TopicsNightPass implements Managed {
                     if (free <= 0 || due.isEmpty()) {
                         return Mono.just(0);
                     }
-                    // A plan stops counting and queueing after topics.runs.planBudget, and none goes past the budget.
-                    var planEnd = now.plus(config.getRuns().getPlanBudget().toJavaDuration());
-                    var stopAt = planEnd.isBefore(budgetEnd) ? planEnd : budgetEnd;
-                    BooleanSupplier inTime = () -> now.plusNanos(System.nanoTime() - began).isBefore(stopAt);
+                    BooleanSupplier inTime = () -> !deadline.passed();
                     var byWorkspace = due.stream().collect(Collectors.groupingBy(
                             NightTriage.NightCandidate::workspaceId, LinkedHashMap::new,
                             Collectors.mapping(NightTriage.NightCandidate::projectId, Collectors.toList())));
-                    // One count per workspace; a workspace not counted in time waits for a later plan.
+                    // One count per workspace; a workspace not counted in time, its count cut by the deadline, waits for a
+                    // later plan.
                     return Flux.fromIterable(byWorkspace.entrySet())
                             .takeWhile(workspace -> inTime.getAsBoolean())
-                            .concatMap(workspace -> candidates
-                                    .windowVectors(workspace.getKey(), workspace.getValue(), night.date())
+                            .concatMap(workspace -> deadline.cut(candidates
+                                    .windowVectors(workspace.getKey(), workspace.getValue(), night.date()))
                                     .map(counts -> Map.entry(workspace.getKey(), counts)))
                             .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                             .flatMap(counts -> Flux.fromIterable(due)

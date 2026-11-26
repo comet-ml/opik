@@ -53,6 +53,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("topics night pass")
 class TopicsNightPassTest {
 
+    private static final Duration PLAN_BUDGET = Duration.ofMinutes(2);
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final String WORKSPACE_ID = ID_GENERATOR.generateId().toString();
     private static final LocalDate NIGHT = LocalDate.of(2026, 11, 2);
@@ -135,7 +137,7 @@ class TopicsNightPassTest {
     }
 
     private int plan(Instant now, int free) {
-        return pass.plan(now, free, queue).block();
+        return pass.plan(now, PlanDeadline.after(PLAN_BUDGET), free, queue).block();
     }
 
     private double decisions(String decision, String reason) {

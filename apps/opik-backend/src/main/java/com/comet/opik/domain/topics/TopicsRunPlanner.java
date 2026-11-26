@@ -51,9 +51,13 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull TopicsNightPass nightPass;
 
-    /** One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. */
+    /**
+     * One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. The plan
+     * has one deadline, {@code topics.runs.planBudget} from now, for all its phases.
+     */
     public Mono<Integer> plan(@NonNull Instant start) {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
+        var deadline = PlanDeadline.after(config.getRuns().getPlanBudget().toJavaDuration());
         return Mono.fromCallable(() -> workspaceService.enabledWorkspaceIds(TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(workspaceIds -> store.findInFlight()
@@ -61,16 +65,16 @@ public class TopicsRunPlanner {
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
                             // The night pass runs with no free slot too: its skips and its end need none.
-                            return nightPass.plan(start, free, this::queueOne)
+                            return nightPass.plan(start, deadline, free, this::queueOne)
                                     .flatMap(nightly -> {
                                         int left = free - nightly;
                                         if (left <= 0 || workspaceIds.isEmpty()) {
                                             return Mono.just(nightly);
                                         }
                                         return labelsDue(workspaceIds, start)
-                                                .zipWith(candidates.find(workspaceIds, night, start))
+                                                .zipWith(candidates.find(workspaceIds, night, start, deadline))
                                                 .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
-                                                        left))
+                                                        left, deadline))
                                                 .map(queued -> nightly + queued);
                                     });
                         }))
@@ -239,9 +243,13 @@ public class TopicsRunPlanner {
                         .windowTraces(build.vectors()).build()).toList()));
     }
 
-    /** Queues the runs in order until {@code free} are queued; a project that got a run meanwhile is skipped. */
-    private Mono<Integer> queue(List<PlannedRun> runs, int free) {
+    /**
+     * Queues the runs in order until {@code free} are queued or the deadline passes; a project that got a run meanwhile
+     * is skipped.
+     */
+    private Mono<Integer> queue(List<PlannedRun> runs, int free, PlanDeadline deadline) {
         return Flux.fromIterable(runs)
+                .takeWhile(run -> !deadline.passed())
                 .concatMap(run -> queueOne(run).onErrorResume(error -> {
                     log.warn("Topics run not queued, project '{}'", run.projectId(), error);
                     return Mono.empty();
