@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorsMetrics.DiscoveryOutcome;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.google.common.collect.Lists;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -38,31 +39,43 @@ class TopicVectorDiscovery {
     private final @NonNull TopicVectorsMetrics metrics;
 
     /**
-     * Discovers the projects of the workspaces due for it, one at a time: never discovered, or not for
-     * {@code longWindowInterval} ({@code topic_workspaces.vectors_checked_at}), the longest not discovered first. When
-     * that mark cannot be read, every workspace is due, as for a pod that never ran. Per workspace, two plain
-     * aggregates over the backfill window, a slice at a time: the projects with done statuses, and their vector counts.
-     * A discovery must finish within one tick: one the budget cuts short writes nothing, keeps the workspace due and
-     * starts again from its first slice next tick. A workspace's rows not checked for twice the interval start again,
-     * because the tick did not run for it meanwhile.
-     *
-     * @param lowerBound the backfill window's start
-     * @param createdAfter the backfill window's {@code trace_created_at} bound
+     * The workspaces due for project discovery at {@code start}, at most {@code maxDiscoveriesPerTick}: never
+     * discovered, or not for {@code longWindowInterval} ({@code topic_workspaces.vectors_checked_at}), the longest not
+     * discovered first. When that mark cannot be read, every workspace is due, as for a pod that never ran.
      */
-    Mono<Void> discover(@NonNull List<String> workspaceIds, @NonNull Instant lowerBound,
-            @NonNull Instant createdAfter, @NonNull TickBudget budget) {
-        return checked(workspaceIds).flatMap(checked -> {
+    Mono<List<String>> due(@NonNull List<String> workspaceIds, @NonNull Instant start) {
+        return checked(workspaceIds).map(checked -> {
             var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
-            var due = workspaceIds.stream()
+            return workspaceIds.stream()
                     .filter(id -> Optional.ofNullable(checked.get(id))
-                            .map(last -> Duration.between(last, budget.start()).compareTo(interval) >= 0)
+                            .map(last -> Duration.between(last, start).compareTo(interval) >= 0)
                             .orElse(true))
                     .sorted(Comparator.comparing((String id) -> checked.getOrDefault(id, Instant.MIN)))
                     .limit(config.getVectors().getMaxDiscoveriesPerTick())
                     .toList();
+        });
+    }
+
+    /**
+     * Discovers the projects of the {@link #due} workspaces, one at a time. Per workspace, two plain aggregates over
+     * the backfill window, a slice at a time: the projects with done statuses, and their vector counts. A discovery
+     * must finish within this tick: one the budget cuts short writes nothing, keeps the workspace due and starts again
+     * from its first slice next tick. A workspace's rows not checked for twice the interval start again, because the
+     * tick did not run for it meanwhile.
+     *
+     * @param lowerBound the backfill window's start
+     * @param createdAfter the backfill window's {@code trace_created_at} bound
+     */
+    Mono<Void> discover(@NonNull List<String> due, @NonNull Instant lowerBound, @NonNull Instant createdAfter,
+            @NonNull TickBudget budget) {
+        return Mono.defer(() -> {
+            var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
+            var reserve = discoveryReserve(budget, config.getVectors().getEmbedTimeout().toJavaDuration(),
+                    config.getVectors().getDiscoveryMinShare());
             long started = System.nanoTime();
             return Flux.fromIterable(due)
-                    .concatMap(workspaceId -> discover(workspaceId, lowerBound, createdAfter, budget, interval))
+                    .concatMap(workspaceId -> discover(workspaceId, lowerBound, createdAfter, budget, reserve,
+                            interval))
                     .then(Mono.fromRunnable(() -> metrics.phase("discover",
                             Duration.ofNanos(System.nanoTime() - started))));
         });
@@ -79,14 +92,12 @@ class TopicVectorDiscovery {
     }
 
     /**
-     * One workspace's discovery, a slice at a time while half the tick budget is left. Its rows are written once every
-     * slice of both reads is read; a discovery cut short before that is dropped.
+     * One workspace's discovery, a slice at a time while more than {@code discoveryReserve} is left. Its rows are
+     * written once every slice of both reads is read; a discovery cut short before that is dropped.
      */
     private Mono<Void> discover(String workspaceId, Instant lowerBound, Instant createdAfter, TickBudget budget,
-            Duration interval) {
+            Duration discoveryReserve, Duration interval) {
         return Mono.defer(() -> {
-            var reserve = config.getVectors().getEmbedTimeout().toJavaDuration();
-            var discoveryReserve = discoveryReserve(budget, reserve);
             if (!budget.hasTimeForRead(discoveryReserve)) {
                 return Mono.empty();
             }
@@ -94,10 +105,10 @@ class TopicVectorDiscovery {
             var first = Discovery.start(budget.start(), lowerBound, dao.slices(createdAfter));
             // Each step reads one slice and gives the discovery after it; expand() runs the steps one after another.
             return Mono
-                    .defer(() -> readSlice(workspaceId, first, budget.readSeconds(maxExecutionTime, discoveryReserve)))
+                    .defer(() -> readSlice(workspaceId, first, budget, maxExecutionTime, discoveryReserve))
                     .expand(discovery -> !discovery.done() && budget.hasTimeForRead(discoveryReserve)
-                            ? Mono.defer(() -> readSlice(workspaceId, discovery,
-                                    budget.readSeconds(maxExecutionTime, discoveryReserve)))
+                            ? Mono.defer(() -> readSlice(workspaceId, discovery, budget, maxExecutionTime,
+                                    discoveryReserve))
                             : Mono.empty())
                     .last()
                     .flatMap(discovery -> discovery.done()
@@ -122,28 +133,51 @@ class TopicVectorDiscovery {
     }
 
     /**
-     * What a discovery slice leaves for after it: half of the tick budget, and at least what one more read needs. A
-     * slice starts only with that plus a read's minimum left, and its {@code max_execution_time} ends before it, so a
-     * long discovery leaves the fresh and backfill phases the other half.
+     * What the fresh phase leaves to the discovery on a tick with a workspace due for it: {@code discoveryMinShare} of
+     * the budget, or nothing when that share is too short for the discovery to start a read and keep its reserve.
      */
-    private static Duration discoveryReserve(TickBudget budget, Duration reserve) {
-        var half = Duration.between(budget.start(), budget.deadline()).dividedBy(2);
-        var oneRead = TickBudget.MIN_READ_TIME.plus(reserve);
-        return half.compareTo(oneRead) > 0 ? half : oneRead;
+    Duration share(@NonNull TickBudget budget) {
+        var vectors = config.getVectors();
+        var share = Duration.ofMillis(Math.round(budget.total().toMillis() * vectors.getDiscoveryMinShare()));
+        var oneRead = TickBudget.MIN_READ_TIME.plus(vectors.getEmbedTimeout().toJavaDuration());
+        return share.compareTo(TickBudget.MIN_READ_TIME.plus(oneRead)) >= 0 ? share : Duration.ZERO;
     }
 
-    /** The next slice: the projects' slices first, then their vector counts. */
-    private Mono<Discovery> readSlice(String workspaceId, Discovery discovery, long maxExecutionSeconds) {
-        var read = !discovery.toFind().isEmpty()
-                ? dao.findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, discovery.lowerBound(),
-                        discovery.toFind().getFirst(), maxExecutionSeconds)
-                        .collectList()
-                        .map(discovery::afterFound)
-                : dao.countTracesWithVectorsByProject(workspaceId, TopicEmbedding.SUMMARY_TASK,
-                        discovery.toCount().getFirst(), List.copyOf(discovery.projects().keySet()),
-                        maxExecutionSeconds)
-                        .map(discovery::afterCounted);
-        return read;
+    /**
+     * What the discovery phase leaves for the backfill after it, decided when the phase starts: the time left less
+     * {@code minShare} of the tick budget, so discovery gets at least that share after a busy fresh phase; at most half
+     * the budget, so discovery takes no more than half; at least what one more read needs. A slice starts only with
+     * that plus a read's minimum left, and its {@code max_execution_time} ends before it.
+     */
+    static Duration discoveryReserve(TickBudget budget, Duration embedTimeout, double minShare) {
+        var half = budget.total().dividedBy(2);
+        var oneRead = TickBudget.MIN_READ_TIME.plus(embedTimeout);
+        var afterShare = budget.left().minus(Duration.ofMillis(Math.round(budget.total().toMillis() * minShare)));
+        var reserve = afterShare.compareTo(half) > 0 ? half : afterShare;
+        return reserve.compareTo(oneRead) > 0 ? reserve : oneRead;
+    }
+
+    /**
+     * The next slice: the projects' slices first, then their vector counts, for {@code maxExcludedProjects} project ids
+     * per read, so a read's id list stays bounded.
+     */
+    private Mono<Discovery> readSlice(String workspaceId, Discovery discovery, TickBudget budget,
+            Duration maxExecutionTime, Duration discoveryReserve) {
+        if (!discovery.toFind().isEmpty()) {
+            return dao.findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, discovery.lowerBound(),
+                    discovery.toFind().getFirst(), budget.readSeconds(maxExecutionTime, discoveryReserve))
+                    .collectList()
+                    .map(discovery::afterFound);
+        }
+        var slice = discovery.toCount().getFirst();
+        return Flux.fromIterable(Lists.partition(List.copyOf(discovery.projects().keySet()),
+                config.getVectors().getMaxExcludedProjects()))
+                .concatMap(projectIds -> Mono.defer(() -> dao.countTracesWithVectorsByProject(workspaceId,
+                        TopicEmbedding.SUMMARY_TASK, slice, projectIds,
+                        budget.readSeconds(maxExecutionTime, discoveryReserve))))
+                .flatMapIterable(Map::entrySet)
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                .map(discovery::afterCounted);
     }
 
     private Mono<Void> save(String workspaceId, Discovery discovery, Duration interval) {

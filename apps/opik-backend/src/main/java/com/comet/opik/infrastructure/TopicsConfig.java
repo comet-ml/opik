@@ -798,6 +798,13 @@ public class TopicsConfig {
         @Min(1) @Max(1_000) private int maxDiscoveriesPerTick;
 
         /**
+         * The share of {@code tickBudget} the fresh phase leaves to project discovery on a tick with a workspace due
+         * for it. Discovery runs after the fresh phase and never takes more than half the budget, so at most 0.5.
+         */
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("0.5") private double discoveryMinShare;
+
+        /**
          * A project with at most this many traces in the backfill window, as discovered, is read in one query over the
          * whole window; a larger one in {@code find.sliceSize} slices. One read of a project costs about 0.45 KB of
          * memory and 6 rows read per trace, so at 250,000 one read stays near 110 MB and 1.5M rows, an eighth of the

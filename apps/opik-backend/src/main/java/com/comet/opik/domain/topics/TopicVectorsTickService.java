@@ -34,8 +34,8 @@ import java.util.stream.Collectors;
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries and store the unit-length
- * vectors in {@code topic_vectors}. Runs on the leader only. A tick has two phases, each visiting the workspaces up to
- * {@code embedConcurrency} at a time, each workspace with one embed call in flight:
+ * vectors in {@code topic_vectors}. Runs on the leader only. A tick has three phases; the fresh and the backfill phase
+ * visit the workspaces up to {@code embedConcurrency} at a time, each workspace with one embed call in flight:
  * <ul>
  * <li>The fresh phase: per workspace, one read of the done statuses written in {@code window}, all its drained projects
  * together, up to {@code maxTracesPerTick}, oldest first, then their embed calls and writes. It keeps new traces
@@ -45,8 +45,11 @@ import java.util.stream.Collectors;
  * so a cancelled tick keeps what its finished turns did. Once per {@code longWindowInterval} ({@link LongWindowPass}) it
  * reads the long window instead, in slices, for rows it missed, such as a status that became visible more than
  * {@code watermarkOverlap} after a later one was read, and leaves the watermark as it is. A pass that takes several
- * ticks reads each workspace's long window once: the others get their fresh read on its ticks.</li>
- * <li>The backfill phase, with the budget the fresh phase left: per workspace, its projects not drained yet
+ * ticks reads each workspace's long window once: the others get their fresh read on its ticks. On a tick with a
+ * workspace due for project discovery, it leaves {@code discoveryMinShare} of the budget to the discovery.</li>
+ * <li>Project discovery of the due workspaces ({@link TopicVectorDiscovery}), after the fresh phase, so new traces get
+ * their vectors first. The backfill phase reads the rows it writes.</li>
+ * <li>The backfill phase, with the budget the others left: per workspace, its projects not drained yet
  * ({@link TopicVectorBackfiller}).</li>
  * </ul>
  * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
@@ -112,30 +115,42 @@ public class TopicVectorsTickService {
                     arrivalWorkspaceIds());
         })
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(enabled -> discovery.discover(enabled.workspaceIds(), backfillLowerBound,
-                        createdAfter(backfillLowerBound), budget)
-                        .then(backfiller.undrained(enabled.workspaceIds()))
-                        .flatMap(undrained -> Flux.fromIterable(enabled.workspaceIds())
-                                .flatMap(workspaceId -> {
-                                    var readAt = enabled.longWindowReads().get(workspaceId);
-                                    boolean longWindow = pass && (readAt == null || readAt.isBefore(passReadSince));
-                                    return visit(workspaceId, undrained.getOrDefault(workspaceId, List.of()),
-                                            find(workspaceId, longWindow
-                                                    ? backfillLowerBound
-                                                    : readFrom(lowerBound, enabled.watermarks().get(workspaceId),
-                                                            vectors.getWatermarkOverlap().toJavaDuration()),
-                                                    start),
-                                            longWindow, longWindow ? missedBefore : null, budget,
-                                            enabled.arrivalWorkspaceIds().contains(workspaceId));
-                                }, vectors.getEmbedConcurrency())
-                                .collectList()
-                                .flatMap(visits -> finish(visits).flatMap(fresh -> {
-                                    // The pass drains once no workspace is left that it has not read completely.
-                                    var drained = visits.stream().filter(Visit::longWindow).allMatch(Visit::complete);
-                                    return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
-                                            .then(backfill(visits, undrained, backfillLowerBound, budget))
-                                            .map(fresh::plus);
-                                }))));
+                .flatMap(enabled -> Mono.zip(discovery.due(enabled.workspaceIds(), start),
+                        backfiller.undrained(enabled.workspaceIds()))
+                        .flatMap(dueAndUndrained -> {
+                            var due = dueAndUndrained.getT1();
+                            var undrained = dueAndUndrained.getT2();
+                            // With a discovery due, the fresh phase leaves it its share; without, the whole budget.
+                            var fresh = due.isEmpty() ? budget : budget.before(discovery.share(budget));
+                            return Flux.fromIterable(enabled.workspaceIds())
+                                    .flatMap(workspaceId -> {
+                                        var readAt = enabled.longWindowReads().get(workspaceId);
+                                        boolean longWindow = pass && (readAt == null || readAt.isBefore(passReadSince));
+                                        return visit(workspaceId, undrained.getOrDefault(workspaceId, List.of()),
+                                                find(workspaceId, longWindow
+                                                        ? backfillLowerBound
+                                                        : readFrom(lowerBound, enabled.watermarks().get(workspaceId),
+                                                                vectors.getWatermarkOverlap().toJavaDuration()),
+                                                        start),
+                                                longWindow, longWindow ? missedBefore : null, fresh,
+                                                enabled.arrivalWorkspaceIds().contains(workspaceId));
+                                    }, vectors.getEmbedConcurrency())
+                                    .collectList()
+                                    .flatMap(visits -> finish(visits).flatMap(written -> {
+                                        // The pass drains once no workspace is left that it has not read completely.
+                                        var drained = visits.stream().filter(Visit::longWindow)
+                                                .allMatch(Visit::complete);
+                                        return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
+                                                .then(discovery.discover(due, backfillLowerBound,
+                                                        createdAfter(backfillLowerBound), budget))
+                                                .then(due.isEmpty()
+                                                        ? Mono.just(undrained)
+                                                        : undrainedAfterDiscovery(enabled.workspaceIds(), undrained))
+                                                .flatMap(backfills -> backfill(visits, backfills, backfillLowerBound,
+                                                        budget))
+                                                .map(written::plus);
+                                    }));
+                        }));
     }
 
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks,
@@ -249,6 +264,19 @@ public class TopicVectorsTickService {
         });
     }
 
+    /**
+     * The backfills not drained yet, read again after a discovery wrote rows, so this tick's backfill already reads
+     * them. When that read fails, the backfill reads those from before the discovery, and the new rows wait a tick.
+     */
+    private Mono<Map<String, List<TopicBackfill>>> undrainedAfterDiscovery(List<String> workspaceIds,
+            Map<String, List<TopicBackfill>> before) {
+        return backfiller.undrained(workspaceIds).onErrorResume(exception -> {
+            log.warn("Topic vectors backfills not read after discovery, backfilling those from before it",
+                    exception);
+            return Mono.just(before);
+        });
+    }
+
     /** One small write per workspace, as its turn ends: a tick cancelled later keeps the workspaces it finished. */
     private Mono<Void> saveProgress(String workspaceId, Runnable save) {
         return Mono.<Void>fromRunnable(save)
@@ -271,7 +299,10 @@ public class TopicVectorsTickService {
                 .flatMap(visit -> {
                     var workspaceId = visit.workspace().id();
                     var projects = new ArrayList<>(undrained.getOrDefault(workspaceId, List.of()));
-                    projects.addAll(visit.started());
+                    // After a discovery the backfills read again already hold the projects the fresh phase started.
+                    var known = projects.stream().map(TopicBackfill::projectId).collect(Collectors.toSet());
+                    visit.started().stream().filter(project -> !known.contains(project.projectId()))
+                            .forEach(projects::add);
                     return visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
                             ? Mono.just(TickResult.EMPTY)
                             : backfiller.backfill(visit.workspace(), projects,

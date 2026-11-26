@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -83,7 +84,7 @@ class TopicVectorBackfillerTest {
         var lowerBound = now.minus(7, ChronoUnit.DAYS);
 
         // A read starts with half the budget (11s) plus 1s left and ends by the half: 22s fit two reads, of 11s and 5s.
-        setup.discovery.discover(List.of(setup.workspaceId), lowerBound, now, setup.budget(22)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), lowerBound, now, setup.budget(22));
 
         verify(setup.dao).findBackfillProjects(setup.workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound,
                 slices.getFirst(), 11);
@@ -96,7 +97,7 @@ class TopicVectorBackfillerTest {
 
         // 50s: half is 25s, so all four reads fit, from 25s down to 7s.
         var second = setup.budget(50);
-        setup.discovery.discover(List.of(setup.workspaceId), lowerBound, now, second).block();
+        discover(setup.discovery, List.of(setup.workspaceId), lowerBound, now, second);
 
         verify(setup.dao).findBackfillProjects(setup.workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound,
                 slices.getFirst(), 25);
@@ -117,13 +118,13 @@ class TopicVectorBackfillerTest {
                 .thenReturn(Flux.error(new IllegalStateException("clickhouse")))
                 .thenReturn(Flux.just(new BackfillProject(ID_GENERATOR.generateId(), 1, now)));
 
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
         var workspace = TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId);
         verify(setup.metrics).discovery(workspace, DiscoveryOutcome.FAILED);
 
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.dao, times(2)).findBackfillProjects(eq(setup.workspaceId), any(), any(), eq(slices.getFirst()),
                 anyLong());
@@ -141,7 +142,7 @@ class TopicVectorBackfillerTest {
 
         // 20s: a read starts with half (10s) plus 1s left, and is cut to end at the half: reads start at 20s and 15s
         // left, given 10s and 5s; at 10s left none starts.
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(20)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(20));
 
         verify(setup.dao).findBackfillProjects(any(), any(), any(), any(), eq(10L));
         verify(setup.dao).findBackfillProjects(any(), any(), any(), any(), eq(5L));
@@ -150,19 +151,94 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
+    @DisplayName("after a fresh phase that used all it could, discovery still gets discoveryMinShare of the budget")
+    void discoveryGetsItsShareAfterABusyFreshPhase() {
+        var setup = new Setup();
+        setup.config.getVectors().setDiscoveryMinShare(0.5);
+        setup.slices(2);
+        setup.readsTake(java.time.Duration.ofSeconds(5));
+        var budget = setup.budget(50);
+        // The fresh phase used its 25s.
+        setup.clock.advance(java.time.Duration.ofSeconds(25));
+
+        // 25s left, all of it the discovery's but one read's reserve (2s): its four reads of 5s fit.
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, budget);
+
+        verify(setup.backfills).discovered(eq(setup.workspaceId), any(), eq(budget.start()), any());
+    }
+
+    @Test
+    @DisplayName("the vector count reads maxExcludedProjects project ids at a time and adds up the chunks")
+    void vectorCountInChunks() {
+        var setup = new Setup();
+        setup.slices(1);
+        var projects = IntStream.range(0, 2 * MAX_EXCLUDED_PROJECTS + 5)
+                .mapToObj(i -> new BackfillProject(ID_GENERATOR.generateId(), 3, now)).toList();
+        when(setup.dao.findBackfillProjects(any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.fromIterable(projects));
+        var chunks = new ArrayList<List<UUID>>();
+        when(setup.dao.countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong()))
+                .thenAnswer(invocation -> {
+                    List<UUID> ids = List.copyOf(invocation.getArgument(3));
+                    chunks.add(ids);
+                    return Mono.just(ids.stream().collect(Collectors.toMap(id -> id, id -> 2L)));
+                });
+        var budget = setup.budget(50);
+
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, budget);
+
+        assertThat(chunks).hasSize(3).allSatisfy(chunk -> assertThat(chunk).hasSizeLessThanOrEqualTo(
+                MAX_EXCLUDED_PROJECTS));
+        assertThat(chunks.stream().flatMap(List::stream).toList())
+                .containsExactlyInAnyOrderElementsOf(projects.stream().map(BackfillProject::projectId).toList());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TopicBackfill>> rows = ArgumentCaptor.forClass(List.class);
+        verify(setup.backfills).discovered(eq(setup.workspaceId), rows.capture(), any(), any());
+        assertThat(rows.getValue()).containsExactlyInAnyOrderElementsOf(projects.stream()
+                .map(project -> TopicBackfill.builder().workspaceId(setup.workspaceId).projectId(project.projectId())
+                        .backfillStartedAt(budget.start()).backfillLastDoneAt(now).backfillTracesTotal(3)
+                        .backfillTracesDone(2).build())
+                .toList());
+    }
+
+    @Test
+    @DisplayName("a tick reads new traces before any discovery read; with a workspace due for discovery its fresh "
+            + "read leaves discoveryMinShare of the budget, without one it may use the whole budget")
+    void freshPhaseBeforeDiscovery() {
+        var setup = new Setup();
+        setup.slices(1);
+        var tick = tickOnMocks(setup);
+        var start = Instant.now();
+
+        tick.tick(start).block();
+
+        var order = inOrder(setup.dao);
+        order.verify(setup.dao).findUnvectored(argThat(find -> find.projectId() == null
+                && find.maxExecutionSeconds() <= 24));
+        order.verify(setup.dao).findBackfillProjects(eq(setup.workspaceId), any(), any(), any(), anyLong());
+
+        // Discovered: not due on the next tick, whose fresh read may use the whole budget (the 30s read cap).
+        tick.tick(Instant.now()).block();
+
+        verify(setup.dao).findUnvectored(argThat(find -> find.projectId() == null
+                && find.maxExecutionSeconds() == 30));
+        verify(setup.dao).findBackfillProjects(any(), any(), any(), any(), anyLong());
+    }
+
+    @Test
     @DisplayName("a discovered workspace is not due again before longWindowInterval, and is due after it")
     void discoveryDue() {
         var setup = new Setup();
         setup.slices(1);
 
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
         setup.clock.advance(java.time.Duration.ofHours(23));
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.backfills, times(1)).discovered(any(), any(), any(), any());
 
         setup.clock.advance(java.time.Duration.ofHours(1));
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.backfills, times(2)).discovered(any(), any(), any(), any());
     }
@@ -173,11 +249,11 @@ class TopicVectorBackfillerTest {
     void discoveryDueAcrossPods() {
         var setup = new Setup();
         setup.slices(1);
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
         setup.clock.advance(java.time.Duration.ofHours(23));
 
-        new TopicVectorDiscovery(setup.config, setup.dao, setup.backfills, setup.metrics)
-                .discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(new TopicVectorDiscovery(setup.config, setup.dao, setup.backfills, setup.metrics),
+                List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.backfills, times(1)).discovered(any(), any(), any(), any());
     }
@@ -190,12 +266,12 @@ class TopicVectorBackfillerTest {
         setup.slices(1);
         var workspaces = IntStream.range(0, MAX_DISCOVERIES_PER_TICK + 1)
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
-        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
-        setup.discovery.discover(List.of(workspaces.getLast()), now, now, setup.budget(50)).block();
+        discover(setup.discovery, workspaces, now, now, setup.budget(50));
+        discover(setup.discovery, List.of(workspaces.getLast()), now, now, setup.budget(50));
         verify(setup.backfills, times(workspaces.size())).discovered(any(), any(), any(), any());
         when(setup.backfills.findChecked(any())).thenThrow(new IllegalStateException("mysql"));
 
-        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+        discover(setup.discovery, workspaces, now, now, setup.budget(50));
 
         verify(setup.backfills, times(workspaces.size() + MAX_DISCOVERIES_PER_TICK))
                 .discovered(any(), any(), any(), any());
@@ -208,14 +284,14 @@ class TopicVectorBackfillerTest {
         var setup = new Setup();
         setup.slices(1);
         var discoveredBefore = ID_GENERATOR.generateId().toString();
-        setup.discovery.discover(List.of(discoveredBefore), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(discoveredBefore), now, now, setup.budget(50));
         setup.clock.advance(java.time.Duration.ofDays(1));
         var neverDiscovered = IntStream.range(0, MAX_DISCOVERIES_PER_TICK)
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
         var workspaces = new ArrayList<>(List.of(discoveredBefore));
         workspaces.addAll(neverDiscovered);
 
-        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+        discover(setup.discovery, workspaces, now, now, setup.budget(50));
 
         var discovered = ArgumentCaptor.forClass(String.class);
         verify(setup.backfills, times(1 + MAX_DISCOVERIES_PER_TICK))
@@ -224,7 +300,7 @@ class TopicVectorBackfillerTest {
                 .isEqualTo(Stream.concat(Stream.of(discoveredBefore), neverDiscovered.stream())
                         .toList());
 
-        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+        discover(setup.discovery, workspaces, now, now, setup.budget(50));
 
         verify(setup.backfills, times(2)).discovered(eq(discoveredBefore), any(), any(), any());
     }
@@ -234,13 +310,13 @@ class TopicVectorBackfillerTest {
     void reenabledWorkspaceDueByMark() {
         var setup = new Setup();
         setup.slices(1);
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
-        setup.discovery.discover(List.of(), now, now, setup.budget(50)).block();
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(), now, now, setup.budget(50));
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
         verify(setup.backfills, times(1)).discovered(eq(setup.workspaceId), any(), any(), any());
         setup.clock.advance(java.time.Duration.ofDays(1));
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+        discover(setup.discovery, List.of(setup.workspaceId), now, now, setup.budget(50));
 
         verify(setup.backfills, times(2)).discovered(eq(setup.workspaceId), any(), any(), any());
     }
@@ -347,6 +423,27 @@ class TopicVectorBackfillerTest {
             + "not hold the long-window pass")
     void overExcludedWorkspaceOnAPassTick() {
         var setup = new Setup();
+        var start = Instant.now();
+        var undrained = IntStream.range(0, MAX_EXCLUDED_PROJECTS + 1)
+                .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
+        setup.slices(1);
+        var tick = tickOnMocks(setup);
+        when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
+        when(setup.pass.startIfDue()).thenReturn(Mono.just(true));
+
+        tick.tick(start).block();
+
+        verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
+        verify(setup.pass).finish(start, true);
+        verify(setup.metrics).workspaceNotRead(argThat(workspace -> workspace.id().equals(setup.workspaceId)),
+                eq(TopicVectorsMetrics.NotRead.OVER_EXCLUDED));
+    }
+
+    /**
+     * A tick on the setup's mocks, on the system clock as in production: one enabled workspace, its fresh read and the
+     * backfill finding nothing unless a test says otherwise, no long-window pass unless a test says otherwise.
+     */
+    private static TopicVectorsTickService tickOnMocks(Setup setup) {
         var vectors = setup.config.getVectors();
         vectors.setTickInterval(Duration.minutes(1));
         vectors.setTickBudget(Duration.seconds(50));
@@ -355,12 +452,9 @@ class TopicVectorBackfillerTest {
         vectors.setLongWindow(Duration.days(7));
         vectors.setBackfillWindow(Duration.days(0));
         vectors.setEmbedConcurrency(1);
+        vectors.setDiscoveryMinShare(0.5);
         vectors.getFind().setCreatedAtSlack(Duration.days(1));
         vectors.getFind().setSliceSize(Duration.days(1));
-        var start = Instant.now();
-        var undrained = IntStream.range(0, MAX_EXCLUDED_PROJECTS + 1)
-                .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
-        when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
         when(setup.writer.embedAndWrite(any(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new ChunkWrite(TickResult.EMPTY, Set.of(), ArrivalSteps.OFF)));
@@ -370,20 +464,11 @@ class TopicVectorBackfillerTest {
         when(workspaces.vectorsLongWindowReads(any())).thenReturn(Map.of());
         var registry = mock(AiLabelTaskRegistry.class);
         var task = mock(AiLabelTask.class);
-        when(task.versions()).thenReturn(List.of(new AiLabelTask.Version(1, start.minus(30, ChronoUnit.DAYS))));
+        when(task.versions()).thenReturn(List.of(new AiLabelTask.Version(1, Instant.now().minus(30,
+                ChronoUnit.DAYS))));
         when(registry.find(TopicEmbedding.SUMMARY_TASK)).thenReturn(Optional.of(task));
-        var pass = mock(LongWindowPass.class);
-        when(pass.startIfDue()).thenReturn(Mono.just(true));
-        when(pass.finish(any(), anyBoolean())).thenReturn(Mono.empty());
-        var tick = new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
-                setup.writer, setup.discovery, setup.backfiller, pass, setup.metrics);
-
-        tick.tick(start).block();
-
-        verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
-        verify(pass).finish(start, true);
-        verify(setup.metrics).workspaceNotRead(argThat(workspace -> workspace.id().equals(setup.workspaceId)),
-                eq(TopicVectorsMetrics.NotRead.OVER_EXCLUDED));
+        return new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
+                setup.writer, setup.discovery, setup.backfiller, setup.pass, setup.metrics);
     }
 
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */
@@ -393,6 +478,7 @@ class TopicVectorBackfillerTest {
         private final TopicVectorBackfillService backfills = mock(TopicVectorBackfillService.class);
         private final TopicVectorWriter writer = mock(TopicVectorWriter.class);
         private final TopicVectorsMetrics metrics = mock(TopicVectorsMetrics.class);
+        private final LongWindowPass pass = mock(LongWindowPass.class);
         private final TopicsTestClock clock = new TopicsTestClock(now);
         private final String workspaceId = ID_GENERATOR.generateId().toString();
         private final TopicsConfig config = new TopicsConfig();
@@ -415,6 +501,9 @@ class TopicVectorBackfillerTest {
             vectors.setOneSliceMaxTraces(250_000);
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
+            when(pass.startIfDue()).thenReturn(Mono.just(false));
+            when(pass.finish(any(), anyBoolean())).thenReturn(Mono.empty());
+            when(backfills.findUndrained(any())).thenReturn(Map.of());
             when(metrics.workspace(any())).thenAnswer(
                     invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
             discovery = new TopicVectorDiscovery(config, dao, backfills, metrics);
@@ -455,6 +544,14 @@ class TopicVectorBackfillerTest {
         private TickBudget budget(int seconds) {
             return TickBudget.of(clock.instant(), java.time.Duration.ofSeconds(seconds), clock);
         }
+    }
+
+    /** One tick's discovery: the workspaces due at the budget's start, then their discoveries. */
+    private static void discover(TopicVectorDiscovery discovery, List<String> workspaceIds, Instant lowerBound,
+            Instant createdAfter, TickBudget budget) {
+        discovery.due(workspaceIds, budget.start())
+                .flatMap(due -> discovery.discover(due, lowerBound, createdAfter, budget))
+                .block();
     }
 
     private Candidate candidate(String workspaceId, UUID projectId) {

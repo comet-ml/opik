@@ -576,11 +576,12 @@ class TopicVectorsTickTest {
         labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
         // Inside the short window, older than the overlap before the next tick's start.
         tables.insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(1, ChronoUnit.HOURS));
-        wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+        var slowName = wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
                 .willReturn(aResponse().withStatus(200).withBody("slow-name").withFixedDelay(6_000)));
 
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
         assertThat(watermark(workspaceId)).isNull();
+        wireMock.removeStub(slowName);
 
         config().setTickBudget(defaults.getTickBudget());
         config().setEmbedTimeout(defaults.getEmbedTimeout());

@@ -3139,7 +3139,8 @@ topics:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each
     #  tick runs the fresh phase (window), or the daily pass in its place when that is due (longWindow, in slices),
-    #  then the backfill phase (longWindow or backfillWindow, progress in the MySQL table topic_projects).
+    #  then project discovery for the workspaces due for it, then the backfill phase (longWindow or backfillWindow,
+    #  progress in the MySQL table topic_projects).
     #  At most 1h
     tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
     #  Default: 50s
@@ -3167,8 +3168,9 @@ topics:
     #  Default: 0 (off)
     #  Description: When above zero, the backfill phase and the daily pass use this window instead of longWindow, to
     #  embed the traces summarised before topics were enabled. 0 or at least window; at most 365d. A workspace's
-    #  project discovery reads it in slices of find.discoverySliceSize, two reads per slice, and must finish within
-    #  half of one tickBudget: one cut short starts again next tick (topics.vectors.discoveries_total, outcome cut).
+    #  project discovery reads it in slices of find.discoverySliceSize, two reads per slice, and must finish within one
+    #  tick, in at least discoveryMinShare and at most half of tickBudget: one cut short starts again next tick
+    #  (topics.vectors.discoveries_total, outcome cut).
     #  With a large window, raise find.discoverySliceSize (for example 30d for 365d)
     backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
@@ -3199,6 +3201,10 @@ topics:
     #  Default: 5
     #  Description: The most workspaces whose projects one tick discovers for the backfill. At most 1000
     maxDiscoveriesPerTick: ${TOPICS_VECTORS_MAX_DISCOVERIES_PER_TICK:-5}
+    #  Default: 0.5
+    #  Description: The share of tickBudget the fresh phase leaves to project discovery, which runs after it, on a tick
+    #  with a workspace due for discovery. On other ticks the fresh phase may use the whole budget. At most 0.5
+    discoveryMinShare: ${TOPICS_VECTORS_DISCOVERY_MIN_SHARE:-0.5}
     #  Default: 250000
     #  Description: A project with at most this many traces in the backfill window is read in one query; a larger one
     #  in find.sliceSize slices. Lower it with find.maxMemoryUsage: at the default, one such read uses about an eighth
@@ -3230,7 +3236,7 @@ topics:
       #  Default: 7d
       #  Description: The backfill's discovery and vector count read in slices of this much trace creation time. Their
       #  memory stays small, so the slices are wide: each slice re-reads the granules across its edges. A discovery
-      #  reads all its slices within half of one tickBudget (see backfillWindow). From 1h to 365d
+      #  reads all its slices within one tick (see backfillWindow). From 1h to 365d
       discoverySliceSize: ${TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE:-7d}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
