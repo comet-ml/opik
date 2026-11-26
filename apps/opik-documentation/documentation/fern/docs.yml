@@ -967,6 +967,9 @@ navigation:
               - page: Portkey
                 path: ./docs-v2/integrations/portkey.mdx
                 slug: portkey
+              - page: Straitly
+                path: ./docs-v2/integrations/straitly.mdx
+                slug: straitly
               - page: TrueFoundry
                 path: ./docs-v2/integrations/truefoundry.mdx
                 slug: truefoundry
