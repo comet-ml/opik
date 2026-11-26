@@ -48,6 +48,7 @@ import {
   drawerValuesOf,
   findBuiltIn,
   identityOf,
+  isInformational,
   isSameSavedRow,
   overrideFields,
   problemsForRow,
@@ -236,6 +237,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
   const [note, setNote] = useState(entry?.row?.note ?? "");
   const [problems, setProblems] = useState<ModelPriceProblem[]>([]);
   const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
+  const [notes, setNotes] = useState<ModelPriceProblem[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirming, setConfirming] = useState<"discard" | "remove">();
   // Looked up by model and provider, not taken from the entry: an alias entry has no built-in, but the row can
@@ -305,6 +307,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
     setChangedElsewhere({ version: list.version, removed: !latestRow });
     setProblems([]);
     setWarnings([]);
+    setNotes([]);
   }
 
   const buildRow = (): ModelPriceRow => {
@@ -336,6 +339,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
   const resetFeedback = () => {
     setProblems([]);
     setWarnings([]);
+    setNotes([]);
     setIsDirty(true);
   };
 
@@ -415,6 +419,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
       return;
     }
     const { request, index } = replaceOne(list, loaded.row, rowToSave);
+    let savedNotes = notes;
     if (!warnings.length) {
       const preview = await send(request, true);
       if (preview.kind === "invalid") {
@@ -424,19 +429,21 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
       if (preview.kind !== "previewed") {
         return;
       }
-      const found =
-        index >= 0
-          ? blockingWarnings(
-              problemsForRow(preview.result.warnings, index),
-              isCustomPrice,
-            )
-          : [];
+      const rowWarnings =
+        index >= 0 ? problemsForRow(preview.result.warnings, index) : [];
+      const found = blockingWarnings(rowWarnings, isCustomPrice);
+      savedNotes = rowWarnings.filter(isInformational);
       if (found.length) {
         setWarnings(found);
+        setNotes(savedNotes);
         return;
       }
     }
-    const outcome = await send(request, false);
+    const outcome = await send(
+      request,
+      false,
+      savedNotes.map((savedNote) => savedNote.message).join(" ") || undefined,
+    );
     if (outcome.kind === "saved") {
       setOpen(false);
     } else if (outcome.kind === "invalid") {
@@ -913,6 +920,16 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
               ))}
             </ul>
           </WarningCallout>
+        )}
+        {notes.length > 0 && (
+          <Alert variant="callout" size="sm" data-testid="model-price-notes">
+            <Info />
+            <AlertDescription size="sm">
+              {notes.map((savedNote, i) => (
+                <p key={i}>{savedNote.message}</p>
+              ))}
+            </AlertDescription>
+          </Alert>
         )}
         {canEdit && (
           <Alert variant="callout" size="sm">

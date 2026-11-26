@@ -205,15 +205,22 @@ const NOT_BLOCKING_FOR_CUSTOM_PRICES = new Set([
   "no_base",
 ]);
 
+// Says which spans a row prices ("saved as X" on older backends). It comes on
+// every save of a name with a "/", so asking to confirm it would never stop.
+const INFORMATIONAL = new Set(["name_normalized"]);
+
+export const isInformational = (warning: ModelPriceProblem) =>
+  INFORMATIONAL.has(warning.code);
+
 export const blockingWarnings = (
   warnings: ModelPriceProblem[],
   isCustomPrice: boolean,
 ): ModelPriceProblem[] =>
-  isCustomPrice
-    ? warnings.filter(
-        (warning) => !NOT_BLOCKING_FOR_CUSTOM_PRICES.has(warning.code),
-      )
-    : warnings;
+  warnings.filter(
+    (warning) =>
+      !isInformational(warning) &&
+      !(isCustomPrice && NOT_BLOCKING_FOR_CUSTOM_PRICES.has(warning.code)),
+  );
 
 const OUT_OF_RANGE = /^(\S+) per 1M tokens is far from the built-in ([^:\s]+)/;
 const PER_TOKEN_HINT = "Prices in the file are per token.";

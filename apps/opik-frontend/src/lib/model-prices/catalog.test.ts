@@ -481,6 +481,19 @@ describe("saving one model", () => {
     expect(blockingWarnings(warnings, false)).toHaveLength(4);
   });
 
+  it("never asks to confirm a name_normalized note", () => {
+    const warnings = [
+      { row: 0, field: "model", code: "name_normalized", message: "a" },
+      { row: 0, field: "model", code: "shadows_builtin", message: "b" },
+    ];
+    expect(blockingWarnings(warnings, false).map((w) => w.code)).toEqual([
+      "shadows_builtin",
+    ]);
+    expect(blockingWarnings(warnings, true).map((w) => w.code)).toEqual([
+      "shadows_builtin",
+    ]);
+  });
+
   it("names the model and the field in a batch problem", () => {
     const uploaded = [
       { model: "gpt-5", provider: "openai", kind: "fixed" as const },

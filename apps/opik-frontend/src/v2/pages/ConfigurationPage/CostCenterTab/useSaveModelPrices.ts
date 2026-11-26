@@ -31,11 +31,17 @@ const useSaveModelPrices = () => {
     async (
       request: ModelPriceReplace,
       dryRun: boolean,
+      savedNote?: string,
     ): Promise<SaveOutcome> => {
       try {
         const result = await mutateAsync({ request, dryRun });
         if (result.saved) {
-          toast({ description: `Prices saved as version ${result.version}` });
+          const saved = `Prices saved as version ${result.version}`;
+          toast(
+            savedNote
+              ? { title: saved, description: savedNote }
+              : { description: saved },
+          );
           return { kind: "saved", result };
         }
         return { kind: "previewed", result };

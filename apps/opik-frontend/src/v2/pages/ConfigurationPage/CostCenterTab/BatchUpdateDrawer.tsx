@@ -15,12 +15,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 import {
   BuiltInPrice,
   ModelPriceList,
+  ModelPriceProblem,
   ModelPriceReplace,
   ModelPriceReplaceResult,
   builtInLookup,
   describeBatchProblem,
   describeReplaceResult,
   describeRowLimit,
+  isInformational,
   parsePriceUpload,
   problemsForRows,
   summarizeBatch,
@@ -121,14 +123,20 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
     }
     const outcome = await send(request, true);
     if (outcome.kind === "previewed") {
+      const warnings = problemsForRows(outcome.result.warnings, positions);
+      const describeProblem = (problem: ModelPriceProblem) =>
+        describeBatchProblem(problem, request.rows);
       setPreview({
         request,
         result: outcome.result,
         uploaded: positions.length,
-        warnings: problemsForRows(outcome.result.warnings, positions).map(
-          (warning) => describeBatchProblem(warning, request.rows),
-        ),
-        notes: upload.notes ?? [],
+        warnings: warnings
+          .filter((warning) => !isInformational(warning))
+          .map(describeProblem),
+        notes: [
+          ...(upload.notes ?? []),
+          ...warnings.filter(isInformational).map(describeProblem),
+        ],
       });
     } else if (outcome.kind === "invalid") {
       setServerErrors(
