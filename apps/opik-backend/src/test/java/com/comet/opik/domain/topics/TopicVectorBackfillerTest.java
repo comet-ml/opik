@@ -19,12 +19,14 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -220,6 +222,63 @@ class TopicVectorBackfillerTest {
         var atLimit = undrained.subList(0, DEFAULTS.getMaxExcludedProjects());
         assertThat(setup.backfiller.readableWithout(setup.workspaceId, atLimit))
                 .contains(atLimit.stream().map(TopicBackfill::projectId).toList());
+    }
+
+    @Test
+    @DisplayName("a workspace's backfill takes the projects in order, one turn each; a project whose read stops at the "
+            + "cap takes the next turn too; each turn gets the arrival steps the turn before left, and the progress of "
+            + "every turn is recorded once, in turn order")
+    void turnOrder() {
+        var setup = new Setup();
+        var small = backfill(1, now).toBuilder().workspaceId(setup.workspaceId).build();
+        var smallest = backfill(2, now).toBuilder().workspaceId(setup.workspaceId).build();
+        var largeRecent = backfill(100, now).toBuilder().workspaceId(setup.workspaceId).build();
+        var largeOlder = backfill(100, now.minus(1, ChronoUnit.DAYS)).toBuilder().workspaceId(setup.workspaceId)
+                .build();
+        // Rows each read of a project returns: the large recent project's first read stops at the cap (10).
+        var reads = Map.of(small.projectId(), new ArrayDeque<>(List.of(1)),
+                smallest.projectId(), new ArrayDeque<>(List.of(2)),
+                largeRecent.projectId(), new ArrayDeque<>(List.of(10, 3)),
+                largeOlder.projectId(), new ArrayDeque<>(List.of(3)));
+        when(setup.dao.findUnvectored(any())).thenAnswer(invocation -> {
+            TopicVectorsFind find = invocation.getArgument(0);
+            return Flux.fromStream(IntStream.range(0, reads.get(find.projectId()).poll())
+                    .mapToObj(i -> candidate(setup.workspaceId, find.projectId())));
+        });
+        var turns = new AtomicInteger();
+        when(setup.writer.embedAndWrite(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            List<Candidate> candidates = invocation.getArgument(1);
+            return Mono.just(new ChunkWrite(TickResult.written(candidates.size()),
+                    candidates.stream().map(VectorKey::of).collect(Collectors.toSet()),
+                    ArrivalSteps.OFF.toBuilder().spent(java.time.Duration.ofSeconds(turns.incrementAndGet())).build()));
+        });
+
+        var result = setup.backfiller.backfill(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
+                List.of(largeOlder, largeRecent, smallest, small), setup.window(10), setup.budget(50),
+                ArrivalSteps.OFF).block();
+
+        assertThat(result).isEqualTo(TickResult.written(19));
+        var finds = ArgumentCaptor.forClass(TopicVectorsFind.class);
+        verify(setup.dao, times(5)).findUnvectored(finds.capture());
+        assertThat(finds.getAllValues()).extracting(TopicVectorsFind::projectId).containsExactly(small.projectId(),
+                smallest.projectId(), largeRecent.projectId(), largeRecent.projectId(), largeOlder.projectId());
+        var arrivals = ArgumentCaptor.forClass(ArrivalSteps.class);
+        verify(setup.writer, times(5)).embedAndWrite(any(), any(), any(), any(), arrivals.capture());
+        assertThat(arrivals.getAllValues()).extracting(ArrivalSteps::spent).containsExactly(java.time.Duration.ZERO,
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(4));
+        verify(setup.backfills).record(List.of(
+                progress(setup.workspaceId, small, now, 1),
+                progress(setup.workspaceId, smallest, now, 2),
+                progress(setup.workspaceId, largeRecent, null, 10),
+                progress(setup.workspaceId, largeRecent, now, 3),
+                progress(setup.workspaceId, largeOlder, now, 3)));
+    }
+
+    private static TopicBackfillProgress progress(String workspaceId, TopicBackfill project, Instant drainedAt,
+            int written) {
+        return TopicBackfillProgress.builder().workspaceId(workspaceId).projectId(project.projectId())
+                .drainedAt(drainedAt).written(written).build();
     }
 
     @Test
