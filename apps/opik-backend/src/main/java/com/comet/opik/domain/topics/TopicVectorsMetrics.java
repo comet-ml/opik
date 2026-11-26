@@ -53,6 +53,7 @@ class TopicVectorsMetrics {
     private final LongCounter embedFailures;
     private final LongCounter readFailures;
     private final LongCounter workspacesNotRead;
+    private final LongCounter discoveries;
     private final LongCounter longWindowMissed;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
@@ -81,6 +82,11 @@ class TopicVectorsMetrics {
                 .setDescription("Enabled workspaces a tick's workspace read did not read, by reason and workspace: "
                         + "budget (the tick's budget ran out) or over_excluded (more projects in backfill than the "
                         + "read can leave out)")
+                .build();
+        this.discoveries = meter.counterBuilder("topics.vectors.discoveries_total")
+                .setDescription("Project discoveries a tick started, by outcome and workspace: complete (its rows "
+                        + "written), cut (the tick's budget ended it before its last slice; the next tick starts it "
+                        + "again) or failed (a read or the write failed)")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed_total")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -147,6 +153,21 @@ class TopicVectorsMetrics {
     void workspaceNotRead(@NonNull Workspace workspace, @NonNull NotRead reason) {
         workspacesNotRead.add(1,
                 workspace.attributes().toBuilder().put(stringKey("reason"), reason.getValue()).build());
+    }
+
+    void discovery(@NonNull Workspace workspace, @NonNull DiscoveryOutcome outcome) {
+        discoveries.add(1, workspace.attributes().toBuilder().put(stringKey("outcome"), outcome.getValue()).build());
+    }
+
+    /** How a project discovery a tick started ended. */
+    @Getter
+    @RequiredArgsConstructor
+    enum DiscoveryOutcome implements HasValue {
+        COMPLETE("complete"),
+        CUT("cut"),
+        FAILED("failed");
+
+        private final String value;
     }
 
     /** Why a tick's workspace read did not read an enabled workspace. */

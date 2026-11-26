@@ -8,6 +8,7 @@ import com.comet.opik.domain.topics.TopicVectorWriter.ChunkWrite;
 import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Slice;
+import com.comet.opik.domain.topics.TopicVectorsMetrics.DiscoveryOutcome;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.dropwizard.util.Duration;
@@ -72,57 +73,62 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("a discovery the budget cuts short between slices writes nothing; the next tick resumes it at the "
-            + "next slice, gives each read the seconds left, and writes it once, as started by the first tick")
-    void discoveryResumes() {
-        var find = new TopicsConfig.FindConfig();
-        find.setMaxExecutionTime(Duration.seconds(30));
-        var vectors = new TopicsConfig.VectorsConfig();
-        vectors.setFind(find);
-        vectors.setEmbedTimeout(Duration.seconds(1));
-        vectors.setLongWindowInterval(Duration.days(1));
-        vectors.setMaxDiscoveriesPerTick(MAX_DISCOVERIES_PER_TICK);
-        var config = new TopicsConfig();
-        config.setVectors(vectors);
-        var dao = mock(TopicVectorsDAO.class);
-        var backfills = mock(TopicVectorBackfillService.class);
-        var discovery = new TopicVectorDiscovery(config, dao, backfills, mock(TopicVectorsMetrics.class));
-        var clock = new TopicsTestClock(now);
-        var workspaceId = ID_GENERATOR.generateId().toString();
-        var projectId = ID_GENERATOR.generateId();
-        var newer = new Slice(now.minus(7, ChronoUnit.DAYS), null);
-        var older = new Slice(now.minus(14, ChronoUnit.DAYS), now.minus(7, ChronoUnit.DAYS));
-        when(dao.slices(any())).thenReturn(List.of(newer, older));
+    @DisplayName("a discovery the budget cuts short between slices writes nothing and counts as cut; the next tick "
+            + "starts it again from the first slice, gives each read the seconds left, and writes it as its own")
+    void discoveryCutStartsAgain() {
+        var setup = new Setup();
+        var slices = setup.slices(2);
         // Every read takes 6s of the tick.
-        when(dao.findBackfillProjects(eq(workspaceId), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
-            clock.advance(java.time.Duration.ofSeconds(6));
-            return Flux.just(new BackfillProject(projectId, 2, now));
-        });
-        when(dao.countTracesWithVectorsByProject(eq(workspaceId), any(), any(), any(), anyLong()))
-                .thenAnswer(invocation -> {
-                    clock.advance(java.time.Duration.ofSeconds(6));
-                    return Mono.just(Map.of(projectId, 1L));
-                });
+        setup.readsTake(java.time.Duration.ofSeconds(6));
         var lowerBound = now.minus(7, ChronoUnit.DAYS);
+
         // A read starts with half the budget (11s) plus 1s left and ends by the half: 22s fit two reads, of 11s and 5s.
-        var tickBudget = java.time.Duration.ofSeconds(22);
-        var first = TickBudget.of(now, tickBudget, clock);
+        setup.discovery.discover(List.of(setup.workspaceId), lowerBound, now, setup.budget(22)).block();
 
-        discovery.discover(List.of(workspaceId), lowerBound, older.from(), first).block();
+        verify(setup.dao).findBackfillProjects(setup.workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound,
+                slices.getFirst(), 11);
+        verify(setup.dao).findBackfillProjects(setup.workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound,
+                slices.getLast(), 5);
+        verify(setup.dao, never()).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
+        verify(setup.backfills, never()).discovered(any(), any(), any(), any());
+        verify(setup.metrics).discovery(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
+                DiscoveryOutcome.CUT);
 
-        verify(dao).findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, newer, 11);
-        verify(dao).findBackfillProjects(workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound, older, 5);
-        verify(dao, never()).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
-        verify(backfills, never()).discovered(any(), any(), any(), any());
+        // 50s: half is 25s, so all four reads fit, from 25s down to 7s.
+        var second = setup.budget(50);
+        setup.discovery.discover(List.of(setup.workspaceId), lowerBound, now, second).block();
 
-        discovery.discover(List.of(workspaceId), lowerBound, older.from(),
-                TickBudget.of(clock.instant(), tickBudget, clock)).block();
+        verify(setup.dao).findBackfillProjects(setup.workspaceId, TopicEmbedding.SUMMARY_TASK, lowerBound,
+                slices.getFirst(), 25);
+        verify(setup.dao, times(2)).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
+        verify(setup.backfills).discovered(eq(setup.workspaceId), any(), eq(second.start()),
+                eq(second.start().minus(2, ChronoUnit.DAYS)));
+        verify(setup.metrics).discovery(TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId),
+                DiscoveryOutcome.COMPLETE);
+    }
 
-        verify(dao, times(2)).findBackfillProjects(any(), any(), any(), any(), anyLong());
-        verify(dao, times(2)).countTracesWithVectorsByProject(any(), any(), any(), any(), anyLong());
-        verify(backfills).discovered(workspaceId, List.of(TopicBackfill.builder().workspaceId(workspaceId)
-                .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).backfillTracesTotal(4)
-                .backfillTracesDone(2).build()), now, now.minus(2, ChronoUnit.DAYS));
+    @Test
+    @DisplayName("a discovery whose read fails writes nothing and counts as failed; the workspace is due next tick, "
+            + "from the first slice")
+    void discoveryFails() {
+        var setup = new Setup();
+        var slices = setup.slices(1);
+        when(setup.dao.findBackfillProjects(any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException("clickhouse")))
+                .thenReturn(Flux.just(new BackfillProject(ID_GENERATOR.generateId(), 1, now)));
+
+        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+
+        verify(setup.backfills, never()).discovered(any(), any(), any(), any());
+        var workspace = TopicVectorsMetrics.Workspace.unnamed(setup.workspaceId);
+        verify(setup.metrics).discovery(workspace, DiscoveryOutcome.FAILED);
+
+        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
+
+        verify(setup.dao, times(2)).findBackfillProjects(eq(setup.workspaceId), any(), any(), eq(slices.getFirst()),
+                anyLong());
+        verify(setup.backfills).discovered(eq(setup.workspaceId), any(), any(), any());
+        verify(setup.metrics).discovery(workspace, DiscoveryOutcome.COMPLETE);
     }
 
     @Test
@@ -196,50 +202,40 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("a tick discovers at most maxDiscoveriesPerTick workspaces, a discovery in progress before a new "
-            + "one")
+    @DisplayName("a tick discovers at most maxDiscoveriesPerTick workspaces, the longest not discovered first: never "
+            + "discovered, then the oldest mark")
     void discoveriesPerTick() {
         var setup = new Setup();
-        setup.slices(2);
-        var inProgress = ID_GENERATOR.generateId().toString();
-        setup.readsTake(java.time.Duration.ofSeconds(5));
-        // 11s: one of its four reads, then less than half is left.
-        setup.discovery.discover(List.of(inProgress), now, now, setup.budget(11)).block();
-        verify(setup.backfills, never()).discovered(any(), any(), any(), any());
-        setup.readsTake(java.time.Duration.ZERO);
-        var fresh = IntStream.range(0, MAX_DISCOVERIES_PER_TICK)
+        setup.slices(1);
+        var discoveredBefore = ID_GENERATOR.generateId().toString();
+        setup.discovery.discover(List.of(discoveredBefore), now, now, setup.budget(50)).block();
+        setup.clock.advance(java.time.Duration.ofDays(1));
+        var neverDiscovered = IntStream.range(0, MAX_DISCOVERIES_PER_TICK)
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
-        var workspaces = new ArrayList<>(fresh);
-        workspaces.add(inProgress);
+        var workspaces = new ArrayList<>(List.of(discoveredBefore));
+        workspaces.addAll(neverDiscovered);
 
         setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
 
         var discovered = ArgumentCaptor.forClass(String.class);
-        verify(setup.backfills, times(MAX_DISCOVERIES_PER_TICK))
+        verify(setup.backfills, times(1 + MAX_DISCOVERIES_PER_TICK))
                 .discovered(discovered.capture(), any(), any(), any());
-        assertThat(discovered.getAllValues()).first().isEqualTo(inProgress);
-        assertThat(discovered.getAllValues()).doesNotContain(fresh.getLast());
+        assertThat(discovered.getAllValues())
+                .isEqualTo(Stream.concat(Stream.of(discoveredBefore), neverDiscovered.stream())
+                        .toList());
+
+        setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
+
+        verify(setup.backfills, times(2)).discovered(eq(discoveredBefore), any(), any(), any());
     }
 
     @Test
-    @DisplayName("a workspace no longer enabled loses its discovery in progress, which starts from the first slice "
-            + "when it comes back; once discovered, it is due again only by its discovery mark")
-    void disabledWorkspaceForgotten() {
+    @DisplayName("a workspace disabled and enabled again is due only by its discovery mark")
+    void reenabledWorkspaceDueByMark() {
         var setup = new Setup();
-        var slices = setup.slices(2);
-        setup.readsTake(java.time.Duration.ofSeconds(5));
-        setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(11)).block();
-        setup.readsTake(java.time.Duration.ZERO);
-
-        setup.discovery.discover(List.of(), now, now, setup.budget(50)).block();
+        setup.slices(1);
         setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
 
-        // The first slice is read again: the discovery in progress was dropped.
-        verify(setup.dao, times(2)).findBackfillProjects(eq(setup.workspaceId), any(), any(), eq(slices.getFirst()),
-                anyLong());
-        verify(setup.backfills).discovered(eq(setup.workspaceId), any(), any(), any());
-
-        // Discovered, disabled and enabled again: due by its discovery mark, as any workspace.
         setup.discovery.discover(List.of(), now, now, setup.budget(50)).block();
         setup.discovery.discover(List.of(setup.workspaceId), now, now, setup.budget(50)).block();
         verify(setup.backfills, times(1)).discovered(eq(setup.workspaceId), any(), any(), any());
@@ -379,8 +375,6 @@ class TopicVectorBackfillerTest {
         var pass = mock(LongWindowPass.class);
         when(pass.startIfDue()).thenReturn(Mono.just(true));
         when(pass.finish(any(), anyBoolean())).thenReturn(Mono.empty());
-        when(setup.metrics.workspace(any()))
-                .thenAnswer(invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
         var tick = new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
                 setup.writer, setup.discovery, setup.backfiller, pass, setup.metrics);
 
@@ -421,6 +415,8 @@ class TopicVectorBackfillerTest {
             vectors.setOneSliceMaxTraces(250_000);
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
+            when(metrics.workspace(any())).thenAnswer(
+                    invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
             discovery = new TopicVectorDiscovery(config, dao, backfills, metrics);
             when(backfills.discovered(any(), any(), any(), any())).thenAnswer(invocation -> {
                 checked.put(invocation.getArgument(0), invocation.getArgument(2));
