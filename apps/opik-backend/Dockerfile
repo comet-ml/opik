@@ -1,4 +1,4 @@
-FROM maven:3.10.2-amazoncorretto-25-al2023@sha256:5f7dad9f01e643a8c95c5117bb7a731d6fa4c6901a2b7a34ba068b52a86704a9 AS build
+FROM maven:3.10.0-amazoncorretto-25-al2023@sha256:2899182a821e1761e372858e86ed2c0315adae3831f665f0a0d75d51d4233e07 AS build
 
 WORKDIR /opt/opik-backend
 
