@@ -6,6 +6,7 @@ import opik.exceptions as exceptions
 import opik.guardrails.rules.llm_judge as llm_judge
 import opik.guardrails.rules.rule as rule_module
 import opik.guardrails.schemas as schemas
+from opik.rest_api import core as rest_api_core
 
 
 def _make_client(
@@ -96,6 +97,43 @@ def test_llm_judge__fails_closed_on_provider_error():
 
     with pytest.raises(exceptions.GuardrailValidationError):
         judge_rule.validate_local("Hello", client)
+
+
+def test_llm_judge__provider_error_response__error_and_span_name_reason_without_headers(
+    monkeypatch,
+):
+    judge_rule = llm_judge.LLMJudge(
+        name="policy", instructions="Some policy.", model="gpt-4o-mini"
+    )
+
+    current_span = types.SimpleNamespace(id="span-1", trace_id="trace-1")
+    monkeypatch.setattr(
+        llm_judge.opik_context, "get_current_span_data", lambda: current_span
+    )
+
+    recorded = {}
+    client = _make_client(
+        raise_exc=rest_api_core.ApiError(
+            status_code=400,
+            headers={"set-cookie": "AWSALB=load-balancer-cookie"},
+            body={"code": 400, "message": "model not supported gpt-4o-mini"},
+        )
+    )
+    client.span = lambda **kwargs: recorded.update(kwargs)
+
+    with pytest.raises(exceptions.GuardrailValidationError) as error:
+        judge_rule.validate_local("Hello", client)
+
+    assert str(error.value) == (
+        "LLM judge 'policy' could not be evaluated, failing closed: "
+        "model not supported gpt-4o-mini"
+    )
+    error_info = recorded["error_info"]
+    assert error_info["message"] == "model not supported gpt-4o-mini"
+    assert error_info["traceback"].endswith(
+        "ApiError: model not supported gpt-4o-mini\n"
+    )
+    assert "AWSALB" not in error_info["traceback"]
 
 
 def test_llm_judge__records_nested_llm_span(monkeypatch):

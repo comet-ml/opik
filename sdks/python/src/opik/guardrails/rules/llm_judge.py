@@ -10,7 +10,7 @@ from opik import datetime_helpers, opik_context
 from opik.api_objects import opik_client
 
 from . import rule
-from .. import schemas
+from .. import rest_api_client, schemas
 
 
 _SYSTEM_PROMPT = """You are a guardrail that decides whether a piece of text complies with a policy.
@@ -105,6 +105,7 @@ class LLMJudge(rule.Rule):
             content = response.choices[0].message.content
             decision = self._parse_decision(content)
         except Exception as e:
+            reason = rest_api_client.error_reason(e)
             self._log_span(
                 client,
                 messages,
@@ -112,12 +113,16 @@ class LLMJudge(rule.Rule):
                 model=self._model,
                 error_info={
                     "exception_type": type(e).__name__,
-                    "message": str(e),
-                    "traceback": traceback.format_exc(),
+                    "message": reason,
+                    # Built by hand: the formatted exception would end with the error's
+                    # own text, which for an API error holds every response header.
+                    "traceback": "Traceback (most recent call last):\n"
+                    + "".join(traceback.format_tb(e.__traceback__))
+                    + f"{type(e).__name__}: {reason}\n",
                 },
             )
             raise exceptions.GuardrailValidationError(
-                f"LLM judge '{self._name}' could not be evaluated, failing closed: {e}"
+                f"LLM judge '{self._name}' could not be evaluated, failing closed: {reason}"
             ) from e
 
         self._log_span(
