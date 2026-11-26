@@ -42,6 +42,8 @@ const useUndoRedoShortcuts = ({
       if (command === "undo") onUndo();
       else onRedo();
     };
+    // Capture phase so this runs before CodeMirror's own undo, which reverts
+    // only the prompt text and leaves the panel history out of sync.
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () =>
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
