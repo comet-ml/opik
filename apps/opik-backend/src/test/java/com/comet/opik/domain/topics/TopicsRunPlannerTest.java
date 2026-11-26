@@ -38,6 +38,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +63,7 @@ class TopicsRunPlannerTest {
     private final List<PlannedRun> queued = new ArrayList<>();
 
     private TopicsConfig config;
+    private TopicProjectDAO projectDAO;
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunPlanner planner;
@@ -72,13 +74,14 @@ class TopicsRunPlannerTest {
     @BeforeEach
     void setUp() {
         config = TestConfigUtils.loadConfigTest().getTopics();
-        var projectDAO = mock(TopicProjectDAO.class);
+        projectDAO = mock(TopicProjectDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenAnswer(invocation -> List.copyOf(listed));
+        when(projectDAO.findNightDue(anyCollection(), any(), any())).thenAnswer(invocation -> listed.stream()
+                .map(row -> new TopicProjectDAO.NightDue(row, false)).toList());
         when(projectDAO.findListless(anyCollection(), any())).thenAnswer(invocation -> List.copyOf(listless));
         when(projectDAO.findLabelsDue(anyCollection(), any())).thenReturn(List.of());
 
@@ -163,6 +166,60 @@ class TopicsRunPlannerTest {
 
         assertThat(queued).extracting(PlannedRun::projectId).containsExactly(stalest, fresher);
         assertThat(queued).extracting(PlannedRun::mode).containsOnly(TopicProject.RunMode.UPDATE);
+    }
+
+    @Test
+    @DisplayName("the night counts a workspace only when its turn comes: with 20 workspaces of 5 projects and 2 free "
+            + "slots it counts 2 and queues 2, and records no decision on the projects it counted but did not queue")
+    void nightCountsLazily() {
+        for (int i = 0; i < 20; i++) {
+            var workspaceId = workspace();
+            for (int j = 0; j < 5; j++) {
+                listed(workspaceId);
+            }
+        }
+
+        assertThat(planner.plan(IN_BUDGET).block()).isEqualTo(2);
+
+        verify(windowDAO, times(2)).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
+        assertThat(queued).hasSize(2).extracting(PlannedRun::workspaceId).doesNotHaveDuplicates();
+        // The two queued projects only, one write each.
+        verify(projectDAO, times(2)).markLooked(anyString(), anyCollection(), any());
+    }
+
+    @Test
+    @DisplayName("the discovery phase counts a workspace only when its turn comes: with 20 workspaces of 5 projects "
+            + "and 2 free slots it counts 2 and queues 2, one of each")
+    void discoveryCountsLazily() {
+        for (int i = 0; i < 20; i++) {
+            var workspaceId = workspace();
+            for (int j = 0; j < 5; j++) {
+                listless(workspaceId);
+            }
+        }
+
+        assertThat(planner.plan(IN_BUDGET).block()).isEqualTo(2);
+
+        verify(windowDAO, times(2)).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
+        assertThat(queued).hasSize(2).extracting(PlannedRun::workspaceId).doesNotHaveDuplicates();
+        assertThat(queued).extracting(PlannedRun::mode).containsOnly(TopicProject.RunMode.DISCOVERY);
+    }
+
+    @Test
+    @DisplayName("the night writes a workspace's small and count-failed projects with its count, one write per "
+            + "decision, not one per project")
+    void nightRecordsSkipsOncePerWorkspace() {
+        var workspaceId = workspace();
+        var small = Set.of(listed(workspaceId), listed(workspaceId), listed(workspaceId));
+        var failed = Set.of(listed(workspaceId), listed(workspaceId));
+        counts = projectIds -> projectIds.stream().filter(small::contains)
+                .collect(Collectors.toMap(id -> id, id -> 5L));
+
+        assertThat(planner.plan(IN_BUDGET).block()).isZero();
+
+        verify(projectDAO).markLooked(workspaceId, Set.copyOf(small), NIGHT);
+        verify(projectDAO).markLooked(workspaceId, Set.copyOf(failed), NIGHT);
+        verify(projectDAO, times(2)).markLooked(anyString(), anyCollection(), any());
     }
 
     @Test

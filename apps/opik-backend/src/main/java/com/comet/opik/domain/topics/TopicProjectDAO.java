@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.db.TopicRunModeMapper;
 import com.comet.opik.infrastructure.db.TopicRunStatusMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import jakarta.annotation.Nullable;
+import org.jdbi.v3.core.mapper.Nested;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -423,15 +424,19 @@ public interface TopicProjectDAO {
      * has not looked at yet and that have no run in flight. The row the queue checks for an update is the source, so a
      * project with topics but no list is not a candidate. A row whose run is an update queued since {@code nightStart}
      * was the night's already, even if its {@code last_night} write failed: a failed one waits for the next night.
+     * Each row says whether its project was deleted: a deleted project keeps its rows until the sweep.
      */
     @SqlQuery("""
-            SELECT * FROM topic_projects
-            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL
-            AND (last_night IS NULL OR last_night < :night)
-            AND (run_status IS NULL OR run_status IN ('saved', 'failed'))
-            AND NOT COALESCE(run_mode = 'update' AND run_queued_at >= :nightStart, FALSE)
+            SELECT s.*, p.id IS NULL AS project_deleted
+            FROM topic_projects s
+            LEFT JOIN projects p ON p.workspace_id = s.workspace_id AND p.id = s.project_id
+            WHERE s.workspace_id IN (<workspaceIds>) AND s.list_run_id IS NOT NULL
+            AND (s.last_night IS NULL OR s.last_night < :night)
+            AND (s.run_status IS NULL OR s.run_status IN ('saved', 'failed'))
+            AND NOT COALESCE(s.run_mode = 'update' AND s.run_queued_at >= :nightStart, FALSE)
             """)
-    List<TopicProject> findNightDue(@BindList("workspaceIds") Collection<String> workspaceIds,
+    @RegisterConstructorMapper(NightDue.class)
+    List<NightDue> findNightDue(@BindList("workspaceIds") Collection<String> workspaceIds,
             @Bind("night") LocalDate night, @Bind("nightStart") Instant nightStart);
 
     /** The night looked at the projects: updated or skipped them, for any reason. */
@@ -474,6 +479,10 @@ public interface TopicProjectDAO {
             """)
     int markNotReached(@Bind("workspaceId") String workspaceId, @BindList("projectIds") Collection<UUID> projectIds,
             @Bind("night") LocalDate night);
+
+    /** A project the night may look at ({@link #findNightDue}), and whether the project was deleted. */
+    record NightDue(@Nested TopicProject project, boolean projectDeleted) {
+    }
 
     /** How the night on {@code night} ended for the projects of {@code workspaceIds}, for its end log. */
     @SqlQuery("""

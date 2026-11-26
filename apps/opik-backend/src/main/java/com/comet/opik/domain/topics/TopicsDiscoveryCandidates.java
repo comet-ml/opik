@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +36,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 /**
  * The projects a discovery run is due for. One MySQL read finds the projects of the opted-in workspaces with no list,
  * no run in flight and a trace written in the window ({@link TopicProjectDAO#findListless}); the retry policy and the
- * backfill gate ({@link TopicsBackfillGate}) filter them; then one ClickHouse count per workspace keeps those with at
- * least {@code topics.run.minVectors} traces with a vector in the window.
+ * backfill gate ({@link TopicsBackfillGate}) filter them; then one ClickHouse count per workspace, made when the
+ * planner reaches the workspace, keeps those with at least {@code topics.run.minVectors} traces with a vector in the
+ * window.
  */
 @Slf4j
 @Singleton
@@ -52,31 +55,73 @@ class TopicsDiscoveryCandidates {
     }
 
     /**
-     * The candidates for the window that ends at {@code night}'s start. The workspaces are counted in random order
-     * until the plan's deadline, which cuts a count still running, so a slow count never starves the same workspaces. The result takes one
-     * project of each workspace in turn, the most vectors first within a workspace, so one large workspace does not
-     * take every free slot.
+     * The candidates for the window that ends at {@code night}'s start, which the caller takes one at a time
+     * ({@link Due#next}): one project of each workspace in turn, the most vectors first within a workspace, so one
+     * large workspace does not take every free slot. The workspaces go in random order, so a slow count never starves
+     * the same ones, and each is counted once, when its first turn comes: a caller that stops taking stops the counts.
+     * The plan's {@code deadline} cuts a count still running.
      */
-    Mono<List<Candidate>> find(@NonNull Collection<String> workspaceIds, @NonNull LocalDate night,
-            @NonNull Instant now, @NonNull PlanDeadline deadline) {
-        if (workspaceIds.isEmpty()) {
-            return Mono.just(List.of());
-        }
+    Mono<Due> find(@NonNull Collection<String> workspaceIds, @NonNull LocalDate night, @NonNull Instant now,
+            @NonNull PlanDeadline deadline) {
         var from = windowFrom(night);
         var to = windowTo(night);
+        if (workspaceIds.isEmpty()) {
+            return Mono.just(new Due(Map.of(), from, to, deadline));
+        }
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findListless(workspaceIds, from)))
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(listless -> open(listless, now))
-                .flatMapMany(open -> {
-                    var workspaces = new ArrayList<>(open.keySet());
-                    Collections.shuffle(workspaces);
-                    return Flux.fromIterable(workspaces)
-                            .concatMap(workspaceId -> count(workspaceId, open.get(workspaceId), from, to));
-                })
-                .takeUntilOther(deadline.timer())
-                .collectList()
-                .map(TopicsDiscoveryCandidates::roundRobin);
+                .map(listless -> new Due(open(listless, now), from, to, deadline));
+    }
+
+    /** One plan's candidates, taken one at a time; the workspaces' counts are kept for the plan. */
+    final class Due {
+
+        /** A workspace's {@code round}-th candidate, the most vectors first. */
+        private record Turn(String workspaceId, int round) {
+        }
+
+        private final Map<String, List<UUID>> open;
+        private final Instant from;
+        private final Instant to;
+        private final PlanDeadline deadline;
+        private final Iterator<Turn> turns;
+        private final Map<String, List<Candidate>> counted = new HashMap<>();
+
+        private Due(Map<String, List<UUID>> open, Instant from, Instant to, PlanDeadline deadline) {
+            this.open = open;
+            this.from = from;
+            this.to = to;
+            this.deadline = deadline;
+            var workspaces = new ArrayList<>(open.keySet());
+            Collections.shuffle(workspaces);
+            int rounds = open.values().stream().mapToInt(List::size).max().orElse(0);
+            this.turns = IntStream.range(0, rounds).boxed()
+                    .flatMap(round -> workspaces.stream().filter(workspaceId -> round < open.get(workspaceId).size())
+                            .map(workspaceId -> new Turn(workspaceId, round)))
+                    .iterator();
+        }
+
+        /** The next candidate, counting its workspace first when not counted yet; empty when none is left. */
+        Mono<Candidate> next() {
+            return Mono.defer(() -> {
+                while (turns.hasNext()) {
+                    var turn = turns.next();
+                    var candidates = counted.get(turn.workspaceId());
+                    if (candidates == null) {
+                        return deadline.cut(count(turn.workspaceId(), open.get(turn.workspaceId()), from, to))
+                                .flatMap(found -> {
+                                    counted.put(turn.workspaceId(), found);
+                                    return turn.round() < found.size() ? Mono.just(found.get(turn.round())) : next();
+                                });
+                    }
+                    if (turn.round() < candidates.size()) {
+                        return Mono.just(candidates.get(turn.round()));
+                    }
+                }
+                return Mono.empty();
+            });
+        }
     }
 
     /** The project's traces with a vector in the window that ends at {@code night}'s start; 0 for none. */

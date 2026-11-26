@@ -25,6 +25,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -111,7 +112,7 @@ public class TopicsRunPlanner {
                                         }
                                         return labelsDue(workspaceIds, start)
                                                 .zipWith(candidates.find(workspaceIds, night, start, deadline))
-                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
+                                                .flatMap(due -> queue(inTurn(due.getT1(), due.getT2(), night),
                                                         left, deadline))
                                                 .map(queued -> nightly + queued);
                                     });
@@ -270,28 +271,52 @@ public class TopicsRunPlanner {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** One labelling pass, then one discovery run, in turn. */
-    private static List<PlannedRun> interleave(List<TopicProjectKey> labels,
-            List<TopicsDiscoveryCandidates.Candidate> builds, LocalDate night) {
-        return TopicsDiscoveryCandidates.roundRobin(List.of(
-                labels.stream().map(project -> PlannedRun.builder().workspaceId(project.workspaceId())
-                        .projectId(project.projectId()).mode(RunMode.LABELS).build()).toList(),
-                builds.stream().map(build -> PlannedRun.builder().workspaceId(build.workspaceId())
-                        .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
-                        .windowTraces(build.vectors()).build()).toList()));
+    /**
+     * One labelling pass, then one discovery run, in turn. Each is taken only once the one before it is queued or
+     * skipped, so a discovery run's workspace is counted only when its turn comes ({@link
+     * TopicsDiscoveryCandidates.Due#next}).
+     */
+    private static Flux<PlannedRun> inTurn(List<TopicProjectKey> labels, TopicsDiscoveryCandidates.Due builds,
+            LocalDate night) {
+        var nextLabel = labels.iterator();
+        var buildsLeft = new AtomicBoolean(true);
+        return Flux.<Boolean, Boolean>generate(() -> true, (labelTurn, sink) -> {
+            if (nextLabel.hasNext() || buildsLeft.get()) {
+                sink.next(labelTurn);
+            } else {
+                sink.complete();
+            }
+            return !labelTurn;
+        })
+                .concatMap(labelTurn -> {
+                    if (labelTurn) {
+                        return nextLabel.hasNext() ? Mono.just(labels(nextLabel.next())) : Mono.<PlannedRun>empty();
+                    }
+                    return buildsLeft.get()
+                            ? builds.next().map(build -> PlannedRun.builder().workspaceId(build.workspaceId())
+                                    .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
+                                    .windowTraces(build.vectors()).build())
+                                    .switchIfEmpty(Mono.fromRunnable(() -> buildsLeft.set(false)))
+                            : Mono.<PlannedRun>empty();
+                }, 0);
+    }
+
+    private static PlannedRun labels(TopicProjectKey project) {
+        return PlannedRun.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
+                .mode(RunMode.LABELS).build();
     }
 
     /**
      * Queues the runs in order until {@code free} are queued or the deadline passes; a project that got a run meanwhile
-     * is skipped.
+     * is skipped. It takes the next run only once this one is queued or skipped.
      */
-    private Mono<Integer> queue(List<PlannedRun> runs, int free, PlanDeadline deadline) {
-        return Flux.fromIterable(runs)
+    private Mono<Integer> queue(Flux<PlannedRun> runs, int free, PlanDeadline deadline) {
+        return runs
                 .takeWhile(run -> !deadline.passed())
                 .concatMap(run -> queueOne(run).onErrorResume(error -> {
                     log.warn("Topics run not queued, project '{}'", run.projectId(), error);
                     return Mono.empty();
-                }))
+                }), 0)
                 .take(free)
                 .count()
                 .map(Long::intValue);
