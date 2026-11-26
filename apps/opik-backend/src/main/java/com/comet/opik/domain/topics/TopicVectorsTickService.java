@@ -91,9 +91,8 @@ public class TopicVectorsTickService {
     private Mono<TickResult> tick(Instant start, Instant appliesFrom, boolean pass) {
         var vectors = config.getVectors();
         var lowerBound = lowerBound(appliesFrom, start, vectors.getWindow().toJavaDuration());
-        var passResult = TickResult.EMPTY.toBuilder().longWindowPass(pass).build();
         if (lowerBound.isAfter(start)) {
-            return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(passResult);
+            return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(TickResult.EMPTY);
         }
         // The long window: the backfill's, and the long-window pass's.
         var backfillLowerBound = lowerBound(appliesFrom, start, vectors.backfillOrLongWindow());
@@ -132,7 +131,7 @@ public class TopicVectorsTickService {
                                     var drained = visits.stream().filter(Visit::longWindow).allMatch(Visit::complete);
                                     return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
                                             .then(backfill(visits, undrained, backfillLowerBound, budget))
-                                            .map(backfilled -> fresh.plus(backfilled).plus(passResult));
+                                            .map(fresh::plus);
                                 }))));
     }
 

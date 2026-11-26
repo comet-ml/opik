@@ -373,7 +373,7 @@ class TopicVectorsTickTest {
         assertThat(tables.vectors(workspaceId, List.of(traceId))).isEmpty();
 
         makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(TickResult.builder().written(1).skipped(Map.of()).longWindowPass(true).build());
+        assertThat(tick()).isEqualTo(TickResult.written(1));
         assertVectors(tables.vectors(workspaceId, List.of(traceId)),
                 List.of(vector(workspaceId, projectId, traceId, 1)));
     }
@@ -393,7 +393,8 @@ class TopicVectorsTickTest {
             tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
                     Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
         }
-        // An undrained pass is due again after one short tick (1.5 tick intervals): wait for each pass tick.
+        // An undrained pass is due again after one short tick (1.5 tick intervals): wait for each pass tick, the only
+        // ticks that write, as every status is older than the short window.
         config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
         makeLongWindowPassDue();
         var ticks = new ArrayList<TickResult>();
@@ -402,16 +403,15 @@ class TopicVectorsTickTest {
             Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(200))
                     .until(() -> {
                         result.set(tick());
-                        return result.get().longWindowPass();
+                        return result.get().written() > 0;
                     });
             ticks.add(result.get());
         }
         // Drained: not due again for longWindowInterval.
         ticks.add(tick());
 
-        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
-        assertThat(ticks).containsExactly(passTick.written(2).build(), passTick.written(2).build(),
-                passTick.written(1).build(), TickResult.EMPTY);
+        assertThat(ticks).containsExactly(TickResult.written(2), TickResult.written(2), TickResult.written(1),
+                TickResult.EMPTY);
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
@@ -433,13 +433,12 @@ class TopicVectorsTickTest {
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         makeLongWindowPassDue();
-        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
-        assertThat(tick()).isEqualTo(passTick.written(3).build());
+        assertThat(tick()).isEqualTo(TickResult.written(3));
 
         // Found only by a long read of the workspace the first tick already read in full.
         var lateTraces = oldStatuses(read, readProject, 1);
         makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(passTick.written(1).build());
+        assertThat(tick()).isEqualTo(TickResult.written(1));
         // Drained: not due again for longWindowInterval.
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
@@ -762,7 +761,7 @@ class TopicVectorsTickTest {
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
 
         makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(TickResult.builder().skipped(Map.of()).longWindowPass(true).build());
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
         assertThat(embedStub.calls.get()).isEqualTo(2);
     }
 
