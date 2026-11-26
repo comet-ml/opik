@@ -811,6 +811,11 @@ public class TopicsConfig {
         @Valid @NotNull @JsonProperty
         private FindConfig find;
 
+        /** The long-window pass's and the backfill's window: {@code backfillWindow} when above zero, else {@code longWindow}. */
+        public java.time.Duration backfillOrLongWindow() {
+            return (backfillWindow.toMilliseconds() > 0 ? backfillWindow : longWindow).toJavaDuration();
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be shorter than topics.vectors.tickInterval") public boolean isTickBudgetValid() {
             return tickBudget == null || tickInterval == null

@@ -96,7 +96,7 @@ public class TopicVectorsTickService {
             return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(passResult);
         }
         // The long window: the backfill's, and the long-window pass's.
-        var backfillLowerBound = lowerBound(appliesFrom, start, longWindow(vectors).toJavaDuration());
+        var backfillLowerBound = lowerBound(appliesFrom, start, vectors.backfillOrLongWindow());
         var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
         // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
         var missedBefore = start.minus(vectors.getWindow().toJavaDuration());
@@ -316,11 +316,6 @@ public class TopicVectorsTickService {
             return new Visit(workspace, longWindow, false, complete, TickResult.EMPTY, List.of(), Duration.ZERO,
                     Duration.ZERO, arrival);
         }
-    }
-
-    /** The long-window pass's and the backfill's window: {@code backfillWindow} when set, else {@code longWindow}. */
-    public static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
-        return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
     /**
