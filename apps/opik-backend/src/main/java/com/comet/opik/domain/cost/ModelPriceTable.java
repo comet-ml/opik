@@ -70,15 +70,14 @@ public class ModelPriceTable {
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
         pricedProviders = modelProviderPrices.keySet().stream()
-                .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
+                .map(ModelPriceTable::providerOf)
                 .collect(Collectors.toUnmodifiableSet());
         pricesFingerprint = fingerprint(MODEL_PRICES_FILE, MODEL_PRICES_OPENROUTER_FILE, MODEL_PRICES_OVERRIDES_FILE);
         prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
         providersByModelName = modelProviderPrices.keySet().stream()
                 .collect(Collectors.collectingAndThen(Collectors.groupingBy(
-                        key -> key.substring(0, key.lastIndexOf(MODEL_PROVIDER_SEPARATOR)),
-                        Collectors.mapping(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1),
-                                Collectors.toUnmodifiableSet())),
+                        ModelPriceTable::modelNameOf,
+                        Collectors.mapping(ModelPriceTable::providerOf, Collectors.toUnmodifiableSet())),
                         Collections::unmodifiableMap));
     }
 
@@ -134,12 +133,11 @@ public class ModelPriceTable {
     private static Map<String, Map<String, List<String>>> indexPrefixedModelNames(Set<String> keys) {
         Map<String, Map<String, List<String>>> index = new HashMap<>();
         for (String key : keys) {
-            int providerSeparator = key.lastIndexOf(MODEL_PROVIDER_SEPARATOR);
-            String modelName = key.substring(0, providerSeparator);
+            String modelName = modelNameOf(key);
             if (modelName.indexOf(MODEL_PROVIDER_SEPARATOR) <= 0) {
                 continue;
             }
-            index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
+            index.computeIfAbsent(providerOf(key), unused -> new HashMap<>())
                     .computeIfAbsent(rowModelName(modelName), unused -> new ArrayList<>())
                     .add(modelName);
         }
@@ -430,6 +428,14 @@ public class ModelPriceTable {
 
     private static String createModelProviderKey(String modelName, String provider) {
         return modelName + MODEL_PROVIDER_SEPARATOR + provider;
+    }
+
+    private static String modelNameOf(String modelProviderKey) {
+        return modelProviderKey.substring(0, modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR));
+    }
+
+    private static String providerOf(String modelProviderKey) {
+        return modelProviderKey.substring(modelProviderKey.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1);
     }
 
     private static boolean isValidModelProvider(String modelName, String provider) {
