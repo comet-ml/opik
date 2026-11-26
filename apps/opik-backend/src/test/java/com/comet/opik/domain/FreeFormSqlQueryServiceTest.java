@@ -444,6 +444,33 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("validate runs the parse and resolve checks, with the project bound, and never executes")
+    void validateChecksWithoutExecuting() {
+        givenClickHouseReturnsOneRow();
+        var projectId = UUID.randomUUID();
+
+        service.validate(FreeFormSqlAccount.EXTENDED, WORKSPACE, projectId, QUERY).join();
+
+        verify(dao).explainAst(FreeFormSqlAccount.EXTENDED, QUERY);
+        verify(dao).explainQueryTree(FreeFormSqlAccount.EXTENDED, WORKSPACE, projectId.toString(), QUERY);
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+        verify(dao, never()).explainPlan(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("validate rejects what a run rejects, with the same 400 and message")
+    void validateRejectsLikeRun() {
+        givenClickHouseReturnsOneRow();
+        givenScalarReadOfSpans();
+
+        assertThatThrownBy(() -> service.validate(FreeFormSqlAccount.EXTENDED, WORKSPACE, null, QUERY).join())
+                .cause().isExactlyInstanceOf(BadRequestException.class)
+                .satisfies(error -> assertThat(((WebApplicationException) error).getResponse().getEntity())
+                        .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.SCALAR_SUBQUERY_MESSAGE
+                                .formatted("spans")))));
+    }
+
+    @Test
     @DisplayName("audit: a violation is reported but the results are returned")
     void auditReturnsResultsDespiteViolation() {
         givenClickHouseReturnsOneRow();

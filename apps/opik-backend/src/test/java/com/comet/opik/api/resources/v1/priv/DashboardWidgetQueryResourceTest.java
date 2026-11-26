@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.validation.InRangeValidator;
 import com.comet.opik.domain.FreeFormSqlConcurrencyLimiter;
+import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -378,6 +379,18 @@ class DashboardWidgetQueryResourceTest {
         assertStatus(
                 callSaveDashboardQuery("SELECT 1 -- " + "x".repeat(70_000), null, API_KEY_A, WORKSPACE_NAME_A),
                 422);
+    }
+
+    @Test
+    @DisplayName("SQL a widget run would reject is refused on save, with the run's message")
+    void saveDashboardQuery__whenRunWouldReject__thenBadRequest() {
+        try (var response = callSaveDashboardQuery(
+                "SELECT toJSONString(map('q', query)) AS result FROM system.query_log", projectIdA, API_KEY_A,
+                WORKSPACE_NAME_A)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+            assertThat(response.readEntity(ErrorMessage.class).errors())
+                    .containsExactly(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE);
+        }
     }
 
     @Test

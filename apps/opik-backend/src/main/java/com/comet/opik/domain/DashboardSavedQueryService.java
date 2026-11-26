@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.base.Throwables;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -11,9 +12,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -21,7 +26,18 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(DashboardSavedQueryServiceImpl.class)
 public interface DashboardSavedQueryService {
 
+    /**
+     * Stores {@code query} after the checks a widget run applies before executing it, so SQL a run would reject is
+     * refused with the same 400 and message instead of being stored.
+     */
     DashboardSavedQuery create(DashboardSavedQuery query);
+
+    /**
+     * {@link #create}, with the checks run in one of the workspace's concurrent-query slots, as for the public API:
+     * they query ClickHouse as the EXTENDED user, like a run. Ollie's internal save uses {@link #create} and is not
+     * counted, like the rest of its chart authoring.
+     */
+    DashboardSavedQuery createInWorkspaceSlot(DashboardSavedQuery query);
 
     Optional<DashboardSavedQuery> findById(UUID id);
 
@@ -37,10 +53,22 @@ class DashboardSavedQueryServiceImpl implements DashboardSavedQueryService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
+    private final @NonNull FreeFormSqlConcurrencyLimiter concurrencyLimiter;
 
     @Override
     public DashboardSavedQuery create(@NonNull DashboardSavedQuery query) {
+        return create(query, false);
+    }
+
+    @Override
+    public DashboardSavedQuery createInWorkspaceSlot(@NonNull DashboardSavedQuery query) {
+        return create(query, true);
+    }
+
+    private DashboardSavedQuery create(DashboardSavedQuery query, boolean inWorkspaceSlot) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        validate(workspaceId, query, inWorkspaceSlot);
         var saved = query.toBuilder()
                 .id(idGenerator.generateId())
                 .createdBy(requestContext.get().getUserName())
@@ -54,6 +82,25 @@ class DashboardSavedQueryServiceImpl implements DashboardSavedQueryService {
                     saved.projectId() == null ? "all" : saved.projectId());
             return dao.findById(saved.id(), workspaceId).orElseThrow();
         });
+    }
+
+    /**
+     * Checks the query as a widget run would: the EXTENDED account, its project, and the date range placeholders
+     * bound. Any bound dates do, as the checks look at the query's shape, not its rows.
+     */
+    private void validate(String workspaceId, DashboardSavedQuery query, boolean inWorkspaceSlot) {
+        String sql = DashboardWidgetQueryServiceImpl.bindWindow(query.sql(), Instant.EPOCH, Instant.EPOCH);
+        // Takes everything it needs as arguments: in a slot it runs on the thread that granted the slot, outside the
+        // request scope.
+        Supplier<CompletableFuture<Void>> checks = () -> freeFormSqlQueryService
+                .validate(FreeFormSqlAccount.EXTENDED, workspaceId, query.projectId(), sql);
+        try {
+            (inWorkspaceSlot ? concurrencyLimiter.run(workspaceId, checks) : checks.get()).join();
+        } catch (CompletionException e) {
+            // Unwrap so the mapped WebApplicationException, and its HTTP status, reaches the JAX-RS handling.
+            Throwables.throwIfUnchecked(e.getCause());
+            throw e;
+        }
     }
 
     @Override
