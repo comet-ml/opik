@@ -9,12 +9,12 @@ title: Observability for Claude Code with Opik
 
 Opik works with [Claude Code](https://claude.ai/code) in two ways:
 
-- **Tracing:** Claude Code's native OpenTelemetry export sends each session to Opik as a trace, so
-  you can review what developers asked, what the model answered, which tools ran and what each
-  turn cost.
 - **Skills and MCP tools:** the Opik skills and the Opik MCP server tools let Claude Code
   instrument your app, read and score traces, run evaluations and explain failures in your Opik
   workspace.
+- **Tracing:** Claude Code's native OpenTelemetry export sends each session to Opik as a trace, so
+  you can review what developers asked, what the model answered, which tools ran and what each
+  turn cost.
 
 The two are independent, and you can use either or both.
 
@@ -27,64 +27,11 @@ The two are independent, and you can use either or both.
   is Cost Intelligence's primary agent.
 </Tip>
 
-## Trace Claude Code sessions with OpenTelemetry
-
-Claude Code can emit OTel **metrics**, **events** and, in beta, **trace spans**. Opik ingests the
-trace spans only.
-
-<Warning>
-  Without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` Claude Code sends only metrics and events, and
-  nothing appears in Opik. Prompt, tool I/O and assistant output are **redacted by default**; the
-  flags in this section un-redact them. Assistant output on spans additionally requires the detailed-tracing
-  beta, which is available for the Claude Agent SDK and non-interactive `claude -p` runs but gated
-  in interactive sessions.
-</Warning>
-
-Set these before starting Claude Code (Opik Cloud shown; swap the endpoint for your deployment,
-see the [Opik OpenTelemetry overview](/integrations/opentelemetry)):
-
-```bash wordWrap
-# 1. Enable telemetry and trace-span emission
-export CLAUDE_CODE_ENABLE_TELEMETRY=1
-export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
-
-# 2. Export traces to Opik
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
-
-# 3. Un-redact prompt and tool input/output
-export OTEL_LOG_USER_PROMPTS=1
-export OTEL_LOG_TOOL_DETAILS=1
-export OTEL_LOG_TOOL_CONTENT=1
-
-# 4. Assistant output on spans (detailed-tracing beta, non-interactive only)
-export ENABLE_BETA_TRACING_DETAILED=1
-export BETA_TRACING_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-```
-
-Spans arrive as `claude_code.interaction` (one per prompt) with nested `claude_code.llm_request`
-and `claude_code.tool` spans. Opik maps their content to trace and span input/output and
-calculates cost from the model and token attributes.
-
-For the full variable reference, endpoint modes and validation steps, see
-[Claude Agent SDK and Claude Code OpenTelemetry](/integrations/claude-agent-sdk).
-
-### Validation
-
-1. Run a short Claude Code turn that uses a tool, for example "list the files in this directory".
-2. Open the project in Opik that you set as `projectName`.
-3. Confirm the trace carries content: the trace is named `claude_code.interaction`, its input is
-   your prompt, and the model's response is on the `claude_code.llm_request` spans (with model,
-   tokens and cost). The trace-level output stays empty. Tool calls appear as `claude_code.tool`
-   spans with their input and result.
-
 ## Opik skills and MCP tools
 
 The Opik skills and the [Opik MCP server](/mcp-server) tools let Claude Code work in your Opik
 workspace. They do not log Claude Code sessions to Opik. For that, use
-[OpenTelemetry export](#trace-claude-code-sessions-with-opentelemetry).
+[OpenTelemetry export](#opentelemetry-tracing).
 
 ### Install
 
@@ -108,41 +55,44 @@ workspace. They do not log Claude Code sessions to Opik. For that, use
     browser; there is no API key to set. `/mcp` shows the server as `plugin:opik:opik-cloud`.
   </Tab>
   <Tab value="Enterprise deployment" title="Enterprise deployment">
-    The hosted MCP server and the Opik plugin connect to Opik Cloud only. On an Enterprise
-    deployment, Claude Code runs the MCP server on your machine with `uvx opik-mcp`.
+    A dedicated or self-hosted Comet deployment can run the hosted MCP server at its own address.
+    The Opik plugin connects to Opik Cloud only, so register your deployment's server instead.
 
-    Run this command in a terminal. It finds your Opik from `~/.opik.config` or asks for it,
-    registers the MCP server and installs the Opik skills. It needs
+    Run this command in a terminal. It checks whether your deployment runs the hosted server and
+    uses it when it does. It also installs the Opik skills. It needs
     [uv](https://docs.astral.sh/uv/).
 
     ```bash
-    uvx opik@latest mcp configure
+    uvx opik@latest mcp configure --ai-client claude-code --deployment self-hosted \
+      --url https://<company>.comet-hosted.com
     ```
 
-    To register the server by hand, with your API key in `OPIK_API_KEY`:
+    To register the hosted server by hand, use the address you open Comet at, followed by
+    `/opik/api/v1/mcp`:
+
+    ```bash
+    claude mcp add --transport http opik-mcp https://<company>.comet-hosted.com/opik/api/v1/mcp
+    ```
+
+    Start a new session, then sign in from `/mcp` → **Authenticate**. There is no API key to set.
+    If the server answers `404 Not Found`, your deployment does not run the hosted server. Use the
+    local server instead, with your API key in `OPIK_API_KEY`:
 
     ```bash
     claude mcp add --scope user opik-mcp \
-      --env COMET_URL_OVERRIDE=https://<host> \
+      --env COMET_URL_OVERRIDE=https://<company>.comet-hosted.com \
       --env OPIK_WORKSPACE=<workspace> \
       --env OPIK_API_KEY="$OPIK_API_KEY" \
       -- uvx opik-mcp
     ```
 
-    Set `OPIK_WORKSPACE` to the part of your Opik URL after `/opik/`.
+    Set `OPIK_WORKSPACE` to the part of your Opik URL after `/opik/`. For more options, see
+    [Self-hosted and dedicated deployments](/mcp-server/advanced-setup#self-hosted-and-dedicated-deployments).
 
-    If your deployment runs the MCP OAuth server (off by default), you can use the hosted flow
-    instead:
-
-    ```bash
-    claude mcp add --transport http opik-mcp https://<host>/opik/api/v1/mcp
-    ```
-
-    Start a new session after you add the server. If you also installed the Opik plugin, disable
-    `plugin:opik:opik-cloud` in `/mcp`.
+    If you also installed the Opik plugin, disable `plugin:opik:opik-cloud` in `/mcp`.
   </Tab>
   <Tab value="Self-hosted instance" title="Self-hosted instance">
-    The hosted MCP server and the Opik plugin connect to Opik Cloud only. On open-source Opik,
+    Open-source Opik has no hosted MCP server, and the Opik plugin connects to Opik Cloud only.
     Claude Code runs the MCP server on your machine with `uvx opik-mcp`.
 
     Run this command in a terminal. It finds an Opik that runs on localhost, or the one in
@@ -206,6 +156,59 @@ For the full list of operations, see the [MCP tools reference](/mcp-server/tools
 
 Claude Code does not update the plugin on its own. Run `/plugin marketplace update opik`, then
 `/plugin update opik@opik`, or turn on auto-update for the marketplace in `/plugin`.
+
+## OpenTelemetry tracing
+
+Claude Code can emit OTel **metrics**, **events** and, in beta, **trace spans**. Opik ingests the
+trace spans only.
+
+<Warning>
+  Without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` Claude Code sends only metrics and events, and
+  nothing appears in Opik. Prompt, tool I/O and assistant output are **redacted by default**; the
+  flags in this section un-redact them. Assistant output on spans additionally requires the detailed-tracing
+  beta, which is available for the Claude Agent SDK and non-interactive `claude -p` runs but gated
+  in interactive sessions.
+</Warning>
+
+Set these before starting Claude Code (Opik Cloud shown; swap the endpoint for your deployment,
+see the [Opik OpenTelemetry overview](/integrations/opentelemetry)):
+
+```bash wordWrap
+# 1. Enable telemetry and trace-span emission
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+
+# 2. Export traces to Opik
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+
+# 3. Un-redact prompt and tool input/output
+export OTEL_LOG_USER_PROMPTS=1
+export OTEL_LOG_TOOL_DETAILS=1
+export OTEL_LOG_TOOL_CONTENT=1
+
+# 4. Assistant output on spans (detailed-tracing beta, non-interactive only)
+export ENABLE_BETA_TRACING_DETAILED=1
+export BETA_TRACING_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+```
+
+Spans arrive as `claude_code.interaction` (one per prompt) with nested `claude_code.llm_request`
+and `claude_code.tool` spans. Opik maps their content to trace and span input/output and
+calculates cost from the model and token attributes.
+
+For the full variable reference, endpoint modes and validation steps, see
+[Claude Agent SDK and Claude Code OpenTelemetry](/integrations/claude-agent-sdk).
+
+### Validation
+
+1. Run a short Claude Code turn that uses a tool, for example "list the files in this directory".
+2. Open the project in Opik that you set as `projectName`.
+3. Confirm the trace carries content: the trace is named `claude_code.interaction`, its input is
+   your prompt, and the model's response is on the `claude_code.llm_request` spans (with model,
+   tokens and cost). The trace-level output stays empty. Tool calls appear as `claude_code.tool`
+   spans with their input and result.
 
 ## Source references
 
