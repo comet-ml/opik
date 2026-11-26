@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.3.3](https://img.shields.io/badge/Version-2.3.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.3.3](https://img.shields.io/badge/AppVersion-2.3.3-informational?style=flat-square)
+![Version: 2.3.4](https://img.shields.io/badge/Version-2.3.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.3.4](https://img.shields.io/badge/AppVersion-2.3.4-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -500,7 +500,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.readinessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
-| component.python-backend.securityContext.privileged | bool | `true` |  |
+| component.python-backend.securityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | securityContext of the python-backend containers. The `RuntimeDefault` seccomp profile blocks system calls that code metrics have no use for. With `env.PYTHON_CODE_EXECUTOR_STRATEGY: "docker"` the chart adds `privileged: true`, which the Docker daemon inside the container needs; the default process strategy runs unprivileged. If the strategy comes from `envFrom` or `secretRefs` instead, set `privileged: true` here yourself. |
 | component.python-backend.service.ports[0].name | string | `"http"` |  |
 | component.python-backend.service.ports[0].port | int | `8000` |  |
 | component.python-backend.service.ports[0].protocol | string | `"TCP"` |  |
