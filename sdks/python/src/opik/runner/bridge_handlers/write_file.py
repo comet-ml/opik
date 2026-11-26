@@ -53,7 +53,7 @@ class WriteFileHandler(BaseHandler):
 
         diff: Optional[str] = None
         if old_content is not None:
-            rel = str(path.relative_to(self._repo_root))
+            rel = path.relative_to(self._repo_root).as_posix()
             old_lines = old_content.splitlines(keepends=True)
             new_lines = parsed.content.splitlines(keepends=True)
             diff = "".join(
