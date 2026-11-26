@@ -748,7 +748,7 @@ public class TopicsConfig {
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow;
 
-        /** How often the daily long-window pass starts, and the tick discovers each workspace's projects. */
+        /** How often each workspace's daily long-window pass is due, and the tick discovers its projects. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)

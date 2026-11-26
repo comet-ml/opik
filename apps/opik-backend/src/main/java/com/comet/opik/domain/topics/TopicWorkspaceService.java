@@ -81,9 +81,10 @@ public class TopicWorkspaceService {
                 handle -> handle.attach(TopicVectorWatermarkDAO.class).watermarks(workspaceIds));
     }
 
-    void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark) {
+    /** {@code start}: the tick's start, the first row's daily pass mark, so its first long read is an interval on. */
+    void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark, @NonNull Instant start) {
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark);
+            handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark, start);
             return null;
         });
     }

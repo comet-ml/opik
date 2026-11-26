@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -42,10 +43,11 @@ import java.util.stream.Collectors;
  * served. It starts at the workspace's watermark in {@code topic_vector_watermarks}, less {@code watermarkOverlap}, and
  * never before the window: the read moves it past the statuses it gave a vector, never will (a refused input, a zero
  * vector) or left to the backfill, never past one it left for a later try, and saves it when the workspace's turn ends,
- * so a cancelled tick keeps what its finished turns did. Once per {@code longWindowInterval} ({@link LongWindowPass}) it
- * reads the long window instead, in slices, for rows it missed, such as a status that became visible more than
- * {@code watermarkOverlap} after a later one was read, and leaves the watermark as it is. A pass that takes several
- * ticks reads each workspace's long window once: the others get their fresh read on its ticks. On a tick with a
+ * so a cancelled tick keeps what its finished turns did. Once per {@code longWindowInterval} per workspace (the daily
+ * pass, due by {@code topic_vector_watermarks.long_window_read_at}) it reads the long window instead, in slices, for
+ * rows it missed, such as a status that became visible more than {@code watermarkOverlap} after a later one was read,
+ * and leaves the watermark as it is. A long read that does not finish is tried again by itself after one fresh read;
+ * the other workspaces keep their fresh reads. On a tick with a
  * workspace due for project discovery, it leaves {@code discoveryMinShare} of the budget to the discovery.</li>
  * <li>Project discovery of the due workspaces ({@link TopicVectorDiscovery}), after the fresh phase, so new traces get
  * their vectors first. The backfill phase reads the rows it writes.</li>
@@ -78,8 +80,9 @@ public class TopicVectorsTickService {
     private final @NonNull TopicVectorWriter writer;
     private final @NonNull TopicVectorDiscovery discovery;
     private final @NonNull TopicVectorBackfiller backfiller;
-    private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
+    // The tick lock runs one tick at a time; the set is only read and written by that tick.
+    private final Set<String> longReadNotDone = ConcurrentHashMap.newKeySet();
 
     /**
      * Fails with {@link IllegalStateException} when ai-labels has no {@code trace_summary} task: no tick can run, so the
@@ -90,29 +93,28 @@ public class TopicVectorsTickService {
             var task = registry.find(TopicEmbedding.SUMMARY_TASK).orElseThrow(() -> new IllegalStateException(
                     "ai-labels has no task '%s'".formatted(TopicEmbedding.SUMMARY_TASK)));
             var appliesFrom = earliestAppliesFrom(task);
-            return longWindowPass.startIfDue().flatMap(pass -> tick(start, appliesFrom, pass));
+            return tick(start, appliesFrom);
         });
     }
 
-    private Mono<TickResult> tick(Instant start, Instant appliesFrom, boolean pass) {
+    private Mono<TickResult> tick(Instant start, Instant appliesFrom) {
         var vectors = config.getVectors();
         var lowerBound = lowerBound(appliesFrom, start, vectors.getWindow().toJavaDuration());
         if (lowerBound.isAfter(start)) {
-            return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(TickResult.EMPTY);
+            return Mono.just(TickResult.EMPTY);
         }
-        // The long window: the backfill's, and the long-window pass's.
+        // The long window: the backfill's, and the daily pass's.
         var backfillLowerBound = lowerBound(appliesFrom, start, vectors.backfillOrLongWindow());
         var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
-        // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
+        // Only the daily pass can write a status older than the short window: those are the rows it recovers.
         var missedBefore = start.minus(vectors.getWindow().toJavaDuration());
-        // Passes are a longWindowInterval apart, and the ticks of one are minutes apart: a workspace read since half
-        // an interval ago was read by this pass.
-        var passReadSince = start.minus(vectors.getLongWindowInterval().toJavaDuration().dividedBy(2));
+        var longReadBefore = start.minus(vectors.getLongWindowInterval().toJavaDuration());
+        // Due by the column, but its long read did not finish last tick: it gets its fresh read this tick.
+        var waitOneTick = Set.copyOf(longReadNotDone);
         return Mono.fromCallable(() -> {
             var workspaceIds = workspaces.enabledWorkspaceIds();
             return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds),
-                    pass ? workspaces.vectorsLongWindowReads(workspaceIds) : Map.of(),
-                    arrivalWorkspaceIds());
+                    longWindowReads(workspaceIds), arrivalWorkspaceIds());
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> Mono.zip(discovery.due(enabled.workspaceIds(), start),
@@ -124,8 +126,8 @@ public class TopicVectorsTickService {
                             var fresh = due.isEmpty() ? budget : budget.before(discovery.share(budget));
                             return Flux.fromIterable(enabled.workspaceIds())
                                     .flatMap(workspaceId -> {
-                                        var readAt = enabled.longWindowReads().get(workspaceId);
-                                        boolean longWindow = pass && (readAt == null || readAt.isBefore(passReadSince));
+                                        boolean longWindow = !waitOneTick.contains(workspaceId)
+                                                && longWindowDue(workspaceId, enabled, longReadBefore);
                                         return visit(workspaceId, undrained.getOrDefault(workspaceId, List.of()),
                                                 find(workspaceId, longWindow
                                                         ? backfillLowerBound
@@ -136,13 +138,10 @@ public class TopicVectorsTickService {
                                                 enabled.arrivalWorkspaceIds().contains(workspaceId));
                                     }, vectors.getEmbedConcurrency())
                                     .collectList()
+                                    .doOnNext(this::rememberLongReadsNotDone)
                                     .flatMap(visits -> finish(visits).flatMap(written -> {
-                                        // The pass drains once no workspace is left that it has not read completely.
-                                        var drained = visits.stream().filter(Visit::longWindow)
-                                                .allMatch(Visit::complete);
-                                        return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
-                                                .then(discovery.discover(due, backfillLowerBound,
-                                                        createdAfter(backfillLowerBound), budget))
+                                        return discovery.discover(due, backfillLowerBound,
+                                                createdAfter(backfillLowerBound), budget)
                                                 .then(due.isEmpty()
                                                         ? Mono.just(undrained)
                                                         : undrainedAfterDiscovery(enabled.workspaceIds(), undrained))
@@ -153,8 +152,46 @@ public class TopicVectorsTickService {
                         }));
     }
 
+    /**
+     * @param longWindowReads when each workspace's daily pass last read it completely, for those with a read; null
+     *        when the read failed
+     */
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks,
-            @NonNull Map<String, Instant> longWindowReads, @NonNull Set<String> arrivalWorkspaceIds) {
+            @Nullable Map<String, Instant> longWindowReads, @NonNull Set<String> arrivalWorkspaceIds) {
+    }
+
+    /**
+     * The workspaces whose long read did not finish this tick: each reads its fresh window on the next tick and its
+     * long window on the one after, so one whose long read fails every time still gets a fresh read every other tick.
+     * Kept in memory only: a new leader starts with none, which costs at most one more long read per workspace.
+     */
+    private void rememberLongReadsNotDone(List<Visit> visits) {
+        longReadNotDone.clear();
+        visits.stream().filter(visit -> visit.longWindow() && !visit.complete())
+                .forEach(visit -> longReadNotDone.add(visit.workspace().id()));
+    }
+
+    /**
+     * A workspace's daily pass is due when its watermark row exists and its last complete long read is
+     * older than {@code longWindowInterval}, or it has none. A workspace without a watermark row gets its fresh read
+     * first; that row starts the interval.
+     */
+    private static boolean longWindowDue(String workspaceId, Enabled enabled, Instant longReadBefore) {
+        if (enabled.longWindowReads() == null || !enabled.watermarks().containsKey(workspaceId)) {
+            return false;
+        }
+        var readAt = enabled.longWindowReads().get(workspaceId);
+        return readAt == null || !readAt.isAfter(longReadBefore);
+    }
+
+    /** The daily pass's last complete reads; null when the read fails: the tick runs the short window only. */
+    private @Nullable Map<String, Instant> longWindowReads(List<String> workspaceIds) {
+        try {
+            return workspaces.vectorsLongWindowReads(workspaceIds);
+        } catch (RuntimeException exception) {
+            log.warn("Topic vectors daily pass reads not read, running the short window", exception);
+            return null;
+        }
     }
 
     /**
@@ -205,7 +242,7 @@ public class TopicVectorsTickService {
             var vectors = config.getVectors();
             var readableWithout = backfiller.readableWithout(workspaceId, undrained);
             if (readableWithout.isEmpty()) {
-                // Its traces are the backfill's for now; it does not hold the long-window pass.
+                // Its traces are the backfill's for now.
                 return Mono.just(Visit.notRead(workspace, NotRead.OVER_EXCLUDED, longWindow, true, steps));
             }
             long readStarted = System.nanoTime();
@@ -258,7 +295,8 @@ public class TopicVectorsTickService {
                                 .filter(key -> !servedKeys.contains(key))
                                 .forEach(settled::add);
                         var watermark = watermark(read.candidates(), settled, find.limit(), find.upperBound());
-                        return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark))
+                        return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark,
+                                budget.start()))
                                 .thenReturn(visit);
                     });
         });

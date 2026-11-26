@@ -93,7 +93,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -209,7 +208,6 @@ class TopicVectorsTickTest {
     private AiLabelTaskRegistry taskRegistry;
     private TopicVectorWriter writer;
     private TopicVectorBackfiller backfiller;
-    private LongWindowPass longWindowPass;
     private TopicVectorsMetrics vectorsMetrics;
 
     @BeforeAll
@@ -219,7 +217,7 @@ class TopicVectorsTickTest {
             @Jit TopicWorkspaceService workspaceService, @Jit LockService lockService,
             @Jit TopicVectorBackfillService backfillService, GuiceJobManager jobManager, EventBus eventBus,
             @Jit TopicRunStore store, @Jit TopicAlgorithm algorithm, @Jit AiLabelTaskRegistry taskRegistry,
-            @Jit TopicVectorWriter writer, @Jit TopicVectorBackfiller backfiller, @Jit LongWindowPass longWindowPass,
+            @Jit TopicVectorWriter writer, @Jit TopicVectorBackfiller backfiller,
             @Jit TopicVectorsMetrics vectorsMetrics, @Jit TopicEmbedder embedder) {
         this.store = store;
         this.embedder = embedder;
@@ -227,7 +225,6 @@ class TopicVectorsTickTest {
         this.taskRegistry = taskRegistry;
         this.writer = writer;
         this.backfiller = backfiller;
-        this.longWindowPass = longWindowPass;
         this.vectorsMetrics = vectorsMetrics;
         this.opikConfig = opikConfig;
         this.template = template;
@@ -275,8 +272,6 @@ class TopicVectorsTickTest {
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
         embedStub.reset();
-        // Every tick a short one unless a test makes the long-window pass due: the first tick of a run would run it.
-        lockService.lockUsingToken(LongWindowPass.LOCK, Duration.ofHours(1)).block();
     }
 
     @AfterEach
@@ -379,7 +374,8 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("the daily long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
+    @DisplayName("a workspace's long read that reaches the cap is tried again after one fresh read, until one finds "
+            + "fewer; then it is not due for longWindowInterval")
     void longWindowUntilDrained() {
         config().setMaxTracesPerTick(2);
         var workspaceId = enabledWorkspace();
@@ -393,31 +389,20 @@ class TopicVectorsTickTest {
             tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
                     Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
         }
-        // An undrained pass is due again after one short tick (1.5 tick intervals): wait for each pass tick, the only
-        // ticks that write, as every status is older than the short window.
-        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
+        // A fresh tick first gives the workspace its watermark row; every status is older than its short window.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
         makeLongWindowPassDue();
-        var ticks = new ArrayList<TickResult>();
-        for (int pass = 0; pass < 3; pass++) {
-            var result = new AtomicReference<TickResult>();
-            Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(200))
-                    .until(() -> {
-                        result.set(tick());
-                        return result.get().written() > 0;
-                    });
-            ticks.add(result.get());
-        }
-        // Drained: not due again for longWindowInterval.
-        ticks.add(tick());
+        var ticks = IntStream.range(0, 6).mapToObj(i -> tick()).toList();
 
-        assertThat(ticks).containsExactly(TickResult.written(2), TickResult.written(2), TickResult.written(1),
-                TickResult.EMPTY);
+        // Long, fresh, long, fresh, long (drained), and then not due.
+        assertThat(ticks).containsExactly(TickResult.written(2), TickResult.EMPTY, TickResult.written(2),
+                TickResult.EMPTY, TickResult.written(1), TickResult.EMPTY);
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
-    @DisplayName("a long-window pass that takes two ticks reads each workspace's long window once: the second tick "
-            + "reads only the workspace the first left at the cap, and drains the pass")
+    @DisplayName("a workspace whose long read does not finish tries again by itself: the workspace whose long read "
+            + "finished is not read again for longWindowInterval")
     void longWindowAcrossTicks() {
         config().setMaxTracesPerTick(2);
         var capped = enabledWorkspace();
@@ -429,7 +414,7 @@ class TopicVectorsTickTest {
         markDrained(read, readProject);
         var cappedTraces = oldStatuses(capped, cappedProject, 3);
         var readTraces = oldStatuses(read, readProject, 1);
-        // A short tick first: the pass's progress is kept on the watermark rows a fresh read creates.
+        // A short tick first: the daily pass's marks are kept on the watermark rows a fresh read creates.
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         makeLongWindowPassDue();
@@ -437,14 +422,37 @@ class TopicVectorsTickTest {
 
         // Found only by a long read of the workspace the first tick already read in full.
         var lateTraces = oldStatuses(read, readProject, 1);
-        makeLongWindowPassDue();
+        // The capped workspace's fresh read, then its long read again; the other is not due.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
         assertThat(tick()).isEqualTo(TickResult.written(1));
-        // Drained: not due again for longWindowInterval.
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         assertVectors(tables.vectors(capped, cappedTraces), expectedVectors(capped, cappedProject, cappedTraces, 1));
         assertVectors(tables.vectors(read, readTraces), expectedVectors(read, readProject, readTraces, 1));
         assertThat(tables.vectors(read, lateTraces)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("during a rolling deploy, the old pods' cluster-wide long-window key does not stop a due workspace's "
+            + "long read, and the tick does not set that key, so an old pod still finds its pass due")
+    void longWindowWithTheOldPodsKey() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        markDrained(workspaceId, projectId);
+        var traceIds = oldStatuses(workspaceId, projectId, 1);
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        var oldPodsKey = new LockService.Lock("topics:vectors:long_window");
+        // An old pod's pass ran a moment ago: the key says not due.
+        lockService.lockUsingToken(oldPodsKey, Duration.ofHours(1)).block();
+
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+
+        // Without the key, as when it expires, an old pod would take it and run its pass: this tick did not set it.
+        lockService.unlockUsingToken(oldPodsKey).block();
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(lockService.lockUsingToken(oldPodsKey, Duration.ofSeconds(1)).block()).isTrue();
     }
 
     /** {@code count} traces with output rows and done statuses written two days ago, older than the short window. */
@@ -1625,9 +1633,12 @@ class TopicVectorsTickTest {
         }
     }
 
-    /** Drops the long-window lock, so the next tick runs the pass. */
+    /** Clears every workspace's daily pass mark: each with a watermark row reads its long window next tick. */
     private void makeLongWindowPassDue() {
-        lockService.unlockUsingToken(LongWindowPass.LOCK).block();
+        template.inTransaction(WRITE, handle -> {
+            handle.execute("UPDATE topic_vector_watermarks SET long_window_read_at = NULL");
+            return null;
+        });
     }
 
     /** Gives the project a drained backfill row, as a project whose backfill ended earlier has. */
@@ -1755,7 +1766,7 @@ class TopicVectorsTickTest {
         return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaces,
                 vectorsDAO, taskRegistry, arrivalWriter,
                 new TopicVectorDiscovery(opikConfig.getTopics(), vectorsDAO, backfillService, vectorsMetrics),
-                arrivalBackfiller, longWindowPass, vectorsMetrics);
+                arrivalBackfiller, vectorsMetrics);
     }
 
     /** One failed arrival step of the workspace, as {@code topics.arrival.failures} records it. */

@@ -35,7 +35,6 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -457,9 +456,8 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("on a pass tick, a workspace over maxExcludedProjects is not read by the workspace read, and does "
-            + "not hold the long-window pass")
-    void overExcludedWorkspaceOnAPassTick() {
+    @DisplayName("a workspace over maxExcludedProjects and due for its long read is not read by the workspace read")
+    void overExcludedWorkspaceDueForItsLongRead() {
         var setup = new Setup();
         var start = Instant.now();
         var undrained = IntStream.range(0, MAX_EXCLUDED_PROJECTS + 1)
@@ -467,19 +465,35 @@ class TopicVectorBackfillerTest {
         setup.slices(1);
         var tick = tickOnMocks(setup);
         when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
-        when(setup.pass.startIfDue()).thenReturn(Mono.just(true));
+        // A watermark row without a complete long read: due.
+        when(setup.workspaces.vectorsWatermarks(any())).thenReturn(Map.of(setup.workspaceId, start));
 
         tick.tick(start).block();
 
         verify(setup.dao, never()).findUnvectored(argThat(find -> find.projectId() == null));
-        verify(setup.pass).finish(start, true);
         verify(setup.metrics).workspaceNotRead(argThat(workspace -> workspace.id().equals(setup.workspaceId)),
                 eq(TopicVectorsMetrics.NotRead.OVER_EXCLUDED));
     }
 
+    @Test
+    @DisplayName("when the daily pass marks cannot be read, a workspace due for its long read gets its fresh read")
+    void longWindowReadsFail() {
+        var setup = new Setup();
+        var start = Instant.now();
+        var tick = tickOnMocks(setup);
+        when(setup.workspaces.vectorsWatermarks(any())).thenReturn(Map.of(setup.workspaceId, start));
+        when(setup.workspaces.vectorsLongWindowReads(any())).thenThrow(new IllegalStateException("mysql"));
+
+        tick.tick(start).block();
+
+        // The fresh read starts at the watermark less watermarkOverlap; a long read would start a week back.
+        verify(setup.dao).findUnvectored(argThat(find -> find.projectId() == null
+                && find.lowerBound().equals(start.minus(15, ChronoUnit.MINUTES))));
+    }
+
     /**
      * A tick on the setup's mocks, on the system clock as in production: one enabled workspace, its fresh read and the
-     * backfill finding nothing unless a test says otherwise, no long-window pass unless a test says otherwise.
+     * backfill finding nothing unless a test says otherwise, no long read unless a test says otherwise.
      */
     private static TopicVectorsTickService tickOnMocks(Setup setup) {
         var vectors = setup.config.getVectors();
@@ -496,7 +510,7 @@ class TopicVectorBackfillerTest {
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
         when(setup.writer.embedAndWrite(any(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new ChunkWrite(TickResult.EMPTY, Set.of(), ArrivalSteps.OFF)));
-        var workspaces = mock(TopicWorkspaceService.class);
+        var workspaces = setup.workspaces;
         when(workspaces.enabledWorkspaceIds()).thenReturn(List.of(setup.workspaceId));
         when(workspaces.vectorsWatermarks(any())).thenReturn(Map.of());
         when(workspaces.vectorsLongWindowReads(any())).thenReturn(Map.of());
@@ -506,7 +520,7 @@ class TopicVectorBackfillerTest {
                 ChronoUnit.DAYS))));
         when(registry.find(TopicEmbedding.SUMMARY_TASK)).thenReturn(Optional.of(task));
         return new TopicVectorsTickService(setup.config, new AiLabelsConfig(), workspaces, setup.dao, registry,
-                setup.writer, setup.discovery, setup.backfiller, setup.pass, setup.metrics);
+                setup.writer, setup.discovery, setup.backfiller, setup.metrics);
     }
 
     /** A backfiller on mocks and a test clock, with a 30s read cap, a 1s embed timeout and a 1d interval. */
@@ -516,7 +530,7 @@ class TopicVectorBackfillerTest {
         private final TopicVectorBackfillService backfills = mock(TopicVectorBackfillService.class);
         private final TopicVectorWriter writer = mock(TopicVectorWriter.class);
         private final TopicVectorsMetrics metrics = mock(TopicVectorsMetrics.class);
-        private final LongWindowPass pass = mock(LongWindowPass.class);
+        private final TopicWorkspaceService workspaces = mock(TopicWorkspaceService.class);
         private final TopicsTestClock clock = new TopicsTestClock(now);
         private final String workspaceId = ID_GENERATOR.generateId().toString();
         private final TopicsConfig config = new TopicsConfig();
@@ -540,8 +554,6 @@ class TopicVectorBackfillerTest {
             vectors.setOneSliceMaxTraces(250_000);
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
-            when(pass.startIfDue()).thenReturn(Mono.just(false));
-            when(pass.finish(any(), anyBoolean())).thenReturn(Mono.empty());
             when(backfills.findUndrained(any())).thenReturn(Map.of());
             when(metrics.workspace(any())).thenAnswer(
                     invocation -> Mono.just(TopicVectorsMetrics.Workspace.unnamed(invocation.getArgument(0))));
