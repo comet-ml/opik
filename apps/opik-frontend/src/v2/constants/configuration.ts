@@ -3,5 +3,6 @@ export enum CONFIGURATION_TABS {
   ENVIRONMENTS = "environments",
   AI_PROVIDER = "ai-provider",
   WORKSPACE_PREFERENCES = "workspace-preferences",
+  COST_CENTER = "cost-center",
   MEMBERS = "members",
 }

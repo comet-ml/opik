@@ -12,12 +12,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/ui/command";
-import { Input } from "@/ui/input";
+import { Input, InputProps } from "@/ui/input";
 import { Skeleton } from "@/ui/skeleton";
 import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import { Button } from "@/ui/button";
 
 type Props<T extends string> = {
+  "aria-labelledby"?: string;
   value: T;
   onValueChange: (value: T) => void;
   items: T[];
@@ -26,10 +27,12 @@ type Props<T extends string> = {
   emptyMessage?: string;
   placeholder?: string;
   delay?: number;
+  dimension?: InputProps["dimension"];
   className?: string;
 };
 
 const AutoComplete = <T extends string>({
+  "aria-labelledby": ariaLabelledBy,
   value,
   onValueChange,
   items,
@@ -38,6 +41,7 @@ const AutoComplete = <T extends string>({
   emptyMessage = "No items found",
   placeholder = "Search...",
   delay = 300,
+  dimension,
   className,
 }: Props<T>) => {
   const [open, setOpen] = useState(false);
@@ -142,6 +146,11 @@ const AutoComplete = <T extends string>({
               onBlur={handleBlur}
             >
               <Input
+                // cmdk keeps focus by finding the input through the id it
+                // generates, so a caller's label names the input this way
+                // instead of through an id of its own.
+                {...(ariaLabelledBy && { "aria-labelledby": ariaLabelledBy })}
+                dimension={dimension}
                 className={cn(
                   { "border-destructive": hasError },
                   showClearButton && "pr-7",
@@ -193,7 +202,11 @@ const AutoComplete = <T extends string>({
                   ))}
                 </CommandGroup>
               ) : null}
-              {!isLoading ? <CommandEmpty>{emptyMessage}</CommandEmpty> : null}
+              {!isLoading ? (
+                <CommandEmpty className="comet-body-xs px-3 py-4 text-center text-muted-slate">
+                  {emptyMessage}
+                </CommandEmpty>
+              ) : null}
             </CommandList>
           </PopoverContent>
         </Command>

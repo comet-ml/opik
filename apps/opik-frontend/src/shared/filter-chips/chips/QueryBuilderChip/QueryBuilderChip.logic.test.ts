@@ -99,4 +99,21 @@ describe("formatQueryBuilderSummary", () => {
   it("returns null when nothing is applied", () => {
     expect(formatQueryBuilderSummary(undefined, def)).toBeNull();
   });
+
+  it("uses the definition's own operator labels", () => {
+    const summary = formatQueryBuilderSummary(
+      { rows: [{ ...validRow, operator: "=" }] },
+      { ...def, key: {}, operatorLabels: { "=": "is" } },
+    );
+    expect(summary?.tooltip).toBe("Hallucination is 0.5");
+  });
+
+  it("shows only the value when the operator is hidden", () => {
+    const summary = formatQueryBuilderSummary(
+      { rows: [{ ...validRow, operator: "=" }] },
+      { ...def, hideOperatorInSummary: true },
+    );
+    expect(summary?.display).toBe("0.5");
+    expect(summary?.tooltip).toBe("0.5");
+  });
 });

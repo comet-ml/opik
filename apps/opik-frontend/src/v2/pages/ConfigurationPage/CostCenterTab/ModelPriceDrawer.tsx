@@ -1,0 +1,1038 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Calendar,
+  Info,
+  Lock,
+  Pin,
+  PinOff,
+  Plus,
+  RotateCcw,
+  Trash,
+  Trash2,
+} from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTopBar } from "@/ui/sheet";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
+import { Label } from "@/ui/label";
+import { Textarea } from "@/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { Alert, AlertDescription } from "@/ui/alert";
+import SelectBox from "@/shared/SelectBox/SelectBox";
+import Autocomplete from "@/shared/Autocomplete/Autocomplete";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import ColoredTag from "@/shared/ColoredTag/ColoredTag";
+import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
+import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
+import {
+  ANY_PROVIDER_LABEL,
+  BuiltInPrice,
+  CATALOG_TYPE_LABELS,
+  CatalogEntry,
+  CatalogType,
+  DrawerValues,
+  LITELLM_KEYS,
+  ModelPriceList,
+  ModelPriceProblem,
+  ModelPriceRow,
+  PRICE_FIELDS,
+  PRICE_LABELS,
+  PriceField,
+  blockingWarnings,
+  canonicalPrice,
+  describePerToken,
+  describeRemoval,
+  drawerValuesOf,
+  findBuiltIn,
+  identityOf,
+  isInformational,
+  isSameSavedRow,
+  overrideFields,
+  problemsForRow,
+  rebaseValues,
+  replaceOne,
+  validateRow,
+} from "@/lib/model-prices";
+import {
+  PRICE_UNIT_SUFFIX,
+  TYPE_DESCRIPTIONS,
+  TYPE_TAG_VARIANT,
+  providerIconOf,
+} from "./format";
+import useSaveModelPrices from "./useSaveModelPrices";
+import PriceFormula from "./PriceFormula";
+import WarningCallout from "./WarningCallout";
+
+export type DrawerTarget = {
+  entry?: CatalogEntry;
+};
+
+type Line = { id: number; field: PriceField; value: string; locked: boolean };
+
+const KeyName: React.FC<{ name: string }> = ({ name }) => (
+  <>
+    {name.split("_").map((part, index) => (
+      <React.Fragment key={index}>
+        {index > 0 && (
+          <>
+            _<wbr />
+          </>
+        )}
+        {part}
+      </React.Fragment>
+    ))}
+  </>
+);
+
+const READ_ONLY_INPUT = "bg-muted hover:shadow-none";
+
+const PROVIDER_EMPTY_MESSAGE =
+  "Not in the list. Will be saved as a custom provider.";
+const MODEL_EMPTY_MESSAGE = "Not in the list. Will be saved as a custom model.";
+const ALIAS_TARGET_EMPTY_MESSAGE =
+  "Not in the list. Saving checks that this model has a price.";
+const SPANS_OWN_PROVIDER_LABEL = "The span's own provider";
+const MAX_MODEL_SUGGESTIONS = 50;
+
+// A grid, not flex-1: the field picker's padding would widen its column, and
+// the line under each price has to start where the boxes above it start.
+const PRICE_ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2";
+
+const CACHE_FIELDS: PriceField[] = ["cache_read_price", "cache_write_price"];
+const CACHE_HINTS: Record<string, string> = {
+  "cache_read_price,cache_write_price":
+    "Cache reads and writes are billed at the input price unless you add their own price.",
+  cache_read_price:
+    "Cache reads are billed at the input price unless you add a cache read price.",
+  cache_write_price:
+    "Cache writes are billed at the input price unless you add a cache write price.",
+};
+
+const matching = (names: string[], typed: string) => {
+  const query = typed.trim().toLowerCase();
+  const matches = names.filter((name) => name.toLowerCase().includes(query));
+  return [
+    ...matches.filter((name) => name.toLowerCase().startsWith(query)),
+    ...matches.filter((name) => !name.toLowerCase().startsWith(query)),
+  ];
+};
+
+// Typing the placeholder's words means the empty provider, as in CSV import;
+// saved as text it would be a provider no span reports.
+const emptyIfLabel = (value: string, emptyLabel: string) =>
+  value.trim().toLowerCase() === emptyLabel.toLowerCase() ? "" : value;
+
+type ModelPriceDrawerProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  target: DrawerTarget;
+  list: ModelPriceList;
+  builtIns: BuiltInPrice[];
+  providers: string[];
+  pricedModels: PricedModel[];
+  canEdit: boolean;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
+  navigation?: DrawerNavigation;
+};
+
+export type PricedModel = { model: string; provider: string };
+
+export type DrawerNavigation = {
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onChange: (shift: 1 | -1) => void;
+};
+
+type ModelPriceFormProps = ModelPriceDrawerProps & {
+  closeRef: React.MutableRefObject<() => void>;
+};
+
+const initialLines = (entry?: CatalogEntry): Line[] => {
+  if (!entry) {
+    return [
+      { id: 1, field: "input_price", value: "", locked: false },
+      { id: 2, field: "output_price", value: "", locked: false },
+    ];
+  }
+  return PRICE_FIELDS.filter((field) => entry.prices[field]).map(
+    (field, index) => ({
+      id: index + 1,
+      field,
+      value: entry.prices[field] ?? "",
+      locked: true,
+    }),
+  );
+};
+
+const rebaseLines = (
+  lines: Line[],
+  prices: DrawerValues["prices"],
+  newId: () => number,
+): Line[] => {
+  const kept = lines.flatMap((line) => {
+    const value = prices[line.field];
+    if (value !== undefined) return [{ ...line, value }];
+    return line.locked ? [] : [{ ...line, value: "" }];
+  });
+  const shown = new Set(kept.map((line) => line.field));
+  const added = PRICE_FIELDS.filter(
+    (field) => prices[field] !== undefined && !shown.has(field),
+  ).map((field) => ({
+    id: newId(),
+    field,
+    value: prices[field] ?? "",
+    locked: true,
+  }));
+  return [...kept, ...added];
+};
+
+type Loaded = { row?: ModelPriceRow; values: DrawerValues };
+
+type ChangedElsewhere = { version: number; removed: boolean };
+
+const typeOf = (
+  loadedRow: ModelPriceRow | undefined,
+  builtIn: BuiltInPrice | undefined,
+): CatalogType => {
+  if (loadedRow?.kind === "alias") return "alias";
+  if (!builtIn) return "custom";
+  return loadedRow ? "override" : "default";
+};
+
+const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
+  setOpen,
+  target,
+  list,
+  builtIns,
+  providers,
+  pricedModels,
+  canEdit,
+  isPinned = false,
+  onTogglePin,
+  navigation,
+  closeRef,
+}) => {
+  const { entry } = target;
+  const isNew = !entry;
+  const { send, isSaving } = useSaveModelPrices();
+  const nextId = useRef(10);
+
+  const [model, setModel] = useState(entry?.model ?? "");
+  const [provider, setProvider] = useState(entry?.provider ?? "");
+  const [kind, setKind] = useState<ModelPriceRow["kind"]>(
+    entry?.row?.kind ?? "fixed",
+  );
+  const [aliasModel, setAliasModel] = useState(
+    entry?.row?.alias_of?.model ?? "",
+  );
+  const [aliasProvider, setAliasProvider] = useState(
+    entry?.row?.alias_of?.provider ?? "",
+  );
+  const [lines, setLines] = useState<Line[]>(() => initialLines(entry));
+  const [note, setNote] = useState(entry?.row?.note ?? "");
+  const [problems, setProblems] = useState<ModelPriceProblem[]>([]);
+  const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
+  const [notes, setNotes] = useState<ModelPriceProblem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [confirming, setConfirming] = useState<"discard" | "remove">();
+  // Looked up by model and provider, not taken from the entry: an alias entry has no built-in, but the row can
+  // become a fixed price (an override of that built-in) while the drawer is open.
+  const [identityBuiltIn] = useState(() =>
+    entry ? findBuiltIn(builtIns, entry.model, entry.provider) : undefined,
+  );
+  const [loaded, setLoaded] = useState<Loaded>(() => ({
+    row: entry?.row,
+    values: drawerValuesOf(entry?.row, identityBuiltIn),
+  }));
+  const [changedElsewhere, setChangedElsewhere] = useState<ChangedElsewhere>();
+
+  const builtIn = useMemo(
+    () =>
+      entry?.builtIn ??
+      (kind === "fixed" ? findBuiltIn(builtIns, model, provider) : undefined),
+    [entry, builtIns, model, provider, kind],
+  );
+  const type = entry
+    ? typeOf(loaded.row, identityBuiltIn)
+    : builtIn
+      ? "override"
+      : "custom";
+  const isOrganizationOnly = type === "custom" || type === "alias";
+  const keepsBuiltIn = Boolean(builtIn);
+  const isCustomPrice = !keepsBuiltIn && kind === "fixed";
+  const readOnly = !canEdit;
+
+  const values = useMemo(() => {
+    const result: Partial<Record<PriceField, string>> = {};
+    lines.forEach((line) => {
+      result[line.field] = line.value;
+    });
+    return result;
+  }, [lines]);
+
+  const identity = entry
+    ? identityOf(
+        entry.row ?? {
+          model: entry.model,
+          provider: entry.provider,
+          kind: "fixed",
+        },
+      )
+    : undefined;
+  const latestRow = identity
+    ? list.rows.find((row) => identityOf(row) === identity)
+    : undefined;
+  // The list refetches in the background (window focus, after a 409), so someone else's save can land while
+  // the drawer is open. Rebase in render, not in an effect, so the stale values are never shown or saved.
+  if (identity && !isSameSavedRow(latestRow, loaded.row)) {
+    const theirs = drawerValuesOf(latestRow, identityBuiltIn);
+    const merged = rebaseValues(
+      loaded.values,
+      { kind, aliasModel, aliasProvider, note, prices: values },
+      theirs,
+    );
+    setKind(merged.kind);
+    setAliasModel(merged.aliasModel);
+    setAliasProvider(merged.aliasProvider);
+    setNote(merged.note);
+    setLines((current) =>
+      rebaseLines(current, merged.prices, () => (nextId.current += 1)),
+    );
+    setLoaded({ row: latestRow, values: theirs });
+    setChangedElsewhere({ version: list.version, removed: !latestRow });
+    setProblems([]);
+    setWarnings([]);
+    setNotes([]);
+  }
+
+  const buildRow = (): ModelPriceRow => {
+    const base: ModelPriceRow = {
+      model: model.trim(),
+      provider: provider.trim(),
+      kind,
+      note: note.trim() || undefined,
+    };
+    if (kind === "alias") {
+      return {
+        ...base,
+        alias_of: { model: aliasModel.trim(), provider: aliasProvider.trim() },
+      };
+    }
+    if (keepsBuiltIn) {
+      return { ...base, ...overrideFields(builtIn, values) };
+    }
+    const prices: Partial<Record<PriceField, string>> = {};
+    lines.forEach((line) => {
+      const value = canonicalPrice(line.value);
+      if (value) {
+        prices[line.field] = value;
+      }
+    });
+    return { ...base, ...prices };
+  };
+
+  const resetFeedback = () => {
+    setProblems([]);
+    setWarnings([]);
+    setNotes([]);
+    setIsDirty(true);
+  };
+
+  const afterDiscard = useRef<() => void>(() => setOpen(false));
+  const leave = (action: () => void) => {
+    if (isDirty && canEdit) {
+      afterDiscard.current = action;
+      setConfirming("discard");
+      return;
+    }
+    action();
+  };
+  const requestClose = () => leave(() => setOpen(false));
+  useEffect(() => {
+    closeRef.current = requestClose;
+  });
+
+  const updateLine = (id: number, changes: Partial<Line>) => {
+    resetFeedback();
+    setLines((current) =>
+      current.map((line) => (line.id === id ? { ...line, ...changes } : line)),
+    );
+  };
+
+  const usedFields = new Set(lines.map((line) => line.field));
+  const freeFields = PRICE_FIELDS.filter((field) => !usedFields.has(field));
+
+  const addLine = () => {
+    if (!freeFields.length) return;
+    resetFeedback();
+    nextId.current += 1;
+    setLines((current) => [
+      ...current,
+      { id: nextId.current, field: freeFields[0], value: "", locked: false },
+    ]);
+  };
+
+  const removeLine = (id: number) => {
+    resetFeedback();
+    setLines((current) => current.filter((line) => line.id !== id));
+  };
+
+  const duplicate =
+    isNew &&
+    list.rows.some(
+      (row) =>
+        identityOf(row) === identityOf({ model, provider, kind: "fixed" }),
+    );
+
+  const save = async (remove: boolean) => {
+    const next = remove ? undefined : buildRow();
+    const hasOverride =
+      next && keepsBuiltIn && kind === "fixed"
+        ? PRICE_FIELDS.some((field) => next[field])
+        : true;
+    const rowToSave = next && !hasOverride && !next.note ? undefined : next;
+    if (rowToSave) {
+      const found = validateRow(rowToSave).filter(
+        (problem) => !(keepsBuiltIn && problem.code === "no_price"),
+      );
+      if (duplicate) {
+        found.push({
+          row: null,
+          field: "model",
+          code: "duplicate",
+          message:
+            "This model already has an organization price. Open it from the table to change it.",
+        });
+      }
+      if (found.length) {
+        setProblems(found);
+        return;
+      }
+    }
+    if (!rowToSave && !loaded.row) {
+      setOpen(false);
+      return;
+    }
+    const { request, index } = replaceOne(list, loaded.row, rowToSave);
+    let savedNotes = notes;
+    if (!warnings.length) {
+      const preview = await send(request, true);
+      if (preview.kind === "invalid") {
+        setProblems(problemsForRow(preview.errors, index));
+        return;
+      }
+      if (preview.kind !== "previewed") {
+        return;
+      }
+      const rowWarnings =
+        index >= 0 ? problemsForRow(preview.result.warnings, index) : [];
+      const found = blockingWarnings(rowWarnings, isCustomPrice);
+      savedNotes = rowWarnings.filter(isInformational);
+      if (found.length) {
+        setWarnings(found);
+        setNotes(savedNotes);
+        return;
+      }
+    }
+    const outcome = await send(
+      request,
+      false,
+      savedNotes.map((savedNote) => savedNote.message).join(" ") || undefined,
+    );
+    if (outcome.kind === "saved") {
+      setOpen(false);
+    } else if (outcome.kind === "invalid") {
+      setProblems(problemsForRow(outcome.errors, index));
+    } else {
+      setWarnings([]);
+    }
+  };
+
+  const fieldProblems = (field: string) =>
+    problems.filter((problem) => problem.field === field);
+  const isShownByItsField = (field?: string | null) => {
+    if (!field) return false;
+    if (field === "note") return true;
+    if (field === "model") return isNew;
+    if (field.startsWith("alias_of")) return kind === "alias";
+    return kind === "fixed" && usedFields.has(field as PriceField);
+  };
+  const priceProblems = problems.filter(
+    (problem) => problem.code === "no_price",
+  );
+  const generalProblems = problems.filter(
+    (problem) =>
+      problem.code !== "no_price" && !isShownByItsField(problem.field),
+  );
+  const unpricedCache = CACHE_FIELDS.filter(
+    (field) =>
+      !lines.some(
+        (line) => line.field === field && canonicalPrice(line.value) !== "",
+      ),
+  );
+  const cacheHint = CACHE_HINTS[unpricedCache.join(",")];
+
+  const title = entry ? entry.model : "New custom model";
+  const lastUpdatedAt = entry?.lastUpdatedAt
+    ? formatDate(entry.lastUpdatedAt)
+    : undefined;
+  const helpText = keepsBuiltIn
+    ? "Per-token prices are shown per 1M tokens for readability. Empty = built-in price."
+    : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
+  const providerLabel = provider.trim() || ANY_PROVIDER_LABEL;
+  const ProviderIcon = providerIconOf(provider.trim());
+  const modelsMatching = (typed: string, onProvider: string) =>
+    matching(
+      Array.from(
+        new Set(
+          pricedModels
+            .filter(
+              (target) =>
+                !onProvider.trim() ||
+                target.provider.toLowerCase() ===
+                  onProvider.trim().toLowerCase(),
+            )
+            .map((target) => target.model),
+        ),
+      ),
+      typed,
+    ).slice(0, MAX_MODEL_SUGGESTIONS);
+
+  return (
+    <>
+      <SheetTopBar
+        variant="form"
+        title={title}
+        titleSuffix={
+          onTogglePin && (
+            <TooltipWrapper
+              hoverOnly
+              content={isPinned ? "Unpin" : "Pin to the top"}
+            >
+              <Button
+                variant="ghost"
+                size="icon-2xs"
+                className="group/pin"
+                aria-label={isPinned ? "Unpin" : "Pin to the top"}
+                aria-pressed={isPinned}
+                onClick={onTogglePin}
+              >
+                {isPinned ? (
+                  <>
+                    <Pin className="group-hover/pin:hidden" />
+                    <PinOff className="hidden group-hover/pin:block" />
+                  </>
+                ) : (
+                  <Pin />
+                )}
+              </Button>
+            </TooltipWrapper>
+          )
+        }
+      >
+        {!isNew && (
+          <ColoredTag
+            label={CATALOG_TYPE_LABELS[type]}
+            variant={TYPE_TAG_VARIANT[type]}
+            tooltip={TYPE_DESCRIPTIONS[type]}
+            size="default"
+          />
+        )}
+        {navigation && (
+          <ResizableSidePanelArrowNavigation
+            showSeparator={false}
+            horizontalNavigation={{
+              ...navigation,
+              onChange: (shift) => leave(() => navigation.onChange(shift)),
+            }}
+          />
+        )}
+      </SheetTopBar>
+      <SheetDescription className="sr-only">
+        {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
+      </SheetDescription>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-6">
+        {!isNew && (
+          <div className="comet-body-s flex flex-wrap items-center justify-between gap-3 text-foreground">
+            <div className="flex items-center gap-1 text-muted-slate">
+              Provider:
+              {ProviderIcon && <ProviderIcon className="size-3.5 shrink-0" />}
+              <span className="text-foreground">{providerLabel}</span>
+            </div>
+            {lastUpdatedAt && (
+              <TooltipWrapper content={`Last updated: ${lastUpdatedAt}`}>
+                <div className="flex items-center gap-1">
+                  <Calendar className="size-3.5 shrink-0 text-muted-slate" />{" "}
+                  {lastUpdatedAt}
+                </div>
+              </TooltipWrapper>
+            )}
+          </div>
+        )}
+        {changedElsewhere && (
+          <WarningCallout
+            role="status"
+            data-testid="model-price-changed-elsewhere"
+          >
+            <p>
+              {changedElsewhere.removed
+                ? `Someone else removed this model's organization price (version ${changedElsewhere.version}). Saving adds it back with the values below.`
+                : `Someone else saved version ${changedElsewhere.version} while you were editing. Their prices are loaded below and your changes are kept on top. Review them before saving.`}
+            </p>
+          </WarningCallout>
+        )}
+        {isNew && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label id="model-price-provider">Provider</Label>
+              <Autocomplete
+                aria-labelledby="model-price-provider"
+                dimension="sm"
+                placeholder={ANY_PROVIDER_LABEL}
+                value={provider}
+                items={matching(providers, provider)}
+                emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                onValueChange={(value) => {
+                  resetFeedback();
+                  setProvider(emptyIfLabel(value, ANY_PROVIDER_LABEL));
+                }}
+              />
+              <p className="comet-body-xs text-muted-slate">
+                Empty = any provider
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label id="model-price-model">Model name</Label>
+              <Autocomplete
+                aria-labelledby="model-price-model"
+                dimension="sm"
+                placeholder="e.g. acme-finetune-v3"
+                value={model}
+                items={modelsMatching(model, provider)}
+                emptyMessage={MODEL_EMPTY_MESSAGE}
+                onValueChange={(value) => {
+                  resetFeedback();
+                  setModel(value);
+                }}
+              />
+              {fieldProblems("model").map((problem, i) => (
+                <p key={i} className="comet-body-xs text-destructive">
+                  {problem.message}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {canEdit && isNew && (
+          <ToggleGroup
+            type="single"
+            value={kind}
+            onValueChange={(value) => {
+              if (!value) return;
+              resetFeedback();
+              setKind(value as ModelPriceRow["kind"]);
+            }}
+            variant="secondary"
+            className="!-mb-2 !mt-3 w-fit"
+          >
+            <ToggleGroupItem value="fixed" size="xs">
+              Own price
+            </ToggleGroupItem>
+            <ToggleGroupItem value="alias" size="xs" className="gap-1">
+              Alias
+              <ExplainerIcon
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_a_model_alias]}
+              />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
+
+        {kind === "alias" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label id="model-price-alias-provider">On provider</Label>
+              {readOnly ? (
+                <Input
+                  aria-labelledby="model-price-alias-provider"
+                  dimension="sm"
+                  className={READ_ONLY_INPUT}
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
+                  value={aliasProvider}
+                  readOnly
+                />
+              ) : (
+                <Autocomplete
+                  aria-labelledby="model-price-alias-provider"
+                  dimension="sm"
+                  placeholder={SPANS_OWN_PROVIDER_LABEL}
+                  value={aliasProvider}
+                  items={matching(providers, aliasProvider)}
+                  emptyMessage={PROVIDER_EMPTY_MESSAGE}
+                  onValueChange={(value) => {
+                    resetFeedback();
+                    setAliasProvider(
+                      emptyIfLabel(value, SPANS_OWN_PROVIDER_LABEL),
+                    );
+                  }}
+                />
+              )}
+              <p className="comet-body-xs text-muted-slate">
+                Empty = the span&apos;s own provider
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label id="model-price-alias-model">Priced like</Label>
+              {readOnly ? (
+                <Input
+                  aria-labelledby="model-price-alias-model"
+                  dimension="sm"
+                  className={READ_ONLY_INPUT}
+                  placeholder="e.g. gpt-4o"
+                  value={aliasModel}
+                  readOnly
+                />
+              ) : (
+                <Autocomplete
+                  aria-labelledby="model-price-alias-model"
+                  dimension="sm"
+                  placeholder="e.g. gpt-4o"
+                  value={aliasModel}
+                  items={modelsMatching(aliasModel, aliasProvider)}
+                  emptyMessage={ALIAS_TARGET_EMPTY_MESSAGE}
+                  onValueChange={(value) => {
+                    resetFeedback();
+                    setAliasModel(value);
+                  }}
+                />
+              )}
+            </div>
+            {problems
+              .filter((problem) => problem.field?.startsWith("alias_of"))
+              .map((problem, i) => (
+                <p
+                  key={i}
+                  className="comet-body-xs col-span-2 text-destructive"
+                >
+                  {problem.message}
+                </p>
+              ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <h4 className="comet-body-s-accented">Prices</h4>
+              <p className="comet-body-xs text-muted-slate">{helpText}</p>
+              {canEdit && isCustomPrice && cacheHint && (
+                <p className="comet-body-xs mt-1 text-light-slate">
+                  {cacheHint}
+                </p>
+              )}
+            </div>
+            {lines.map((line) => {
+              const builtInValue = builtIn?.[line.field];
+              const canReset =
+                type === "override" &&
+                canEdit &&
+                builtInValue &&
+                canonicalPrice(line.value) !== builtInValue;
+              return (
+                <div key={line.id} className="space-y-1">
+                  <div className={cn(PRICE_ROW_GRID, "items-center")}>
+                    {line.locked || readOnly ? (
+                      <div className="comet-body-s flex h-8 items-center gap-2 rounded-md bg-muted px-3">
+                        {line.locked && (
+                          <Lock className="size-3.5 text-light-slate" />
+                        )}
+                        {PRICE_LABELS[line.field]}
+                      </div>
+                    ) : (
+                      <SelectBox
+                        className="h-8"
+                        value={line.field}
+                        onChange={(field: PriceField) =>
+                          updateLine(line.id, { field })
+                        }
+                        options={PRICE_FIELDS.filter(
+                          (field) =>
+                            field === line.field || !usedFields.has(field),
+                        ).map((field) => ({
+                          value: field,
+                          label: PRICE_LABELS[field],
+                        }))}
+                      />
+                    )}
+                    <div className="relative">
+                      <span className="comet-body-s pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-slate">
+                        $
+                      </span>
+                      <Input
+                        dimension="sm"
+                        className={cn(
+                          "pl-7 pr-16",
+                          readOnly && READ_ONLY_INPUT,
+                        )}
+                        aria-label={`${
+                          PRICE_LABELS[line.field]
+                        } price per 1M tokens`}
+                        placeholder={builtInValue ?? "No price"}
+                        value={line.value}
+                        readOnly={readOnly}
+                        onChange={(event) =>
+                          updateLine(line.id, { value: event.target.value })
+                        }
+                      />
+                      <span className="comet-body-xs pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-light-slate">
+                        {PRICE_UNIT_SUFFIX}
+                      </span>
+                    </div>
+                    {canReset ? (
+                      <TooltipWrapper content="Reset to built-in price">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Reset ${
+                            PRICE_LABELS[line.field]
+                          } to the built-in price`}
+                          onClick={() =>
+                            updateLine(line.id, {
+                              value: builtInValue ?? "",
+                            })
+                          }
+                        >
+                          <RotateCcw className="size-3.5" />
+                        </Button>
+                      </TooltipWrapper>
+                    ) : !line.locked && canEdit ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove ${PRICE_LABELS[line.field]}`}
+                        onClick={() => removeLine(line.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    ) : (
+                      <span className="w-8" />
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      PRICE_ROW_GRID,
+                      "comet-body-xs text-light-slate",
+                    )}
+                  >
+                    <span className="break-words">
+                      <KeyName name={LITELLM_KEYS[line.field]} />
+                    </span>
+                    <span className="truncate">
+                      {describePerToken(
+                        line.value,
+                        keepsBuiltIn ? builtInValue : undefined,
+                      )}
+                    </span>
+                  </div>
+                  {fieldProblems(line.field).map((problem, i) => (
+                    <p key={i} className="comet-body-xs text-destructive">
+                      {problem.message}
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
+            {priceProblems.map((problem, i) => (
+              <p key={i} className="comet-body-xs text-destructive">
+                {problem.message}
+              </p>
+            ))}
+            {canEdit && freeFields.length > 0 && (
+              <Button variant="outline" size="sm" onClick={addLine}>
+                <Plus className="mr-1.5 size-3.5" />
+                Add price
+              </Button>
+            )}
+          </div>
+        )}
+
+        {readOnly ? (
+          note && (
+            <div className="space-y-1.5">
+              <h4 className="comet-body-s-accented">Note</h4>
+              <p className="comet-body-s whitespace-pre-wrap break-words">
+                {note}
+              </p>
+            </div>
+          )
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="model-price-note">Note</Label>
+            <Textarea
+              id="model-price-note"
+              rows={3}
+              className="min-h-[76px]"
+              placeholder="Why was this changed? e.g. negotiated rate, contract #…"
+              value={note}
+              onChange={(event) => {
+                resetFeedback();
+                setNote(event.target.value);
+              }}
+            />
+            {fieldProblems("note").map((problem, i) => (
+              <p key={i} className="comet-body-xs text-destructive">
+                {problem.message}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {kind !== "alias" && (
+          <PriceFormula
+            prices={Object.fromEntries(
+              lines.map((line) => [line.field, line.value]),
+            )}
+            builtIn={builtIn}
+          />
+        )}
+
+        {generalProblems.length > 0 && (
+          <Alert variant="destructive" size="sm">
+            <AlertDescription size="sm">
+              <ul className="space-y-1">
+                {generalProblems.map((problem, i) => (
+                  <li key={i}>{problem.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {warnings.length > 0 && (
+          <WarningCallout data-testid="model-price-warnings">
+            <p className="comet-body-xs-accented">Check these before saving</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {warnings.map((warning, i) => (
+                <li key={i}>{warning.message}</li>
+              ))}
+            </ul>
+          </WarningCallout>
+        )}
+        {notes.length > 0 && (
+          <Alert variant="callout" size="sm" data-testid="model-price-notes">
+            <Info />
+            <AlertDescription size="sm">
+              {notes.map((savedNote, i) => (
+                <p key={i}>{savedNote.message}</p>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )}
+        {canEdit && (
+          <Alert variant="callout" size="sm">
+            <Info />
+            <AlertDescription size="sm">
+              New prices apply to new spans only. Existing spans keep their
+              estimated cost.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 border-t px-6 py-3">
+        {canEdit ? (
+          <>
+            {type === "override" && loaded.row && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => save(true)}
+              >
+                <RotateCcw className="mr-1.5 size-3.5" />
+                Restore all defaults
+              </Button>
+            )}
+            {isOrganizationOnly && loaded.row && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => setConfirming("remove")}
+              >
+                <Trash className="mr-1.5 size-3.5" />
+                Delete model
+              </Button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={requestClose}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => save(false)} disabled={isSaving}>
+                {warnings.length
+                  ? "Save anyway"
+                  : isNew
+                    ? "Add model"
+                    : "Save changes"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="comet-body-xs text-muted-slate">
+            Only organization admins can change prices.
+          </p>
+        )}
+      </div>
+      <ConfirmDialog
+        open={confirming === "discard"}
+        setOpen={(next) => !next && setConfirming(undefined)}
+        onConfirm={() => afterDiscard.current()}
+        title="Discard your changes?"
+        description="The prices and note you changed here aren't saved yet."
+        confirmText="Discard"
+        cancelText="Keep editing"
+        confirmButtonVariant="destructive"
+      />
+      <ConfirmDialog
+        open={confirming === "remove"}
+        setOpen={(next) => !next && setConfirming(undefined)}
+        onConfirm={() => save(true)}
+        title={`Delete ${title}`}
+        description={describeRemoval(Boolean(identityBuiltIn))}
+        confirmText="Delete model"
+        confirmButtonVariant="destructive"
+      />
+    </>
+  );
+};
+
+const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = (props) => {
+  const { open, setOpen, target } = props;
+  const closeRef = useRef<() => void>(() => setOpen(false));
+
+  // Only the form is keyed by model, so stepping through models with
+  // Previous / Next keeps the sheet open instead of replaying its slide-in.
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => (next ? setOpen(true) : closeRef.current())}
+    >
+      <SheetContent
+        side="right"
+        className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
+        header={null}
+      >
+        <ModelPriceForm
+          key={target.entry?.key ?? "new"}
+          {...props}
+          closeRef={closeRef}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+export default ModelPriceDrawer;

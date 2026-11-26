@@ -136,18 +136,23 @@ export const formatQueryBuilderSummary = (
   if (valid.length === 0) return null;
 
   const hasKey = Boolean(definition.key);
+  const custom = definition.operatorLabels;
+  const labelOf =
+    (fallback: (op: FilterOperator) => string) => (op: FilterOperator) =>
+      definition.hideOperatorInSummary ? "" : (custom?.[op] ?? fallback(op));
+  const longLabel = labelOf(getOperatorLabel);
   if (valid.length > 1) {
     return {
       display: String(valid.length),
       tooltip: valid
-        .map((row) => composeRow(row, hasKey, getOperatorLabel, false))
+        .map((row) => composeRow(row, hasKey, longLabel, false))
         .join("\nAND: "),
     };
   }
 
   const [row] = valid;
   return {
-    display: composeRow(row, hasKey, getOperatorShortLabel, true),
-    tooltip: composeRow(row, hasKey, getOperatorLabel, false),
+    display: composeRow(row, hasKey, labelOf(getOperatorShortLabel), true),
+    tooltip: composeRow(row, hasKey, longLabel, false),
   };
 };

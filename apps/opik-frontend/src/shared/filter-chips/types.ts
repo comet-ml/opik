@@ -84,6 +84,7 @@ export interface TimeChipDefinition extends ChipDefinitionBase {
 interface QueryBuilderKeyConfig {
   placeholder?: string;
   options?: ChipOptionsConfig;
+  optionsHeading?: string;
   validate?: (value: string) => string | undefined;
 }
 
@@ -91,6 +92,7 @@ interface QueryBuilderValueConfig {
   type?: "text" | "numeric";
   placeholder?: string;
   options?: ChipOptionsConfig;
+  optionsHeading?: string;
   decimals?: number;
   validate?: (value: string) => string | undefined;
 }
@@ -101,6 +103,8 @@ export interface QueryBuilderChipDefinition extends ChipDefinitionBase {
   operators: FilterOperator[];
   defaultOperator?: FilterOperator;
   addLabel?: string;
+  operatorLabels?: Partial<Record<FilterOperator, string>>;
+  hideOperatorInSummary?: boolean;
   // At least one of `key` / `value` must carry `options` — drives the
   // empty-state search source. Runtime-enforced (not at type level).
   key?: QueryBuilderKeyConfig;

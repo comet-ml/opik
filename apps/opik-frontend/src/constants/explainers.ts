@@ -39,6 +39,8 @@ export enum EXPLAINER_ID {
   whats_the_playground = "whats_the_playground",
   whats_these_configuration_things = "whats_these_configuration_things",
   why_do_i_need_an_ai_provider = "why_do_i_need_an_ai_provider",
+  what_are_model_prices = "what_are_model_prices",
+  what_is_a_model_alias = "what_is_a_model_alias",
   why_do_i_need_the_collaborators_tab = "why_do_i_need_the_collaborators_tab",
   what_does_the_test_suite_do_here = "what_does_the_test_suite_do_here",
   how_do_i_use_the_test_suite_in_the_playground = "how_do_i_use_the_test_suite_in_the_playground",
@@ -318,6 +320,16 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,
     description:
       "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
+  },
+  [EXPLAINER_ID.what_are_model_prices]: {
+    id: EXPLAINER_ID.what_are_model_prices,
+    description:
+      "Model prices used to estimate cost. Changes apply to spans logged after you save.",
+  },
+  [EXPLAINER_ID.what_is_a_model_alias]: {
+    id: EXPLAINER_ID.what_is_a_model_alias,
+    description:
+      "Alias uses another model's price, so a renamed or fine-tuned model is billed like the model it points to.",
   },
   [EXPLAINER_ID.what_does_the_test_suite_do_here]: {
     id: EXPLAINER_ID.what_does_the_test_suite_do_here,
