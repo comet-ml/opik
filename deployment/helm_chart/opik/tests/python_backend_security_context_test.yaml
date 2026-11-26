@@ -9,6 +9,12 @@ tests:
       path: metadata.name
       value: opik-python-backend
     asserts:
+      - notEqual:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
+      - notEqual:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+          value: true
       - equal:
           path: spec.template.spec.containers[0].securityContext
           value:
