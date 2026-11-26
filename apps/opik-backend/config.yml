@@ -1805,7 +1805,9 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/alpha/decisions
   # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev. It lives outside
   #   /api/v1, so it can't be derived from openRouterUrl. Also used when a workspace's OpenRouter provider sets a
-  #   custom base URL: that URL only applies to chat models
+  #   custom base URL: that URL only applies to chat models. OpenRouter serves TypeSafe Jev only on openrouter.ai, so
+  #   Jev evaluations are refused, without a call, when this URL, openRouterUrl or the workspace's base URL is on
+  #   eu.openrouter.ai or us.openrouter.ai
   openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-https://openrouter.ai/api/alpha/decisions}
 
   vertexAIClient:

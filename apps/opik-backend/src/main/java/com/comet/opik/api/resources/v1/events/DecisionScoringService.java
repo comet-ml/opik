@@ -7,6 +7,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine.ParsedFeedbackScores;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels.DecisionModel;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
@@ -20,6 +21,7 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -121,7 +123,11 @@ public class DecisionScoringService {
             @NonNull EvaluationRecorder recorder) {
         var call = Mono.fromCallable(() -> llmProviderFactory.getClientApiConfig(workspaceId, request.model()))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(config -> clientFor(request.model()).decide(request, config));
+                .flatMap(config -> clientFor(request.model()).decide(request, config))
+                // A 4xx, as ChatCompletionService maps a refused chat request: the consumer retires it instead of
+                // redelivering a request that can never be sent.
+                .onErrorMap(ProviderRequestRefusedException.class,
+                        refusal -> new BadRequestException(refusal.getMessage(), refusal));
         return recorder.recordDecisionCall(request, call);
     }
 

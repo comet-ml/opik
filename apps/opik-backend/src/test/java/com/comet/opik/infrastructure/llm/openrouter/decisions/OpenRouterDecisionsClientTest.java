@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.utils.RetryUtils;
@@ -17,13 +18,17 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -33,6 +38,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OpenRouterDecisionsClientTest {
@@ -185,6 +193,73 @@ class OpenRouterDecisionsClientTest {
         var response = decisionsClient.decide(request(), apiConfig(Map.of())).block();
 
         assertThat(response.answers()).containsKeys("answer_relevant", "answer_correct");
+    }
+
+    @Nested
+    class RegionRefusal {
+
+        private static final String GLOBAL_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
+        private static final String EU_DECISIONS_URL = "https://eu.openrouter.ai/api/alpha/decisions";
+        private static final String US_DECISIONS_URL = "https://us.openrouter.ai/api/alpha/decisions";
+        private static final String GLOBAL_URL = "https://openrouter.ai/api/v1";
+        private static final String EU_URL = "https://eu.openrouter.ai/api/v1";
+        private static final String US_URL = "https://us.openrouter.ai/api/v1";
+        private static final String PROXY_DECISIONS_URL = "https://llm-proxy.example.com/api/alpha/decisions";
+
+        static Stream<Arguments> refusedRegions() {
+            return Stream.of(
+                    arguments(EU_DECISIONS_URL, EU_URL, null, "EU"),
+                    arguments(US_DECISIONS_URL, US_URL, null, "US"),
+                    arguments(EU_DECISIONS_URL, GLOBAL_URL, null, "EU"),
+                    // The decisions URL was left on openrouter.ai while the server's chat traffic stays in the EU.
+                    arguments(GLOBAL_DECISIONS_URL, EU_URL, null, "EU"),
+                    arguments(GLOBAL_DECISIONS_URL, GLOBAL_URL, EU_URL, "EU"),
+                    arguments(PROXY_DECISIONS_URL, EU_URL, null, "EU"));
+        }
+
+        @ParameterizedTest(name = "decisions {0}, server {1}, workspace {2} -> {3}")
+        @MethodSource("refusedRegions")
+        void refusesJevOutsideItsRegionsWithoutCallingOpenRouter(String decisionsUrl, String serverUrl,
+                String workspaceBaseUrl, String region) {
+            var httpClient = mock(RetriableHttpClient.class);
+            var client = new OpenRouterDecisionsClient(httpClient, config(decisionsUrl, serverUrl));
+
+            assertThatThrownBy(() -> client.decide(request(), apiConfig(workspaceBaseUrl)).block())
+                    .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                    .hasMessageStartingWith(
+                            "TypeSafe Jev is not available in OpenRouter's %s region".formatted(region));
+            verifyNoInteractions(httpClient);
+        }
+
+        @Test
+        void sendsJevWhenTheWorkspaceOverridesARegionalServerWithTheGlobalHost() {
+            wireMock.server().stubFor(post(urlEqualTo(PATH))
+                    .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                            .withBody(SUCCESS_BODY)));
+            var client = new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()),
+                    config(wireMock.runtimeInfo().getHttpBaseUrl() + PATH, EU_URL));
+
+            var response = client.decide(request(), apiConfig(GLOBAL_URL)).block();
+
+            assertThat(response.answers()).containsKeys("answer_relevant", "answer_correct");
+            wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+        }
+
+        private LlmProviderClientConfig config(String decisionsUrl, String serverUrl) {
+            var config = new LlmProviderClientConfig();
+            config.setOpenRouterDecisionsUrl(decisionsUrl);
+            config.setOpenRouterUrl(serverUrl);
+            config.setMaxAttempts(MAX_ATTEMPTS);
+            config.setDelayMillis(1);
+            return config;
+        }
+
+        private LlmProviderClientApiConfig apiConfig(String workspaceBaseUrl) {
+            return LlmProviderClientApiConfig.builder()
+                    .apiKey(apiKey)
+                    .baseUrl(workspaceBaseUrl)
+                    .build();
+        }
     }
 
     private DecisionsRequest request() {

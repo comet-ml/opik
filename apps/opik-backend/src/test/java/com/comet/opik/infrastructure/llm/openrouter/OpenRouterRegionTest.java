@@ -94,4 +94,21 @@ class OpenRouterRegionTest {
             assertThat(OpenRouterRegion.effective(null, null)).isEqualTo(OpenRouterRegion.UNKNOWN);
         }
     }
+
+    @Nested
+    class DecisionModelAvailability {
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"~typesafe/jev-latest", "typesafe/jev-1.13"})
+        void jevIsServedOnlyOnTheGlobalHost(String model) {
+            assertThat(OpenRouterDecisionModel.isServedIn(model, OpenRouterRegion.GLOBAL)).isTrue();
+            assertThat(OpenRouterDecisionModel.isServedIn(model, OpenRouterRegion.EU)).isFalse();
+            assertThat(OpenRouterDecisionModel.isServedIn(model, OpenRouterRegion.US)).isFalse();
+        }
+
+        @Test
+        void aModelThatIsNotADecisionModelIsServedNowhere() {
+            assertThat(OpenRouterDecisionModel.isServedIn("openai/gpt-4o", OpenRouterRegion.GLOBAL)).isFalse();
+        }
+    }
 }
