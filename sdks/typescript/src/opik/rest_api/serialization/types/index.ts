@@ -550,6 +550,7 @@ export * from "./RetentionRulePagePublic.js";
 export * from "./RetentionRulePublic.js";
 export * from "./RetentionRulePublicLevel.js";
 export * from "./RetentionRulePublicRetention.js";
+export * from "./ScopedAnalyticsQueryRequest.js";
 export * from "./ScoreCondition.js";
 export * from "./ScoreConditionOperator.js";
 export * from "./ScoreConditionPublic.js";

@@ -142,19 +142,45 @@ class InferenceConfigTest {
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
 
-    static Stream<Arguments> topicsLlmDeadlines() {
-        return Stream.of(
-                arguments("at the batch lane's limit", Duration.seconds(300), true),
-                arguments("over the batch lane's limit", Duration.milliseconds(300_001), false));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("topicsLlmDeadlines")
+    @DisplayName("Topics LLM deadlines stay within inference.limits.maxGenerateBatchDeadline")
+    void topicsLlmDeadlinesStayWithinTheLimit(String description, String overLimitDeadline) {
+        var config = TestConfigUtils.loadConfigTest();
+        var max = config.getInference().getLimits().getMaxGenerateBatchDeadline();
+        var aboveMax = Duration.milliseconds(max.toMilliseconds() + 1);
+        var run = config.getTopics().getRun();
+        run.setLlmDeadline("llmDeadline".equals(overLimitDeadline) ? aboveMax : max);
+        run.setNamingDeadline("namingDeadline".equals(overLimitDeadline) ? aboveMax : max);
+        run.setVerifyDeadline("verifyDeadline".equals(overLimitDeadline) ? aboveMax : max);
+
+        assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlinesWithinLimits"))
+                .hasSize(overLimitDeadline == null ? 0 : 1);
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("topicsLlmDeadlines")
-    @DisplayName("the Topics LLM deadline stays within the generate batch lane's limit")
-    void topicsLlmDeadlineStaysWithinTheBatchLimit(String description, Duration llmDeadline, boolean valid) {
+    @MethodSource("decideDeadlines")
+    @DisplayName("the decide deadline stays within inference.limits.maxDecideRealtimeDeadline")
+    void decideDeadlineStaysWithinTheLimit(String description, long overLimitMs, boolean valid) {
         var config = TestConfigUtils.loadConfigTest();
-        config.getTopics().getRun().setLlmDeadline(llmDeadline);
+        var max = config.getInference().getLimits().getMaxDecideRealtimeDeadline();
+        config.getInference().getRealtime()
+                .setDecideDeadline(Duration.milliseconds(max.toMilliseconds() + overLimitMs));
 
-        assertThat(VALIDATOR.validateProperty(config, "topicsLlmDeadlineWithinLimits")).hasSize(valid ? 0 : 1);
+        assertThat(VALIDATOR.validateProperty(config, "decideDeadlineWithinLimits")).hasSize(valid ? 0 : 1);
+    }
+
+    static Stream<Arguments> decideDeadlines() {
+        return Stream.of(
+                arguments("at the limit", 0L, true),
+                arguments("over the limit", 1L, false));
+    }
+
+    static Stream<Arguments> topicsLlmDeadlines() {
+        return Stream.of(
+                arguments("every deadline at the limit", null),
+                arguments("llmDeadline over the limit", "llmDeadline"),
+                arguments("namingDeadline over the limit", "namingDeadline"),
+                arguments("verifyDeadline over the limit", "verifyDeadline"));
     }
 }

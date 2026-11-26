@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** The k-means algorithm through its entry points: a discovery run's sizing and author call, and its labeller. */
 @DisplayName("k-means topic algorithm")
@@ -35,6 +36,19 @@ class KMeansTopicAlgorithmTest {
         assertThat(stats.get("unique_texts").asInt()).isEqualTo(uniqueTexts);
         assertThat(stats.get("k").asInt()).isEqualTo(expectedGroups);
         assertThat(stats.get("author_examples").asInt()).isEqualTo(expectedExamples);
+    }
+
+    @Test
+    @DisplayName("a verify budget above the inference service's max_tokens limit stops the start")
+    void verifyBudgetAboveTheLimit() {
+        // The verify task's 60 + 25 per pair x 200 groups is 5060, above the 4096 the service takes.
+        var config = TopicsTestAlgorithm.config();
+        config.setNightlyMaxGroups(200);
+
+        assertThatThrownBy(() -> TopicsTestAlgorithm.algorithm(config))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("5060")
+                .hasMessageContaining("4096");
     }
 
     @Test
@@ -68,18 +82,20 @@ class KMeansTopicAlgorithmTest {
     void labellerFromSavedList() {
         var topicA = topic(axis(1));
         var topicB = topic(axis(0), axis(2));
-        var labeller = algorithm.labeller(List.of(topicB, topicA), vectors(axis(3))).orElseThrow();
+        var labeller = algorithm.labeller(List.of(topicB, topicA), vectors(axis(3)));
 
-        var labels = labeller.label(concat(axis(0), axis(1), axis(2), axis(3), axis(4)));
+        var labels = labeller.label(List.of(axis(0), axis(1), new float[3], axis(2), axis(3), axis(4)));
 
-        assertThat(labels).containsExactly(topicB.id(), topicA.id(), topicB.id(), TraceTopic.OTHER, TraceTopic.OTHER);
+        assertThat(labels).containsExactly(topicB.id(), topicA.id(), null, topicB.id(), TraceTopic.OTHER,
+                TraceTopic.OTHER);
     }
 
     @Test
-    @DisplayName("a saved list with no topic has no labeller")
+    @DisplayName("a saved list with no topic labels every usable vector Other, as its run did")
     void noTopic() {
-        assertThat(algorithm.labeller(List.of(), vectors(axis(0)))).isEmpty();
-        assertThat(algorithm.labeller(List.of(), null)).isEmpty();
+        assertThat(algorithm.labeller(List.of(), vectors(axis(0))).label(List.of(axis(1), new float[3])))
+                .containsExactly(TraceTopic.OTHER, null);
+        assertThat(algorithm.labeller(List.of(), null).label(List.of(axis(2)))).containsExactly(TraceTopic.OTHER);
     }
 
     private static JsonNode emptyAnswer() throws IOException {
@@ -118,11 +134,4 @@ class KMeansTopicAlgorithmTest {
         return vector;
     }
 
-    private static float[] concat(float[]... vectors) {
-        var out = new float[vectors.length * D];
-        for (int i = 0; i < vectors.length; i++) {
-            System.arraycopy(vectors[i], 0, out, i * D, D);
-        }
-        return out;
-    }
 }

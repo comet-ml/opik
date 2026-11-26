@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.RedirectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -22,6 +23,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +45,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -103,6 +107,7 @@ class RedirectResourceTest {
     private RedirectResourceClient redirectResourceClient;
     private TraceResourceClient traceResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -111,6 +116,7 @@ class RedirectResourceTest {
         this.redirectResourceClient = new RedirectResourceClient(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
 
         ClientSupportUtils.config(client);
     }
@@ -188,6 +194,28 @@ class RedirectResourceTest {
     void projectRedirectUrlNoTrace() {
         redirectResourceClient.projectsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), WORKSPACE_NAME, "path",
                 404);
+    }
+
+    @Test
+    @DisplayName("when a trace id exists in two projects, then redirect to the project with the highest project id")
+    void projectRedirect__whenTraceIdExistsInTwoProjects__thenRedirectToHighestProjectId() {
+        var projectNames = List.of(
+                "project-" + RandomStringUtils.secure().nextAlphanumeric(32),
+                "project-" + RandomStringUtils.secure().nextAlphanumeric(32));
+        var projectIds = projectNames.stream()
+                .map(name -> projectResourceClient.createProject(name, API_KEY, WORKSPACE_NAME))
+                .toList();
+        var trace = factory.manufacturePojo(Trace.class);
+        projectNames.forEach(name -> traceResourceClient.batchCreateTraces(
+                List.of(trace.toBuilder().projectName(name).build()), API_KEY, WORKSPACE_NAME));
+
+        // ClickHouse compares project_id as a string, so the larger UUID string wins.
+        var expectedProjectId = projectIds.stream().max(Comparator.comparing(UUID::toString)).orElseThrow();
+        var redirectURL = redirectResourceClient.projectsRedirect(trace.id(), UUID.randomUUID().toString(),
+                WORKSPACE_NAME, getBaseUrlEncoded(), 303);
+
+        assertThat(redirectURL).isEqualTo(redirectResourceClient.expectedProjectRedirectUrl(
+                wireMock.runtimeInfo().getHttpBaseUrl(), WORKSPACE_NAME, expectedProjectId, trace.id()));
     }
 
     @ParameterizedTest

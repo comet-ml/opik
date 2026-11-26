@@ -13,6 +13,7 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.io.IOUtils;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
@@ -57,16 +58,20 @@ public class AttachmentResourceClient {
 
     public void completeMultiPartUpload(
             CompleteMultipartUploadRequest request, String apiKey, String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = completeMultiPartUploadWithResponse(request, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public Response completeMultiPartUploadWithResponse(
+            CompleteMultipartUploadRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("upload-complete")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-        }
+                .post(Entity.json(request));
     }
 
     public Attachment.AttachmentPage attachmentList(UUID projectId, EntityType entityType, UUID entityId, String path,

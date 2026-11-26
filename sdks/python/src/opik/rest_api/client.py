@@ -8,6 +8,7 @@ from .agent_insights.client import AgentInsightsClient, AsyncAgentInsightsClient
 from .agent_insights_enrollment.client import AgentInsightsEnrollmentClient, AsyncAgentInsightsEnrollmentClient
 from .agent_insights_jobs.client import AgentInsightsJobsClient, AsyncAgentInsightsJobsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
+from .analytics_queries.client import AnalyticsQueriesClient, AsyncAnalyticsQueriesClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
@@ -119,11 +120,13 @@ class OpikApi:
         self.agent_insights_enrollment = AgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.dashboard_saved_queries = DashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
+        self.topics = TopicsClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AgentInsightsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
+        self.analytics_queries = AnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
@@ -155,7 +158,6 @@ class OpikApi:
         self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
-        self.topics = TopicsClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
         self.views = ViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
@@ -280,11 +282,13 @@ class AsyncOpikApi:
         self.agent_insights_enrollment = AsyncAgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.dashboard_saved_queries = AsyncDashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
+        self.topics = AsyncTopicsClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AsyncAgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AsyncAgentInsightsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
+        self.analytics_queries = AsyncAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
@@ -316,7 +320,6 @@ class AsyncOpikApi:
         self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
-        self.topics = AsyncTopicsClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.views = AsyncViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)

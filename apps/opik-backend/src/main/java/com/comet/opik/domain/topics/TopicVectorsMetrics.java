@@ -36,6 +36,12 @@ class TopicVectorsMetrics {
         static Workspace unnamed(@NonNull String id) {
             return new Workspace(id, workspace(id, id).build());
         }
+
+        /** The name its attributes carry: the one looked up, or the id. */
+        String name() {
+            var name = attributes.get(WORKSPACE_NAME_KEY);
+            return name == null ? id : name;
+        }
     }
 
     private final WorkspaceNameService names;
@@ -82,8 +88,8 @@ class TopicVectorsMetrics {
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
                 .setDescription("Time one tick spent in each phase: discover (project discovery), find (workspace "
-                        + "reads, summed over workspaces), embed (their embed calls and writes, summed over "
-                        + "workspaces), backfill (project reads, embed calls and writes)")
+                        + "reads, summed over workspaces), embed (their embed calls, writes and arrival steps, summed "
+                        + "over workspaces), backfill (project reads, embed calls, writes and arrival steps)")
                 .build();
     }
 

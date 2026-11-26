@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.oauth.OAuthRegisterResource;
 import com.comet.opik.api.resources.oauth.OAuthTokenResource;
 import com.comet.opik.api.resources.oauth.OAuthValidateTokenResource;
 import com.comet.opik.api.resources.v1.internal.AgentInsightsEnrollmentResource;
+import com.comet.opik.api.resources.v1.internal.TopicsResource;
 import com.comet.opik.api.resources.v1.internal.UsageResource;
 import com.comet.opik.api.resources.v1.session.RedirectResource;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
@@ -69,6 +70,7 @@ class AuthFilterCoverageTest {
     private static final Set<Class<?>> PUBLIC_RESOURCES = Set.of(
             UsageResource.class,
             AgentInsightsEnrollmentResource.class,
+            TopicsResource.class,
             OAuthAuthorizeResource.class,
             OAuthRegisterResource.class,
             OAuthTokenResource.class,

@@ -9,18 +9,60 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hc.core5.http.NoHttpResponseException;
+import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 import reactor.util.retry.RetryBackoffSpec;
 
 import java.io.InterruptedIOException;
 import java.net.SocketException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 @Slf4j
 @UtilityClass
 public class RetryUtils {
+
+    /**
+     * The wait before retry number {@code retries + 1}: what the service asked with {@code Retry-After} when it did,
+     * otherwise {@code baseBackoff} doubled per retry made, jittered by up to half either way so the pods and calls
+     * that failed together retry apart.
+     */
+    public static Duration backoff(@NonNull Duration baseBackoff, long retries, Duration retryAfter) {
+        if (retryAfter != null) {
+            return retryAfter;
+        }
+        var exponential = baseBackoff.multipliedBy(1L << Math.min(retries, 30));
+        return Duration.ofNanos(Math.round(exponential.toNanos() * ThreadLocalRandom.current().nextDouble(0.5, 1.5)));
+    }
+
+    /**
+     * Retries for a call with a deadline: up to {@code maxRetries} retries of the failures {@code retryable} accepts,
+     * each after {@link #backoff}, and none whose wait would end at or past {@code deadline}. Running out of retries
+     * or of time fails with the last error. {@code onRetry} gets the failure and the number of the attempt about to
+     * be made.
+     */
+    public static Retry untilDeadline(int maxRetries, @NonNull Duration baseBackoff, @NonNull Instant deadline,
+            @NonNull Predicate<Throwable> retryable, @NonNull Function<Throwable, Duration> retryAfter,
+            @NonNull BiConsumer<Throwable, Long> onRetry) {
+        Preconditions.checkArgument(maxRetries >= 0, "Argument 'maxRetries' must not be negative");
+        return Retry.from(signals -> signals.concatMap(signal -> {
+            var failure = signal.failure();
+            if (signal.totalRetries() >= maxRetries || !retryable.test(failure)) {
+                return Mono.<Long>error(failure);
+            }
+            var wait = backoff(baseBackoff, signal.totalRetries(), retryAfter.apply(failure));
+            if (!Instant.now().plus(wait).isBefore(deadline)) {
+                return Mono.<Long>error(failure);
+            }
+            onRetry.accept(failure, signal.totalRetries() + 1);
+            return Mono.delay(wait);
+        }));
+    }
 
     public static RetryBackoffSpec handleConnectionError() {
         return Retry.backoff(3, Duration.ofMillis(100))

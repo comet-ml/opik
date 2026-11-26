@@ -13,7 +13,17 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
-## Release 2.3.4, 2026-11-25
+<Warning>
+  **Backward incompatible for direct SQL: the `traces` and `spans` storage cutovers.** The ClickHouse `traces` and `spans` tables each have a storage cutover. It is not tied to an Opik release: it changes a table only when your installation's operators run it, following its runbook. After it:
+
+  - `end_time`, `duration` and `ttft` store an epoch or `NaN` sentinel instead of `NULL`. `IS NULL` filters on them match nothing, and `avg`, `sum` and `count(x)` include the `NaN` values.
+  - `start_time`, `end_time` and `created_at` are stored at microsecond precision.
+  - On `spans`, `parent_span_id` is `FixedString(36)`, so `length(parent_span_id)` is 36 even for a root span, and the deduplication key no longer includes it.
+
+  Saved queries, dashboards and BI tools that query these tables directly don't fail; they return wrong results. See [Querying traces and spans in ClickHouse](/self-host/querying-traces-and-spans) for how to check each table and what to change. The REST API, the SDKs and the Opik UI are unaffected.
+</Warning>
+
+## Release 2.3.5, 2026-11-26
 
 ### Security Change
 

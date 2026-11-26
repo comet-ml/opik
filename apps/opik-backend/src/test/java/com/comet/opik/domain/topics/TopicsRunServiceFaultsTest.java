@@ -1,10 +1,11 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
-import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.InferenceClient;
+import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
@@ -16,13 +17,14 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -30,13 +32,14 @@ import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.net.SocketException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
@@ -46,9 +49,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -83,8 +90,7 @@ class TopicsRunServiceFaultsTest {
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunService service;
-    /** The scheduler the entry point would hand in. */
-    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-faults-compute");
+    private TopicAlgorithm algorithm;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -97,13 +103,11 @@ class TopicsRunServiceFaultsTest {
         when(handle.attach(TopicProjectDAO.class)).thenReturn(projectDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         projectService = mock(ProjectService.class);
-        when(projectService.findByIds(workspaceId, Set.of(projectId)))
-                .thenReturn(List.of(Project.builder().id(projectId).name("p").build()));
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         windowDAO = mock(TopicWindowDAO.class);
-        when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
+        when(windowDAO.readWindow(eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
         when(projectDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(projectDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
@@ -112,16 +116,37 @@ class TopicsRunServiceFaultsTest {
         when(idGenerator.generateId()).thenAnswer(invocation -> IDS.generate());
         var metrics = TopicsMetricsReader.metrics(metricReader);
         var config = TestConfigUtils.loadConfigTest().getTopics();
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                mock(WorkspaceNameService.class));
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
+        algorithm = spy(TopicsTestAlgorithm.algorithm());
         service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
-                metrics, TopicsTestAlgorithm.algorithm());
+                metrics, algorithm);
     }
 
-    @AfterEach
-    void tearDown() {
-        compute.dispose();
+    @Test
+    @DisplayName("clustering runs on parallel(), not on the thread that emitted the window")
+    void clusteringLeavesTheReadThread() {
+        var driver = Schedulers.newSingle("topics-test-driver");
+        try {
+            when(windowDAO.readWindow(eq(projectId), any(), any(), anyInt(), anyLong()))
+                    .thenReturn(Flux.fromIterable(window()).subscribeOn(driver));
+            var thread = new AtomicReference<String>();
+            doAnswer(invocation -> {
+                thread.set(Thread.currentThread().getName());
+                return invocation.callRealMethod();
+            }).when(algorithm).cluster(any(), anyInt());
+            answer(FIXTURE.answer);
+
+            var outcome = service.discover(runId, projectId, night, TRACES)
+                    .contextWrite(TopicsTestData.context(workspace)).block();
+
+            assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(thread.get()).startsWith("parallel-");
+        } finally {
+            driver.dispose();
+        }
     }
 
     @Test
@@ -155,7 +180,8 @@ class TopicsRunServiceFaultsTest {
                 .doOnSubscribe(__ -> calls.incrementAndGet())
                 .doOnCancel(cancelled::incrementAndGet));
 
-        var subscription = service.discover(runId, workspace, projectId, night, TRACES, compute).subscribe();
+        var subscription = service.discover(runId, projectId, night, TRACES)
+                .contextWrite(TopicsTestData.context(workspace)).subscribe();
         Awaitility.await().until(() -> calls.get() == 1);
         subscription.dispose();
 
@@ -175,7 +201,8 @@ class TopicsRunServiceFaultsTest {
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         verify(traceTopicsDAO, never()).insert(any());
@@ -194,7 +221,8 @@ class TopicsRunServiceFaultsTest {
                 : Mono.just((long) TRACES)));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
@@ -215,7 +243,8 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + INSERT_RETRIES);
@@ -237,7 +266,8 @@ class TopicsRunServiceFaultsTest {
         }));
         answer(FIXTURE.answer);
 
-        var outcome = service.discover(runId, workspace, projectId, night, TRACES, compute).block();
+        var outcome = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1);
@@ -256,10 +286,11 @@ class TopicsRunServiceFaultsTest {
             return Mono.<Long>never().doOnCancel(cancelled::incrementAndGet);
         }));
         answer(FIXTURE.answer);
-        var scheduler = VirtualTimeScheduler.create();
+        var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                    .toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(READ_TIMEOUT.toJavaDuration());
@@ -267,7 +298,7 @@ class TopicsRunServiceFaultsTest {
             });
             outcome = run.get();
         } finally {
-            scheduler.dispose();
+            VirtualTimeScheduler.reset();
         }
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
@@ -286,23 +317,23 @@ class TopicsRunServiceFaultsTest {
         when(client.generate(any(), any()))
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
         var timeout = TestConfigUtils.loadConfigTest().getTopics().getRun().getProjectTimeout().toJavaDuration();
-        var scheduler = VirtualTimeScheduler.create();
+        var scheduler = VirtualTimeScheduler.getOrSet();
         TopicRunOutcome outcome;
         try {
-            var run = service.discover(runId, workspace, projectId, night, TRACES, scheduler).toFuture();
+            var run = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))
+                    .toFuture();
             Awaitility.await().atMost(Duration.seconds(30).toJavaDuration()).until(() -> {
                 scheduler.advanceTimeBy(timeout);
                 return run.isDone();
             });
             outcome = run.get();
         } finally {
-            scheduler.dispose();
+            VirtualTimeScheduler.reset();
         }
 
         assertThat(outcome.errorCode()).isEqualTo("timeout");
         assertThat(outcome.stats().has("window_from")).isTrue();
-        assertThat(outcome.stats().has("window_traces")).as("a timed-out run carries the window bounds only")
-                .isFalse();
+        assertThat(outcome.stats().has("window_traces")).as("the timeout cuts the chain from outside").isFalse();
         assertThat(points(metricReader, "topics.run.duration_seconds")).extracting(point -> point.get("phase"))
                 .contains("window", "cluster", "llm");
         assertThat(cancelled).hasValue(1);
@@ -312,6 +343,81 @@ class TopicsRunServiceFaultsTest {
     }
 
     /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"another run saved the project meanwhile", "MySQL is down"})
+    @DisplayName("a nightly update whose MySQL save fails, as a conflict or with MySQL down, fails with save and "
+            + "writes no trace_topics row: the traces keep last night's")
+    void failedUpdateSaveWritesNoLabels(String failure) {
+        discoveryThenEmptyNaming();
+        var save = when(projectDAO.saveList(any(), any(), eq(runId), any(), any(), any(), any(), any()));
+        if (failure.equals("MySQL is down")) {
+            save.thenThrow(new IllegalStateException("MySQL down"));
+        } else {
+            save.thenReturn(0);
+        }
+        var updateRunId = IDS.generate();
+        when(projectDAO.markFailed(eq(workspaceId), eq(projectId), eq(updateRunId), any(), any())).thenReturn(1);
+
+        var outcome = service.nightlyUpdate(updateRunId, projectId, night.plusDays(1), TRACES)
+                .contextWrite(TopicsTestData.context(workspace)).block();
+
+        assertThat(outcome.errorCode()).isEqualTo("save");
+        verify(topicDAO, never()).updateTopics(any());
+        verify(projectDAO, never()).markSaved(eq(workspaceId), eq(projectId), eq(updateRunId), any());
+        // The discovery run's insert only.
+        verify(traceTopicsDAO, times(1)).insert(any());
+        assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+    }
+
+    /**
+     * The topics and the project row the discovery run saved, as the nightly update reads them back. Returns the
+     * topics.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Topic> readBackDiscovery() {
+        ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        var otherVectors = ArgumentCaptor.forClass(PrototypeVectors.class);
+        var windowUntil = ArgumentCaptor.forClass(Instant.class);
+        verify(projectDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(),
+                windowUntil.capture(), otherVectors.capture(), eq(TopicEmbedding.MODEL));
+        verify(traceTopicsDAO).insert(any());
+        var project = TopicProject.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .savedRuns(1)
+                .listRunId(runId)
+                .windowUntil(windowUntil.getValue())
+                .otherVectors(otherVectors.getValue())
+                .embedModel(TopicEmbedding.MODEL)
+                .build();
+        when(projectDAO.findProjects(eq(workspaceId), any())).thenReturn(List.of(project));
+        when(topicDAO.findByProject(workspaceId, projectId)).thenReturn(topics.getValue());
+        return topics.getValue();
+    }
+
+    /**
+     * The discovery run, read back as the nightly update reads it, then a naming answer that changes nothing: most nights
+     * make no LLM call, and any that comes changes nothing. Returns the discovery run's topics.
+     */
+    private List<Topic> discoveryThenEmptyNaming() {
+        answer(FIXTURE.answer);
+        service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace)).block();
+        var topics = readBackDiscovery();
+        answer(emptyNaming());
+        return topics;
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
+    }
+
     private void answer(JsonNode output) {
         when(client.generate(any(), any())).thenReturn(Mono.just(response(output)));
     }

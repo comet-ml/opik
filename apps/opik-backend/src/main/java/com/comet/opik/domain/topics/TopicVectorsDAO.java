@@ -167,10 +167,13 @@ public class TopicVectorsDAO {
 
     /**
      * {@code done}'s oldest and newest trace id times, the {@code id_at} bounds of the output and vector sides of
-     * {@link #FIND_UNVECTORED}. One scalar in one text: ClickHouse computes an identical scalar once per query.
+     * {@link #FIND_UNVECTORED}. One scalar in one text: ClickHouse computes an identical scalar once per query. With
+     * {@code done} empty, {@code min()} is 1970-01-01, which would read every partition of the three sides for no row;
+     * a far-future lower bound reads none instead.
      */
     private static final String ID_AT_BOUNDS = """
-            (SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
+            (SELECT (toStartOfSecond(if(count() = 0, toDateTime('2100-01-01 00:00:00', 'UTC'),
+                    min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC')))),
                 max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)""";
 
     /**

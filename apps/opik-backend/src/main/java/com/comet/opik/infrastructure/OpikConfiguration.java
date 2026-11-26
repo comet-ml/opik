@@ -14,6 +14,8 @@ import lombok.Setter;
 import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.stream.Stream;
+
 @Getter
 @Setter
 public class OpikConfiguration extends JobConfiguration {
@@ -240,8 +242,7 @@ public class OpikConfiguration extends JobConfiguration {
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: the backend runs guardrail checks on opik-inference")
     public boolean isGuardrailsInferenceConfigured() {
-        return !serviceToggles.isGuardrailsValidationsEnabled()
-                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+        return !serviceToggles.isGuardrailsValidationsEnabled() || inference.isConfigured();
     }
 
     // Every guardrail models endpoint passes the guardrails gate, which needs the validations toggle: training alone
@@ -255,8 +256,7 @@ public class OpikConfiguration extends JobConfiguration {
     @JsonIgnore
     @AssertTrue(message = "inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
     public boolean isAiLabelsInferenceConfigured() {
-        return !aiLabels.isEnabled()
-                || (StringUtils.isNotBlank(inference.getUrl()) && StringUtils.isNotBlank(inference.getCredential()));
+        return !aiLabels.isEnabled() || inference.isConfigured();
     }
 
     @Valid @NotNull @JsonProperty
@@ -277,9 +277,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     // Topics embeds ai-labels' summaries through ai-labels' opik-inference deployment: without labels there is nothing.
     @JsonIgnore
-    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED) and inference.url (OPIK_INFERENCE_URL)")
+    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED), inference.url (OPIK_INFERENCE_URL) and inference.credential (OPIK_INFERENCE_CREDENTIAL)")
     public boolean isTopicsAiLabelsEnabled() {
-        return !topics.isEnabled() || (aiLabels.isEnabled() && StringUtils.isNotBlank(inference.getUrl()));
+        return !topics.isEnabled() || (aiLabels.isEnabled() && inference.isConfigured());
     }
 
     @JsonIgnore
@@ -306,22 +306,31 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "topics.run.llmDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlineWithinLimits() {
-        var run = topics.getRun();
-        var limits = inference.getLimits();
-        return run == null || limits == null
-                || notAbove(run.getLlmDeadline(), limits.getMaxGenerateBatchDeadline());
-    }
-
-    @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedTimeout must not be above inference.limits.maxEmbedDeadline") public boolean isTopicsEmbedTimeoutWithinLimits() {
         var vectors = topics.getVectors();
         var limits = inference.getLimits();
         return vectors == null || limits == null || notAbove(vectors.getEmbedTimeout(), limits.getMaxEmbedDeadline());
     }
 
+    @JsonIgnore
+    @AssertTrue(message = "inference.realtime.decideDeadline must not be above inference.limits.maxDecideRealtimeDeadline") public boolean isDecideDeadlineWithinLimits() {
+        var realtime = inference.getRealtime();
+        var limits = inference.getLimits();
+        return realtime == null || limits == null
+                || notAbove(realtime.getDecideDeadline(), limits.getMaxDecideRealtimeDeadline());
+    }
+
     /** A bound left unset is checked by its own field's validation, not here. */
     private static boolean notAbove(Duration value, Duration limit) {
         return value == null || limit == null || value.toMilliseconds() <= limit.toMilliseconds();
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "topics.run.llmDeadline, namingDeadline and verifyDeadline must not be above inference.limits.maxGenerateBatchDeadline") public boolean isTopicsLlmDeadlinesWithinLimits() {
+        var run = topics.getRun();
+        var limits = inference.getLimits();
+        return run == null || limits == null
+                || Stream.of(run.getLlmDeadline(), run.getNamingDeadline(), run.getVerifyDeadline())
+                        .allMatch(deadline -> notAbove(deadline, limits.getMaxGenerateBatchDeadline()));
     }
 }

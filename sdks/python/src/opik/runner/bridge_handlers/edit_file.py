@@ -251,7 +251,7 @@ class EditFileHandler(BaseHandler):
             new_content = bom + new_content
             new_content = _restore_line_ending(new_content, line_ending)
 
-            rel = str(path.relative_to(self._repo_root))
+            rel = path.relative_to(self._repo_root).as_posix()
             diff = _generate_diff(raw_content, new_content, rel)
 
             try:

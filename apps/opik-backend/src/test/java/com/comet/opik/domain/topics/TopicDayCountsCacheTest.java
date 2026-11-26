@@ -6,6 +6,7 @@ import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.cache.CacheInterceptor;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.infrastructure.cache.Cacheable;
@@ -89,7 +90,7 @@ class TopicDayCountsCacheTest {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         var workspaces = mock(TopicWorkspaceService.class);
-        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.reaches(WORKSPACE_ID, TopicsStage.UI)).thenReturn(true);
         topic = Topic.builder()
                 .id(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
