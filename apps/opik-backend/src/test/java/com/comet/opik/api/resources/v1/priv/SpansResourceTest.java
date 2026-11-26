@@ -2224,6 +2224,16 @@ class SpansResourceTest {
             }
         }
 
+        @Test
+        void batch__whenSpanIsNull__thenReturnUnprocessableEntity() {
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(Arrays.asList((Span) null), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("spans[0].<list element> must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource
         void batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent(

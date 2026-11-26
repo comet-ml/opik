@@ -12,7 +12,7 @@ import java.util.List;
 
 @Builder(toBuilder = true)
 public record SpanBatch(@NotNull @Size(min = 1, max = 1000) @JsonView({
-        Span.View.Write.class}) @Valid @ConvertGroup(to = Span.View.Write.class) List<Span> spans)
+        Span.View.Write.class}) List<@NotNull @Valid @ConvertGroup(to = Span.View.Write.class) Span> spans)
         implements
             RateEventContainer {
 
