@@ -1078,6 +1078,7 @@ inference:
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxDecideRealtimeDeadline: 5s
     maxGenerateRealtimeDeadline: 60s
     maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
@@ -1086,6 +1087,9 @@ inference:
     maxRetries: 2
     baseBackoff: 100ms
     submitBytesPerSecond: 1048576
+  realtime:
+    decideDeadline: 5s
+    decideMargin: 1s
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
@@ -1156,6 +1160,9 @@ topics:
     planInterval: 5m
     leaseSlack: 1m
     requeueWait: 5s
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
   algorithm:
     minGroups: 30
     maxGroups: 50

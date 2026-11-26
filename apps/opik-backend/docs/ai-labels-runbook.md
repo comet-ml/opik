@@ -84,6 +84,7 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 | `ai_labels.tick.interval_seconds`, `.budget_seconds` | The tick cadence and the time a tick may use, as configured (`AI_LABELS_TICK_INTERVAL`, `AI_LABELS_TICK_BUDGET`). Loading stops at 40% of the budget, the sweep at 70%, submit at all of it. |
 | `ai_labels.sweep.buckets` / `.buckets_reached` | N as configured vs the buckets the latest sweep got through before its share of the tick budget. Fewer than N means the sweep ran out of time (`ai_labels.sweep.overrun`); the first bucket swept rotates, so none starves. |
 | `ai_labels.sweep.candidates` / `ai_labels.tick.workspaces` | Traces the latest sweep found to label, and the workspaces they span. Many candidates but few admitted (`ai_labels.submit.traces`) means the budget, not the sweep, bounds throughput. |
+| `opik.http.client.pool.connections` by `route` and `state`, `.pending`, `.max` by `route` | The shared HTTP client's pool, in all (`route=all`) and on the route to opik-inference (`route=opik-inference`), which ai-labels, guardrail checks and Topics share. `pending` above zero on that route means calls wait for a connection: raise `JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE`, keeping the concurrency sum the backend checks at startup below it. |
 | `ai_labels.jobs.submitted` by `endpoint` | Jobs opik-inference accepted (202) and the tick recorded as open. Flat while `ai_labels.sweep.candidates` is high means submits fail: see `ai_labels.submit.throttled`, `.rejected` and the logs. |
 | `ai_labels.jobs.open` | Jobs submitted and not yet loaded, as the leader last knew them. Growing while `ai_labels.items.done` is flat means jobs finish slower than they start, or never: the pool, or the service, is behind. |
 | `ai_labels.jobs.oldest_open_seconds` | How long the oldest open job has been out, measured at scrape time. Past a few tick intervals the pipeline is stuck: the job is hung at the service, or the leader stopped ticking (the gauge then keeps growing on the last leader). 0 with none open. |
@@ -243,6 +244,49 @@ with the API, run the query on the same UTC date and at least `CACHE_MANAGER_TOP
 project's last API call, or the API can answer from its cache. A run that saves between the two reads changes the
 counts.
 
+### Traces filtered by topic
+
+The traces list takes a `topic_id` filter. "View all logs" on a topic opens the list with it. The value is a topic's
+`id` from this endpoint, or Other's all-zeros id. The field is `STRING_EXACT`, the type of the other id fields: the
+value is compared exactly, and ids are lower case. The page and the Logs chip use `=`. A value that is not an id
+matches no trace. The filter applies to the list and its `total`, to `GET /v1/private/traces/stats`, to the search
+stream (`POST /v1/private/traces/search`), to the trace KPI cards (`POST /v1/private/projects/{id}/kpi-cards`) and to
+the trace metrics (`POST /v1/private/projects/{id}/metrics`, `trace_filters`). `GET /v1/private/projects/stats`
+ignores it: it spans many projects, and a topic belongs to one.
+
+```json
+[{"field": "topic_id", "operator": "=", "value": "<topic_id>"}]
+```
+
+The filter uses the rules of [How it counts](#how-it-counts). Every row counts, each trace goes by its latest row,
+and a topic that is not live is Other. A trace with no counted row fails every operator, `!=` included: `!=` keeps
+only traces that have a topic row, so it is not the opposite of `=`. With topics off, a workspace not opted in or
+listed at a stage before `ui`, or a project with no live topic, the filter returns no trace and no error.
+
+The page's link opens Logs with the time range, which bounds the list by the time in the trace id. The read API counts
+by the trace's `created_at`. So the list's `total` can differ from the topic's `count` for traces whose id time is
+outside the window (late or imported traces), and around UTC midnight. For an exact match, add two `created_at`
+filters, `>=` the start of `window_from` and `<` the start of the day after `today`, both in UTC
+(`2026-10-06T00:00:00Z`), and the Logs page's filters `source = sdk` and `visibility_mode = default`. With these, the
+list's `total` equals the topic's `count`, and with the Other filter, the sum of `other.series`. A run that saves
+between the two requests can change both.
+
+The backend reads MySQL first: whether the workspace is eligible, then the project's live topics. Then each trace
+query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
+the latest row of each trace, and returns the ids that pass the filter. It is bounded only by the trace id range of
+the list: its time range and its cursor. With neither, it reads the project's whole history in `trace_topics`. It has
+no `log_comment` of its own: in `system.query_log` it is part of the list's queries (`find_traces_by_project_id`,
+`count_traces_by_project`). The KPI cards and the metrics carry the same subquery, bounded by their own id range.
+
+A query with a topic filter has two guards on the whole query, the trace read and the subquery together:
+`max_execution_time` from `TOPICS_FILTER_MAX_EXECUTION_TIME` (30 s) and `max_memory_usage` from
+`TOPICS_FILTER_MAX_MEMORY_USAGE` (4 GiB). The list, its count, the stats, the KPI cards and the trace metrics have them;
+a query without a topic filter has neither. A query that stops at a guard answers `503` with `Retry-After: 5` (see
+"Errors"). The search stream has already sent its status then, so it ends with an error, as for any ClickHouse error.
+A project whose "All time" filter trips a guard on every retry needs a narrower date range, or a higher limit if
+ClickHouse has the memory. The time guard takes at most 4 minutes: a longer query outlives the progress headers the
+driver can take at the default `ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS`, and fails instead of answering `503`.
+
 ### Errors
 
 | Code | When |
@@ -251,6 +295,7 @@ counts.
 | 404 | The project is not in the workspace. |
 | 400 | A request without `project_id`. |
 | 503, `Topics are busy; retry shortly`, `Retry-After: 5` | A query hit its time guard (159), `TOPICS_READ_BUDGET` ran out, or ClickHouse did not answer within the budget and 2 s. The per-day counts of a large project take a fraction of the budget, so this is load, not size. The backend logs a WARN `Topics read is busy` with the workspace and the project. |
+| 503, `Retry-After: 5`, traces filtered by topic | A trace query with a topic filter (list, count, stats, KPI cards, trace metrics) stopped at a guard: time (159, `TOPICS_FILTER_MAX_EXECUTION_TIME`) or memory (241, `TOPICS_FILTER_MAX_MEMORY_USAGE`). A retry can pass. The backend logs a WARN `Trace query filtered by topic hit a guard`. |
 | 429 | More than `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` requests from one workspace in `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` (60 s). |
 | 500 | Any other error. |
 

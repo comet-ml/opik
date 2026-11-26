@@ -1028,6 +1028,42 @@ class TopicsDaoStorageTest {
         return NIGHT;
     }
 
+    @Test
+    @DisplayName("the nightly save: kept topics updated, retired ones deleted, and the list cleared by a "
+            + "compare-and-set when no topic is left")
+    void nightlySave() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        var other = newId();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        data.savedList(workspaceId, other, NIGHT, BUILT);
+        var listed = data.topicProject(projectId);
+        var listRunId = listed.listRunId();
+        var topic = data.topics(projectId).getFirst();
+
+        var kept = topic.toBuilder().name("Renamed").definition("Changed").lowNights(2).size(7)
+                .vectors(new PrototypeVectors(List.of(TopicsTestData.unit(2), TopicsTestData.unit(3)))).build();
+        var updated = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .updateTopics(List.of(kept)));
+        assertThat(updated).containsExactly(1);
+        assertThat(data.topics(projectId)).singleElement()
+                .isEqualTo(kept.toBuilder().name(topic.name()).definition(topic.definition()).build());
+
+        var savedAt = NIGHT.plus(Duration.ofDays(1));
+        template.inTransaction(WRITE, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            assertThat(projectDAO.clearList(workspaceId, projectId, newId(), savedAt)).isZero();
+            assertThat(projectDAO.clearList(workspaceId, projectId, listRunId, savedAt)).isEqualTo(1);
+            assertThat(topicDAO.deleteTopics(workspaceId, projectId, List.of(topic.id()))).isEqualTo(1);
+            return null;
+        });
+        assertThat(data.topicProject(projectId)).isEqualTo(listed.toBuilder().listRunId(null).windowUntil(null)
+                .otherVectors(null).embedModel(null).savedRuns(2).lastSuccessAt(savedAt).build());
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.topicProject(other).listRunId()).isNotNull();
+    }
+
     private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {
         return TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(traces).build();
     }

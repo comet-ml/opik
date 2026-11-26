@@ -26,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,10 +56,6 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
     /** The questions a request may need: two decide calls' worth. */
     static final int MAX_QUESTIONS = 2 * DecideRequest.MAX_QUESTIONS;
-    /** The longest deadline opik-inference allows a realtime decide call: a slow answer is still an answer. */
-    static final Duration DECIDE_DEADLINE = Duration.ofSeconds(5);
-    /** Room past the service's deadline for its answer to arrive, or for a quick retry of an overloaded call. */
-    static final Duration CLIENT_MARGIN = Duration.ofSeconds(1);
     /**
      * What a caller is told when the checks could not run. The cause is attached for the log and the error metric, not
      * returned: it may name internal hosts.
@@ -83,10 +78,13 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         var thresholds = configuration.getGuardrails();
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            var deadline = Instant.now().plus(DECIDE_DEADLINE).plus(CLIENT_MARGIN);
+            var realtime = configuration.getInference().getRealtime();
+            // the service's deadline, and room for its answer to arrive or for a quick retry
+            var deadline = Instant.now().plus(realtime.getDecideDeadline().toJavaDuration())
+                    .plus(realtime.getDecideMargin().toJavaDuration());
             return Flux.fromIterable(batches)
-                    .flatMap(batch -> inferenceClient.decide(decideRequest(workspaceId, request.text(), batch),
-                            deadline))
+                    .flatMap(batch -> inferenceClient.decide(decideRequest(workspaceId, request.text(), batch,
+                            realtime.getDecideDeadline().toMilliseconds()), deadline))
                     .flatMapIterable(response -> response.result().answers().entrySet())
                     .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                     .map(answers -> toResponse(rules, rule -> rule.evaluate(answers, thresholds)))
@@ -98,7 +96,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     }
 
     private static DecideRequest decideRequest(String workspaceId, String text,
-            List<Map.Entry<String, Question>> batch) {
+            List<Map.Entry<String, Question>> batch, long deadlineMs) {
         var questions = new LinkedHashMap<String, Question>();
         batch.forEach(question -> questions.put(question.getKey(), question.getValue()));
         return DecideRequest.builder()
@@ -106,7 +104,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                 .state(TextNode.valueOf(text))
                 .questions(questions)
                 .lane(DecideRequest.REALTIME_LANE)
-                .deadlineMs(DECIDE_DEADLINE.toMillis())
+                .deadlineMs(deadlineMs)
                 .cache(true)
                 .build();
     }
