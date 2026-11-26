@@ -48,6 +48,9 @@ public class TopicsConfig {
     private RunConfig run;
 
     @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
+    @Valid @NotNull @JsonProperty
     private ReadConfig read;
 
     @Valid @NotNull @JsonProperty
@@ -417,6 +420,33 @@ public class TopicsConfig {
         @MinDuration(value = 10, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration sweepTimeout;
+    }
+
+    /**
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /**
+         * ClickHouse's {@code max_execution_time}, in whole seconds. At most 4 minutes: a longer query outlives the
+         * progress headers the r2dbc driver can take ({@code databaseAnalytics.httpHeadersProgressIntervalMs}), so it
+         * fails to parse instead of answering 503.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 4, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
+        }
     }
 
     /**

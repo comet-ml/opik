@@ -3078,6 +3078,17 @@ topics:
     #  Default: 5s
     #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
     requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 4m. A longer query outlives
+    #  the progress headers the driver can take at the default databaseAnalytics.httpHeadersProgressIntervalMs
+    maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
+    #  At most 68719476736 (64 GiB)
+    maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After
