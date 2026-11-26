@@ -166,7 +166,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 // A run saved after its project was deleted is discarded: nothing is left to label. When the check
                 // fails, the labelling run is queued, and the planner cancels it if the project is gone.
                 .filterWhen(outcome -> store.projectExists(message.projectId()).onErrorReturn(true))
-                .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                .flatMap(outcome -> planner.queueOne(PlannedRun.builder()
                         .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
                         .build()))
                 .then();

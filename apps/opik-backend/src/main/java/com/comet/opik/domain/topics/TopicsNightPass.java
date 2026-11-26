@@ -125,7 +125,7 @@ class TopicsNightPass implements Managed {
      * later. A read that fails, for every workspace or for one, is logged and counted as a failed night once; the other
      * workspaces go on, and the next plan reads the failed ones again.
      */
-    Mono<Integer> plan(@NonNull Instant now, int free, @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+    Mono<Integer> plan(@NonNull Instant now, int free, @NonNull Function<PlannedRun, Mono<UUID>> queue) {
         var nightly = config.getNightly();
         var found = TopicsNight.current(nightly.getSchedule(), now);
         if (found.isEmpty()) {
@@ -161,7 +161,7 @@ class TopicsNightPass implements Managed {
      *                           run in flight
      */
     Mono<UUID> byHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
-            @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+            @NonNull Function<PlannedRun, Mono<UUID>> queue) {
         return jdbi(() -> {
             var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                     .findProjects(workspaceId, Set.of(projectId))).stream()
@@ -190,7 +190,7 @@ class TopicsNightPass implements Managed {
                                 + "night '%s', reason '%s', vectors '%d', minimum '%d'").formatted(projectId, night,
                                         NightSkipReason.SMALL.getValue(), vectors, min)));
                     }
-                    return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(workspaceId)
+                    return queue.apply(PlannedRun.builder().workspaceId(workspaceId)
                             .projectId(projectId).mode(RunMode.UPDATE).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "Project has a topics run in flight, project '%s'".formatted(projectId))));
@@ -206,7 +206,7 @@ class TopicsNightPass implements Managed {
 
     /** Within the budget: the cheap skips first, then the counts and queues while slots are free. */
     private Mono<Integer> decide(TopicsNight night, Collection<String> workspaceIds, Instant now, Instant budgetEnd,
-            int free, Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+            int free, Function<PlannedRun, Mono<UUID>> queue) {
         // The plan's clock starts before its read, so the read's time counts against the budget too.
         long began = System.nanoTime();
         return jdbi(() -> {
@@ -287,7 +287,7 @@ class TopicsNightPass implements Managed {
      * records it not reached.
      */
     private Mono<Boolean> decideOne(NightTriage.NightCandidate candidate, Long vectors, TopicsNight night,
-            BooleanSupplier inTime, Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
+            BooleanSupplier inTime, Function<PlannedRun, Mono<UUID>> queue) {
         var key = new TopicProjectKey(candidate.workspaceId(), candidate.projectId());
         if (vectors == null) {
             return jdbi(() -> {
@@ -304,7 +304,7 @@ class TopicsNightPass implements Managed {
         if (!inTime.getAsBoolean()) {
             return Mono.just(false);
         }
-        return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(candidate.workspaceId())
+        return queue.apply(PlannedRun.builder().workspaceId(candidate.workspaceId())
                 .projectId(candidate.projectId()).mode(RunMode.UPDATE).night(night.date()).windowTraces(vectors)
                 .build())
                 .flatMap(runId -> jdbi(() -> {

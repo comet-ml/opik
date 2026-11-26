@@ -320,11 +320,11 @@ class TopicsNightlyIntegrationTest {
         });
         var untouched = Map.of(lookedAt, data.topicProject(lookedAt), running, data.topicProject(running));
         var reader = InMemoryMetricReader.create();
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
 
         assertThat(pass(reader).plan(Instant.now(), 10, capture(queued)).block()).isEqualTo(1);
 
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(workspaceId, built,
+        assertThat(queued).containsExactly(new PlannedRun(workspaceId, built,
                 TopicProject.RunMode.UPDATE, today(), FIXTURE.size()));
         for (var reason : List.of("deleted", "already_saved", "paused", "small")) {
             assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "skip", "reason",
@@ -357,7 +357,7 @@ class TopicsNightlyIntegrationTest {
         assertThat(failed.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
         assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_ERROR);
         assertThat(failed.failedRuns()).isEqualTo(failures);
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
         int from = logEvents().size();
 
         // Tomorrow's night, within its budget: a failed update queued tonight waits for it.
@@ -395,7 +395,7 @@ class TopicsNightlyIntegrationTest {
         data.savedList(workspaceId, older, yesterdayStart().minusSeconds(2 * 86_400), FIXTURE.size());
         var newer = seededList(workspaceId, FIXTURE.size());
         var reader = InMemoryMetricReader.create();
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
 
         assertThat(pass(reader).plan(Instant.now(), 0, capture(queued)).block()).isZero();
         assertThat(data.topicProject(gone).lastNight()).isEqualTo(today());
@@ -405,7 +405,7 @@ class TopicsNightlyIntegrationTest {
         assertThat(data.topicProject(older).lastNight()).isNull();
 
         assertThat(pass(reader).plan(Instant.now(), 1, capture(queued)).block()).isEqualTo(1);
-        assertThat(queued).extracting(TopicsRunPlanner.Planned::projectId).containsExactly(older);
+        assertThat(queued).extracting(PlannedRun::projectId).containsExactly(older);
         assertThat(data.topicProject(newer).lastNight()).isNull();
     }
 
@@ -1032,7 +1032,7 @@ class TopicsNightlyIntegrationTest {
     }
 
     /** A queue that records what it is given and returns a new run id. */
-    private static Function<TopicsRunPlanner.Planned, Mono<UUID>> capture(List<TopicsRunPlanner.Planned> queued) {
+    private static Function<PlannedRun, Mono<UUID>> capture(List<PlannedRun> queued) {
         return planned -> {
             queued.add(planned);
             return Mono.just(ID_GENERATOR.generateId());

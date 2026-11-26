@@ -63,8 +63,8 @@ class TopicsNightPassTest {
     /** Each project's row; its window count in {@link #vectors}, or a failed count when absent. */
     private final Map<UUID, TopicProject> rows = new HashMap<>();
     private final Map<UUID, Long> vectors = new HashMap<>();
-    private final List<TopicsRunPlanner.Planned> queued = new ArrayList<>();
-    private Function<TopicsRunPlanner.Planned, Mono<UUID>> queue;
+    private final List<PlannedRun> queued = new ArrayList<>();
+    private Function<PlannedRun, Mono<UUID>> queue;
 
     private InMemoryMetricReader reader;
     private TopicsConfig config;
@@ -200,7 +200,7 @@ class TopicsNightPassTest {
 
         assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
 
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(WORKSPACE_ID, built,
+        assertThat(queued).containsExactly(new PlannedRun(WORKSPACE_ID, built,
                 TopicProject.RunMode.UPDATE, NIGHT, 500));
         assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
         verify(projectDAO, never()).markLooked(eq(brokenWorkspace), any(), any());

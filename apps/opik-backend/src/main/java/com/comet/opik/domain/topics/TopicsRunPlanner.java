@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,16 +50,6 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull TopicsNightPass nightPass;
-
-    /** A run to queue: its message once queued, which gives it its id. */
-    @Builder(toBuilder = true)
-    record Planned(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull RunMode mode, LocalDate night,
-            long windowTraces) {
-
-        TopicsRunMessage message(UUID runId) {
-            return new TopicsRunMessage(runId, workspaceId, projectId, mode, night, windowTraces);
-        }
-    }
 
     /** One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. */
     public Mono<Integer> plan(@NonNull Instant start) {
@@ -118,7 +107,7 @@ public class TopicsRunPlanner {
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
                                         .formatted(projectId, vectors, night, config.getRun().getMinVectors())));
                     }
-                    return queueByHand(Planned.builder().workspaceId(workspaceId).projectId(projectId)
+                    return queueByHand(PlannedRun.builder().workspaceId(workspaceId).projectId(projectId)
                             .mode(RunMode.DISCOVERY).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
@@ -181,7 +170,7 @@ public class TopicsRunPlanner {
      * Queues the run and publishes it; empty when the project has a run in flight. A failed publish leaves the run
      * queued: the next plans publish it again.
      */
-    Mono<UUID> queueOne(@NonNull Planned run) {
+    Mono<UUID> queueOne(@NonNull PlannedRun run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run queued but not published, a later plan publishes it, run '{}', project '{}'",
                     runId, run.projectId(), error);
@@ -196,7 +185,7 @@ public class TopicsRunPlanner {
      * stream took it, so the caller gets its id. The drop is one compare-and-set on "never claimed", and a requeue
      * keeps the claim, so a pod that stops meanwhile cannot turn a claimed run into a 503.
      */
-    private Mono<UUID> queueByHand(Planned run) {
+    private Mono<UUID> queueByHand(PlannedRun run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run by hand not published, dropping it, run '{}', project '{}'", runId,
                     run.projectId(), error);
@@ -225,7 +214,7 @@ public class TopicsRunPlanner {
     }
 
     /** Queues the run and publishes it; empty when the project has a run in flight. */
-    private Mono<UUID> queueAndPublish(Planned run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
+    private Mono<UUID> queueAndPublish(PlannedRun run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
         return store.queue(run.workspaceId(), run.projectId(), run.mode())
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
@@ -240,18 +229,18 @@ public class TopicsRunPlanner {
     }
 
     /** One labelling pass, then one discovery run, in turn. */
-    private static List<Planned> interleave(List<TopicProjectKey> labels,
+    private static List<PlannedRun> interleave(List<TopicProjectKey> labels,
             List<TopicsDiscoveryCandidates.Candidate> builds, LocalDate night) {
         return TopicsDiscoveryCandidates.roundRobin(List.of(
-                labels.stream().map(project -> Planned.builder().workspaceId(project.workspaceId())
+                labels.stream().map(project -> PlannedRun.builder().workspaceId(project.workspaceId())
                         .projectId(project.projectId()).mode(RunMode.LABELS).build()).toList(),
-                builds.stream().map(build -> Planned.builder().workspaceId(build.workspaceId())
+                builds.stream().map(build -> PlannedRun.builder().workspaceId(build.workspaceId())
                         .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
                         .windowTraces(build.vectors()).build()).toList()));
     }
 
     /** Queues the runs in order until {@code free} are queued; a project that got a run meanwhile is skipped. */
-    private Mono<Integer> queue(List<Planned> runs, int free) {
+    private Mono<Integer> queue(List<PlannedRun> runs, int free) {
         return Flux.fromIterable(runs)
                 .concatMap(run -> queueOne(run).onErrorResume(error -> {
                     log.warn("Topics run not queued, project '{}'", run.projectId(), error);
