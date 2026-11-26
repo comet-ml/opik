@@ -1480,6 +1480,11 @@ annotationQueueRouting:
   # Description: Maximum number of buffer members read per page when flushing, and therefore the most entities one
   #   stream message can carry (100-5000)
   jobBatchSize: ${ANNOTATION_QUEUE_ROUTING_JOB_BATCH_SIZE:-1000}
+  # Default: 4
+  # Description: Automation filter searches one routing message runs at once (1-16). Each is a ClickHouse query,
+  #   and up to consumerBatchSize messages are processed at once per replica, so the ceiling on concurrent searches
+  #   per replica is the product of the two.
+  searchConcurrency: ${ANNOTATION_QUEUE_ROUTING_SEARCH_CONCURRENCY:-4}
   # Default: 1s
   # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
   #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
@@ -1852,9 +1857,9 @@ cacheManager:
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     # Default: PT1S
-    # Description: Cache TTL for the annotation queue routing guard, read once per feedback score
-    #   event. Kept short because a stale negative is silent: the events it turns away are dropped
-    #   at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
+    # Description: Cache TTL for the annotation queue routing guard, read on every trace, span, score,
+    #   comment and guardrail event. Kept short because a stale negative is silent: the events it turns away
+    #   are dropped at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
     annotation_queue_automations: ${CACHE_MANAGER_ANNOTATION_QUEUE_AUTOMATIONS_DURATION:-PT1S}
     # Default: PT1H
     # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.

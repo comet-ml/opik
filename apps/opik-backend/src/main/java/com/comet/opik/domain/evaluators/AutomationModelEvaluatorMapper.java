@@ -15,6 +15,7 @@ import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectReader;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.apache.commons.lang3.StringUtils;
@@ -203,20 +204,33 @@ interface AutomationModelEvaluatorMapper {
             return List.of();
         }
 
+        String filters = firstGroupIfGrouped(model.filters());
         return switch (model) {
             case LlmAsJudgeAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, TraceFilter.LIST_TYPE_REFERENCE);
             case UserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, TraceFilter.LIST_TYPE_REFERENCE);
             case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
             case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
             case SpanLlmAsJudgeAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, SpanFilter.LIST_TYPE_REFERENCE);
             case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
-                (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+                (List<T>) JsonUtils.readValue(filters, SpanFilter.LIST_TYPE_REFERENCE);
         };
+    }
+
+    /**
+     * The shared {@code automation_rules.filters} column holds OR-ed groups of filters for annotation queue
+     * automations and, until evaluators are migrated to the same shape, a flat list for evaluators. Evaluators
+     * only ever have one group, so a grouped value reads as its first group and a flat one as it is.
+     */
+    private static String firstGroupIfGrouped(String filtersJson) {
+        JsonNode filters = JsonUtils.getJsonNodeFromString(filtersJson);
+        return filters.isArray() && !filters.isEmpty() && filters.get(0).isArray()
+                ? filters.get(0).toString()
+                : filtersJson;
     }
 
     default String map(List<? extends Filter> filters) {

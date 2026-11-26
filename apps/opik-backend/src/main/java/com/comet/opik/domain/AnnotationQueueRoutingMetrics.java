@@ -27,6 +27,12 @@ public class AnnotationQueueRoutingMetrics {
                     + "retries it, and this counts how often that happens")
             .build();
 
+    public static final LongCounter SEARCH_FAILURES = METER
+            .counterBuilder("search_failures_total")
+            .setDescription("Automation filter searches that failed; the message is left pending so autoClaim "
+                    + "retries it, and this counts how often that happens")
+            .build();
+
     public static final LongCounter MESSAGES_FLUSHED = METER
             .counterBuilder("messages_flushed_total")
             .setDescription("Stream messages published by the buffer flush, one per (workspace, scope) batch "

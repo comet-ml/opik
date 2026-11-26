@@ -326,6 +326,8 @@ const DataTable = <TData, TValue>({
         {...(isRowClickable || isGrouped
           ? {
               onClick: (e) =>
+                // A click inside a dialog or menu a cell opened reaches the row through React, not the page.
+                e.currentTarget.contains(e.target as Node) &&
                 rowClickWrapper(
                   e,
                   isGrouped
