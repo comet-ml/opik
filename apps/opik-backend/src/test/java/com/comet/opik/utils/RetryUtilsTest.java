@@ -2,6 +2,8 @@ package com.comet.opik.utils;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -18,15 +20,19 @@ class RetryUtilsTest {
     private static final Duration BASE = Duration.ofMillis(100);
 
     @Test
-    @DisplayName("the wait is Retry-After when given, else the base doubled per retry with jitter of up to half")
-    void backoffHonorsRetryAfterOrDoublesWithJitter() {
+    @DisplayName("the wait is Retry-After when given")
+    void backoffHonorsRetryAfter() {
         assertThat(RetryUtils.backoff(BASE, 2, Duration.ofSeconds(3))).isEqualTo(Duration.ofSeconds(3));
-        for (int retries = 0; retries < 4; retries++) {
-            var expected = BASE.multipliedBy(1L << retries);
-            assertThat(RetryUtils.backoff(BASE, retries, null))
-                    .as("retry %d", retries)
-                    .isBetween(expected.dividedBy(2), expected.multipliedBy(3).dividedBy(2));
-        }
+    }
+
+    @ParameterizedTest(name = "after {0} retries")
+    @ValueSource(ints = {0, 1, 2, 3})
+    @DisplayName("without Retry-After the wait is the base doubled per retry, with jitter of up to half")
+    void backoffDoublesWithJitter(int retries) {
+        var expected = BASE.multipliedBy(1L << retries);
+
+        assertThat(RetryUtils.backoff(BASE, retries, null))
+                .isBetween(expected.dividedBy(2), expected.multipliedBy(3).dividedBy(2));
     }
 
     @Test
