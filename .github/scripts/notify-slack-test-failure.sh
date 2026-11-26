@@ -12,7 +12,7 @@
 #   GITHUB_ACTOR       — user who triggered the workflow (set by GitHub Actions)
 #
 # Usage:
-#   notify-slack-test-failure.sh "Guardrails E2E Tests"
+#   notify-slack-test-failure.sh "Python SDK Docs Deploy"
 #
 set -euo pipefail
 
