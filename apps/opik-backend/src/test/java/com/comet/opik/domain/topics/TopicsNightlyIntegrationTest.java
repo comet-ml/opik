@@ -65,6 +65,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -334,6 +335,44 @@ class TopicsNightlyIntegrationTest {
             assertThat(data.topicProject(projectId).lastNight()).as(projectId.toString()).isEqualTo(today());
         }
         untouched.forEach((projectId, before) -> assertThat(data.topicProject(projectId)).isEqualTo(before));
+    }
+
+    @Test
+    @DisplayName("nightly updates by hand that fail pauseFailures times in a row pause the project: the next night "
+            + "skips it as paused and queues nothing for it")
+    void failedNightsByHandPause() {
+        var workspaceId = enabledWorkspace();
+        var projectId = discovered(workspaceId);
+        plant(workspaceId, projectId);
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
+        int failures = opikConfig.getTopics().getNightly().getPauseFailures();
+        // A failed update saves nothing, so the same night can be asked for again.
+        for (int i = 0; i < failures; i++) {
+            try (var response = nightEndpoint(workspaceId, projectId, today().toString())) {
+                assertThat(response.getStatus()).isEqualTo(202);
+                awaitEnded(projectId, UUID.fromString(response.readEntity(JsonNode.class).path("run_id").asText()));
+            }
+        }
+        var failed = data.topicProject(projectId);
+        assertThat(failed.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+        assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_ERROR);
+        assertThat(failed.failedRuns()).isEqualTo(failures);
+        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        int from = logEvents().size();
+
+        // Tomorrow's night, within its budget: a failed update queued tonight waits for it.
+        var tomorrowNight = todayStart().plusSeconds(86_400 + 2 * 3_600 + 60);
+        pass(InMemoryMetricReader.create()).plan(tomorrowNight, 10, capture(queued)).block();
+
+        assertThat(queued).noneMatch(planned -> planned.projectId().equals(projectId));
+        var events = logEvents();
+        assertThat(events.subList(from, events.size())).anySatisfy(event -> {
+            assertThat(event.getMessage()).startsWith("Topics night '{}' decided");
+            assertThat(event.getArgumentArray()[1]).isEqualTo(workspaceId);
+            assertThat(event.getArgumentArray()[2]).isEqualTo(Set.of(projectId));
+            assertThat(event.getArgumentArray()[4]).isEqualTo("paused");
+        });
+        assertThat(data.topicProject(projectId)).isEqualTo(failed.toBuilder().lastNight(today().plusDays(1)).build());
     }
 
     @Test
