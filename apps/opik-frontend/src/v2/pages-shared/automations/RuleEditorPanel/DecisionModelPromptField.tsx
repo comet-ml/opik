@@ -14,6 +14,7 @@ import {
 } from "@/ui/form";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import useOpenRouterRegion from "@/api/provider-keys/useOpenRouterRegion";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import {
@@ -21,6 +22,7 @@ import {
   DECISIONS_API_MODELS,
 } from "@/constants/decisionModels";
 import SelectBox from "@/shared/SelectBox/SelectBox";
+import { getDecisionModelUnavailableReason } from "@/lib/openRouterRegion";
 import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import { getRecordErrorKeys } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
@@ -45,11 +47,12 @@ const getDecisionModelErrors = (
   return messages;
 };
 
-const DecisionModelSelect: React.FC<{
+export const DecisionModelSelect: React.FC<{
   form: UseFormReturn<EvaluationRuleFormType>;
 }> = ({ form }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data, isPending } = useProviderKeys({ workspaceName });
+  const { data: openRouterRegion } = useOpenRouterRegion({ workspaceName });
   const {
     permissions: { canUpdateAIProviders },
   } = usePermissions();
@@ -64,6 +67,22 @@ const DecisionModelSelect: React.FC<{
   const isConnected = (data?.content ?? []).some(
     (providerKey) => providerKey.provider === provider,
   );
+  const unavailableReason = getDecisionModelUnavailableReason(
+    model,
+    openRouterRegion,
+  );
+  const options = [
+    ...DECISION_MODELS.map((decisionModel) => {
+      const reason = getDecisionModelUnavailableReason(
+        decisionModel.value,
+        openRouterRegion,
+      );
+      return reason
+        ? { ...decisionModel, disabled: true, description: reason }
+        : decisionModel;
+    }),
+    ...DECISIONS_API_MODELS,
+  ];
 
   return (
     <>
@@ -75,11 +94,17 @@ const DecisionModelSelect: React.FC<{
             shouldDirty: true,
           })
         }
-        options={[...DECISION_MODELS, ...DECISIONS_API_MODELS]}
+        options={options}
         testId="decision-model-select"
         className="comet-body-xs h-6 w-auto gap-1 px-1 text-muted-slate"
       />
-      {!isPending &&
+      {unavailableReason && (
+        <span className="comet-body-xs text-destructive">
+          {unavailableReason}
+        </span>
+      )}
+      {!unavailableReason &&
+        !isPending &&
         !isConnected &&
         (canUpdateAIProviders ? (
           <>
