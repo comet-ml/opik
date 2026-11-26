@@ -24,11 +24,11 @@ const compareRoutePath = (projectId: string, datasetId: string): string => {
  * The Compare button's three branches on the experiments list (opik#8612,
  * OPIK-8594).
  *
- * `handleCompareClick` does one of three things, decided by how many rows are
- * ticked and whether they share a dataset: one selected opens the same-dataset
- * picker pre-checked on it; two or more on one dataset navigate straight to the
- * compare view; a selection spanning two datasets opens the mixed-dataset guard
- * instead.
+ * The button does one of three things, decided by how many rows are ticked and
+ * whether they share a dataset: one selected opens the same-dataset picker
+ * pre-checked on it; two or more on one dataset navigate straight to the
+ * compare view; a selection spanning two datasets disables Compare, with a
+ * tooltip saying why (OPIK-9128).
  *
  * WHAT THIS ADDS. `experiments.compare-side-by-side` is marked covered, but
  * every spec under `tests/experiments/` reaches the compare view by
@@ -128,7 +128,7 @@ test.describe(
     );
 
     test(
-      'two or more on one dataset navigate directly, and a mixed selection opens the guard',
+      'two or more on one dataset navigate directly, and a mixed selection disables Compare',
       { tag: ['@cap:experiments.compare-side-by-side'] },
       async ({ compareButtonExperiments, page }) => {
         const seed = compareButtonExperiments;
@@ -156,36 +156,33 @@ test.describe(
             experiments.comparePickerDialog,
             'a same-dataset selection of 2+ must not raise the picker',
           ).toHaveCount(0);
-          await expect(
-            experiments.datasetFilterDialog,
-            'a same-dataset selection must not raise the mixed-dataset guard',
-          ).toHaveCount(0);
         });
 
-        await test.step('Back on the list, select across two datasets and click Compare', async () => {
+        await test.step('Back on the list, select across two datasets', async () => {
           await experiments.goto(seed.projectId);
           await experiments.waitForReady();
           await experiments.selectExperiments([seed.datasetA[0].id, seed.datasetB.id]);
-          await experiments.clickCompare();
         });
 
-        await test.step('The mixed-dataset guard opens, and nothing navigates', async () => {
+        await test.step('Compare is disabled and its tooltip says why', async () => {
+          // Disabled rather than "opens a dialog": an enabled Compare here
+          // would either raise the same-dataset picker, silently dropping the
+          // second dataset's experiment, or navigate to a compare view that
+          // rejects the mix.
           await expect(
-            experiments.datasetFilterDialog,
-            'a selection spanning two datasets must raise "Select experiments to compare"',
-          ).toBeVisible();
-          // The other dialog explicitly, not just "a dialog is open": the two
-          // branches raise different dialogs and confusing them is precisely
-          // the regression — the same-dataset picker here would silently drop
-          // the second dataset's experiment.
+            experiments.compareButton,
+            'a selection spanning two datasets must disable Compare',
+          ).toBeDisabled();
+          await experiments.hoverCompare();
+          // Both seeded sources are plain datasets, so the label names them.
+          await expect(
+            experiments.compareTooltip,
+            'the tooltip must explain the mixed-dataset selection',
+          ).toHaveText('Select experiments from the same dataset to compare them');
           await expect(
             experiments.comparePickerDialog,
             'the mixed-dataset case must not raise the same-dataset picker',
           ).toHaveCount(0);
-          expect(
-            new URL(page.url()).pathname,
-            'the guard must be raised without navigating',
-          ).not.toContain('/compare');
         });
       },
     );
