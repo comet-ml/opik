@@ -34,6 +34,12 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     /** The k-means seed: fixed, so the same window always gives the same groups. */
     static final long SEED = 0;
 
+    /**
+     * Below this many groups a discovery run keeps each trace's cosine to each group centre, {@code n * k} doubles,
+     * instead of the window's {@code n * dimensions} floats, which then need not outlive the clustering.
+     */
+    static final int COSINE_TABLE_BELOW_GROUPS = TopicEmbedding.DIMENSIONS / 2;
+
     private final AlgorithmConfig config;
     private final TopicTasks tasks;
 
@@ -81,14 +87,47 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 .schema(task.schema())
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
-        return new KMeansClustering(window.vectors(), maxTopics, groups, fit.centres(), author, stats);
+        // The assignment after the author call compares each trace with group centres only. With fewer groups than
+        // COSINE_TABLE_BELOW_GROUPS, those cosines take less memory than the vectors, so the clustering keeps them and
+        // the window can go while the call runs.
+        var traces = k < COSINE_TABLE_BELOW_GROUPS
+                ? TraceCosines.table(PrototypeAssigner.cosines(window.vectors(), fit.centres(), k,
+                        TopicEmbedding.DIMENSIONS), k)
+                : TraceCosines.vectors(window.vectors());
+        return new KMeansClustering(traces, maxTopics, groups, fit.centres(), author, stats);
+    }
+
+    /**
+     * What the assignment reads per trace: its vector, or its cosine to each group centre. Both give the same labels,
+     * as {@link PrototypeAssigner#cosines} computes a cosine exactly as the assigner does, and every prototype of a
+     * discovery run is a group centre.
+     */
+    private record TraceCosines(float[] vectors, double[] table, int groups) {
+
+        static TraceCosines vectors(float[] vectors) {
+            return new TraceCosines(vectors, null, 0);
+        }
+
+        static TraceCosines table(double[] table, int groups) {
+            return new TraceCosines(null, table, groups);
+        }
+
+        int[] assign(PrototypeAssigner assigner, AppliedAnswer applied) {
+            if (vectors != null) {
+                return assigner.assign(vectors);
+            }
+            var topicGroups = applied.topics().stream().flatMap(topic -> topic.groups().stream())
+                    .mapToInt(Integer::intValue).toArray();
+            var otherGroups = applied.other().stream().mapToInt(Integer::intValue).toArray();
+            return assigner.assign(table, groups, topicGroups, otherGroups);
+        }
     }
 
     /** The groups of one window, waiting for the author answer. */
     @RequiredArgsConstructor
     private final class KMeansClustering implements Clustering {
 
-        private final float[] vectors;
+        private final TraceCosines traces;
         private final int maxTopics;
         private final List<GroupSummary> groups;
         private final float[] centres;
@@ -126,7 +165,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             // near it is saved, so it would assign no trace.
             return DiscoveredTopics.builder()
                     .topics(topics)
-                    .labels(assigner.assign(vectors))
+                    .labels(traces.assign(assigner, applied))
                     .otherPrototypes(assigner.keptOther())
                     .stats(finishStats)
                     .build();

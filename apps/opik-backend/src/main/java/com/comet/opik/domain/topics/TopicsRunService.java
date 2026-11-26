@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -108,14 +109,21 @@ public class TopicsRunService {
         // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> cpu(run, "cluster",
-                        () -> algorithm.cluster(window.topicWindow(), maxTopics))
-                        .flatMap(clustering -> timed(run, "llm",
-                                llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .flatMap(answer -> cpu(run, "assign",
-                                        () -> assign(run, window, clustering, answer)))
-                                .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
-                        .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
+                .flatMap(window -> {
+                    // After the clustering the run needs only the traces and the stats: nothing after it holds the
+                    // texts and vectors, so they can go during the author call. The step takes them from a holder it
+                    // clears, as the chain keeps the step until the run ends.
+                    var traces = window.traces();
+                    var windowStats = window.stats();
+                    var toCluster = new AtomicReference<>(window.topicWindow());
+                    return cpu(run, "cluster", () -> algorithm.cluster(toCluster.getAndSet(null), maxTopics))
+                            .flatMap(clustering -> timed(run, "llm",
+                                    llm.generate(run, clustering.author(), AuthorAnswer::parse))
+                                    .flatMap(answer -> cpu(run, "assign",
+                                            () -> assign(run, traces, windowStats, clustering, answer)))
+                                    .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
+                            .onErrorMap(error -> TopicsRunException.withStats(error, windowStats));
+                })
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
@@ -125,21 +133,21 @@ public class TopicsRunService {
     }
 
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
-    private TopicRunRows assign(TopicRun run, RunWindow window, Clustering clustering,
+    private TopicRunRows assign(TopicRun run, List<WindowTrace> traces, ObjectNode windowStats, Clustering clustering,
             TopicsLlm.Answer<AuthorAnswer> answer) {
         TopicRunRows rows;
         try {
-            rows = TopicRunRows.of(run, window.traces(), clustering.finish(answer.value()), idGenerator::generateId);
+            rows = TopicRunRows.of(run, traces, clustering.finish(answer.value()), idGenerator::generateId);
         } catch (IllegalArgumentException exception) {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
         var stats = TopicRunOutcomes.bounds(run);
-        stats.setAll(window.stats());
+        stats.setAll(windowStats);
         stats.setAll(clustering.stats());
         stats.setAll(answer.stats());
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
-                + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
+                + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), traces.size(),
                 rows.topics().stream().map(Topic::size).toList(), TopicText.fixed(rows.otherShare(), 3));
         return rows.toBuilder().stats(stats).build();
     }

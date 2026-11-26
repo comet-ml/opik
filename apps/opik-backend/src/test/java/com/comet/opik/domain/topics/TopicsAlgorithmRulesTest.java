@@ -483,6 +483,67 @@ class TopicsAlgorithmRulesTest {
             assertThat(assigner.winners(vectors)).containsExactly(expected);
         }
 
+        @ParameterizedTest(name = "{0} groups, seed {1}")
+        @CsvSource({"30, 1", "31, 2", "50, 3", "1, 4", "2, 5"})
+        @DisplayName("from the cosine table to the group centres, the owners are the ones the vectors give, the gated "
+                + "known-Other centres left out alike")
+        void fromCosineTable(int groups, long seed) {
+            int d = TopicEmbedding.DIMENSIONS;
+            var random = new SplittableRandom(seed);
+            int n = 2_000;
+            // Unit vectors near the centres, so most traces clear minCosine and the gate has something to gate.
+            var centres = unitRows(randomRows(random, groups, d), d);
+            var vectors = new float[n * d];
+            for (int i = 0; i < n; i++) {
+                int g = random.nextInt(groups);
+                for (int t = 0; t < d; t++) {
+                    vectors[i * d + t] = centres[g * d + t] + (float) (random.nextDouble() * 0.04 - 0.02);
+                }
+            }
+            vectors = unitRows(vectors, d);
+            var topicGroups = new ArrayList<Integer>();
+            var owners = new ArrayList<Integer>();
+            var otherGroups = new ArrayList<Integer>();
+            for (int g = 0; g < groups; g++) {
+                int pick = random.nextInt(5);
+                if (pick < 3) {
+                    // Two groups per topic, as a topic's prototypes are its groups' centres.
+                    owners.add(topicGroups.size() / 2);
+                    topicGroups.add(g);
+                } else if (pick == 3) {
+                    otherGroups.add(g);
+                }
+            }
+            if (topicGroups.size() > 1) {
+                // A centre listed twice, as a topic prototype and as known Other: the gate leaves the Other one out.
+                otherGroups.add(topicGroups.getFirst());
+            }
+            var assigner = new PrototypeAssigner(
+                    topicGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), owners,
+                    otherGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), d, 0.75,
+                    OTHER_GATE);
+
+            var table = PrototypeAssigner.cosines(vectors, centres, groups, d);
+
+            assertThat(assigner.assign(table, groups, topicGroups.stream().mapToInt(Integer::intValue).toArray(),
+                    otherGroups.stream().mapToInt(Integer::intValue).toArray()))
+                    .containsExactly(assigner.assign(vectors));
+        }
+
+        private static float[] unitRows(float[] rows, int dimensions) {
+            var out = rows.clone();
+            for (int r = 0; r < out.length / dimensions; r++) {
+                double norm = 0;
+                for (int t = 0; t < dimensions; t++) {
+                    norm += (double) out[r * dimensions + t] * out[r * dimensions + t];
+                }
+                for (int t = 0; t < dimensions; t++) {
+                    out[r * dimensions + t] = (float) (out[r * dimensions + t] / Math.sqrt(norm));
+                }
+            }
+            return out;
+        }
+
         private static double[] widened(float[] values) {
             var out = new double[values.length];
             for (int i = 0; i < values.length; i++) {
