@@ -1,7 +1,4 @@
 import React, { useCallback } from "react";
-import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
-import { EditorView } from "@codemirror/view";
-import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
@@ -12,10 +9,6 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
-import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-import useJsonInput from "@/hooks/useJsonInput";
-import { Label } from "@/ui/label";
-import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
 import { getRequestParameters, resolveSamplingParams } from "@/lib/modelUtils";
 import {
@@ -25,9 +18,8 @@ import {
 import ExclusiveSamplingParams, {
   resolveSamplingPresentation,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import ExtraBodyParametersInput from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExtraBodyParametersInput";
 import {
   NO_OUTPUT_LIMIT_TOOLTIP,
   getNoOutputLimitHint,
@@ -51,7 +43,6 @@ const CustomModelConfig = ({
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
   const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const theme = useCodemirrorTheme({ editable: true });
 
   const handleExtraBodyParametersChange = useCallback(
     (value: Record<string, unknown> | null) => {
@@ -60,11 +51,6 @@ const CustomModelConfig = ({
     [onChange],
   );
 
-  const { jsonString, showInvalidJSON, handleJsonChange, handleJsonBlur } =
-    useJsonInput({
-      value: configs.custom_parameters,
-      onChange: handleExtraBodyParametersChange,
-    });
   const requestParameters = getRequestParameters(
     model ?? "",
     configs as LLMPromptConfigsType,
@@ -228,56 +214,24 @@ const CustomModelConfig = ({
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="custom_parameters" className="flex items-center gap-1">
-          Extra body parameters (Optional)
-          <TooltipWrapper
-            content={
-              <PromptModelSettingsTooltipContent text="Provider-specific JSON parameters sent with each request" />
-            }
-          >
-            <Info className="ml-1 size-4 text-light-slate" />
-          </TooltipWrapper>
-        </Label>
-        <div className="max-h-52 overflow-y-auto rounded-md border">
-          <CodeMirror
-            id="custom_parameters"
-            theme={theme}
-            value={jsonString}
-            onChange={handleJsonChange}
-            onBlur={handleJsonBlur}
-            extensions={[jsonLanguage, EditorView.lineWrapping]}
-            placeholder='{"key": "value"}'
-            basicSetup={{
-              lineNumbers: false,
-              foldGutter: false,
-              highlightActiveLine: false,
-              highlightSelectionMatches: false,
-            }}
-          />
-        </div>
-        {showInvalidJSON ? (
-          <FormErrorSkeleton>
-            {configs.custom_parameters
-              ? "Invalid JSON, not saved. Runs keep the last valid JSON."
-              : "Invalid JSON, not saved."}
-          </FormErrorSkeleton>
-        ) : (
-          <>
-            {sliderKeysInExtraBody.length > 0 && (
-              <p className="comet-body-xs text-light-slate">
-                Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
-              </p>
-            )}
-            {extraBodyKeyNextToSlider && (
-              <p className="comet-body-xs text-light-slate">
-                {extraBodyKeyNextToSlider} is sent next to{" "}
-                {sliderKeyNextToExtraBody}. Claude may reject the two together.
-              </p>
-            )}
-          </>
+      <ExtraBodyParametersInput
+        value={configs.custom_parameters}
+        onChange={handleExtraBodyParametersChange}
+        tooltip="Provider-specific JSON parameters sent with each request"
+        placeholder='{"key": "value"}'
+      >
+        {sliderKeysInExtraBody.length > 0 && (
+          <p className="comet-body-xs text-light-slate">
+            Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
+          </p>
         )}
-      </div>
+        {extraBodyKeyNextToSlider && (
+          <p className="comet-body-xs text-light-slate">
+            {extraBodyKeyNextToSlider} is sent next to{" "}
+            {sliderKeyNextToExtraBody}. Claude may reject the two together.
+          </p>
+        )}
+      </ExtraBodyParametersInput>
     </div>
   );
 };
