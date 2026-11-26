@@ -46,6 +46,9 @@ public class TopicsConfig {
     private RunConfig run;
 
     @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
+    @Valid @NotNull @JsonProperty
     private ReadConfig read;
 
     @Valid @NotNull @JsonProperty
@@ -397,6 +400,48 @@ public class TopicsConfig {
          */
         @JsonProperty
         @Min(1) @Max(10_000) private int deleteBatchSize;
+
+        /** How often each pod deletes the topics of deleted projects that the project delete left. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration sweepInterval;
+
+        /**
+         * How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire sweeps again.
+         * At most 30m, under the shortest {@code sweepInterval}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration sweepTimeout;
+    }
+
+    /**
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /**
+         * ClickHouse's {@code max_execution_time}, in whole seconds. At most 4 minutes: a longer query outlives the
+         * progress headers the r2dbc driver can take ({@code databaseAnalytics.httpHeadersProgressIntervalMs}), so it
+         * fails to parse instead of answering 503.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 4, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
+        }
     }
 
     /**
@@ -516,7 +561,10 @@ public class TopicsConfig {
         @NotNull @JsonProperty
         private String consumerGroupName;
 
-        /** Runs one pod runs at a time: each holds a window in memory. */
+        /**
+         * Runs one pod runs at a time: each holds its window in memory, so this is a per-pod memory budget. Set it to
+         * {@code maxInFlight} so one pod can fill every slot.
+         */
         @JsonProperty
         @Min(1) @Max(8) private int consumerBatchSize;
 
@@ -583,6 +631,18 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration planBudget;
 
+        /** How often the leader plans: the discovery job fires on every pod this often, and one of them plans. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration planInterval;
+
+        /** How much longer than the plan the leader lock lasts, for the queue writes and publishes after the counts. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+        private Duration leaseSlack;
+
         /** How long a stopping pod waits for each of its runs to be put back to {@code queued}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -593,6 +653,12 @@ public class TopicsConfig {
         @JsonIgnore
         public Codec getCodec() {
             return RedisStreamCodec.JAVA.getCodec();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.runs.planBudget must be shorter than topics.runs.planInterval") public boolean isPlanBudgetValid() {
+            return planBudget == null || planInterval == null
+                    || planBudget.toMilliseconds() < planInterval.toMilliseconds();
         }
 
         @JsonIgnore

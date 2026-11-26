@@ -1078,6 +1078,7 @@ inference:
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxDecideRealtimeDeadline: 5s
     maxGenerateRealtimeDeadline: 60s
     maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
@@ -1086,6 +1087,9 @@ inference:
     maxRetries: 2
     baseBackoff: 100ms
     submitBytesPerSecond: 1048576
+  realtime:
+    decideDeadline: 5s
+    decideMargin: 1s
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
@@ -1140,7 +1144,7 @@ topics:
   runs:
     streamName: topics-runs
     consumerGroupName: topics-runs-consumers
-    consumerBatchSize: 1
+    consumerBatchSize: 2
     poolingInterval: 5s
     longPollingDuration: 5s
     claimIntervalRatio: 2
@@ -1153,7 +1157,12 @@ topics:
     abandonGrace: 60s
     republishAfter: 10m
     planBudget: 2m
+    planInterval: 5m
+    leaseSlack: 1m
     requeueWait: 5s
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1194,6 +1203,8 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
+    sweepInterval: 24h
+    sweepTimeout: 1m
 
 # Python evaluator configuration
 pythonEvaluator:

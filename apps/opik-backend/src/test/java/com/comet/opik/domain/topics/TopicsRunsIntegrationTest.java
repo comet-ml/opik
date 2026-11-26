@@ -18,7 +18,9 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
@@ -174,17 +176,18 @@ class TopicsRunsIntegrationTest {
         var built = UUID.randomUUID();
         var withList = UUID.randomUUID();
         var small = UUID.randomUUID();
-        var quiet = UUID.randomUUID();
+        // Created through the API with no trace written: its vectors are in the window, its last trace time is not.
+        var quiet = createProject(workspaceId);
         var notOptedIn = UUID.randomUUID();
         var deleted = UUID.randomUUID();
-        for (var projectId : List.of(built, withList, quiet, deleted)) {
+        for (var projectId : List.of(built, withList, deleted)) {
             data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         }
+        data.seedVectors(workspaceId, quiet, 0, FIXTURE.size(), tomorrowStart());
         data.seed(workspaceId, small, 0, SMALL, tomorrowStart());
         data.seed(aiLabelsOnlyWorkspace(), notOptedIn, 0, FIXTURE.size(), tomorrowStart());
         data.savedList(workspaceId, withList, tomorrowStart(), FIXTURE.size());
         store.markLabelsComplete(workspaceId, withList, data.topicProject(withList).listRunId()).block();
-        lastTraceAt(quiet, tomorrowStart().minus(Duration.ofDays(31)));
         deleteProject(workspaceId, deleted);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
@@ -441,6 +444,82 @@ class TopicsRunsIntegrationTest {
         assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
     }
 
+    @Test
+    @DisplayName("a queued nightly update of a saved list runs on a pod: it saves the list under its own run with the "
+            + "topics' ids, writes one trace_topics row per trace as its run's, and its labelling pass runs after it")
+    void runsANightlyUpdate(@Jit TopicsRunPublisher publisher) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        awaitBuilt(projectId);
+        awaitLabelsComplete(projectId);
+        var before = data.topics(projectId);
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
+
+        var updateRunId = queueUpdate(publisher, workspaceId, projectId);
+
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
+                .isEqualTo(updateRunId));
+        awaitLabelsComplete(projectId);
+        var project = data.topicProject(projectId);
+        assertThat(project.savedRuns()).isEqualTo(2);
+        assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.LABELS);
+        assertThat(data.topics(projectId)).isNotEmpty().extracting(Topic::id)
+                .isSubsetOf(before.stream().map(Topic::id).toList());
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
+    }
+
+    @Test
+    @DisplayName("a queued nightly update that leaves no live topic deletes every topic, clears the list, keeps the "
+            + "traces' last rows and queues no labelling pass; the next plan queues a discovery run")
+    void nightlyUpdateClearsAnEmptyList(@Jit TopicsRunPublisher publisher) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        // One topic whose only vector is far from every trace: no trace tonight, so it retires.
+        data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
+        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
+
+        var updateRunId = queueUpdate(publisher, workspaceId, projectId);
+
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                .isEqualTo(TopicProject.RunStatus.SAVED));
+        var project = data.topicProject(projectId);
+        assertThat(project.runId()).isEqualTo(updateRunId);
+        assertThat(project.listRunId()).isNull();
+        assertThat(project.savedRuns()).isEqualTo(2);
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
+    }
+
+    /** Queues and publishes the project's nightly update for tomorrow's window, as the nightly job will. */
+    private UUID queueUpdate(TopicsRunPublisher publisher, String workspaceId, UUID projectId) {
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.UPDATE).block();
+        publisher.publish(TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(TopicProject.RunMode.UPDATE).night(tomorrow()).windowTraces(FIXTURE.size()).build()).block();
+        return runId;
+    }
+
+    private void awaitLabelsComplete(UUID projectId) {
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).labelsComplete())
+                .isTrue());
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
+    }
+
     /** Waits until the project's discovery run is saved and returns its run id. */
     private UUID awaitBuilt(UUID projectId) {
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).listRunId())
@@ -473,22 +552,20 @@ class TopicsRunsIntegrationTest {
                 .ignoringFieldsOfTypes(Instant.class, PrototypeVectors.class).isEqualTo(expected);
     }
 
+    /** Creates a project as a user does, through the projects API, and returns its id. */
+    private UUID createProject(String workspaceId) {
+        var apiKey = TopicsTestData.newId().toString();
+        var workspaceName = "topics-" + workspaceId;
+        AuthTestUtils.mockTargetWorkspace(wireMock, apiKey, workspaceName, workspaceId, "user");
+        return projects.createProject("topics-" + TopicsTestData.newId(), apiKey, workspaceName);
+    }
+
     /** Deletes the project as a user does, through the projects API; its topic_projects row goes with it. */
     private void deleteProject(String workspaceId, UUID projectId) {
         var apiKey = UUID.randomUUID().toString();
         var workspaceName = "topics-" + workspaceId;
         AuthTestUtils.mockTargetWorkspace(wireMock, apiKey, workspaceName, workspaceId, "user");
         projects.deleteProject(projectId, apiKey, workspaceName);
-    }
-
-    /**
-     * Fixture: moves the project's last trace time back. No API can: trace ingestion writes it from the trace's time and
-     * only ever moves it forward. Old traces would not do either, as this test needs the project's vectors in the
-     * window with its last trace time before the window, to show that time alone keeps the project out.
-     */
-    private void lastTraceAt(UUID projectId, Instant at) {
-        template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE projects SET last_updated_trace_at = ? WHERE id = ?", at, projectId.toString()));
     }
 
     /**
@@ -576,7 +653,8 @@ class TopicsRunsIntegrationTest {
     }
 
     @Test
-    @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure")
+    @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure; it "
+            + "publishes the run again, so another pod runs it without waiting for republishAfter")
     void stopMidRunRequeues(RedissonReactiveClient redisson, @Jit TopicsRunService runService,
             @Jit TopicWindowLabelService labelService) {
         var workspaceId = enabledWorkspace();
@@ -590,11 +668,13 @@ class TopicsRunsIntegrationTest {
         doReturn("topics-runs-stop-" + UUID.randomUUID()).when(runs).getStreamName();
         var config = spy(opikConfig.getTopics());
         doReturn(runs).when(config).getRuns();
-        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner);
+        var publisher = new TopicsRunPublisher(redisson, config);
+        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
+        var other = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
         pod.start();
         try {
             var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
-            new TopicsRunPublisher(redisson, config).publish(TopicsRunMessage.builder().runId(runId)
+            publisher.publish(TopicsRunMessage.builder().runId(runId)
                     .workspaceId(workspaceId).projectId(projectId).mode(TopicProject.RunMode.DISCOVERY)
                     .night(tomorrow()).windowTraces(FIXTURE.size()).build()).block();
             Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(wireMock.findAll(
@@ -606,8 +686,16 @@ class TopicsRunsIntegrationTest {
             assertProject(projectId, TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
                     .runId(runId).runMode(TopicProject.RunMode.DISCOVERY).runStatus(TopicProject.RunStatus.QUEUED)
                     .build());
+
+            // The pod that starts next takes the message published at the stop, well before republishAfter.
+            wireMock.resetAll();
+            wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(
+                    FIXTURE.discoveryAnswer, 0)));
+            other.start();
+            assertThat(awaitBuilt(projectId)).isEqualTo(runId);
         } finally {
             pod.stop();
+            other.stop();
         }
     }
 

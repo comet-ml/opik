@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -155,7 +155,7 @@ class ExecHandler(BaseHandler):
         shell_args = self._shell_args(parsed.command)
         return self._execute_foreground(shell_args, parsed, timeout)
 
-    def _execute_background(self, shell_args: list) -> Dict[str, Any]:
+    def _execute_background(self, shell_args: Union[str, List[str]]) -> Dict[str, Any]:
         if self._bg_tracker is None:
             raise CommandError(
                 "not_supported",
@@ -218,7 +218,10 @@ class ExecHandler(BaseHandler):
         return result
 
     def _execute_foreground(
-        self, shell_args: list, parsed: ExecArgs, timeout: float
+        self,
+        shell_args: Union[str, List[str]],
+        parsed: ExecArgs,
+        timeout: float,
     ) -> Dict[str, Any]:
         cmd_timeout = min(parsed.timeout or _DEFAULT_TIMEOUT_SECONDS, timeout)
 
@@ -260,9 +263,13 @@ class ExecHandler(BaseHandler):
         proc.wait()
 
     @staticmethod
-    def _shell_args(command: str, *, line_buffered: bool = False) -> list:
+    def _shell_args(
+        command: str, *, line_buffered: bool = False
+    ) -> Union[str, List[str]]:
         if platform.system() == "Windows":
-            return ["cmd", "/c", command]
+            # Pass a raw command line: a list would go through list2cmdline,
+            # which escapes '"' as '\"' — an escape cmd.exe doesn't understand.
+            return f'cmd /s /c "{command}"'
         if line_buffered and _has_stdbuf():
             # Force line-buffered stdout so log files get output promptly
             # instead of waiting for the default ~4KB block buffer to fill.
