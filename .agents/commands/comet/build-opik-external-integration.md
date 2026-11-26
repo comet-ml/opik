@@ -4,7 +4,7 @@
 
 ## Overview
 
-Drive the end-to-end workflow for building or updating an Opik integration that lives **outside this repo** — a standalone `opik-*` package (e.g. `opik-openclaw`, `opik-mcp`) or Opik support contributed into a third-party project (e.g. LiteLLM, Dify). This command is the entry trigger for the `opik-external-integrations` skill.
+Drive the end-to-end workflow for building or updating an Opik integration that lives **outside this repo** — a standalone `opik-*` package (e.g. `opik-openclaw`) or Opik support contributed into a third-party project (e.g. LiteLLM, Dify). This command is the entry trigger for the `opik-external-integrations` skill.
 
 - **Use this, not `build-opik-integration`, when** the target lives in an external repo/package. For integrations that ship inside `sdks/python/src/opik/integrations/` or `sdks/typescript/src/opik/integrations/`, use `/comet:build-opik-integration`.
 - **Execution model**: Runs **autonomously** by default — acquires the repo, finds credentials, picks the backend, runs every phase, self-verifies against the live backend via the Opik MCP, and ends with a high-level report. Stops early only on a true blocker (no repo access, missing credential with no fallback, unreachable backend, ambiguous product decision). Add "let me review the design first" to run interactively with a design gate.

@@ -1,13 +1,13 @@
 ---
 name: opik-external-integrations
-description: Build or update an Opik integration that lives OUTSIDE this repo — a standalone opik-* package (e.g. opik-openclaw, opik-mcp) or Opik support contributed into a third-party project (e.g. LiteLLM, Dify). Use ONLY when the user names an external repository or external package as the target; for integrations under sdks/ use the opik-integrations skill instead.
+description: Build or update an Opik integration that lives OUTSIDE this repo — a standalone opik-* package (e.g. opik-openclaw) or Opik support contributed into a third-party project (e.g. LiteLLM, Dify). Use ONLY when the user names an external repository or external package as the target; for integrations under sdks/ use the opik-integrations skill instead.
 ---
 
 # Opik External Integrations
 
 This skill builds Opik integrations whose code **does not live in this repository**. Two shapes:
 
-- **Standalone `opik-*` package / plugin** — its own repo or package that depends on the *published* Opik SDK. Examples: `opik-openclaw`, `opik-mcp`.
+- **Standalone `opik-*` package / plugin** — its own repo or package that depends on the *published* Opik SDK. Example: `opik-openclaw`.
 - **Upstream contribution** — Opik support added into a third-party project that already has its own logging/callback/plugin system. Examples: an Opik callback in **LiteLLM**, an Opik integration in **Dify**.
 
 > **Activation gate — read this first.** Use this skill **only** when the target lives in an external repo or external package. If the user wants an integration that ships inside `sdks/python/src/opik/integrations/` or `sdks/typescript/src/opik/integrations/`, this is the wrong skill — use **`opik-integrations`**. When in doubt, ask the "where does it live" question (below) and route accordingly.
