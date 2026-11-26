@@ -31,8 +31,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Queues a project's discovery run by hand instead of waiting for the leader's next plan, and forgets a project's list
- * so the next discovery run builds it again. Internal and cross-workspace, so it is reachable only from inside the
+ * Queues a project's discovery run or its nightly update by hand instead of waiting for the leader's next plan, and
+ * forgets a project's list so the next discovery run builds it again. Internal and cross-workspace, so it is reachable only from inside the
  * cluster: like the other {@code /v1/internal} resources it is not authenticated by {@code AuthFilter}. For the runbook.
  */
 @Path("/v1/internal/topics")
@@ -62,6 +62,20 @@ public class TopicsResource {
                     projectId);
         }
         var runId = planner.runByHand(workspaceId, projectId, night(night), ignoreBackfill).block();
+        return Response.accepted(Map.of("run_id", runId)).build();
+    }
+
+    @POST
+    @Path("/projects/{projectId}/night")
+    @Operation(operationId = "runProjectTopicsNight", summary = "Run a project's nightly update now", description = "Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.", responses = {
+            @ApiResponse(responseCode = "202", description = "The run is queued"),
+            @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is longer ago than the vectors backfill window"),
+            @ApiResponse(responseCode = "409", description = "The workspace is not opted in at stage nightly or later, or topics are off, the night would skip the project (reason no_list, deleted, already_saved or small, named in the message), or a run is in flight"),
+            @ApiResponse(responseCode = "503", description = "The run could not be started; nothing is queued, try again")})
+    public Response runProjectNight(@PathParam("projectId") UUID projectId,
+            @QueryParam("workspace_id") @NotBlank String workspaceId,
+            @QueryParam("night") String night) {
+        var runId = planner.nightByHand(workspaceId, projectId, night(night)).block();
         return Response.accepted(Map.of("run_id", runId)).build();
     }
 

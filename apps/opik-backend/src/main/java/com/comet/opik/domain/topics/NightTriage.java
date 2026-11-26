@@ -78,7 +78,7 @@ final class NightTriage {
     }
 
     /** Whether the saved list's window already ends at or after {@code windowTo}: the night would count it twice. */
-    private static boolean covers(TopicProject row, Instant windowTo) {
+    static boolean covers(TopicProject row, Instant windowTo) {
         return row.windowUntil() != null && !row.windowUntil().isBefore(windowTo);
     }
 
