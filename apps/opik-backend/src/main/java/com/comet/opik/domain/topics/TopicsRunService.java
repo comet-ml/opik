@@ -14,9 +14,12 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -30,6 +33,12 @@ import java.util.concurrent.Callable;
  * {@code trace_topics} for the traces it read, with its own bound. A failure before the commit writes nothing but the
  * failed attempt. The topics' sizes and the run's Other share are those of the traces it read: on a sampled window, of
  * the sample. The run's stats go to its log lines, not to a table.
+ *
+ * <p>A nightly update ({@link #nightlyUpdate}) reads the same window and the project's saved list, has the algorithm
+ * update the list and saves the changed list the same way: one transaction that checks no other run saved the project
+ * since this one read it, then the {@code trace_topics} insert. A retired topic's row is deleted, with a log line and
+ * {@code topics.topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
+ * a later discovery run makes a new one.
  */
 @Slf4j
 @Singleton
@@ -59,17 +68,38 @@ public class TopicsRunService {
     }
 
     /**
-     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
-     * caller counted as {@code windowTraces} traces. The save leaves the labels incomplete. Never errors: a failure is recorded on the run and
-     * returned. A run that outlasts {@code topics.run.projectTimeout} before its commit fails with {@code timeout};
-     * one cancelled by its subscriber is failed with {@code timeout} too.
+     * Makes the project's first topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context. The save leaves the
+     * labels incomplete. Never errors: a failure is recorded on the run and returned. A run that outlasts {@code
+     * topics.run.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber is
+     * failed with {@code timeout} too.
      */
-    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace,
-            @NonNull UUID projectId, @NonNull LocalDate night, long windowTraces) {
-        var run = TopicRun.of(runId, workspace.id(), workspace.name(), projectId, night,
-                config.getRun().getWindowDays());
-        return Mono.usingWhen(Mono.just(run), started -> run(started, windowTraces),
-                started -> Mono.empty(), (started, error) -> Mono.empty(), outcomes::cancelled);
+    Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
+            long windowTraces) {
+        return asRun(runId, projectId, night, run -> run(run, windowTraces));
+    }
+
+    /**
+     * Updates the project's saved topic list for {@code night}, the UTC date whose start ends the window, which the
+     * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context: the window read, the
+     * saved list read ({@link TopicRunStore#readList}), the algorithm's steps ({@link #update}), the save
+     * ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics} insert. Never errors: a failure is recorded on
+     * the run and returned, and the previous list stays. The same time limit and cancel as {@link #discover}. A save
+     * that leaves no live topic deletes them all and clears the project's list, so a later discovery run makes a new
+     * one; it inserts no {@code trace_topics}.
+     */
+    Mono<TopicRunOutcome> nightlyUpdate(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
+            long windowTraces) {
+        return asRun(runId, projectId, night, run -> nightly(run, night, windowTraces));
+    }
+
+    /** Runs {@code work} as the claimed run, in the workspace of the Reactor context; a cancel fails it as timeout. */
+    private Mono<TopicRunOutcome> asRun(UUID runId, UUID projectId, LocalDate night,
+            Function<TopicRun, Mono<TopicRunOutcome>> work) {
+        var runs = TopicsMetrics.Workspace.fromContext().map(workspace -> TopicRun.of(runId, workspace.id(),
+                workspace.name(), projectId, night, config.getRun().getWindowDays()));
+        return Mono.usingWhen(runs, work, started -> Mono.empty(), (started, error) -> Mono.empty(),
+                outcomes::cancelled);
     }
 
     private Mono<TopicRunOutcome> run(TopicRun run, long windowTraces) {
@@ -114,6 +144,75 @@ public class TopicsRunService {
         return rows.toBuilder().stats(stats).build();
     }
 
+    private Mono<TopicRunOutcome> nightly(TopicRun run, LocalDate night, long windowTraces) {
+        var timeout = config.getRun().getProjectTimeout().toJavaDuration();
+        return timed(run, "window", reader.read(run, windowTraces))
+                .flatMap(window -> timed(run, "state", store.readList(run, night))
+                        .flatMap(list -> {
+                            // The update changes the state in place.
+                            int topicsBefore = list.state().liveCount();
+                            return update(run, list.state(), nightWindow(run, window))
+                                    .flatMap(result -> cpu(run, "rows",
+                                            () -> rows(run, window, list, topicsBefore, result)));
+                        })
+                        .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
+                .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.list(), updated.save()))
+                        .map(kept -> kept ? updated : updated.discarded())
+                        .onErrorMap(error -> TopicsRunException.withStats(error, updated.stats())))
+                .timeout(timeout, Mono.error(this::timedOut))
+                .flatMap(updated -> savedNight(run, updated))
+                .onErrorResume(error -> outcomes.failed(run, error));
+    }
+
+    private static NightWindow nightWindow(TopicRun run, RunWindow window) {
+        var createdAt = new Instant[window.texts().length];
+        for (int i = 0; i < createdAt.length; i++) {
+            createdAt[i] = window.traces().get(i).traceCreatedAt();
+        }
+        return NightWindow.builder().texts(window.texts()).vectors(window.vectors()).createdAt(createdAt)
+                .from(run.from()).night(run.to()).dimensions(TopicEmbedding.DIMENSIONS).build();
+    }
+
+    /** The night's rows, with the run's stats; a state that breaks the night's invariants fails the run. */
+    private NightRows rows(TopicRun run, RunWindow window, NightList list, int topicsBefore, TopicUpdate result) {
+        NightRows rows;
+        try {
+            NightInvariants.check(list.state(), TopicEmbedding.DIMENSIONS);
+            rows = NightRows.of(run, window.traces(), list, topicsBefore, result);
+        } catch (IllegalArgumentException exception) {
+            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
+        }
+        var stats = TopicRunOutcomes.bounds(run);
+        stats.setAll(window.stats());
+        stats.put("mode", TopicProject.RunMode.UPDATE.getValue());
+        stats.setAll(rows.stats());
+        log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', born '{}', retired '{}', "
+                + "topics '{}', Other share '{}', churn '{}'", run.runId(), run.projectId(), run.from(), run.to(),
+                window.traces().size(), rows.born(), stats.get("retired"), rows.live(),
+                TopicText.fixed(rows.otherShare(), 3), rows.churn());
+        return rows.toBuilder().stats(stats).build();
+    }
+
+    /**
+     * After the commit: the night's metrics, a log line and {@code topics.topics.retired} per retired topic, then the
+     * shared post-save step. A cleared list has no {@code trace_topics} to write.
+     */
+    private Mono<TopicRunOutcome> savedNight(TopicRun run, NightRows night) {
+        metrics.topics(run.workspace(), night.live(), night.born());
+        for (var topic : night.retired()) {
+            // Ids only: a name and definition come from trace text and must not reach the logs.
+            log.info("Topics run '{}' retired topic '{}', project '{}', reason '{}', size '{}'", run.runId(),
+                    topic.getId(), run.projectId(), topic.getRetiredReason().getValue(), topic.getSize());
+            metrics.retired(run.workspace(), topic.getRetiredReason());
+        }
+        metrics.churn(run.workspace(), night.churn());
+        if (!night.save().keep()) {
+            log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
+                    + "cleared, so a later discovery run makes a new one", run.runId(), run.projectId());
+        }
+        return afterSave(run, night.traceTopics(), night.otherShare(), night.stats());
+    }
+
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
      * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
@@ -156,15 +255,25 @@ public class TopicsRunService {
     }
 
     private Mono<TopicRunOutcome> saved(TopicRun run, TopicRunRows rows) {
-        metrics.otherShare(run.workspace(), rows.otherShare());
-        return store.insertTraceTopics(run.workspace(), rows.traceTopics())
-                .thenReturn(!rows.traceTopics().isEmpty())
+        return afterSave(run, rows.traceTopics(), rows.otherShare(), rows.stats());
+    }
+
+    /**
+     * After a run's commit, for a discovery run and a nightly update alike: the Other share metric, then the
+     * {@code trace_topics} insert. A failed insert leaves the run saved: the labelling pass gives the window's traces
+     * their topics.
+     */
+    private Mono<TopicRunOutcome> afterSave(TopicRun run, List<TraceTopic> traceTopics, double otherShare,
+            ObjectNode stats) {
+        metrics.otherShare(run.workspace(), otherShare);
+        return store.insertTraceTopics(run.workspace(), traceTopics)
+                .thenReturn(traceTopics.size())
                 .onErrorResume(exception -> {
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
                             + "pass gives the window's traces their topics", run.runId(), run.projectId(), exception);
-                    return Mono.just(false);
+                    return Mono.just(0);
                 })
-                .map(inserted -> outcomes.saved(run, rows, inserted));
+                .map(inserted -> outcomes.saved(run, stats, inserted));
     }
 
     private TopicsRunException timedOut() {
@@ -174,7 +283,7 @@ public class TopicsRunService {
 
     /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
     private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
-        return timed(run, phase, Mono.fromCallable(step).subscribeOn(Schedulers.parallel()));
+        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(Schedulers.parallel());
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */

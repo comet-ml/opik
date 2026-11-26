@@ -54,7 +54,10 @@ public class TopicWindowLabelService {
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
 
-    /** The saved list a pass labels with: the traces created in {@code [from, to)}, the run's window. */
+    /**
+     * The saved list a pass labels with: the traces created in {@code [from, to)}. {@code from} is the run's window
+     * start; {@code to} is its window end or its save, whichever is later.
+     */
     private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller) {
     }
 
@@ -115,12 +118,19 @@ public class TopicWindowLabelService {
 
     /**
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
-     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it ended is the outcome. A project
-     * with no saved list is complete. The caller keeps a run of the same project from saving meanwhile: that would make
-     * this pass label with a list that is no longer the project's.
+     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it
+     * ended is the outcome. A project with no saved list is complete. The caller runs it as a claimed run of the project
+     * ({@link TopicProjectDAO#claim}), so no run of the project saves meanwhile: that would make this pass label with a
+     * list that is no longer the project's.
      */
-    Mono<LabelPassOutcome> labelWindow(@NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
-            @NonNull Instant deadline, @NonNull LabelTrigger trigger) {
+    Mono<LabelPassOutcome> labelWindow(@NonNull UUID projectId, @NonNull Instant deadline,
+            @NonNull LabelTrigger trigger) {
+        return TopicsMetrics.Workspace.fromContext().flatMap(workspace -> labelWindow(workspace, projectId, deadline,
+                trigger));
+    }
+
+    private Mono<LabelPassOutcome> labelWindow(TopicsMetrics.Workspace workspace, UUID projectId, Instant deadline,
+            LabelTrigger trigger) {
         return store.readSaved(workspace.id(), projectId)
                 .map(this::saved)
                 .flatMap(saved -> pass(workspace, projectId, saved, deadline, trigger))
@@ -133,9 +143,16 @@ public class TopicWindowLabelService {
                 });
     }
 
+    /**
+     * The traces a saved list labels run from its window start to its window end or its save, whichever is later. A
+     * nightly update saves after its window's end: its pass also labels the traces vectored since, which arrival
+     * labelled by the list before the save. A discovery run's window ends at tomorrow's start, after its save.
+     */
     private Saved saved(TopicRunStore.SavedList list) {
-        var to = list.project().windowUntil();
-        var from = to.minus(Duration.ofDays(config.getRun().getWindowDays()));
+        var windowUntil = list.project().windowUntil();
+        var lastSuccessAt = list.project().lastSuccessAt();
+        var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
+        var from = windowUntil.minus(Duration.ofDays(config.getRun().getWindowDays()));
         return new Saved(list.project().listRunId(), from, to,
                 algorithm.labeller(list.topics(), list.project().otherVectors()));
     }
@@ -188,7 +205,7 @@ public class TopicWindowLabelService {
         if (outcome != LabelPassOutcome.COMPLETE) {
             return Mono.just(outcome);
         }
-        return anyLeft(workspaceId, projectId, saved)
+        return anyLeft(projectId, saved)
                 .flatMap(left -> {
                     if (left) {
                         log.info("Topics labelling pass found a trace left behind its pages, a later pass labels it, "
@@ -217,12 +234,12 @@ public class TopicWindowLabelService {
      * Whether the window has a trace with a usable vector and no row of the run. Traces with an unusable vector never
      * get one, so a full page of them reads on to the next.
      */
-    private Mono<Boolean> anyLeft(String workspaceId, UUID projectId, Saved saved) {
+    private Mono<Boolean> anyLeft(UUID projectId, Saved saved) {
         int chunk = config.getRun().getLabelPageTraces();
         var window = new Slice(saved.from(), saved.to());
-        return page(workspaceId, projectId, saved, window, 1, "", chunk)
+        return page(projectId, saved, window, 1, "", chunk)
                 .expand(page -> page.hasNext(chunk)
-                        ? page(workspaceId, projectId, saved, window, page.number() + 1, page.last(), chunk)
+                        ? page(projectId, saved, window, page.number() + 1, page.last(), chunk)
                         : Mono.empty())
                 .any(page -> page.rows().stream().anyMatch(row -> TopicEmbedding.usable(row.vector())));
     }
@@ -246,7 +263,7 @@ public class TopicWindowLabelService {
         // A full slice takes ceil(sliceTraces / chunk) pages and one empty page; the rest is margin for ties on a
         // bound and for traces that got their vector after the count.
         int maxPages = (sliceTraces + chunk - 1) / chunk + 2;
-        return windowDAO.countAndBounds(workspace.id(), projectId, saved.from(), saved.to(), sliceTraces,
+        return windowDAO.countAndBounds(projectId, saved.from(), saved.to(), sliceTraces,
                 countTimeout.toSeconds())
                 .timeout(countTimeout)
                 .flatMapMany(window -> Flux.fromIterable(slices(saved.from(), saved.to(), window.bounds()))
@@ -285,15 +302,14 @@ public class TopicWindowLabelService {
 
     private Mono<Step> step(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Slice slice, int number,
             String after, int chunk, int maxPages) {
-        return page(workspace.id(), projectId, saved, slice, number, after, chunk)
+        return page(projectId, saved, slice, number, after, chunk)
                 .flatMap(page -> labelPage(workspace, projectId, saved, page, chunk, maxPages)
                         .map(totals -> new Step(page, totals)));
     }
 
-    private Mono<Page> page(String workspaceId, UUID projectId, Saved saved, Slice slice, int number, String after,
-            int chunk) {
+    private Mono<Page> page(UUID projectId, Saved saved, Slice slice, int number, String after, int chunk) {
         var readTimeout = config.getRun().getReadTimeout().toJavaDuration();
-        return windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
+        return windowDAO.readUnlabelled(projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
                 readTimeout.toSeconds())
                 .collectList()
                 .timeout(readTimeout)
