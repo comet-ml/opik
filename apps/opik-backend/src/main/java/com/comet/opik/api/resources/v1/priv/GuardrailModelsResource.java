@@ -104,7 +104,7 @@ public class GuardrailModelsResource {
             // names its field.
             @FormDataParam("name") @NotBlank(message = "name must not be blank") @Size(max = GuardrailModel.NAME_MAX_LENGTH, message = "name cannot exceed {max} characters") String name,
             @FormDataParam("description") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "description cannot exceed {max} characters") @Schema(description = "A note for people on what the model is for; the classifier never sees it") String description,
-            @FormDataParam("config") @NotNull(message = "config must not be null") @Valid @Schema(description = "A JSON part (application/json): what the model's classifier is asked", implementation = GuardrailModelConfig.class) GuardrailModelConfig config,
+            @FormDataParam("config") @NotNull(message = "config must not be null") @Valid @Schema(description = "A JSON part, read as JSON whatever its Content-Type: what the model's classifier is asked", implementation = GuardrailModelConfig.class) GuardrailModelConfig config,
             @FormDataParam("file") @NotNull @Schema(description = FILE_DESCRIPTION) InputStream file,
             @Context UriInfo uriInfo) {
         checkAccess();
@@ -150,7 +150,7 @@ public class GuardrailModelsResource {
 
     @PATCH
     @Path("/{id}")
-    @Operation(operationId = "updateGuardrailModel", summary = "Update guardrail model", description = "Update a guardrail model's description, its config or both; what is absent stays as it is, and the name never changes. A new config applies from the next check, with no retrain", responses = {
+    @Operation(operationId = "updateGuardrailModel", summary = "Update guardrail model", description = "Update a guardrail model's description, its config or both; what is absent stays as it is, a blank description removes it, and the name never changes. A new config applies from the next check, with no retrain", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "403", description = FORBIDDEN, content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail model not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),

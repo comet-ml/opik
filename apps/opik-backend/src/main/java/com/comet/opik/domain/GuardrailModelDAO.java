@@ -62,10 +62,10 @@ public interface GuardrailModelDAO {
     @SqlQuery("SELECT id FROM guardrail_models WHERE id = :id AND workspace_id = :workspaceId FOR UPDATE")
     Optional<UUID> lock(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    // A null description or config leaves its column as it is.
+    // A null description or config leaves its column as it is, and an empty description is stored as none.
     @SqlUpdate("""
             UPDATE guardrail_models
-            SET <if(description)> description = :description, <endif> <if(config)> config = :config, <endif>
+            SET <if(description)> description = NULLIF(:description, ''), <endif> <if(config)> config = :config, <endif>
                 last_updated_by = :userName
             WHERE id = :id AND workspace_id = :workspaceId
             """)

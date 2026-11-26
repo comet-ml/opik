@@ -54,7 +54,7 @@ public interface GuardrailModelService {
     GuardrailModelPage find(int page, int size, String name, boolean usableOnly,
             GuardrailTrainingRunStatus latestRunStatus, List<SortingField> sortingFields);
 
-    /** Sets what is given; a null description or config is left as it is. */
+    /** Sets what is given; a null description or config is left as it is, and a blank description is removed. */
     void update(UUID id, String description, GuardrailModelConfig config);
 
     /** The model's runs, newest first. 404 for a model the workspace does not have, rather than an empty page. */
@@ -147,9 +147,11 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     public void update(@NonNull UUID id, String description, GuardrailModelConfig config) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+        // Blank removes the description, as on create; the DAO stores an empty one as none.
+        String newDescription = description != null && description.isBlank() ? "" : description;
 
         int updated = template.inTransaction(WRITE, handle -> handle.attach(GuardrailModelDAO.class)
-                .update(id, workspaceId, description, config, userName));
+                .update(id, workspaceId, newDescription, config, userName));
         if (updated == 0) {
             throw new NotFoundException(MODEL_NOT_FOUND);
         }

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aliaksandrk:000124_add_guardrail_models_config
+--changeset aliaksandrk:000125_add_guardrail_models_config
 --comment: Add guardrail_models.config, what a model's classifier is asked, and make the description optional (OPIK-9373)
 
 -- config holds what the classifier is asked, {"prompt": "..."}, as the online evaluators' code column holds theirs:

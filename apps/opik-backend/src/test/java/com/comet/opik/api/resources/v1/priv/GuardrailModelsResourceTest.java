@@ -50,6 +50,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -220,6 +221,32 @@ class GuardrailModelsResourceTest {
                     MediaType.APPLICATION_OCTET_STREAM_TYPE));
         }
         return Entity.entity(multiPart, multiPart.getMediaType());
+    }
+
+    /**
+     * A body written by hand, so the config part can go without a Content-Type, as a browser's FormData and curl -F
+     * send a text part. An empty configContentType leaves the header out.
+     */
+    private static Entity<byte[]> rawMultipart(String name, String configContentType, String config) {
+        var boundary = randomUUID().toString();
+        var configHeader = configContentType.isEmpty() ? "" : "Content-Type: %s\r\n".formatted(configContentType);
+        var body = """
+                --%1$s\r
+                Content-Disposition: form-data; name="name"\r
+                \r
+                %2$s\r
+                --%1$s\r
+                Content-Disposition: form-data; name="config"\r
+                %3$s\r
+                %4$s\r
+                --%1$s\r
+                Content-Disposition: form-data; name="file"; filename="data.jsonl"\r
+                Content-Type: application/octet-stream\r
+                \r
+                %5$s\r
+                --%1$s--\r
+                """.formatted(boundary, name, configHeader, config, VALID_DATASET);
+        return Entity.entity(body.getBytes(StandardCharsets.UTF_8), "multipart/form-data; boundary=" + boundary);
     }
 
     private static GuardrailModelConfig configFor(String name) {
@@ -447,6 +474,38 @@ class GuardrailModelsResourceTest {
         assertThat(get(workspace, otherId).description()).isNull();
     }
 
+    @ParameterizedTest(name = "Content-Type [{0}]")
+    @ValueSource(strings = {"", "text/plain"})
+    @DisplayName("The config part is read as JSON whatever its Content-Type, as browsers and curl send it with none")
+    void createWhenConfigPartIsNotTypedAsJson(String configContentType) {
+        var workspace = newWorkspace();
+        var name = newName();
+
+        UUID id;
+        try (var response = upload(workspace, "").post(
+                rawMultipart(name, configContentType, JsonUtils.writeValueAsString(configFor(name))))) {
+            id = created(response);
+        }
+
+        assertThat(get(workspace, id).config()).isEqualTo(configFor(name));
+    }
+
+    @Test
+    @DisplayName("A config part that is not JSON is a 400, and nothing is created")
+    void createWhenConfigPartIsNotJsonReturnsBadRequest() {
+        var workspace = newWorkspace();
+
+        try (var response = upload(workspace, "").post(rawMultipart(newName(), "", "Is the text spam?"))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                    .isEqualTo("Unable to process the config part as JSON. Unrecognized token 'Is': was expecting"
+                            + " (JSON String, Number (or 'NaN'/'+INF'/'-INF'), Array, Object or token 'null',"
+                            + " 'true' or 'false')");
+        }
+
+        assertThat(find(workspace, target -> target).total()).isZero();
+    }
+
     Stream<Arguments> invalidDatasets() {
         var tooLongText = "x".repeat(12_001);
         return Stream.of(
@@ -609,7 +668,7 @@ class GuardrailModelsResourceTest {
     }
 
     @Test
-    @DisplayName("The description and the config are updated separately; a blank one or an unknown model is refused")
+    @DisplayName("The description and the config are updated separately, a blank description removes it; a blank prompt or an unknown model is refused")
     void update() {
         var workspace = newWorkspace();
         var id = create(workspace, newName());
@@ -633,11 +692,16 @@ class GuardrailModelsResourceTest {
                 .usingRecursiveComparison()
                 .ignoringFields("lastUpdatedAt")
                 .isEqualTo(model.toBuilder().description(description).config(config).build());
-
+        // A form sends an empty field for a cleared input.
         try (var response = request(workspace, "/" + id).method("PATCH",
                 Entity.json(GuardrailModelUpdate.builder().description(" ").build()))) {
-            assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "description must not be blank");
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
+        assertThat(get(workspace, id))
+                .usingRecursiveComparison()
+                .ignoringFields("lastUpdatedAt")
+                .isEqualTo(model.toBuilder().description(null).config(config).build());
+
         try (var response = request(workspace, "/" + id).method("PATCH",
                 Entity.json(GuardrailModelUpdate.builder().config(new GuardrailModelConfig(" ")).build()))) {
             assertErrors(response, HttpStatus.SC_UNPROCESSABLE_ENTITY, "config.prompt must not be blank");

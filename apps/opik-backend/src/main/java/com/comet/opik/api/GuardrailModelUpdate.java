@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
@@ -14,7 +13,6 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailModelUpdate(
-        // A null passes @Pattern, so an absent description is allowed and a blank one is not.
-        @Schema(description = "A new note for people") @Pattern(regexp = "(?s).*\\S.*", message = "must not be blank") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "cannot exceed {max} characters") String description,
+        @Schema(description = "A new note for people; a blank one removes the note") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "cannot exceed {max} characters") String description,
         @Schema(description = "A new config, replacing the current one whole; it applies from the next check, with no retrain") @Valid GuardrailModelConfig config) {
 }
