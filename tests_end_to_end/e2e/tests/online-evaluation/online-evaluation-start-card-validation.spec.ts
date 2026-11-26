@@ -28,11 +28,7 @@ function isRuleCreate(method: string, url: string): boolean {
  *
  * Each assertion is exhaustive over the messages the editor is showing, not a
  * membership check on one of them, because the second half of this behaviour is
- * that the start error is the ONLY error. The cards hide the model selector and
- * the prompt box, so listing a model or a question error beside them points the
- * author at a field that is not on screen — the decision-model panel really did
- * that until this PR's last commit, which is the shape the Moderation test
- * below pins.
+ * that the start error is the ONLY error.
  *
  * Deterministic, free and entirely local to the page: no model is ever called,
  * and the judge half seeds a provider whose base URL refuses every connection
@@ -97,7 +93,7 @@ test.describe(
         });
 
         await test.step('A prompt with no variable is refused by name', async () => {
-          await rules.chooseStartCard('Type your prompt');
+          await rules.chooseStartCard('Start blank');
           await rules.selectJudgeModel('unreachable-model');
           await rules.replacePromptText('Decide whether the answer is any good.');
 
@@ -171,12 +167,6 @@ test.describe(
 
         await test.step('Create is refused, and the start error is the only one shown', async () => {
           await rules.submitButton.click();
-          // Exhaustive, and that is the assertion. The Questions card sits in
-          // the other column with an empty Main question box, and the
-          // decision-model refinement used to flag it here — "Write the
-          // question for this score", for a question the author cannot have
-          // written because the cards are still covering the prompt. It is
-          // skipped until a card is chosen, and this is what says so.
           await expect
             .poll(() => rules.panelErrorMessages(), {
               message: 'the editor settles on exactly the start error',
@@ -188,7 +178,7 @@ test.describe(
         });
 
         await test.step('Choosing a card clears it, and the rule creates', async () => {
-          await rules.chooseStartCard('Write your own');
+          await rules.chooseStartCard('Start blank');
           await rules.replacePromptText('Judge this: {{output}}');
           await rules.mainQuestionInput.fill('Is the output safe to send?');
           await expect
