@@ -10,7 +10,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -25,8 +24,8 @@ import java.util.function.Function;
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
  * author call ({@link TopicsLlm}), finish the list into its rows ({@link TopicRunRows}) and save ({@link TopicRunStore}).
  * It also drives a nightly update's steps ({@link #update}). It owns the run's time limit and its cancel. Its CPU
- * steps, clustering, assignment and a nightly update's steps, run on {@code parallel()}, off the ClickHouse driver's and
- * the inference client's threads that emit their inputs.
+ * steps, clustering, assignment and a nightly update's steps, run on the runs' CPU threads
+ * ({@link TopicsRunSchedulers}), off the ClickHouse driver's and the inference client's threads that emit their inputs.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -52,11 +51,13 @@ public class TopicsRunService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
+    private final @NonNull TopicsRunSchedulers schedulers;
 
     @Inject
     TopicsRunService(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicWindowReader reader,
             @NonNull TopicsLlm llm, @NonNull TopicRunStore store, @NonNull TopicRunOutcomes outcomes,
-            @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm) {
+            @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics, @NonNull TopicAlgorithm algorithm,
+            @NonNull TopicsRunSchedulers schedulers) {
         this.config = config;
         this.reader = reader;
         this.llm = llm;
@@ -65,6 +66,7 @@ public class TopicsRunService {
         this.idGenerator = idGenerator;
         this.metrics = metrics;
         this.algorithm = algorithm;
+        this.schedulers = schedulers;
     }
 
     /**
@@ -119,7 +121,7 @@ public class TopicsRunService {
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
-                .timeout(timeout, Mono.error(this::timedOut))
+                .timeout(timeout, Mono.error(this::timedOut), schedulers.timer())
                 .flatMap(rows -> saved(run, rows))
                 .onErrorResume(error -> outcomes.failed(run, error));
     }
@@ -159,7 +161,7 @@ public class TopicsRunService {
                 .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.list(), updated.save()))
                         .map(kept -> kept ? updated : updated.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, updated.stats())))
-                .timeout(timeout, Mono.error(this::timedOut))
+                .timeout(timeout, Mono.error(this::timedOut), schedulers.timer())
                 .flatMap(updated -> savedNight(run, updated))
                 .onErrorResume(error -> outcomes.failed(run, error));
     }
@@ -215,7 +217,7 @@ public class TopicsRunService {
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
-     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on the runs' CPU threads. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
      * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
      */
     Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
@@ -281,9 +283,9 @@ public class TopicsRunService {
                 .formatted(config.getRun().getProjectTimeout()));
     }
 
-    /** A CPU step on {@code parallel()}, off the thread that emitted its input; timed from when it starts there. */
+    /** A CPU step on the runs' CPU threads, off the thread that emitted its input; timed from when it starts there. */
     private <T> Mono<T> cpu(TopicRun run, String phase, Callable<T> step) {
-        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(Schedulers.parallel());
+        return timed(run, phase, Mono.fromCallable(step)).subscribeOn(schedulers.cpu());
     }
 
     /** Records the phase's duration, monotonic, from its subscription to its end, whatever the end. */

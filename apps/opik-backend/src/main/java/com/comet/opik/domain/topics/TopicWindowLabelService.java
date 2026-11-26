@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -33,8 +32,8 @@ import java.util.UUID;
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
  * in pages of at most {@code topics.run.labelPageTraces} traces, each read, assigned and inserted before the next, so
  * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
- * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on {@code parallel()},
- * off the ClickHouse driver's thread that emitted the page.
+ * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on the runs' CPU threads
+ * ({@link TopicsRunSchedulers}), off the ClickHouse driver's thread that emitted the page.
  *
  * <p>A trace whose vector lands behind the cursor while the pass runs is not on any later page. So before a pass marks
  * the labels complete, it reads the whole window once more for a trace left: if there is one, the pass ends cut, and
@@ -53,6 +52,7 @@ public class TopicWindowLabelService {
     private final @NonNull TopicRunStore store;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
+    private final @NonNull TopicsRunSchedulers schedulers;
 
     /**
      * The saved list a pass labels with: the traces created in {@code [from, to)}. {@code from} is the run's window
@@ -175,7 +175,7 @@ public class TopicWindowLabelService {
                     return Mono.just(Totals.FAILED);
                 })
                 // The deadline ends the stream: what it folded so far is the pass's.
-                .takeUntilOther(Mono.delay(budget))
+                .takeUntilOther(Mono.delay(budget, schedulers.timer()))
                 .reduce(Totals.ZERO, Totals::plus)
                 .flatMap(totals -> finish(workspace.id(), projectId, saved, totals)
                         // The check and the mark end at the deadline too: the pass is then cut, and a later one marks.
@@ -183,7 +183,7 @@ public class TopicWindowLabelService {
                             log.info("Topics labelling pass cut by its deadline before it marked its run complete, "
                                     + "run '{}', project '{}'", saved.runId(), projectId);
                             return LabelPassOutcome.CUT;
-                        }))
+                        }), schedulers.timer())
                         .doOnNext(outcome -> ended(workspace, projectId, saved, trigger, outcome, totals, started)))
                 .doOnCancel(() -> {
                     log.info("Topics labelling pass cut by its caller, run '{}', project '{}'", saved.runId(),
@@ -340,7 +340,7 @@ public class TopicWindowLabelService {
         var traces = page.rows().stream().map(row -> new WindowTrace(row.traceId(), row.traceCreatedAt())).toList();
         return Mono.fromCallable(() -> saved.labeller()
                 .label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList()))
-                .subscribeOn(Schedulers.parallel())
+                .subscribeOn(schedulers.cpu())
                 .flatMap(labels -> {
                     var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
                     long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();

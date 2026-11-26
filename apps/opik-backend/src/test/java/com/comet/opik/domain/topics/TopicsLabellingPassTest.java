@@ -364,7 +364,7 @@ class TopicsLabellingPassTest {
         var late = new UUID(0, 1);
         var inserts = spy(traceTopicsDAO);
         var calls = new AtomicInteger();
-        // The insert runs after the page's labelling, on parallel(), so the copy is chained instead of blocking.
+        // The insert runs after the page's labelling, on the Topics CPU threads, so the copy is chained, not blocking.
         doAnswer(invocation -> {
             var insert = (Mono<?>) invocation.callRealMethod();
             return calls.incrementAndGet() == 1
@@ -558,7 +558,8 @@ class TopicsLabellingPassTest {
         var metrics = TopicsMetricsReader.metrics(InMemoryMetricReader.create());
         var store = new TopicRunStore(opikConfig.getTopics(), template, traceTopicsDAO, mock(ProjectService.class),
                 ID_GENERATOR, metrics, mock(WorkspaceNameService.class));
-        return new TopicWindowLabelService(opikConfig.getTopics(), windowDAO, store, metrics, algorithm);
+        return new TopicWindowLabelService(opikConfig.getTopics(), windowDAO, store, metrics, algorithm,
+                new TopicsRunSchedulers());
     }
 
     private static UUID id() {

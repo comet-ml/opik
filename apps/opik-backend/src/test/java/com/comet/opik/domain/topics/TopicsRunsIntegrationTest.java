@@ -42,6 +42,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
@@ -55,6 +56,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
@@ -381,6 +384,49 @@ class TopicsRunsIntegrationTest {
                 .isInstanceOf(ConflictException.class);
 
         assertThat(awaitBuilt(waiting)).isEqualTo(runId);
+    }
+
+    @Test
+    @DisplayName("a run whose CPU steps wait behind busy CPU threads for twice topics.runs.abandonGrace keeps its "
+            + "heartbeat: the plans meanwhile do not record it abandoned, and it saves once the threads are free")
+    void heartbeatWhileTheCpuThreadsAreBusy(@Jit TopicsRunSchedulers schedulers) throws InterruptedException {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        var abandonGrace = opikConfig.getTopics().getRuns().getAbandonGrace().toJavaDuration();
+        var release = new CountDownLatch(1);
+        // One task per CPU thread: the scheduler hands its tasks to its threads in turn.
+        var held = new CountDownLatch(Schedulers.DEFAULT_POOL_SIZE);
+        for (int i = 0; i < Schedulers.DEFAULT_POOL_SIZE; i++) {
+            schedulers.cpu().schedule(() -> {
+                held.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        try {
+            assertThat(held.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+            Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                    .isEqualTo(TopicProject.RunStatus.RUNNING));
+            var started = data.topicProject(projectId).runStartedAt();
+            // A plan every second, as the leader's would settle the run.
+            var heldUntil = Instant.now().plus(abandonGrace.multipliedBy(2));
+            while (Instant.now().isBefore(heldUntil)) {
+                planner.plan(Instant.now()).block();
+                Thread.sleep(1_000);
+            }
+            var running = data.topicProject(projectId);
+            assertThat(running.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+            assertThat(running.heartbeatAt()).isAfter(started.plus(abandonGrace));
+        } finally {
+            release.countDown();
+        }
+        awaitBuilt(projectId);
+        assertThat(data.topicProject(projectId).failedRuns()).isZero();
     }
 
     @Test
@@ -722,7 +768,7 @@ class TopicsRunsIntegrationTest {
     @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure; it "
             + "publishes the run again, so another pod runs it without waiting for republishAfter")
     void stopMidRunRequeues(RedissonReactiveClient redisson, @Jit TopicsRunService runService,
-            @Jit TopicWindowLabelService labelService) {
+            @Jit TopicWindowLabelService labelService, @Jit TopicsRunSchedulers schedulers) {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
@@ -735,8 +781,10 @@ class TopicsRunsIntegrationTest {
         var config = spy(opikConfig.getTopics());
         doReturn(runs).when(config).getRuns();
         var publisher = new TopicsRunPublisher(redisson, config);
-        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
-        var other = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
+        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher,
+                schedulers);
+        var other = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher,
+                schedulers);
         pod.start();
         try {
             var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();

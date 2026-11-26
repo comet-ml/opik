@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static com.comet.opik.domain.topics.TopicsMetricsReader.points;
 import static com.comet.opik.domain.topics.TopicsMetricsReader.sum;
@@ -90,6 +91,8 @@ class TopicsRunServiceFaultsTest {
     private TopicWindowDAO windowDAO;
     private TopicRunStore store;
     private TopicsRunService service;
+    /** The service on the given schedulers, over this test's mocks. */
+    private Function<TopicsRunSchedulers, TopicsRunService> serviceOn;
     private TopicAlgorithm algorithm;
 
     @BeforeEach
@@ -121,12 +124,13 @@ class TopicsRunServiceFaultsTest {
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         algorithm = spy(TopicsTestAlgorithm.algorithm());
-        service = new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store), idGenerator,
-                metrics, algorithm);
+        serviceOn = schedulers -> new TopicsRunService(config, reader, llm, store, new TopicRunOutcomes(store),
+                idGenerator, metrics, algorithm, schedulers);
+        service = serviceOn.apply(new TopicsRunSchedulers());
     }
 
     @Test
-    @DisplayName("clustering runs on parallel(), not on the thread that emitted the window")
+    @DisplayName("clustering runs on the Topics CPU threads, not on the thread that emitted the window")
     void clusteringLeavesTheReadThread() {
         var driver = Schedulers.newSingle("topics-test-driver");
         try {
@@ -143,7 +147,7 @@ class TopicsRunServiceFaultsTest {
                     .contextWrite(TopicsTestData.context(workspace)).block();
 
             assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-            assertThat(thread.get()).startsWith("parallel-");
+            assertThat(thread.get()).startsWith("topics-cpu-");
         } finally {
             driver.dispose();
         }
@@ -318,6 +322,8 @@ class TopicsRunServiceFaultsTest {
                 .thenReturn(Mono.<GenerateResponse>never().doOnCancel(cancelled::incrementAndGet));
         var timeout = TestConfigUtils.loadConfigTest().getTopics().getRun().getProjectTimeout().toJavaDuration();
         var scheduler = VirtualTimeScheduler.getOrSet();
+        // The run's timeout is on its own timer: built now, it runs on the virtual clock.
+        service = serviceOn.apply(new TopicsRunSchedulers());
         TopicRunOutcome outcome;
         try {
             var run = service.discover(runId, projectId, night, TRACES).contextWrite(TopicsTestData.context(workspace))

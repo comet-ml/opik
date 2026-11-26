@@ -572,7 +572,7 @@ class TopicsRunServiceTest {
     private TopicsRunService serviceWith(TopicAlgorithm algorithm) {
         return new TopicsRunService(config, new TopicWindowReader(config, windowDAO),
                 new TopicsLlm(config, client, metrics), store, new TopicRunOutcomes(store), idGenerator, metrics,
-                algorithm);
+                algorithm, new TopicsRunSchedulers());
     }
 
     /** A topic born on the run's night, with the traces whose index is {@code label} mod 3, and one prototype. */

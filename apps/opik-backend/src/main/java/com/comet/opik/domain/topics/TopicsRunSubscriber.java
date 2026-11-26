@@ -39,12 +39,13 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private final TopicWindowLabelService labelService;
     private final TopicsRunPlanner planner;
     private final TopicsRunPublisher publisher;
+    private final TopicsRunSchedulers schedulers;
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
             @NonNull TopicRunStore store, @NonNull TopicsRunService runService,
             @NonNull TopicWindowLabelService labelService, @NonNull TopicsRunPlanner planner,
-            @NonNull TopicsRunPublisher publisher) {
+            @NonNull TopicsRunPublisher publisher, @NonNull TopicsRunSchedulers schedulers) {
         super(config.getRuns(), redisson, TopicsConfig.RunsConfig.PAYLOAD_FIELD, METRICS_NAMESPACE,
                 METRICS_BASE_NAME);
         this.config = config;
@@ -53,6 +54,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         this.labelService = labelService;
         this.planner = planner;
         this.publisher = publisher;
+        this.schedulers = schedulers;
     }
 
     @Override
@@ -90,7 +92,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             .takeUntilOther(stopped(message))
                             // A backstop: the run ends itself by its deadline, and the planner cancels it after.
                             .timeout(limit.plus(config.getRuns().getAbandonGrace().toJavaDuration()),
-                                    Mono.defer(() -> fail(message, RunError.TIMEOUT)))
+                                    Mono.defer(() -> fail(message, RunError.TIMEOUT)), schedulers.timer())
                             .then(Mono.defer(() -> store.endCancelled(message.workspaceId(), message.projectId(),
                                     message.runId())))
                             .doOnNext(code -> log.info("Topics run '{}' stopped, project '{}', code '{}'",
@@ -203,7 +205,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private Mono<Beat> stopped(TopicsRunMessage message) {
         var interval = config.getRuns().getHeartbeatInterval().toJavaDuration();
         var abandonGrace = config.getRuns().getAbandonGrace().toJavaDuration();
-        return Flux.interval(interval, interval)
+        // On the timer, never behind the run's CPU steps: a beat held back there would get the run recorded abandoned.
+        return Flux.interval(interval, interval, schedulers.timer())
                 .onBackpressureDrop()
                 .concatMap(tick -> store.heartbeat(message)
                         .map(alive -> new Beat(alive, Instant.now()))
