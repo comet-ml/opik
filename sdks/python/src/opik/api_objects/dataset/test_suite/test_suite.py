@@ -22,6 +22,7 @@ import datetime
 from opik import exceptions as opik_exceptions
 from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset
+from opik.api_objects.experiment import experiment_item
 from opik.rest_api.types import dataset_version_public
 from . import types as suite_types, converters
 from .. import validators, execution_policy, rest_operations
@@ -318,6 +319,47 @@ class TestSuite:
             List of tag strings.
         """
         return self._dataset.get_tags()
+
+    def get_item_experiment_results(
+        self,
+        item_id: str,
+        dataset_versions: Optional[List[str]] = None,
+        max_results: int = 1000,
+    ) -> List[experiment_item.ExperimentItemContent]:
+        """
+        Returns one item's results across every experiment run on this suite.
+
+        Use it to see how a single test case scored over time. Each result is one
+        experiment's run of the item, with its ``experiment_id``, feedback scores,
+        assertion results, output and trace. Results span every version of the item
+        unless ``dataset_versions`` narrows them.
+
+        Args:
+            item_id: The test suite item's id. Must be a UUID.
+            dataset_versions: Test suite version hashes or tags. Only experiments run
+                against one of these versions are included. Defaults to every version.
+            max_results: The maximum number of results to return.
+
+        Returns:
+            List[ExperimentItemContent]: The item's results, one per run: an
+            experiment with ``runs_per_item`` above 1 contributes several.
+            Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Raises:
+            ValueError: If ``item_id`` is not a UUID.
+            DatasetVersionNotFound: If a version in ``dataset_versions`` does not exist.
+
+        Note:
+            For several items at once, such as every item with a tag, use
+            ``Opik.get_experiments_client().find_experiment_items_for_dataset`` with
+            the suite's name and a ``filter_string`` such as
+            ``'tags contains "team-x"'``.
+        """
+        return self._dataset.get_item_experiment_results(
+            item_id=item_id,
+            dataset_versions=dataset_versions,
+            max_results=max_results,
+        )
 
     def get_current_version_name(self) -> Optional[str]:
         """

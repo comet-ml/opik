@@ -14,7 +14,7 @@ def _capital_task(item: Dict[str, Any]) -> Dict[str, Any]:
     return {"output": item["input"]["question"].split()[-1].rstrip("?")}
 
 
-def test_get_dataset_item_experiment_results__one_item_across_experiments_and_versions(
+def test_dataset_get_item_experiment_results__one_item_across_experiments_and_versions(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
@@ -49,11 +49,7 @@ def test_get_dataset_item_experiment_results__one_item_across_experiments_and_ve
         item for item in dataset.get_items() if "Poland" in item["input"]["question"]
     )
 
-    every_version = opik_client.get_dataset_item_experiment_results(
-        dataset_name=dataset_name,
-        dataset_item_id=poland["id"],
-        project_name=PROJECT_NAME,
-    )
+    every_version = dataset.get_item_experiment_results(item_id=poland["id"])
 
     assert {result.experiment_id for result in every_version} == (
         first_version_experiment_ids | {second_version_experiment_id}
@@ -69,26 +65,20 @@ def test_get_dataset_item_experiment_results__one_item_across_experiments_and_ve
         assert result.evaluation_task_output == {"output": "Poland"}
         assert result.feedback_scores[0]["value"] == 0.0
 
-    first_version_only = opik_client.get_dataset_item_experiment_results(
-        dataset_name=dataset_name,
-        dataset_item_id=poland["id"],
-        dataset_versions=[first_version_hash],
-        project_name=PROJECT_NAME,
+    first_version_only = dataset.get_item_experiment_results(
+        item_id=poland["id"], dataset_versions=[first_version_hash]
     )
     assert {
         result.experiment_id for result in first_version_only
     } == first_version_experiment_ids
 
     with pytest.raises(opik.exceptions.DatasetVersionNotFound):
-        opik_client.get_dataset_item_experiment_results(
-            dataset_name=dataset_name,
-            dataset_item_id=poland["id"],
-            dataset_versions=["no-such-version"],
-            project_name=PROJECT_NAME,
+        dataset.get_item_experiment_results(
+            item_id=poland["id"], dataset_versions=["no-such-version"]
         )
 
 
-def test_get_test_suite_item_experiment_results__one_result_per_run(
+def test_test_suite_get_item_experiment_results__one_result_per_run(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     suite = opik_client.create_test_suite(
@@ -120,9 +110,7 @@ def test_get_test_suite_item_experiment_results__one_result_per_run(
 
     poland = next(item for item in suite.get_items() if "Poland" in str(item))
 
-    results = opik_client.get_test_suite_item_experiment_results(
-        name=dataset_name, item_id=poland["id"], project_name=PROJECT_NAME
-    )
+    results = suite.get_item_experiment_results(item_id=poland["id"])
 
     assert {result.experiment_id for result in results} == experiment_ids
     assert len(results) == 4

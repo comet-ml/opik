@@ -9,8 +9,8 @@ title: Fetching a test case's history
 ---
 
 <Note>
-  In Opik 2.0, datasets and experiments are project-scoped. Pass a `project_name` so the dataset or test suite
-  resolves in the right project.
+  In Opik 2.0, datasets and experiments are project-scoped. Pass a `project_name` when you get the dataset or test
+  suite so it resolves in the right project.
 </Note>
 
 To see how one test case has scored over time, fetch its results from every experiment that ran it. Opik reads
@@ -19,18 +19,17 @@ Each result says which experiment it came from, so you can chart a test case's s
 
 ## One dataset item across every experiment
 
-Pass the dataset's name and the item's id. You get one result per experiment that ran the item, across every
+Get the dataset, then pass the item's id. You get one result per experiment that ran the item, across every
 version of the dataset.
 
 ```python title="Python"
 import opik
 
 client = opik.Opik()
+dataset = client.get_dataset("support-eval", project_name="my-project")
 
-results = client.get_dataset_item_experiment_results(
-    dataset_name="support-eval",
-    dataset_item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
-    project_name="my-project",
+results = dataset.get_item_experiment_results(
+    item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
 )
 
 for result in results:
@@ -43,14 +42,14 @@ it, so the results cover every version of the item.
 
 ## One test suite item across every experiment
 
-Test suites have their own method, with the same parameters. When a suite runs each item more than once
+A test suite has the same method, with the same parameters. When a suite runs each item more than once
 (`runs_per_item` above 1), you get one result per run, each with its own trace and assertion results.
 
 ```python title="Python"
-results = client.get_test_suite_item_experiment_results(
-    name="refund-policy-tests",
+suite = client.get_test_suite("refund-policy-tests", project_name="my-project")
+
+results = suite.get_item_experiment_results(
     item_id="01a20cbd-39a1-7154-b6cf-8b20a01920dd",
-    project_name="my-project",
 )
 
 for result in results:
@@ -64,17 +63,15 @@ Without `dataset_versions`, results span every version of the item, including ru
 To compare only experiments that ran against particular versions, pass their hashes or tags:
 
 ```python title="Python"
-results = client.get_dataset_item_experiment_results(
-    dataset_name="support-eval",
-    dataset_item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
+results = dataset.get_item_experiment_results(
+    item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
     dataset_versions=["b888a6df", "baseline"],
-    project_name="my-project",
 )
 ```
 
 A version that doesn't exist raises `opik.exceptions.DatasetVersionNotFound`. Version names such as `v3` aren't
-accepted yet; use the version's hash or a tag. `get_test_suite_item_experiment_results` takes the same
-`dataset_versions` parameter for test suite versions.
+accepted yet; use the version's hash or a tag. A test suite takes the same `dataset_versions` parameter for its
+versions.
 
 ## Labeling results with experiment names
 
