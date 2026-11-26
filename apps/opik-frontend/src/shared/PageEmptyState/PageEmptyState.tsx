@@ -11,6 +11,7 @@ type PageEmptyStateProps = {
   description: string;
   primaryActionLabel?: string;
   onPrimaryAction?: () => void;
+  primaryAction?: React.ReactNode;
   docsUrl?: string;
   docsLabel?: string;
 };
@@ -22,6 +23,7 @@ const PageEmptyState: React.FC<PageEmptyStateProps> = ({
   description,
   primaryActionLabel,
   onPrimaryAction,
+  primaryAction,
   docsUrl,
   docsLabel = "View docs",
 }) => {
@@ -38,7 +40,8 @@ const PageEmptyState: React.FC<PageEmptyStateProps> = ({
         </p>
       </div>
       <div className="flex items-center gap-3">
-        {primaryActionLabel && onPrimaryAction && (
+        {primaryAction}
+        {!primaryAction && primaryActionLabel && onPrimaryAction && (
           <Button size="sm" onClick={onPrimaryAction}>
             {primaryActionLabel}
           </Button>

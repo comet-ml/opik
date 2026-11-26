@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
@@ -69,6 +71,20 @@ class WorkspaceOrganizationClient {
                 .readTimeout(requestTimeout.isZero() ? null : requestTimeout)
                 .responseFunction(WorkspaceOrganizationClient::toLookup)
                 .build());
+    }
+
+    /**
+     * Comet itself failed: a 5xx, or Comet not reached in time. Any other 4xx, or a body that can't be read, may be
+     * specific to the one call. Only Comet's own failures are remembered for a workspace with no entry, since that
+     * leaves the workspace without an organization on every pod for the retry window.
+     */
+    static boolean isCometDown(Throwable error) {
+        return switch (error) {
+            case RetryUtils.RetryableHttpException unavailable -> true;
+            case WebApplicationException unexpected -> unexpected.getResponse().getStatus() >= 500;
+            case ProcessingException notRead -> !(notRead.getCause() instanceof JsonProcessingException);
+            default -> false;
+        };
     }
 
     /**

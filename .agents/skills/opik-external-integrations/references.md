@@ -12,7 +12,6 @@ For the **standalone package** shape — its own repo depending on the published
 |---|---|---|
 | `opik-project-template` | Cookiecutter scaffold for a new Opik project — **the starting point for a brand-new standalone package** | <https://github.com/comet-ml/opik-project-template> |
 | `opik-openclaw` | Official OpenClaw plugin exporting agent traces to Opik (traces, cost, tokens, errors) | <https://github.com/comet-ml/opik-openclaw> |
-| `opik-claude-code-plugin` | Opik plugin for Claude Code | <https://github.com/comet-ml/opik-claude-code-plugin> |
 | `opik-codex-plugin` | Opik plugin for Codex | <https://github.com/comet-ml/opik-codex-plugin> |
 | `opik-kong-plugin` | Opik plugin for the Kong AI Gateway | <https://github.com/comet-ml/opik-kong-plugin> |
 

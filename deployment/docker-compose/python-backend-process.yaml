@@ -1,0 +1,4 @@
+# python-backend settings for PYTHON_CODE_EXECUTOR_STRATEGY=process, which docker-compose.yaml extends.
+services:
+  python-backend:
+    privileged: false

@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -9,6 +10,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -95,6 +97,31 @@ class TopicsConfigTest {
         assertThat(TopicsStage.BUILD.includes(TopicsStage.BUILD)).isTrue();
         assertThat(TopicsStage.BUILD.includes(TopicsStage.ARRIVAL)).isFalse();
         assertThat(TopicsStage.ALL.includes(TopicsStage.UI)).isTrue();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("verifyExamples")
+    @DisplayName("verify may show at most the examples naming and the group summaries picked")
+    void verifyExamplesOrdered(String label, int verifyTopicExamples, int verifyGroupExamples, String message) {
+        var algorithm = new TopicsConfig.AlgorithmConfig();
+        algorithm.setNightlyTopicExamples(4);
+        algorithm.setNightlyExamples(5);
+        algorithm.setVerifyTopicExamples(verifyTopicExamples);
+        algorithm.setVerifyGroupExamples(verifyGroupExamples);
+
+        var messages = VALIDATOR.validate(algorithm).stream().map(violation -> violation.getMessage()).toList();
+
+        assertThat(messages).filteredOn(text -> text.startsWith("topics.algorithm.verify"))
+                .containsExactlyElementsOf(message == null ? List.of() : List.of(message));
+    }
+
+    static Stream<Arguments> verifyExamples() {
+        return Stream.of(
+                arguments("both equal to what was picked", 4, 5, null),
+                arguments("more topic examples than naming picked", 5, 5,
+                        "topics.algorithm.verifyTopicExamples must not be above nightlyTopicExamples"),
+                arguments("more group examples than the summary picked", 4, 6,
+                        "topics.algorithm.verifyGroupExamples must not be above nightlyExamples"));
     }
 
     private static TopicsConfig withList(String enabledWorkspaces) {

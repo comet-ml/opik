@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 
@@ -24,7 +25,12 @@ final class TopicsMetricsReader {
 
     /** Metrics that record into {@code reader}. */
     static TopicsMetrics metrics(InMemoryMetricReader reader) {
-        return new TopicsMetrics(SdkMeterProvider.builder().registerMetricReader(reader).build().get("opik.topics"));
+        return new TopicsMetrics(meter(reader));
+    }
+
+    /** A meter that records into {@code reader}. */
+    static Meter meter(InMemoryMetricReader reader) {
+        return SdkMeterProvider.builder().registerMetricReader(reader).build().get("opik.topics");
     }
 
     static List<Point> points(InMemoryMetricReader reader, String name) {

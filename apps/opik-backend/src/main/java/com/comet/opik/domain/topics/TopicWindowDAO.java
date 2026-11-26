@@ -21,10 +21,14 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 /**
  * A topic run's reads of {@code topic_vectors}, the {@link TopicEmbedding#SUMMARY_TASK} rows: how many traces some
@@ -230,16 +234,16 @@ public class TopicWindowDAO {
     private final @NonNull @Config("topics") TopicsConfig config;
 
     /**
-     * Per project of {@code projectIds}, the traces with a vector created in {@code [from, to)}; a project with none is
-     * left out.
+     * Per project of {@code projectIds}, the traces with a vector created in {@code [from, to)}; 0 for a project with
+     * none.
      */
-    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+    public Mono<Map<UUID, Long>> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
         return countByProject(workspaceId, projectIds, from, to, config.getRun().getRead(), maxExecutionSeconds);
     }
 
     /** {@link #countByProject} under the given guards, for a caller that is not the run (the read API). */
-    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+    public Mono<Map<UUID, Long>> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, @NonNull ReadGuards guards, long maxExecutionSeconds) {
         Preconditions.checkArgument(!projectIds.isEmpty(), "a window count takes at least one project");
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
@@ -253,16 +257,29 @@ public class TopicWindowDAO {
                         .bind("window_from", from.toString())
                         .bind("window_to", to.toString())
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> ProjectCount.builder()
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
-                        .traces(((Number) row.get("traces", Object.class)).longValue())
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("project_id", String.class)),
+                        ((Number) row.get("traces", Object.class)).longValue())))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap<UUID, Long>::new)
+                .map(counts -> {
+                    projectIds.forEach(projectId -> counts.putIfAbsent(projectId, 0L));
+                    return counts;
+                });
     }
 
-    /** The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}. */
-    public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
+    /**
+     * The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}, in the
+     * workspace of the Reactor context.
+     */
+    public Mono<WindowBounds> countAndBounds(@NonNull UUID projectId, @NonNull Instant from, @NonNull Instant to,
+            int sliceTraces, long maxExecutionSeconds) {
         Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
+        return makeMonoContextAware((userName, workspaceId) -> countAndBounds(workspaceId, projectId, from, to,
+                sliceTraces, maxExecutionSeconds));
+    }
+
+    private Mono<WindowBounds> countAndBounds(String workspaceId, UUID projectId, Instant from, Instant to,
+            int sliceTraces, long maxExecutionSeconds) {
         var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces));
         var guards = config.getRun().getRead();
@@ -295,10 +312,16 @@ public class TopicWindowDAO {
 
     /**
      * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
-     * are more, in no particular order.
+     * are more, in no particular order, in the workspace of the Reactor context.
      */
-    public Flux<WindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
+    public Flux<WindowRow> readWindow(@NonNull UUID projectId, @NonNull Instant from, @NonNull Instant to, int limit,
+            long maxExecutionSeconds) {
+        return makeFluxContextAware((userName, workspaceId) -> readWindow(workspaceId, projectId, from, to, limit,
+                maxExecutionSeconds));
+    }
+
+    private Flux<WindowRow> readWindow(String workspaceId, UUID projectId, Instant from, Instant to, int limit,
+            long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit));
         withGuards(template, config.getRun().getRead(), maxExecutionSeconds);
@@ -315,11 +338,17 @@ public class TopicWindowDAO {
     }
 
     /**
-     * One page of {@link #READ_UNLABELLED}; {@code after} is a trace id, or the empty string for the slice's start.
+     * One page of {@link #READ_UNLABELLED} in the workspace of the Reactor context; {@code after} is a trace id, or the
+     * empty string for the slice's start.
      */
-    public Flux<WindowVector> readUnlabelled(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull UUID runId, @NonNull Instant from, @NonNull Instant to, @NonNull String after, int limit,
-            long maxExecutionSeconds) {
+    public Flux<WindowVector> readUnlabelled(@NonNull UUID projectId, @NonNull UUID runId, @NonNull Instant from,
+            @NonNull Instant to, @NonNull String after, int limit, long maxExecutionSeconds) {
+        return makeFluxContextAware((userName, workspaceId) -> readUnlabelled(workspaceId, projectId, runId, from, to,
+                after, limit, maxExecutionSeconds));
+    }
+
+    private Flux<WindowVector> readUnlabelled(String workspaceId, UUID projectId, UUID runId, Instant from,
+            Instant to, String after, int limit, long maxExecutionSeconds) {
         var template = getSTWithLogComment(READ_UNLABELLED, "topics:read_unlabelled", workspaceId, null,
                 "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit));
         withGuards(template, config.getRun().getRead(), maxExecutionSeconds);
@@ -389,10 +418,6 @@ public class TopicWindowDAO {
             }
         }
         return vector;
-    }
-
-    @Builder(toBuilder = true)
-    record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
     /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */

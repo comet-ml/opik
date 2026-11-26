@@ -37,6 +37,9 @@ public interface TopicVectorBackfillService {
     /** The started backfills not drained yet, by workspace. */
     Map<String, List<TopicBackfill>> findUndrained(Collection<String> workspaceIds);
 
+    /** When each workspace's projects were last discovered; a workspace never discovered has no entry. */
+    Map<String, Instant> findChecked(Collection<String> workspaceIds);
+
     /** The started backfills of {@code projectIds}, by project. */
     Map<UUID, TopicBackfill> findByKeys(String workspaceId, Collection<UUID> projectIds);
 
@@ -72,6 +75,15 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
                 handle -> handle.attach(TopicProjectDAO.class).findUndrainedBackfills(workspaceIds))
                 .stream()
                 .collect(Collectors.groupingBy(TopicBackfill::workspaceId));
+    }
+
+    @Override
+    public Map<String, Instant> findChecked(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorBackfillDAO.class).findChecked(workspaceIds));
     }
 
     @Override

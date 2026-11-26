@@ -32,9 +32,16 @@ class Verifier {
                 .prompt(TopicPrompts.verify(task, prompts, config.getVerifyTopicExamples(),
                         config.getVerifyGroupExamples()))
                 .schema(task.schema())
-                .maxTokens(task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * prompts.size())
+                // Not capped here: a cut answer would verify no pair and turn sound assigns into new topics. A night
+                // has at most nightlyMaxGroups pairs, and KMeansTopicAlgorithm checks that budget at startup.
+                .maxTokens(maxTokens(task, config, prompts.size()))
                 .build();
         return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
+    }
+
+    /** The verify call's max_tokens for {@code pairs} pairs: the task's base plus the config's tokens per pair. */
+    static int maxTokens(AiLabelTask task, AlgorithmConfig config, int pairs) {
+        return task.effectiveMaxTokens() + config.getNightlyVerifyTokensPerPair() * pairs;
     }
 
     private static Map<Integer, Boolean> verdicts(JsonNode answer, int pairs) {

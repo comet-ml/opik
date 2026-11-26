@@ -158,6 +158,24 @@ class InferenceConfigTest {
                 .hasSize(overLimitDeadline == null ? 0 : 1);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("decideDeadlines")
+    @DisplayName("the decide deadline stays within inference.limits.maxDecideRealtimeDeadline")
+    void decideDeadlineStaysWithinTheLimit(String description, long overLimitMs, boolean valid) {
+        var config = TestConfigUtils.loadConfigTest();
+        var max = config.getInference().getLimits().getMaxDecideRealtimeDeadline();
+        config.getInference().getRealtime()
+                .setDecideDeadline(Duration.milliseconds(max.toMilliseconds() + overLimitMs));
+
+        assertThat(VALIDATOR.validateProperty(config, "decideDeadlineWithinLimits")).hasSize(valid ? 0 : 1);
+    }
+
+    static Stream<Arguments> decideDeadlines() {
+        return Stream.of(
+                arguments("at the limit", 0L, true),
+                arguments("over the limit", 1L, false));
+    }
+
     static Stream<Arguments> topicsLlmDeadlines() {
         return Stream.of(
                 arguments("every deadline at the limit", null),

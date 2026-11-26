@@ -1,5 +1,13 @@
 {{- range $key, $value := .Values.component }}
 {{- if $value.enabled }}
+{{- $securityContext := $value.securityContext }}
+{{- if and (eq $key "python-backend") (eq (dig "env" "PYTHON_CODE_EXECUTOR_STRATEGY" "" $value | toString) "docker") }}
+{{- /* Only the docker strategy needs privileged, for its in-container Docker daemon; a privileged value set in securityContext wins. */}}
+{{- $securityContext = deepCopy (default (dict) $value.securityContext) }}
+{{- if not (hasKey $securityContext "privileged") }}
+{{- $_ := set $securityContext "privileged" true }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -56,7 +64,7 @@ spec:
           image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           command:
             - /bin/bash
           args:
@@ -102,7 +110,7 @@ spec:
           image: "{{ default $.Values.registry $value.waitForMysql.image.registry }}/{{ $value.waitForMysql.image.repository }}:{{ $value.waitForMysql.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForMysql.image.pullPolicy }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -121,7 +129,7 @@ spec:
           image: "{{ default $.Values.registry $value.waitForClickhouse.image.registry }}/{{ $value.waitForClickhouse.image.repository }}:{{ $value.waitForClickhouse.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForClickhouse.image.pullPolicy }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -141,7 +149,7 @@ spec:
           image: "{{ default $.Values.registry $value.waitForRedis.image.registry }}/{{ $value.waitForRedis.image.repository }}:{{ $value.waitForRedis.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForRedis.image.pullPolicy }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -160,7 +168,7 @@ spec:
           image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           command: ["./run_db_migrations.sh"]
           {{- with $value.envFrom }}
           envFrom:
@@ -189,7 +197,7 @@ spec:
         {{- end }}
         - name: {{ include "opik.name" $ }}-{{ $key | lower }}
           securityContext:
-            {{- toYaml $value.securityContext | nindent 12 }}
+            {{- toYaml $securityContext | nindent 12 }}
           image: "{{ default $.Values.registry $value.image.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}
           {{- with $value.ports }}

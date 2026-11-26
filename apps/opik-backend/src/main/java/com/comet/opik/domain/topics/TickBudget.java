@@ -19,6 +19,16 @@ record TickBudget(@NonNull Instant start, @NonNull Instant deadline, @NonNull Cl
         return new TickBudget(start, start.plus(budget), clock);
     }
 
+    /** The same tick, ending {@code reserve} before its deadline: a phase that leaves that time to the next one. */
+    TickBudget before(@NonNull Duration reserve) {
+        return new TickBudget(start, deadline.minus(reserve), clock);
+    }
+
+    /** The whole budget, from start to deadline. */
+    Duration total() {
+        return Duration.between(start, deadline);
+    }
+
     Duration left() {
         return Duration.between(clock.instant(), deadline);
     }

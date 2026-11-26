@@ -32,6 +32,7 @@ import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -136,7 +137,6 @@ class TopicsReadResourceTest {
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
-                        new CustomConfig("topics.nightly.enabled", "false"),
                         new CustomConfig("topics.discovery.enabled", "false")))
                 .build());
     }
@@ -462,14 +462,19 @@ class TopicsReadResourceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"true, true, true", "true, false, false", "false, true, false", "false, false, false"})
-    @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible; when false, the "
-            + "API answers 501 or status disabled")
-    void togglesTopicsEnabled(boolean enabled, boolean eligible, boolean expected) {
+    @CsvSource({
+            "true, unstaged, true", "true, vectors, false", "true, nightly, false", "true, unlisted, false",
+            "false, unstaged, false", "false, vectors, false", "false, unlisted, false"})
+    @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible at the ui stage, "
+            + "which a workspace listed without a stage is; when false, the API answers 501 or status disabled")
+    void togglesTopicsEnabled(boolean enabled, String listed, boolean expected) {
         var caller = topics.caller();
         var projectId = topics.project(caller);
-        if (eligible) {
-            topics.optIn(caller.workspaceId());
+        switch (listed) {
+            case "unlisted" -> {
+            }
+            case "unstaged" -> topics.optIn(caller.workspaceId());
+            default -> topics.optIn(caller.workspaceId(), TopicsStage.fromConfigName(listed).orElseThrow());
         }
         opikConfig.getTopics().setEnabled(enabled);
 

@@ -3,9 +3,7 @@ import json
 from types import SimpleNamespace
 
 import cerebras.cloud.sdk as cerebras
-import httpx
 import pytest
-import respx
 from cerebras.cloud.sdk.types.chat.chat_completion import (
     ChatChunkResponse,
     ChatCompletionResponse,
@@ -14,6 +12,12 @@ from cerebras.cloud.sdk.types.chat.chat_completion import (
     ChatCompletionResponseTimeInfo,
     ChatCompletionResponseUsage,
 )
+
+try:
+    # cerebras_cloud_sdk>=2 moved from httpx to httpx2
+    import httpx2 as httpx
+except ImportError:
+    import httpx
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
@@ -28,8 +32,7 @@ from ...testlib import (
 )
 
 MODEL = "llama-3.3-70b"
-BASE_URL = "https://api.cerebras.ai"
-COMPLETIONS_ROUTE = "/v1/chat/completions"
+COMPLETIONS_PATH = "/v1/chat/completions"
 
 
 def _mock_completion(
@@ -242,9 +245,8 @@ def _sse(*chunks: dict) -> bytes:
     return (body + "data: [DONE]\n\n").encode()
 
 
-@respx.mock(base_url=BASE_URL)
 def test_cerebras_chat_completions_create__stream_with_tool_call__tool_call_in_span_output(
-    respx_mock, fake_backend
+    fake_backend,
 ):
     """A streamed tool call goes through the real SSE parser and into the span output."""
 
@@ -258,43 +260,50 @@ def test_cerebras_chat_completions_create__stream_with_tool_call__tool_call_in_s
             "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
         }
 
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
-        return_value=httpx.Response(
-            200,
-            headers={"Content-Type": "text/event-stream"},
-            content=_sse(
-                chunk({"role": "assistant"}),
-                chunk(
+    sse_body = _sse(
+        chunk({"role": "assistant"}),
+        chunk(
+            {
+                "tool_calls": [
                     {
-                        "tool_calls": [
-                            {
-                                "index": 0,
-                                "id": "call_1",
-                                "type": "function",
-                                "function": {
-                                    "name": "get_weather",
-                                    "arguments": '{"city": ',
-                                },
-                            }
-                        ]
+                        "index": 0,
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": ',
+                        },
                     }
-                ),
-                chunk(
+                ]
+            }
+        ),
+        chunk(
+            {
+                "tool_calls": [
                     {
-                        "tool_calls": [
-                            {
-                                "index": 0,
-                                "type": "function",
-                                "function": {"arguments": '"Paris"}'},
-                            }
-                        ]
+                        "index": 0,
+                        "type": "function",
+                        "function": {"arguments": '"Paris"}'},
                     }
-                ),
-                chunk({}, finish_reason="tool_calls"),
-            ),
-        )
+                ]
+            }
+        ),
+        chunk({}, finish_reason="tool_calls"),
     )
-    client = cerebras.Cerebras(api_key="fake-api-key")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200, headers={"Content-Type": "text/event-stream"}, content=sse_body
+        )
+
+    # Injecting the transport keeps the request off the network whichever HTTP
+    # library the installed SDK version is built on.
+    client = cerebras.Cerebras(
+        api_key="fake-api-key",
+        http_client=cerebras.DefaultHttpxClient(transport=httpx.MockTransport(handler)),
+    )
     tracked = track_cerebras(client)
 
     stream = tracked.chat.completions.create(
@@ -304,6 +313,8 @@ def test_cerebras_chat_completions_create__stream_with_tool_call__tool_call_in_s
     )
     list(stream)
     opik.flush_tracker()
+
+    assert [request.url.path for request in requests].count(COMPLETIONS_PATH) == 1
 
     assert len(fake_backend.trace_trees) == 1
     span = fake_backend.trace_trees[0].spans[0]
