@@ -125,9 +125,7 @@ public class TopicReadService {
             @NonNull Instant to) {
         var read = config.getRead();
         return windowDAO.countByProject(workspaceId, Set.of(projectId), from, to, read, read.getBudget().toSeconds())
-                .next()
-                .map(TopicWindowDAO.ProjectCount::traces)
-                .defaultIfEmpty(0L)
+                .map(counts -> counts.get(projectId))
                 .timeout(clientTimeout());
     }
 

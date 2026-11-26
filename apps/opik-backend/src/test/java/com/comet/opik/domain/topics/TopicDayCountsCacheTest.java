@@ -164,7 +164,7 @@ class TopicDayCountsCacheTest {
     void collectingCountIsCached() {
         when(projectDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
         when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
-                .thenReturn(Flux.just(TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(7).build()));
+                .thenReturn(Mono.just(Map.of(projectId, 7L)));
 
         var first = service.get(WORKSPACE_ID, projectId);
         var second = service.get(WORKSPACE_ID, projectId);

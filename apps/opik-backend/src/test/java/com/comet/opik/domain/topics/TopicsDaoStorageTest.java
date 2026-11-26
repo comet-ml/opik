@@ -176,9 +176,8 @@ class TopicsDaoStorageTest {
         data.seed(workspaceId, projectId, 0, BUILT);
 
         // As a discovery run reads: the count of its projects under 60 s, a run's window under 120 s.
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60)
-                .collectList().block())
-                .containsExactly(count(projectId, BUILT));
+        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).block())
+                .isEqualTo(Map.of(projectId, (long) BUILT));
         assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 120)
                 .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .hasSize(BUILT);
@@ -211,8 +210,8 @@ class TopicsDaoStorageTest {
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
                 .block();
 
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(count(projectId, BUILT - deleted.size()));
+        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).block())
+                .isEqualTo(Map.of(projectId, (long) BUILT - deleted.size()));
         assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
                 .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
@@ -232,8 +231,8 @@ class TopicsDaoStorageTest {
         // The tombstone comes before the live row: the dedup keeps the live row, so the key stays.
         data.insertVectorTombstones(workspaceId, projectId, revived, -3_600);
 
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(count(projectId, BUILT - tombstoned.size()));
+        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).block())
+                .isEqualTo(Map.of(projectId, (long) BUILT - tombstoned.size()));
         assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
                 .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                 .extracting(TopicWindowDAO.WindowRow::traceId)
@@ -251,8 +250,8 @@ class TopicsDaoStorageTest {
         data.withoutMerges(() -> {
             data.insertTiedVectorTombstones(workspaceId, projectId, tied);
 
-            assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
-                    .block()).containsExactly(count(projectId, BUILT));
+            assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).block())
+                    .isEqualTo(Map.of(projectId, (long) BUILT));
             assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
                     .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                     .extracting(TopicWindowDAO.WindowRow::traceId).containsAll(tied).hasSize(BUILT);
@@ -326,14 +325,15 @@ class TopicsDaoStorageTest {
         data.insertVersionOneTombstones(workspaceId, mixed, List.of(ids.get(6)), -3_600);
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(below, at, above, gone, mixed), from(), to(), 60)
-                .collectList().block())
-                .containsExactlyInAnyOrder(
-                        count(below, MIN_VECTORS - 1),
-                        count(at, MIN_VECTORS),
-                        count(above, MIN_VECTORS + 1),
-                        count(mixed, 12 - 3));
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(below, gone), from(), to(), 60).collectList().block())
-                .containsExactly(count(below, MIN_VECTORS - 1));
+                .block())
+                .isEqualTo(Map.of(
+                        below, (long) MIN_VECTORS - 1,
+                        at, (long) MIN_VECTORS,
+                        above, (long) MIN_VECTORS + 1,
+                        gone, 0L,
+                        mixed, 12L - 3));
+        assertThat(windowDAO.countByProject(workspaceId, Set.of(below, gone), from(), to(), 60).block())
+                .isEqualTo(Map.of(below, (long) MIN_VECTORS - 1, gone, 0L));
     }
 
     @Test
@@ -1275,9 +1275,5 @@ class TopicsDaoStorageTest {
     private List<TopicProjectKey> notReached(String workspaceId, LocalDate night) {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .findNotReached(List.of(workspaceId), night, TopicsNight.windowTo(night)));
-    }
-
-    private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {
-        return TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(traces).build();
     }
 }
