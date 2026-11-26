@@ -1,7 +1,7 @@
 import type { ModelPriceAliasOf, ModelPriceRow } from "./types";
 import { PRICE_FIELDS } from "./types";
 import { canonicalPrice, isDecimal } from "./rows";
-import { ANY_PROVIDER_LABEL } from "./catalog";
+import { ANY_PROVIDER_LABEL, CATALOG_TYPE_LABELS } from "./catalog";
 import { LiteLlmUpload, parseLiteLlmUpload } from "./litellm";
 
 const SPANS_OWN_PROVIDER = " on the span's own provider";
@@ -19,6 +19,20 @@ const aliasTargetOf = (text: string): ModelPriceAliasOf => {
 
 const cell = (record: Record<string, string>, key: string) =>
   (record[key] ?? "").trim();
+
+// Export as CSV also lists built-in prices. Importing those as rows would turn
+// each one into an organization price that no longer follows built-in updates.
+const isDefaultType = (type: string) =>
+  type.toLowerCase() === CATALOG_TYPE_LABELS.default.toLowerCase();
+
+const describeSkippedDefaults = (count: number) =>
+  `Skipped ${count} ${count === 1 ? "row" : "rows"} of type ${
+    CATALOG_TYPE_LABELS.default
+  }: ${
+    count === 1 ? "it uses" : "they use"
+  } the built-in price. To set your own price, change the type to ${
+    CATALOG_TYPE_LABELS.override
+  }.`;
 
 // RFC 4180: a quoted field may hold commas, line breaks and "" for a quote.
 const readCsv = (text: string): { records: string[][]; isClosed: boolean } => {
@@ -87,10 +101,15 @@ export const parsePriceCsv = (text: string): LiteLlmUpload => {
 
   const rows: ModelPriceRow[] = [];
   const errors: string[] = [];
+  let skippedDefaults = 0;
   records.forEach((record, index) => {
     const model = cell(record, "model");
     if (!model) {
       errors.push(`Line ${index + 2}: model is empty.`);
+      return;
+    }
+    if (isDefaultType(cell(record, "type"))) {
+      skippedDefaults += 1;
       return;
     }
     const providerText = cell(record, "provider");
@@ -130,7 +149,11 @@ export const parsePriceCsv = (text: string): LiteLlmUpload => {
       errors.push(`${model}: no price columns found.`);
     }
   });
-  return { rows, errors };
+  return {
+    rows,
+    errors,
+    notes: skippedDefaults ? [describeSkippedDefaults(skippedDefaults)] : [],
+  };
 };
 
 export const parsePriceUpload = (text: string): LiteLlmUpload =>

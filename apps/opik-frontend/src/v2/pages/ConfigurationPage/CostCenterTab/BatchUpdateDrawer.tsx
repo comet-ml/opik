@@ -20,6 +20,7 @@ import {
   builtInLookup,
   describeBatchProblem,
   describeReplaceResult,
+  describeRowLimit,
   parsePriceUpload,
   problemsForRows,
   summarizeBatch,
@@ -66,6 +67,7 @@ type Preview = {
   result: ModelPriceReplaceResult;
   uploaded: number;
   warnings: string[];
+  notes: string[];
 };
 
 const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
@@ -111,7 +113,12 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
       setParseErrors(upload.errors);
       return;
     }
-    const { request, positions } = upsertMany(list, upload.rows);
+    const { request, positions, duplicates } = upsertMany(list, upload.rows);
+    const rowLimit = describeRowLimit(list, request);
+    if (duplicates.length || rowLimit) {
+      setParseErrors(rowLimit ? [...duplicates, rowLimit] : duplicates);
+      return;
+    }
     const outcome = await send(request, true);
     if (outcome.kind === "previewed") {
       setPreview({
@@ -121,6 +128,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
         warnings: problemsForRows(outcome.result.warnings, positions).map(
           (warning) => describeBatchProblem(warning, request.rows),
         ),
+        notes: upload.notes ?? [],
       });
     } else if (outcome.kind === "invalid") {
       setServerErrors(
@@ -244,7 +252,10 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   <code>cache_read_price_per_1m</code> and{" "}
                   <code>cache_write_price_per_1m</code>, and{" "}
                   <code>priced_like</code> for an alias, like{" "}
-                  <code>gpt-4o on openai</code>. Other columns are ignored.
+                  <code>gpt-4o on openai</code>, and an optional{" "}
+                  <code>note</code>. Rows whose <code>type</code> is Default are
+                  skipped, because they use the built-in price. Other columns
+                  are ignored.
                 </p>
               </ExpandableHint>
               {parseErrors.length > 0 && (
@@ -279,6 +290,9 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                       ))}
                       {described.updated.map((line, i) => (
                         <li key={`u${i}`}>Changed {line}</li>
+                      ))}
+                      {preview.notes.map((note, i) => (
+                        <li key={`n${i}`}>{note}</li>
                       ))}
                     </ul>
                   </AlertDescription>

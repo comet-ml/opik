@@ -23,6 +23,11 @@ export const describeProvider = (provider?: string | null) =>
 export const rowLabel = (row: ModelPriceRow) =>
   `${row.model} on ${describeProvider(row.provider)}`;
 
+export const describeRemoval = (fallsBackToBuiltIn: boolean) =>
+  fallsBackToBuiltIn
+    ? "Spans saved after this use Opik's built-in price for this model. Spans already saved keep their cost."
+    : "Spans saved after this won't have a price for this model. Spans already saved keep their cost.";
+
 export const describeAliasTarget = (row: ModelPriceRow) => {
   const model = row.alias_of?.model?.trim() ?? "";
   const provider = row.alias_of?.provider?.trim();
@@ -147,6 +152,17 @@ export const groupHistory = (
     current.lines.push(describeHistoryEntry(entry, builtInOf));
   });
   return versions;
+};
+
+// One version's changes can run onto the next page, so while older pages are
+// not loaded, the oldest version so far may be missing some and is held back.
+export const groupLoadedHistory = (
+  entries: ModelPriceHistoryEntry[],
+  hasOlder: boolean,
+  builtInOf: BuiltInOf,
+): HistoryVersion[] => {
+  const versions = groupHistory(entries, builtInOf);
+  return hasOlder ? versions.slice(0, -1) : versions;
 };
 
 export const describeReplaceResult = (

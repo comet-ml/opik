@@ -44,6 +44,7 @@ import {
   blockingWarnings,
   canonicalPrice,
   describePerToken,
+  describeRemoval,
   drawerValuesOf,
   findBuiltIn,
   identityOf,
@@ -983,7 +984,7 @@ const ModelPriceForm: React.FC<ModelPriceFormProps> = ({
         setOpen={(next) => !next && setConfirming(undefined)}
         onConfirm={() => save(true)}
         title={`Delete ${title}`}
-        description="Spans saved after this won't have a price for this model. Spans already saved keep their cost."
+        description={describeRemoval(Boolean(identityBuiltIn))}
         confirmText="Delete model"
         confirmButtonVariant="destructive"
       />

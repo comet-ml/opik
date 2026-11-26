@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { ColumnDef, ColumnPinningState } from "@tanstack/react-table";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Button } from "@/ui/button";
 import DataTable from "@/shared/DataTable/DataTable";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -71,12 +72,18 @@ type HistorySheetProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   history: HistoryVersion[];
+  hasOlder: boolean;
+  isLoadingOlder: boolean;
+  onLoadOlder: () => void;
 };
 
 const HistorySheet: React.FC<HistorySheetProps> = ({
   open,
   setOpen,
   history,
+  hasOlder,
+  isLoadingOlder,
+  onLoadOlder,
 }) => {
   const rows = useMemo<HistoryRow[]>(
     () =>
@@ -111,6 +118,20 @@ const HistorySheet: React.FC<HistorySheetProps> = ({
             getRowId={(row) => row.id}
             columnPinning={COLUMN_PINNING}
           />
+          {hasOlder && (
+            <div className="flex justify-center pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLoadingOlder}
+                onClick={onLoadOlder}
+              >
+                {isLoadingOlder
+                  ? "Loading older versions…"
+                  : "Load older versions"}
+              </Button>
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>

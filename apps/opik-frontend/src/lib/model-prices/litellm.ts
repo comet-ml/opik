@@ -94,6 +94,7 @@ export const parseBuiltInPrices = (file: unknown): BuiltInPrice[] => {
 export interface LiteLlmUpload {
   rows: ModelPriceRow[];
   errors: string[];
+  notes?: string[];
 }
 
 export const parseLiteLlmUpload = (text: string): LiteLlmUpload => {

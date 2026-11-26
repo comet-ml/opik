@@ -37,7 +37,7 @@ import {
   filterCatalog,
   replaceOne,
   builtInLookup,
-  groupHistory,
+  groupLoadedHistory,
   providersOf,
   sortCatalog,
 } from "@/lib/model-prices";
@@ -58,7 +58,7 @@ import ModelPriceDrawer, {
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import useBuiltInPrices from "./useBuiltInPrices";
 
-const HISTORY_PAGE = { page: 1, size: 100 };
+const HISTORY_PAGE = { size: 1000 };
 const PAGE_SIZES = [25, 50, 100];
 
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
@@ -76,11 +76,25 @@ const CostCenterTab: React.FC = () => {
   const canEdit = access.canEdit && !access.isPending;
   const { data: list, isPending, isError } = useModelPrices();
   const { data: builtIns, isPending: isBuiltInPending } = useBuiltInPrices();
-  const { data: historyPage } = useModelPriceHistory(HISTORY_PAGE);
+  const {
+    data: historyPages,
+    hasNextPage: hasOlderHistory,
+    fetchNextPage: loadOlderHistory,
+    isFetchingNextPage: isLoadingOlderHistory,
+    isFetchNextPageError: hasOlderHistoryFailed,
+  } = useModelPriceHistory(HISTORY_PAGE);
+  const historyEntries = useMemo(
+    () => historyPages?.pages.flatMap((page) => page.content) ?? [],
+    [historyPages],
+  );
   const history = useMemo(
     () =>
-      groupHistory(historyPage?.content ?? [], builtInLookup(builtIns ?? [])),
-    [historyPage, builtIns],
+      groupLoadedHistory(
+        historyEntries,
+        hasOlderHistory,
+        builtInLookup(builtIns ?? []),
+      ),
+    [historyEntries, hasOlderHistory, builtIns],
   );
 
   const [search, setSearch] = useState("");
@@ -100,6 +114,27 @@ const CostCenterTab: React.FC = () => {
     returnFocusTo.current?.focus();
     returnFocusTo.current = null;
   }, [isAnyDrawerOpen]);
+
+  // A single save can change more rows than a page holds. Keep loading until
+  // the sheet has at least one whole version to show.
+  useEffect(() => {
+    if (
+      isHistoryOpen &&
+      hasOlderHistory &&
+      !history.length &&
+      !isLoadingOlderHistory &&
+      !hasOlderHistoryFailed
+    ) {
+      loadOlderHistory();
+    }
+  }, [
+    isHistoryOpen,
+    hasOlderHistory,
+    history.length,
+    isLoadingOlderHistory,
+    hasOlderHistoryFailed,
+    loadOlderHistory,
+  ]);
 
   const rememberFocus = useCallback(() => {
     returnFocusTo.current =
@@ -438,7 +473,7 @@ const CostCenterTab: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {history.length > 0 && (
+          {historyEntries.length > 0 && (
             <TooltipWrapper content="History">
               <Button
                 variant="outline"
@@ -505,11 +540,14 @@ const CostCenterTab: React.FC = () => {
         />
       )}
 
-      {history.length > 0 && (
+      {historyEntries.length > 0 && (
         <HistorySheet
           open={isHistoryOpen}
           setOpen={setIsHistoryOpen}
           history={history}
+          hasOlder={hasOlderHistory}
+          isLoadingOlder={isLoadingOlderHistory}
+          onLoadOlder={() => loadOlderHistory()}
         />
       )}
 

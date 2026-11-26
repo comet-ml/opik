@@ -4,6 +4,7 @@ import {
   describeReplaceResult,
   describeRowPrice,
   groupHistory,
+  groupLoadedHistory,
   rowLabel,
   summarizeBatch,
 } from "./describe";
@@ -222,6 +223,42 @@ describe("summarizeBatch", () => {
     );
     expect(summarizeBatch({ added: 0, changed: 0, unchanged: 0 })).toBe(
       "Nothing changes",
+    );
+  });
+});
+
+describe("groupLoadedHistory", () => {
+  const entry = (version: number, model: string): ModelPriceHistoryEntry => ({
+    list_version: version,
+    row_id: model,
+    action: "created",
+    after: { model, provider: "acme", kind: "fixed", input_price: "1" },
+    created_at: "2026-11-01T10:00:00Z",
+    created_by: "maria",
+  });
+  const firstPage = [entry(5, "a"), entry(4, "b")];
+
+  it("holds back the oldest version while older pages may hold more of it", () => {
+    expect(
+      groupLoadedHistory(firstPage, true, () => undefined).map(
+        (version) => version.version,
+      ),
+    ).toEqual([5]);
+  });
+
+  it("shows a version split across pages as one, once both are loaded", () => {
+    const versions = groupLoadedHistory(
+      [...firstPage, entry(4, "c"), entry(3, "d")],
+      false,
+      () => undefined,
+    );
+
+    expect(versions.map((version) => [version.version, version.added])).toEqual(
+      [
+        [5, 1],
+        [4, 2],
+        [3, 1],
+      ],
     );
   });
 });

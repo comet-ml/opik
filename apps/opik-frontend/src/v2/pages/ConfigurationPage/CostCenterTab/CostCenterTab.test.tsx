@@ -16,82 +16,92 @@ import {
   ModelPricesAccessProvider,
 } from "@/contexts/ModelPricesAccessContext";
 
-const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch, listState } =
-  vi.hoisted(() => {
-    const gpt4o = {
-      id: "row-1",
-      model: "gpt-4o",
-      provider: "openai",
-      kind: "fixed" as const,
-      input_price: "2",
-      note: "Contract rate",
-    };
-    return {
-      LIST: {
-        version: 3,
-        rows: [
-          gpt4o,
-          {
-            id: "row-2",
-            model: "acme-llama-70b",
-            provider: "",
-            kind: "fixed" as const,
-            input_price: "0.6",
-            output_price: "0.6",
-          },
-          {
-            id: "row-3",
-            model: "team-model",
-            provider: "gateway",
-            kind: "alias" as const,
-            alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
-          },
-        ],
-      },
-      HISTORY: {
-        page: 1,
-        size: 100,
-        total: 1,
-        content: [
-          {
-            list_version: 3,
-            row_id: "row-1",
-            action: "created" as const,
-            after: gpt4o,
-            created_at: "2026-11-01T10:00:00Z",
-            created_by: "maria",
-          },
-        ],
-      },
-      BUILT_INS: [
+const {
+  LIST,
+  HISTORY,
+  BUILT_INS,
+  mutateAsync,
+  refetch,
+  listState,
+  historyState,
+  fetchNextPage,
+} = vi.hoisted(() => {
+  const gpt4o = {
+    id: "row-1",
+    model: "gpt-4o",
+    provider: "openai",
+    kind: "fixed" as const,
+    input_price: "2",
+    note: "Contract rate",
+  };
+  return {
+    LIST: {
+      version: 3,
+      rows: [
+        gpt4o,
         {
-          model: "gpt-4o",
-          provider: "openai",
-          mode: "chat",
-          input_price: "2.5",
-          output_price: "10",
-          cache_read_price: "1.25",
-        },
-        {
-          model: "gpt-4o-mini",
-          provider: "openai",
-          mode: "chat",
-          input_price: "0.15",
+          id: "row-2",
+          model: "acme-llama-70b",
+          provider: "",
+          kind: "fixed" as const,
+          input_price: "0.6",
           output_price: "0.6",
         },
         {
-          model: "claude-sonnet-4-5",
-          provider: "anthropic",
-          mode: "chat",
-          input_price: "3",
-          output_price: "15",
+          id: "row-3",
+          model: "team-model",
+          provider: "gateway",
+          kind: "alias" as const,
+          alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
         },
       ],
-      mutateAsync: vi.fn(),
-      refetch: vi.fn(),
-      listState: { current: undefined as unknown },
-    };
-  });
+    },
+    HISTORY: {
+      page: 1,
+      size: 100,
+      total: 1,
+      content: [
+        {
+          list_version: 3,
+          row_id: "row-1",
+          action: "created" as const,
+          after: gpt4o,
+          created_at: "2026-11-01T10:00:00Z",
+          created_by: "maria",
+        },
+      ],
+    },
+    BUILT_INS: [
+      {
+        model: "gpt-4o",
+        provider: "openai",
+        mode: "chat",
+        input_price: "2.5",
+        output_price: "10",
+        cache_read_price: "1.25",
+      },
+      {
+        model: "gpt-4o-mini",
+        provider: "openai",
+        mode: "chat",
+        input_price: "0.15",
+        output_price: "0.6",
+      },
+      {
+        model: "claude-sonnet-4-5",
+        provider: "anthropic",
+        mode: "chat",
+        input_price: "3",
+        output_price: "15",
+      },
+    ],
+    mutateAsync: vi.fn(),
+    refetch: vi.fn(),
+    listState: { current: undefined as unknown },
+    historyState: { current: undefined as unknown },
+    fetchNextPage: vi.fn(),
+  };
+});
 
 // The real CodeMirror editor does not mount under this environment (a duplicate
 // @codemirror/state breaks its instanceof checks), so a textarea stands in for it.
@@ -123,7 +133,13 @@ vi.mock("@/api/model-prices/useModelPrices", () => ({
 }));
 
 vi.mock("@/api/model-prices/useModelPriceHistory", () => ({
-  default: () => ({ data: HISTORY }),
+  default: () =>
+    historyState.current ?? {
+      data: { pages: [HISTORY] },
+      hasNextPage: false,
+      fetchNextPage,
+      isFetchingNextPage: false,
+    },
 }));
 
 vi.mock("@/api/model-prices/useModelPricesReplaceMutation", () => ({
@@ -233,6 +249,8 @@ describe("CostCenterTab", () => {
     window.localStorage.clear();
     window.localStorage.setItem("cost-center:type-default-applied", "true");
     listState.current = undefined;
+    historyState.current = undefined;
+    fetchNextPage.mockReset();
   });
 
   describe("access", () => {
@@ -311,6 +329,61 @@ describe("CostCenterTab", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("model-price-history")).toBeNull(),
     );
+  });
+
+  it("shows every version of a long history and loads older ones on request", async () => {
+    const entry = (version: number, model: string) => ({
+      ...HISTORY.content[0],
+      list_version: version,
+      row_id: model,
+      after: { ...HISTORY.content[0].after, model },
+    });
+    const firstPage = {
+      ...HISTORY,
+      total: 4,
+      content: [entry(5, "model-a"), entry(4, "model-b")],
+    };
+    const olderPage = {
+      ...HISTORY,
+      page: 2,
+      total: 4,
+      content: [entry(4, "model-c"), entry(3, "model-d")],
+    };
+    historyState.current = {
+      data: { pages: [firstPage] },
+      hasNextPage: true,
+      fetchNextPage,
+      isFetchingNextPage: false,
+    };
+    const { rerender } = renderTab(ADMIN);
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    const sheet = await screen.findByTestId("model-price-history");
+
+    expect(within(sheet).getByText("v5")).toBeVisible();
+    expect(within(sheet).queryByText("v4")).toBeNull();
+
+    fireEvent.click(
+      within(sheet).getByRole("button", { name: "Load older versions" }),
+    );
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
+
+    historyState.current = {
+      data: { pages: [firstPage, olderPage] },
+      hasNextPage: false,
+      fetchNextPage,
+      isFetchingNextPage: false,
+    };
+    rerender(tabTree(ADMIN));
+
+    expect(within(sheet).getByText("v4")).toBeVisible();
+    expect(within(sheet).getByText("v3")).toBeVisible();
+    expect(
+      within(sheet).getByText(/added model-b .*added model-c/),
+    ).toBeVisible();
+    expect(
+      within(sheet).queryByRole("button", { name: "Load older versions" }),
+    ).toBeNull();
   });
 
   describe("catalog", () => {
@@ -678,6 +751,45 @@ describe("CostCenterTab", () => {
 
       await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
       expect(sentModels()).toEqual(["acme-llama-70b", "team-model"]);
+    });
+
+    it("shows an override of a prefixed built-in as one row that goes back to the built-in price", async () => {
+      BUILT_INS.push({
+        model: "azure/gpt-4.1-mini",
+        provider: "azure",
+        mode: "chat",
+        input_price: "0.4",
+        output_price: "1.6",
+      });
+      listState.current = {
+        ...LIST,
+        rows: [
+          ...LIST.rows,
+          {
+            id: "row-4",
+            model: "gpt-4.1-mini",
+            provider: "azure",
+            kind: "fixed" as const,
+            input_price: "0.3",
+          },
+        ],
+      };
+      try {
+        renderTab(ADMIN);
+
+        expect(screen.queryByText("azure/gpt-4.1-mini")).toBeNull();
+        expect(rowOf("gpt-4.1-mini")).toHaveTextContent("Override");
+        expect(rowOf("gpt-4.1-mini")).toHaveTextContent("$1.60");
+
+        fireEvent.click(rowAction("gpt-4.1-mini", /^Restore all defaults/)!);
+
+        expect(
+          await screen.findByText(/use Opik's built-in price for this model/),
+        ).toBeVisible();
+        expect(screen.queryByText(/won't have a price/)).toBeNull();
+      } finally {
+        BUILT_INS.splice(3);
+      }
     });
 
     it("offers no row action for built-in prices or to read-only users", () => {
@@ -1674,6 +1786,74 @@ describe("CostCenterTab", () => {
       expect(warnings).toHaveTextContent("Check these before saving");
       expect(within(warnings).getAllByRole("listitem")).toHaveLength(2);
       expect(warnings).not.toHaveTextContent("someone else's row");
+    });
+
+    const pasteAndPreview = (value: string) => {
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), { target: { value } });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+    };
+
+    it("refuses a CSV that lists one model twice instead of keeping the last row", () => {
+      renderTab(ADMIN);
+
+      pasteAndPreview(
+        [
+          "model,provider,input_price_per_1m,output_price_per_1m",
+          "csv-dup,acme,1,2",
+          "CSV-dup ,acme,3,4",
+        ].join("\n"),
+      );
+
+      expect(
+        screen.getByText(
+          "CSV-dup on acme appears more than once. Keep one row per model and provider.",
+        ),
+      ).toBeVisible();
+      expect(mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("counts the saved and the new rows when the list would grow past its limit", () => {
+      renderTab(ADMIN);
+
+      pasteAndPreview(
+        [
+          "model,provider,input_price_per_1m",
+          ...Array.from({ length: 998 }, (_, i) => `bulk-${i},acme,1`),
+        ].join("\n"),
+      );
+
+      expect(
+        screen.getByText(
+          "The price list can hold at most 1,000 models. With this update it would have 1,001: 3 saved now and 998 new.",
+        ),
+      ).toBeVisible();
+      expect(mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("skips the Default rows of an exported file and says so in the preview", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      pasteAndPreview(
+        [
+          "model,provider,type,priced_like,input_price_per_1m,output_price_per_1m,note",
+          "gpt-4o,openai,Override,,2,,Contract rate",
+          "gpt-4o-mini,openai,Default,,0.15,0.6,",
+          "claude-sonnet-4-5,anthropic,Default,,3,15,",
+        ].join("\n"),
+      );
+
+      expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
+        "Skipped 2 rows of type Default: they use the built-in price. To set your own price, change the type to Override.",
+      );
+      expect(sentRows().map((row: { model: string }) => row.model)).toEqual([
+        "gpt-4o",
+        "acme-llama-70b",
+        "team-model",
+      ]);
     });
 
     it("explains what is wrong with the file instead of sending it", () => {

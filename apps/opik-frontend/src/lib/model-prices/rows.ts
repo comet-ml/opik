@@ -86,3 +86,13 @@ export const isSameRow = (left: ModelPriceRow, right: ModelPriceRow) =>
 
 export const identityOf = (row: ModelPriceRow) =>
   `${text(row.model).toLowerCase()}|${text(row.provider).toLowerCase()}`;
+
+// Opik prices a span by the model name after its first "/", so "azure/gpt-4.1-mini" and "gpt-4.1-mini" on
+// azure are one price. The backend has saved either form, so a saved row is matched by this key, not its name.
+export const lookupKeyOf = (model?: string | null) => {
+  const name = text(model).toLowerCase();
+  return name.slice(name.indexOf("/") + 1);
+};
+
+export const priceKeyOf = (row: Pick<ModelPriceRow, "model" | "provider">) =>
+  `${lookupKeyOf(row.model)}|${text(row.provider).toLowerCase()}`;

@@ -5,7 +5,7 @@ import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { CatalogEntry } from "@/lib/model-prices";
+import { CatalogEntry, describeRemoval } from "@/lib/model-prices";
 
 export type PriceRowActions = {
   onRemove: (entry: CatalogEntry) => void;
@@ -40,11 +40,9 @@ const PriceRowActionsCell: React.FC<CellContext<CatalogEntry, unknown>> = (
                 ? `Restore the defaults of ${entry.model}?`
                 : `Delete ${entry.model}`
             }
-            description={
-              isOverride
-                ? "Spans saved after this use Opik's built-in price. Spans already saved keep their cost."
-                : "Spans saved after this won't have a price for this model. Spans already saved keep their cost."
-            }
+            description={describeRemoval(
+              isOverride || Boolean(entry.shadowsBuiltIn),
+            )}
             confirmText={isOverride ? "Restore all defaults" : "Delete model"}
             confirmButtonVariant="destructive"
           />

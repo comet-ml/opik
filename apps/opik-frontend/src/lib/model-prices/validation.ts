@@ -8,6 +8,7 @@ export const MAX_NAME_LENGTH = 255;
 export const MAX_NOTE_LENGTH = 500;
 export const MAX_DECIMALS = 10;
 export const MAX_PRICE_PER_MILLION = 100000;
+export const MAX_ROWS = 1000;
 
 const problem = (
   field: string | null,

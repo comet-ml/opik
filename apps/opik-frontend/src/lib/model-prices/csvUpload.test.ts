@@ -47,6 +47,31 @@ describe("parsePriceCsv", () => {
     ]);
   });
 
+  it("skips the built-in rows of an export instead of saving them as the organization's", () => {
+    const upload = parsePriceCsv(
+      [
+        HEADER + ",note",
+        "gpt-4o,openai,Override,,2,,,,,Contract rate",
+        "claude-haiku-4-5,anthropic,Default,,1,5,,,,",
+        "gpt-4o-mini,openai,default,,0.15,0.6,,,,",
+      ].join("\n"),
+    );
+
+    expect(upload.errors).toEqual([]);
+    expect(upload.rows).toEqual([
+      {
+        model: "gpt-4o",
+        provider: "openai",
+        kind: "fixed",
+        input_price: "2",
+        note: "Contract rate",
+      },
+    ]);
+    expect(upload.notes).toEqual([
+      "Skipped 2 rows of type Default: they use the built-in price. To set your own price, change the type to Override.",
+    ]);
+  });
+
   it("keeps tiny prices exact instead of turning them into 1e-7", () => {
     const upload = parsePriceCsv(
       "model,provider,input_price_per_1m\ncheap,acme,0.0000001",
