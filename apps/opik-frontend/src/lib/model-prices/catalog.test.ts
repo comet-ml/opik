@@ -178,6 +178,23 @@ describe("buildCatalog", () => {
       );
     });
 
+    it("still finds the override by the built-in's name", () => {
+      const catalog = buildCatalog(azure, [
+        {
+          model: "gpt-4.1-mini",
+          provider: "azure",
+          kind: "fixed",
+          input_price: "0.3",
+        },
+      ]);
+
+      expect(
+        filterCatalog(catalog, { search: "azure/gpt-4.1-mini" }).map(
+          (entry) => [entry.model, entry.type],
+        ),
+      ).toEqual([["gpt-4.1-mini", "override"]]);
+    });
+
     it("replaces every built-in that prices the same spans", () => {
       const catalog = buildCatalog(
         [
