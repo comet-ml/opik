@@ -339,7 +339,7 @@ class TopicsNightlyIntegrationTest {
 
     @Test
     @DisplayName("nightly updates by hand that fail pauseFailures times in a row pause the project: the next night "
-            + "skips it as paused and queues nothing for it")
+            + "skips it as paused and queues nothing for it, and a night by hand still runs it")
     void failedNightsByHandPause() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
@@ -373,6 +373,13 @@ class TopicsNightlyIntegrationTest {
             assertThat(event.getArgumentArray()[4]).isEqualTo("paused");
         });
         assertThat(data.topicProject(projectId)).isEqualTo(failed.toBuilder().lastNight(today().plusDays(1)).build());
+        // The pause is the night's own: an operator still runs the paused project by hand.
+        try (var response = nightEndpoint(workspaceId, projectId, today().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+            var runId = UUID.fromString(response.readEntity(JsonNode.class).path("run_id").asText());
+            awaitEnded(projectId, runId);
+            assertThat(data.topicProject(projectId).runId()).isEqualTo(runId);
+        }
     }
 
     @Test
@@ -433,20 +440,25 @@ class TopicsNightlyIntegrationTest {
 
     @Test
     @DisplayName("a night by hand queues the project's nightly update and a pod saves it, with no night field "
-            + "written; it is refused (409) while the run is in flight, once the night is saved, and for a project "
-            + "with no list")
+            + "written; it is refused (409) while the run is in flight, and with the night's skip reason for a project "
+            + "with no list, a deleted project, a window under minVectors and once the night is saved")
     void nightByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = discoveredYesterday(workspaceId);
         var listless = ID_GENERATOR.generateId();
         data.seed(workspaceId, listless, 0, FIXTURE.size(), todayStart());
+        var gone = ID_GENERATOR.generateId();
+        data.seedVectors(workspaceId, gone, 0, FIXTURE.size(), todayStart());
+        data.savedList(workspaceId, gone, yesterdayStart(), FIXTURE.size());
+        var small = seededList(workspaceId, SMALL);
         stubAnswer(emptyNaming());
 
         var runId = planner.nightByHand(workspaceId, projectId, today()).block();
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
-                .isInstanceOf(ConflictException.class);
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, listless, today()).block())
-                .isInstanceOf(ConflictException.class);
+        assertRefusedByHand(workspaceId, projectId, "Project has a topics run in flight, project '" + projectId + "'");
+        assertRefusedByHand(workspaceId, listless, skippedByHand(listless, "no_list"));
+        assertRefusedByHand(workspaceId, gone, skippedByHand(gone, "deleted"));
+        assertRefusedByHand(workspaceId, small, skippedByHand(small, "small") + ", vectors '" + SMALL
+                + "', minimum '" + opikConfig.getTopics().getRun().getMinVectors() + "'");
 
         Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(data.topicProject(projectId)).satisfies(row -> {
@@ -454,9 +466,21 @@ class TopicsNightlyIntegrationTest {
                     assertThat(row.runStatus()).isNotIn(TopicProject.RunStatus.QUEUED,
                             TopicProject.RunStatus.RUNNING);
                 }));
-        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
-                .isInstanceOf(ConflictException.class);
+        assertRefusedByHand(workspaceId, projectId, skippedByHand(projectId, "already_saved"));
         assertThat(data.topicProject(projectId).lastNight()).isNull();
+    }
+
+    /** The night by hand of the project today is refused with exactly {@code message}. */
+    private void assertRefusedByHand(String workspaceId, UUID projectId, String message) {
+        assertThatThrownBy(() -> planner.nightByHand(workspaceId, projectId, today()).block())
+                .isInstanceOfSatisfying(ConflictException.class, error -> assertThat(
+                        ((ErrorMessage) error.getResponse().getEntity()).getMessage()).isEqualTo(message));
+    }
+
+    /** The refusal of tonight's night by hand for a project the night would skip with {@code reason}. */
+    private static String skippedByHand(UUID projectId, String reason) {
+        return "Project is skipped for the night, project '%s', night '%s', reason '%s'".formatted(projectId, today(),
+                reason);
     }
 
     @Test
@@ -991,7 +1015,7 @@ class TopicsNightlyIntegrationTest {
         assertSavedNight(projectId, row, runId, todayStart(), row.lastNight());
         try (var response = nightEndpoint(workspaceId, projectId, today().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
-            assertThat(response.readEntity(String.class)).contains("at or after the night");
+            assertThat(response.readEntity(String.class)).contains(skippedByHand(projectId, "already_saved"));
         }
         opikConfig.getTopics().setEnabled(false);
         try (var response = nightEndpoint(workspaceId, projectId, today().plusDays(1).toString())) {

@@ -885,13 +885,14 @@ curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id
 
 `night` is today (UTC) by default, at most tomorrow, and no older than the vectors backfill window. The workspace is
 listed at stage `nightly` or later, the project has a list whose `window_until` is before the night's start, its window
-holds `TOPICS_RUN_MIN_VECTORS` vectors, and it has no run in flight. `TOPICS_RUNS_MAX_IN_FLIGHT` and the budget do not
-apply, and `last_night` is not written.
+holds `TOPICS_RUN_MIN_VECTORS` vectors, and it has no run in flight. These are the night's own skips, so the endpoint
+refuses a project the night would skip. The pause does not apply: a paused project runs by hand.
+`TOPICS_RUNS_MAX_IN_FLIGHT` and the budget do not apply, and `last_night` is not written.
 
 | Answer | Meaning |
 |---|---|
 | `202` | Queued; the body is `{"run_id": "..."}`. |
-| `409` | Below stage `nightly` or topics off, no list, the list covers the night, too few vectors, or a run in flight. The message says which. |
+| `409` | Below stage `nightly` or topics off; the night would skip the project, with the reason in the message (`no_list`, `deleted`, `already_saved` or `small`); or a run in flight. The message says which. |
 | `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill window. |
 | `503` | Not started, nothing queued. Try again. |
 

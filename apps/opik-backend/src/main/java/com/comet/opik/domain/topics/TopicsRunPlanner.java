@@ -132,8 +132,7 @@ public class TopicsRunPlanner {
      * ({@link TopicsNightPass#byHand}).
      *
      * @throws ConflictException           when the workspace is not opted in at stage {@code nightly} or later, the
-     *                                     project is gone or has no list, its list already covers the night, its
-     *                                     window has too few vectors, or it has a run in flight
+     *                                     night would skip the project (the pause aside), or it has a run in flight
      * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
      *                                     again
      */

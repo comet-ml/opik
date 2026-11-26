@@ -153,45 +153,55 @@ class TopicsNightPass implements Managed {
      * Queues the project's nightly update for {@code night} now and returns its run id. {@code topics.runs.maxInFlight}
      * and the night's budget do not apply, and the night fields are not written: it is one project's run, not a night.
      *
-     * The caller checks that the workspace is opted in at stage {@code nightly} or later.
+     * The caller checks that the workspace is opted in at stage {@code nightly} or later. The project goes through the
+     * night's own triage and count with the pause off: a run by hand is how an operator retries a paused project.
      *
-     * @throws ConflictException when the project is gone or has no list, its list already covers the night, its window
-     *                           has too few vectors, or it has a run in flight
+     * @throws ConflictException when the night would skip the project (no list, deleted, its list already covers the
+     *                           night, or too few vectors in its window; the message names the reason), or it has a
+     *                           run in flight
      */
     Mono<UUID> byHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             @NonNull Function<TopicsRunPlanner.Planned, Mono<UUID>> queue) {
         return jdbi(() -> {
-            // A deleted project keeps its rows until the sweep: run only a project that exists.
-            var row = projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()
-                    ? null
-                    : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
-                            .findProjects(workspaceId, Set.of(projectId))).stream()
-                            .filter(found -> found.listRunId() != null).findFirst().orElse(null);
-            if (row == null) {
-                throw new ConflictException(
-                        "Project '%s' has no topic list: a discovery run makes one".formatted(projectId));
+            var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                    .findProjects(workspaceId, Set.of(projectId))).stream()
+                    .filter(found -> found.listRunId() != null)
+                    .toList();
+            if (rows.isEmpty()) {
+                throw skippedByHand(projectId, night, NightSkipReason.NO_LIST);
             }
-            if (NightTriage.covers(row, TopicsNight.windowTo(night))) {
-                throw new ConflictException(("Project '%s' has a list saved with its window until '%s', at or after "
-                        + "the night '%s'").formatted(projectId, row.windowUntil(), night));
+            // A deleted project keeps its rows until the sweep: the triage skips it.
+            var existing = projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()
+                    ? Set.<TopicProjectKey>of()
+                    : Set.of(new TopicProjectKey(workspaceId, projectId));
+            var topicsNight = TopicsNight.builder().date(night).start(TopicsNight.windowTo(night)).build();
+            // No failure count reaches Integer.MAX_VALUE: the pause is off.
+            var skipped = NightTriage.triage(rows, existing, topicsNight, Integer.MAX_VALUE, 0).skipped().keySet();
+            if (!skipped.isEmpty()) {
+                throw skippedByHand(projectId, night, skipped.iterator().next());
             }
-            return row;
+            return rows;
         })
                 .flatMap(__ -> candidates.windowVectors(workspaceId, projectId, night))
                 .flatMap(vectors -> {
                     int min = config.getRun().getMinVectors();
                     if (vectors < min) {
-                        return Mono.error(new ConflictException(
-                                "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
-                                        .formatted(projectId, vectors, night, min)));
+                        return Mono.error(new ConflictException(("Project is skipped for the night, project '%s', "
+                                + "night '%s', reason '%s', vectors '%d', minimum '%d'").formatted(projectId, night,
+                                        NightSkipReason.SMALL.getValue(), vectors, min)));
                     }
                     return queue.apply(TopicsRunPlanner.Planned.builder().workspaceId(workspaceId)
                             .projectId(projectId).mode(RunMode.UPDATE).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
-                                    "A topics run of project '%s' is in flight".formatted(projectId))));
+                                    "Project has a topics run in flight, project '%s'".formatted(projectId))));
                 })
                 .doOnNext(runId -> log.info("Topics run '{}' queued by hand, mode '{}', workspace '{}', project '{}', "
                         + "night '{}'", runId, RunMode.UPDATE.getValue(), workspaceId, projectId, night));
+    }
+
+    private static ConflictException skippedByHand(UUID projectId, LocalDate night, NightSkipReason reason) {
+        return new ConflictException("Project is skipped for the night, project '%s', night '%s', reason '%s'"
+                .formatted(projectId, night, reason.getValue()));
     }
 
     /** Within the budget: the cheap skips first, then the counts and queues while slots are free. */
