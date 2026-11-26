@@ -73,6 +73,68 @@ ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
 LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 ```
 
+## Removing rows of deleted traces
+
+Before the tick checked for deleted traces, a trace deleted while its jobs were in flight could keep its
+`ai_labels` and `ai_label_status` rows. The Topics vectors tick could then write `topic_vectors` and
+`topic_vector_status` rows for it, and a topic could be assigned to its vector in `trace_topics`. The steps below
+delete those rows once, one weekly partition at a time: every statement reads one partition of the table it cleans,
+and only the `traces` rows of the trace ids in it, from the same week of `traces`. The five tables and `traces` take
+their week from the trace id, so a trace and its rows are always in the same week. Do not run them while a `traces` cutover or backfill is in
+progress, when `traces` can miss rows that are live.
+
+1. List the workspaces and the weeks (partitions) that have rows in any of the five tables:
+
+   ```sql
+   SELECT DISTINCT workspace_id FROM (
+     SELECT workspace_id FROM ai_labels UNION ALL SELECT workspace_id FROM ai_label_status
+     UNION ALL SELECT workspace_id FROM topic_vectors UNION ALL SELECT workspace_id FROM topic_vector_status
+     UNION ALL SELECT workspace_id FROM trace_topics)
+   ORDER BY workspace_id;
+   SELECT DISTINCT partition FROM system.parts
+   WHERE database = currentDatabase() AND active
+     AND table IN ('ai_labels', 'ai_label_status', 'topic_vectors', 'topic_vector_status', 'trace_topics')
+   ORDER BY partition;
+   ```
+
+2. For one week, count the rows to delete. Put the week (for example `20261116`) in `<week>`, the quoted
+   workspace ids (`'a', 'b'`) in `<workspace_ids>`, and the table in `<table>`. Run it for `ai_labels`,
+   `ai_label_status`, `topic_vectors`, `topic_vector_status` and `trace_topics`. Stop if a count is far larger than
+   you expect.
+
+   ```sql
+   SELECT count() FROM <table>
+   WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)
+     AND (workspace_id, project_id, trace_id) NOT IN (
+       SELECT workspace_id, project_id, id FROM traces
+       WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
+         AND id IN (SELECT trace_id FROM <table>
+                    WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
+   SETTINGS max_memory_usage = 2147483648;
+   ```
+
+3. Delete them, in this order: `ai_labels`, `ai_label_status`, `topic_vectors`, `topic_vector_status`,
+   `trace_topics`. Each delete is a synchronous lightweight delete of one partition:
+
+   ```sql
+   DELETE FROM <table> IN PARTITION <week>
+   WHERE workspace_id IN (<workspace_ids>)
+     AND (workspace_id, project_id, trace_id) NOT IN (
+       SELECT workspace_id, project_id, id FROM traces
+       WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
+         AND id IN (SELECT trace_id FROM <table>
+                    WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
+   SETTINGS lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1, max_memory_usage = 2147483648;
+   ```
+
+4. Run step 2 again for the week. Every count is 0.
+
+The match is on workspace, project and trace: the same trace id can live in two projects. A trace re-created after
+its delete counts as live and keeps its rows. Each replica runs the subquery of a delete on its own, as for
+retention deletes.
+
 ## What to watch
 
 | Metric | Meaning |
