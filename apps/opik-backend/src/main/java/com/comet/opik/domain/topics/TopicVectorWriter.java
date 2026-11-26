@@ -141,9 +141,9 @@ class TopicVectorWriter {
         if (written.isEmpty()) {
             return Mono.just(Set.of());
         }
-        return dao.findLiveTraceIds(workspace.id(), TopicEmbedding.SUMMARY_TASK, written)
+        return dao.findLiveTraces(workspace.id(), TopicEmbedding.SUMMARY_TASK, written)
                 .flatMap(live -> {
-                    var kept = written.stream().filter(key -> live.contains(key.traceId()))
+                    var kept = written.stream().filter(key -> live.contains(TopicVectorsDAO.ProjectTrace.of(key)))
                             .collect(Collectors.toUnmodifiableSet());
                     var gone = written.stream().filter(key -> !kept.contains(key)).toList();
                     if (gone.isEmpty()) {

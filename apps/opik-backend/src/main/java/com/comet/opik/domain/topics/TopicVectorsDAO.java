@@ -238,8 +238,8 @@ public class TopicVectorsDAO {
             """;
 
     /** Any row of the key is enough: the trace-delete cascade and retention delete all of a trace's rows. */
-    private static final String FIND_LIVE_TRACE_IDS = """
-            SELECT DISTINCT trace_id
+    private static final String FIND_LIVE_TRACES = """
+            SELECT DISTINCT project_id, trace_id
             FROM ai_label_status
             WHERE workspace_id = :workspace_id
             AND project_id IN :project_ids
@@ -289,6 +289,14 @@ public class TopicVectorsDAO {
     }
 
     /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
+    /** A trace of one project: a client can give the same trace id to traces of two projects. */
+    record ProjectTrace(@NonNull UUID projectId, @NonNull UUID traceId) {
+
+        static ProjectTrace of(VectorKey key) {
+            return new ProjectTrace(key.projectId(), key.traceId());
+        }
+    }
+
     record Slice(@NonNull Instant from, @Nullable Instant before) {
     }
 
@@ -391,14 +399,14 @@ public class TopicVectorsDAO {
     }
 
     /** Of {@code keys}, the traces that still have an {@code ai_label_status} row of {@code task}: not deleted. */
-    public Mono<Set<UUID>> findLiveTraceIds(@NonNull String workspaceId, @NonNull String task,
+    public Mono<Set<ProjectTrace>> findLiveTraces(@NonNull String workspaceId, @NonNull String task,
             @NonNull Collection<VectorKey> keys) {
         if (keys.isEmpty()) {
             return Mono.just(Set.of());
         }
         var projectIds = keys.stream().map(key -> key.projectId().toString()).distinct().toArray(String[]::new);
         var traceIds = keys.stream().map(key -> key.traceId().toString()).distinct().toArray(String[]::new);
-        var template = guarded(FIND_LIVE_TRACE_IDS, "topics:find_live_trace_ids", workspaceId,
+        var template = guarded(FIND_LIVE_TRACES, "topics:find_live_trace_ids", workspaceId,
                 "traces=%d".formatted(traceIds.length),
                 config.getVectors().getFind().getMaxExecutionTime().toSeconds());
         return Mono.from(connectionFactory.create())
@@ -408,7 +416,9 @@ public class TopicVectorsDAO {
                         .bind("project_ids", projectIds)
                         .bind("trace_ids", traceIds)
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("trace_id", String.class))))
+                .flatMap(result -> result.map((row, metadata) -> new ProjectTrace(
+                        UUID.fromString(row.get("project_id", String.class)),
+                        UUID.fromString(row.get("trace_id", String.class)))))
                 .collect(Collectors.toUnmodifiableSet());
     }
 

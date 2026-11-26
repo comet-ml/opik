@@ -979,6 +979,35 @@ class TopicVectorsTickTest {
                 List.of(traceIds.getLast()), 1));
     }
 
+    @Test
+    @DisplayName("a trace id two projects of one chunk share, deleted in one of them while its embed call is in "
+            + "flight, has no vector there after the tick; the other project's trace keeps its own")
+    void sharedTraceIdDeletedInOneProjectDuringEmbed() {
+        var workspaceId = enabledWorkspace();
+        var deletedIn = ID_GENERATOR.generateId();
+        var keptIn = ID_GENERATOR.generateId();
+        // Drained projects: both traces are the workspace read's, so they are embedded in one chunk.
+        markDrained(workspaceId, deletedIn);
+        markDrained(workspaceId, keptIn);
+        var traceId = ID_GENERATOR.generateId();
+        label(workspaceId, deletedIn, List.of(traceId), 1);
+        label(workspaceId, keptIn, List.of(traceId), 1);
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(20));
+        embedStub.beforeAnswer = () -> {
+            eventBus.post(new TracesDeleted(Set.of(traceId), deletedIn, workspaceId, "user"));
+            Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                    .until(() -> finishedDeletes(workspaceId, "topic_vector_status") > 0);
+        };
+
+        try {
+            tick();
+        } finally {
+            embedStub.beforeAnswer = null;
+        }
+
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)), List.of(vector(workspaceId, keptIn, traceId, 1)));
+    }
+
     private long finishedDeletes(String workspaceId, String table) {
         return templateAsync.nonTransaction(connection -> Mono
                 .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
