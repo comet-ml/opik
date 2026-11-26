@@ -47,6 +47,8 @@ interface TraceThreadIdService {
 
     Mono<List<TraceThreadIdModel>> getTraceThreadIdModelsByThreadModelIds(List<UUID> threadModelIds);
 
+    Mono<Map<String, UUID>> findThreadModelIds(UUID projectId, Set<String> threadIds);
+
 }
 
 @Singleton
@@ -184,6 +186,21 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                             TraceThreadIdModel::id,
                             TraceThreadIdModel::threadId));
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Map<String, UUID>> findThreadModelIds(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
+        if (threadIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.attach(TraceThreadIdDAO.class)
+                        .findByProjectIdAndThreadIds(projectId, List.copyOf(threadIds))))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(models -> models.stream()
+                        .collect(Collectors.toMap(TraceThreadIdModel::threadId, TraceThreadIdModel::id,
+                                (first, ignored) -> first)));
     }
 
     @Override

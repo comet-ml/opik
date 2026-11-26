@@ -315,7 +315,7 @@ test.describe('Annotation queues — what automation will and will not collect',
   );
 
   test(
-    'an automation group takes five AND-ed conditions and refuses a sixth',
+    'an automation group takes fifty AND-ed filters and refuses a fifty-first',
     { tag: ['@cap:annotation-queues.create-queue'] },
     async ({ project, backendClient, registerAnnotationQueueCleanup, testNamespace }) => {
       const conditionsFor = (count: number) =>
@@ -328,39 +328,39 @@ test.describe('Annotation queues — what automation will and will not collect',
       const acceptedId = uuid7();
       const refusedId = uuid7();
 
-      await test.step('Five conditions in one group is accepted', async () => {
+      await test.step('Fifty filters in one group is accepted', async () => {
         // The positive half, and not a formality: a cap enforced one too low
         // would reject this, and a test that only checked the rejection would
         // call that a pass.
-        registerAnnotationQueueCleanup(acceptedId, `${testNamespace}-five`);
+        registerAnnotationQueueCleanup(acceptedId, `${testNamespace}-fifty`);
         const { status, message } = await backendClient.createAnnotationQueue({
           id: acceptedId,
           projectId: project.id,
-          name: `${testNamespace}-five`,
+          name: `${testNamespace}-fifty`,
           scope: 'trace',
-          automation: { enabled: true, groups: [conditionsFor(5)] },
+          automation: { enabled: true, groups: [conditionsFor(MAX_FILTERS_PER_GROUP)] },
         });
-        expect(status, `five conditions answered: ${message}`).toBe(201);
+        expect(status, `fifty filters answered: ${message}`).toBe(201);
       });
 
-      await test.step('…and it really stored all five', async () => {
+      await test.step('…and it really stored all fifty', async () => {
         const automation = await backendClient.getAnnotationQueueAutomation(acceptedId);
         expect(automation, 'the queue must read back with an automation block').not.toBeNull();
         expect(
           automation!.groups,
-          'a cap that silently truncated to four would otherwise read as acceptance',
-        ).toEqual([conditionsFor(5)]);
+          'a cap that silently truncated would otherwise read as acceptance',
+        ).toEqual([conditionsFor(MAX_FILTERS_PER_GROUP)]);
       });
 
-      await test.step('Six is refused, and writes nothing', async () => {
+      await test.step('Fifty-one is refused, and writes nothing', async () => {
         const { status, message } = await backendClient.createAnnotationQueue({
           id: refusedId,
           projectId: project.id,
-          name: `${testNamespace}-six`,
+          name: `${testNamespace}-fifty-one`,
           scope: 'trace',
-          automation: { enabled: true, groups: [conditionsFor(6)] },
+          automation: { enabled: true, groups: [conditionsFor(MAX_FILTERS_PER_GROUP + 1)] },
         });
-        expect(status, `six conditions answered: ${message}`).toBe(422);
+        expect(status, `fifty-one filters answered: ${message}`).toBe(422);
 
         // The half that matters operationally: a 422 over a queue that was
         // created anyway leaves an automation nobody asked for running against
@@ -373,6 +373,9 @@ test.describe('Annotation queues — what automation will and will not collect',
     },
   );
 });
+
+/** AnnotationQueueAutomation.MAX_FILTERS_PER_GROUP on the backend. */
+const MAX_FILTERS_PER_GROUP = 50;
 
 /** A trace that looks like production SDK traffic — what automation accepts. */
 async function seedSdkTrace(

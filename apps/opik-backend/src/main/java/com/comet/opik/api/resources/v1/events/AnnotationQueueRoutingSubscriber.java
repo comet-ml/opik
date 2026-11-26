@@ -2,21 +2,24 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueItemSource;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
-import com.comet.opik.domain.AnnotationQueueConditionEvaluator;
 import com.comet.opik.domain.AnnotationQueueRoutingMessage;
 import com.comet.opik.domain.AnnotationQueueRoutingMetrics;
 import com.comet.opik.domain.AnnotationQueueService;
-import com.comet.opik.domain.EffectiveFeedbackScore;
-import com.comet.opik.domain.EntityFeedbackScores;
-import com.comet.opik.domain.EntityType;
-import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.ThreadDAO;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.threads.TraceThreadDAO;
+import com.comet.opik.domain.threads.TraceThreadIdModel;
+import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -26,6 +29,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,20 +38,19 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
 /**
- * Does the routing work: loads automation config, reads the entities' effective scores, evaluates the
- * conditions and adds the matches to their queues.
+ * Does the routing work: loads automation config, runs each automation's filters over the entities in the
+ * message and adds the matches to their queues.
  *
  * <p>All of this sits behind the stream rather than in the event listener because none of it is free — one
- * MySQL read, one ClickHouse read, and up to a write per matching queue. Behind the stream it is durable
- * (a replica dying leaves the message pending for {@code autoClaim}), retried, and concurrency-bounded by
- * the consumer group. In the listener it would be none of those, and there is no backfill or manual re-run
- * to recover a lost event.
+ * MySQL read, a ClickHouse read per automation, and up to a write per matching queue. Behind the stream it is
+ * durable (a replica dying leaves the message pending for {@code autoClaim}), retried, and
+ * concurrency-bounded by the consumer group. In the listener it would be none of those, and there is no
+ * backfill or manual re-run to recover a lost event.
  *
  * <p>One message at a time, and a message is already a batch: the buffer flush hands over one
- * (workspace, scope) group of everything scored in the buffer window, deduplicated, so a message is one
- * automation lookup and one score read however many entities it names. Nothing here looks across messages —
- * the stream always moves forward. Writes run as the system user, like every other background write; the
- * item's {@code source} records that automation added it.
+ * (workspace, scope) group of everything that changed in the buffer window, deduplicated. Nothing here looks
+ * across messages — the stream always moves forward. Writes run as the system user, like every other
+ * background write; the item's {@code source} records that automation added it.
  *
  * <p>Redelivery is safe: the message carries no decision, so the consumer re-evaluates from current state,
  * and {@code addItems} excludes anything the queue has held before. At-least-once therefore needs no
@@ -60,14 +63,18 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     private static final String METRICS_NAMESPACE = "opik";
     private static final String METRICS_BASE_NAME = "annotation_queue_routing";
 
+    // Only ids come back from the match queries, so the heavy text columns are never read.
+    private static final Set<Trace.TraceField> EXCLUDED_TRACE_FIELDS = Set.of(
+            Trace.TraceField.INPUT, Trace.TraceField.OUTPUT, Trace.TraceField.METADATA);
+
     private final AnnotationQueueRoutingConfig config;
     private final FeatureFlags featureFlags;
     private final AnnotationQueueAutomationService automationService;
-    private final AnnotationQueueConditionEvaluator evaluator;
     private final AnnotationQueueService annotationQueueService;
-    private final FeedbackScoreDAO feedbackScoreDAO;
     private final TraceDAO traceDAO;
+    private final ThreadDAO threadDAO;
     private final TraceThreadDAO traceThreadDAO;
+    private final TraceThreadService traceThreadService;
 
     @Inject
     public AnnotationQueueRoutingSubscriber(
@@ -75,20 +82,20 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeatureFlags featureFlags,
             @NonNull AnnotationQueueAutomationService automationService,
-            @NonNull AnnotationQueueConditionEvaluator evaluator,
             @NonNull AnnotationQueueService annotationQueueService,
-            @NonNull FeedbackScoreDAO feedbackScoreDAO,
             @NonNull TraceDAO traceDAO,
-            @NonNull TraceThreadDAO traceThreadDAO) {
+            @NonNull ThreadDAO threadDAO,
+            @NonNull TraceThreadDAO traceThreadDAO,
+            @NonNull TraceThreadService traceThreadService) {
         super(config, redisson, AnnotationQueueRoutingConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
         this.featureFlags = featureFlags;
         this.automationService = automationService;
-        this.evaluator = evaluator;
         this.annotationQueueService = annotationQueueService;
-        this.feedbackScoreDAO = feedbackScoreDAO;
         this.traceDAO = traceDAO;
+        this.threadDAO = threadDAO;
         this.traceThreadDAO = traceThreadDAO;
+        this.traceThreadService = traceThreadService;
     }
 
     @Override
@@ -115,21 +122,28 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     }
 
     /**
-     * Scores are read first, then automations. That order is deliberate: automation scope is the
-     * <em>project</em>, and the event does not name one — the batch score path cannot, because a batch may
-     * span several projects. The scores come back carrying each entity's project, so reading them first is
-     * what lets the automation lookup be narrowed to exactly the projects involved instead of sweeping the
-     * whole workspace.
+     * An entity named by the message, with what routing needs to know about it. {@code threadId} is the
+     * thread's own id, which the threads filters address it by; it is null for traces.
+     */
+    @Builder(toBuilder = true)
+    private record RoutedEntity(@NonNull UUID id, @NonNull UUID projectId, String threadId) {
+    }
+
+    /**
+     * Entities are resolved to their projects first, then automations are looked up. Automation scope is the
+     * <em>project</em>, and the message does not name one — several of the events feeding it cannot, because
+     * one batch may span several projects. Resolving first is what lets the automation lookup be narrowed to
+     * exactly the projects involved instead of sweeping the whole workspace.
      */
     private Mono<Long> route(AnnotationQueueRoutingMessage message) {
-        return readScores(message)
-                .flatMap(scoresByEntity -> {
-                    if (scoresByEntity.isEmpty()) {
+        return readEntities(message)
+                .flatMap(entities -> {
+                    if (entities.isEmpty()) {
                         return Mono.just(0L);
                     }
 
-                    Set<UUID> projectIds = scoresByEntity.values().stream()
-                            .map(EntityFeedbackScores::projectId)
+                    Set<UUID> projectIds = entities.values().stream()
+                            .map(RoutedEntity::projectId)
                             .collect(Collectors.toSet());
 
                     return Mono
@@ -140,7 +154,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                             // processing — an automation disabled in the meantime must not route.
                             .flatMap(automations -> automations.isEmpty()
                                     ? Mono.just(0L)
-                                    : retainProductionEntities(scoresByEntity, projectIds, message)
+                                    : retainProductionEntities(entities, projectIds, message)
                                             .flatMap(production -> production.isEmpty()
                                                     ? Mono.just(0L)
                                                     : addMatches(automations, production, message)));
@@ -158,114 +172,101 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * experiment comparison view, not a queue, so they are excluded here.
      *
      * <p>It runs after the automation lookup so the read only happens for a project that actually has an
-     * enabled automation, which is the minority of scored traffic.
+     * enabled automation, which is the minority of traffic.
      */
-    private Mono<Map<UUID, EntityFeedbackScores>> retainProductionEntities(
-            Map<UUID, EntityFeedbackScores> scoresByEntity, Set<UUID> projectIds,
-            AnnotationQueueRoutingMessage message) {
+    private Mono<Map<UUID, RoutedEntity>> retainProductionEntities(Map<UUID, RoutedEntity> entities,
+            Set<UUID> projectIds, AnnotationQueueRoutingMessage message) {
 
-        Set<UUID> entityIds = scoresByEntity.keySet();
+        Set<UUID> entityIds = entities.keySet();
 
         Mono<Set<UUID>> loggedBySdk = message.scope() == AnnotationQueue.AnnotationScope.THREAD
                 ? traceThreadDAO.getLoggingSourceIds(projectIds, entityIds)
                 : traceDAO.getLoggingSourceIds(projectIds, entityIds);
 
-        return loggedBySdk
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+        return withSystemContext(loggedBySdk, message)
                 .map(kept -> {
                     int skipped = entityIds.size() - kept.size();
                     if (skipped > 0) {
                         AnnotationQueueRoutingMetrics.NON_PRODUCTION_SKIPPED.add(skipped);
                         log.debug(
-                                "Skipped scored entities not logged by an SDK, skipped '{}', scored '{}', workspace '{}'",
+                                "Skipped entities not logged by an SDK, skipped '{}', received '{}', workspace '{}'",
                                 skipped, entityIds.size(), message.workspaceId());
                     }
 
-                    return scoresByEntity.entrySet().stream()
+                    return entities.entrySet().stream()
                             .filter(entry -> kept.contains(entry.getKey()))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
     }
 
-    private Mono<Map<UUID, EntityFeedbackScores>> readScores(AnnotationQueueRoutingMessage message) {
-        EntityType entityType = message.scope() == AnnotationQueue.AnnotationScope.THREAD
-                ? EntityType.THREAD
-                : EntityType.TRACE;
+    /**
+     * An entity that cannot be resolved — deleted since, or not yet visible on this replica — is dropped:
+     * there is nothing to route, and its next change publishes it again.
+     */
+    private Mono<Map<UUID, RoutedEntity>> readEntities(AnnotationQueueRoutingMessage message) {
+        List<UUID> ids = List.copyOf(message.entityIds());
 
-        // The scores carry the project id, which the message does not: on the batch score path it is absent
-        // because one batch may span several projects. So one read answers both questions. Nothing here is
-        // read younger than debounceDelay, which is what keeps the read clear of ClickHouse replica lag; an
-        // entity with no scores visible is simply not routed until its next score.
-        return feedbackScoreDAO.getEffectiveScores(entityType, message.entityIds())
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
-                // Straight into the per-entity view: each entity's rows are folded as its group closes,
-                // so no second map of the same rows is built alongside the first.
-                .collect(Collectors.groupingBy(EffectiveFeedbackScore::entityId,
-                        Collectors.collectingAndThen(Collectors.toList(),
-                                AnnotationQueueRoutingSubscriber::toEntityScores)));
+        if (message.scope() == AnnotationQueue.AnnotationScope.THREAD) {
+            return traceThreadService.getThreadIdModelsByThreadModelIds(ids)
+                    .map(models -> models.stream()
+                            .collect(Collectors.toMap(TraceThreadIdModel::id, model -> RoutedEntity.builder()
+                                    .id(model.id())
+                                    .projectId(model.projectId())
+                                    .threadId(model.threadId())
+                                    .build(), (first, ignored) -> first)));
+        }
+
+        return withSystemContext(traceDAO.getProjectIdsByTraceIds(ids), message)
+                .map(projectIdByTrace -> projectIdByTrace.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> RoutedEntity.builder()
+                                .id(entry.getKey())
+                                .projectId(entry.getValue())
+                                .build())));
     }
 
     /**
-     * Folds one entity's rows into the view the conditions are evaluated against. This lives here rather
-     * than in the DAO because this is where the bound on it is known: the rows belong to the entity ids of
-     * one message, which the buffer flush caps at {@code jobBatchSize}.
+     * A search to run: one filter group over the batch's entities of one project.
      */
-    private static EntityFeedbackScores toEntityScores(List<EffectiveFeedbackScore> rows) {
-        return EntityFeedbackScores.builder()
-                .entityId(rows.getFirst().entityId())
-                .projectId(rows.getFirst().projectId())
-                // The query returns one row per (entity, name); the merge only keeps a corrupted duplicate
-                // from failing a whole batch.
-                .scores(rows.stream().collect(Collectors.toUnmodifiableMap(EffectiveFeedbackScore::name,
-                        EffectiveFeedbackScore::value, (first, ignored) -> first)))
-                .build();
+    private record GroupSearch(UUID projectId, List<Filter> filters) {
     }
 
+    /**
+     * Runs each distinct (project, filter group) search once, then adds every automation's matches to its queue.
+     *
+     * <p>Automations of one project often share filter groups, and each search is a ClickHouse query, so a group is
+     * searched once however many automations use it. Searches run {@code searchConcurrency} at a time; queue
+     * writes stay sequential. Each search is the traces or threads search the UI runs, narrowed to the candidates
+     * by id, so a filter here selects exactly what it selects on the traces or threads page.
+     */
     private Mono<Long> addMatches(List<AnnotationQueueAutomationService.QueueAutomation> automations,
-            Map<UUID, EntityFeedbackScores> scoresByEntity, AnnotationQueueRoutingMessage message) {
+            Map<UUID, RoutedEntity> entities, AnnotationQueueRoutingMessage message) {
 
-        // Group per queue so each queue takes one addItems call rather than one per entity. Items this
-        // queue has held before are excluded inside addItems, which checks the history whenever the source
-        // is AUTOMATED — that is what stops a reviewer's own score from re-adding what they just annotated.
-        Map<UUID, Set<UUID>> matchesByQueue = automations.stream()
-                .flatMap(automation -> scoresByEntity.values().stream()
-                        .filter(entity -> automation.projectId().equals(entity.projectId()))
-                        .filter(entity -> evaluator.matches(automation.conditions(), entity.scores()))
-                        .map(entity -> Map.entry(automation.queueId(), entity.entityId())))
-                .collect(Collectors.groupingBy(Map.Entry::getKey,
-                        Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
-
-        if (matchesByQueue.isEmpty()) {
-            return Mono.just(0L);
-        }
-
-        // Every queue is attempted even if an earlier one failed, so one bad queue cannot starve the rest.
-        // But a failure is not swallowed: it is collected and rethrown once the others are done, which
-        // leaves the message pending for autoClaim to retry. Retrying costs almost nothing and cannot
-        // duplicate anything, because addItems excludes what a queue has already held - so acknowledging a
-        // failed write would trade a cheap retry for a permanently unrouted trace, there being no backfill.
         var failures = new ConcurrentLinkedQueue<Throwable>();
 
-        return Flux.fromIterable(matchesByQueue.entrySet())
-                .concatMap(entry -> annotationQueueService
-                        .addItems(entry.getKey(), entry.getValue(), AnnotationQueueItemSource.AUTOMATED)
-                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
-                        // Nothing currently bounds how much a queue can accumulate, so this counter is the
-                        // only way to see a badly scoped condition filling one up.
-                        .doOnNext(added -> AnnotationQueueRoutingMetrics.ITEMS_ROUTED.add(added))
+        Map<UUID, List<RoutedEntity>> candidatesByProject = entities.values().stream()
+                .collect(Collectors.groupingBy(RoutedEntity::projectId));
+
+        Set<GroupSearch> searches = automations.stream()
+                .filter(automation -> candidatesByProject.containsKey(automation.projectId()))
+                .flatMap(automation -> automation.filterGroups().stream()
+                        .map(filters -> new GroupSearch(automation.projectId(), filters)))
+                .collect(Collectors.toSet());
+
+        return Flux.fromIterable(searches)
+                .flatMap(groupSearch -> withSystemContext(search(message.scope(), groupSearch.projectId(),
+                        groupSearch.filters(), candidatesByProject.get(groupSearch.projectId())), message)
+                        .collect(Collectors.toSet())
+                        .map(matches -> Map.entry(groupSearch, matches))
                         .onErrorResume(error -> {
-                            // DEBUG, not ERROR: every failure here is rethrown below, and the base
-                            // subscriber logs that one at ERROR with the rest attached as suppressed. This
-                            // line only adds the queue each failure belongs to.
-                            log.debug("Failed to route items into annotation queue, queueId '{}'", entry.getKey(),
-                                    error);
-                            AnnotationQueueRoutingMetrics.QUEUE_WRITE_FAILURES.add(1);
+                            log.debug("Failed to search for annotation queue automation matches, projectId '{}'",
+                                    groupSearch.projectId(), error);
+                            AnnotationQueueRoutingMetrics.SEARCH_FAILURES.add(1);
                             failures.add(error);
-                            return Mono.just(0L);
-                        }))
+                            return Mono.empty();
+                        }), config.getSearchConcurrency())
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                .flatMapMany(matchesBySearch -> Flux.fromIterable(automations)
+                        .concatMap(automation -> addToQueue(automation, matchesBySearch, message, failures)))
                 .reduce(0L, Long::sum)
                 .flatMap(routed -> {
                     if (failures.isEmpty()) {
@@ -275,5 +276,66 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                     failures.forEach(primary::addSuppressed);
                     return Mono.error(primary);
                 });
+    }
+
+    /**
+     * Adds what any of the automation's filter groups matched.
+     */
+    private Mono<Long> addToQueue(AnnotationQueueAutomationService.QueueAutomation automation,
+            Map<GroupSearch, Set<UUID>> matchesBySearch, AnnotationQueueRoutingMessage message,
+            Collection<Throwable> failures) {
+
+        Set<UUID> matches = automation.filterGroups().stream()
+                .map(filters -> matchesBySearch.getOrDefault(new GroupSearch(automation.projectId(), filters),
+                        Set.of()))
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
+
+        if (matches.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return withSystemContext(annotationQueueService.addItems(automation.queueId(), matches,
+                AnnotationQueueItemSource.AUTOMATED), message)
+                .doOnNext(AnnotationQueueRoutingMetrics.ITEMS_ROUTED::add)
+                .onErrorResume(error -> {
+                    log.debug("Failed to route items into annotation queue, queueId '{}'", automation.queueId(),
+                            error);
+                    AnnotationQueueRoutingMetrics.QUEUE_WRITE_FAILURES.add(1);
+                    failures.add(error);
+                    return Mono.just(0L);
+                });
+    }
+
+    private Flux<UUID> search(AnnotationQueue.AnnotationScope scope, UUID projectId, List<? extends Filter> filters,
+            List<RoutedEntity> candidates) {
+
+        if (scope == AnnotationQueue.AnnotationScope.THREAD) {
+            return threadDAO.search(candidates.size(), TraceSearchCriteria.builder()
+                    .projectId(projectId)
+                    .filters(filters)
+                    .threadIds(candidates.stream().map(RoutedEntity::threadId).collect(Collectors.toSet()))
+                    .build())
+                    // A thread whose row is not written yet has no model id; writing it routes the thread again.
+                    .mapNotNull(TraceThread::threadModelId);
+        }
+
+        return traceDAO.search(candidates.size(), TraceSearchCriteria.builder()
+                .projectId(projectId)
+                .filters(filters)
+                .traceIds(candidates.stream().map(RoutedEntity::id).collect(Collectors.toSet()))
+                .exclude(EXCLUDED_TRACE_FIELDS)
+                .build())
+                .map(Trace::id);
+    }
+
+    private static <T> Mono<T> withSystemContext(Mono<T> mono, AnnotationQueueRoutingMessage message) {
+        return mono.contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
+    }
+
+    private static <T> Flux<T> withSystemContext(Flux<T> flux, AnnotationQueueRoutingMessage message) {
+        return flux.contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
     }
 }

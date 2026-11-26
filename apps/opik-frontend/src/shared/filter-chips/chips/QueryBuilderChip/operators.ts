@@ -63,6 +63,8 @@ export const COMMENTS_OPERATORS: FilterOperator[] = [
 export const FEEDBACK_SCORE_OPERATORS: FilterOperator[] = [
   ">=",
   "<=",
+  ">",
+  "<",
   "=",
   "is_not_empty",
   "is_empty",

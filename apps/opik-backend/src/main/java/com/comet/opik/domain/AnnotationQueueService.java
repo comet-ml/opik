@@ -137,11 +137,13 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         Map<UUID, AnnotationQueueAutomation> automations = withAutomation.stream()
                 .collect(Collectors.toMap(AnnotationQueue::id, AnnotationQueue::automation));
+        Map<UUID, AnnotationQueue.AnnotationScope> scopes = withAutomation.stream()
+                .collect(Collectors.toMap(AnnotationQueue::id, AnnotationQueue::scope));
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromRunnable(() -> automationService.validate(workspaceId, automations));
+            return Mono.fromRunnable(() -> automationService.validate(workspaceId, automations, scopes));
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
@@ -206,7 +208,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                     // rewritten, so a 400 never leaves a half-applied update behind.
                                     updateMono = Mono.fromRunnable(
                                             () -> automationService.validate(workspaceId,
-                                                    Map.of(id, updateRequest.automation())))
+                                                    Map.of(id, updateRequest.automation()),
+                                                    Map.of(id, queueInfo.scope())))
                                             .subscribeOn(Schedulers.boundedElastic())
                                             .then(updateMono)
                                             // No rows means the queue was deleted between the lookup above

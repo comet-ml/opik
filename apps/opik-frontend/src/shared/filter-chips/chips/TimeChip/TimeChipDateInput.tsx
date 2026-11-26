@@ -18,6 +18,7 @@ import {
   type Slot,
   type SlotPatch,
 } from "@/shared/filter-chips/chips/TimeChip/TimeChipPopover.shared";
+import { cellInput } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/cellBase";
 
 interface TimeChipDateInputProps {
   slot: Slot;
@@ -27,6 +28,8 @@ interface TimeChipDateInputProps {
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
   onPicked?: () => void;
+  /** Row height and text size of a filter cell, for a date sitting in a row of cells. */
+  compact?: boolean;
 }
 
 const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
@@ -37,6 +40,7 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
   calendarDefaultTime,
   onChange,
   onPicked,
+  compact = false,
 }) => {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -138,7 +142,9 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
           <div ref={anchorRef} className="relative">
             <DebounceInput
               ref={inputRef}
-              dimension="sm"
+              {...(compact
+                ? { variant: "unstyled" as const, dimension: "none" as const }
+                : { dimension: "sm" as const })}
               type="text"
               autoFocus={autoFocus}
               value={slot.dateText}
@@ -148,7 +154,10 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
               onBlur={() => onChange({ dateTouched: true })}
               onKeyDown={handleKeyDown}
               onPaste={() => setCalendarOpen(false)}
-              className={cn("pr-8", showError && "border-destructive")}
+              className={cn(
+                compact ? cn(cellInput, "block w-full py-0 pr-6") : "pr-8",
+                showError && "border-destructive",
+              )}
             />
             <button
               type="button"
@@ -157,9 +166,12 @@ const TimeChipDateInput: React.FC<TimeChipDateInputProps> = ({
               aria-expanded={calendarOpen}
               onMouseDown={handleIconMouseDown}
               onClick={handleIconClick}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-slate hover:text-foreground"
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 text-muted-slate hover:text-foreground",
+                compact ? "right-1.5 z-10" : "right-2",
+              )}
             >
-              <CalendarIcon className="size-[14px]" />
+              <CalendarIcon className={compact ? "size-3" : "size-[14px]"} />
             </button>
           </div>
         </PopoverAnchor>

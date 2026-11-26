@@ -2,10 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue.AnnotationScope;
 import com.comet.opik.api.AnnotationQueueAutomation;
-import com.comet.opik.api.annotationqueue.ConditionGroup;
-import com.comet.opik.api.annotationqueue.Conditions;
-import com.comet.opik.api.annotationqueue.ScoreCondition;
-import com.comet.opik.api.annotationqueue.ScoreConditionOperator;
+import com.comet.opik.api.annotationqueue.AutomationFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -13,9 +11,11 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.AnnotationQueueAutomationService.QueueAutomation;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
@@ -31,6 +31,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -40,8 +41,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Guards that the {@code annotation_queue_automations} cache on
  * {@link AnnotationQueueAutomationService#hasEnabledAutomation(String, UUID, AnnotationScope)} engages and
- * that the writes evict it. The method is read once per feedback score event, so losing the cache is a
- * database round trip on the busiest event in the system; losing the eviction is worse, because a stale
+ * that the writes evict it. The method is read on every trace, span, score, comment and guardrail event, so
+ * losing the cache is a database round trip on the busiest events in the system; losing the eviction is worse,
+ * because a stale
  * {@code false} is silent — the events it turns away are dropped at the guard and there is no backfill.
  *
  * <p>The TTL here is deliberately far longer than any test takes. A short one would let expiry stand in for
@@ -166,6 +168,58 @@ class AnnotationQueueAutomationServiceCacheTest {
                 .isTrue();
     }
 
+    /**
+     * The API validates every write, so a stored filter only goes bad through a manual edit or a migration. That
+     * automation is skipped; the others in its workspace keep routing.
+     */
+    @Test
+    void findEnabledByProjects__skipsAnAutomationWhoseStoredFiltersCannotBeRead(
+            AnnotationQueueAutomationService service, TransactionTemplate transactionTemplate) {
+
+        var broken = new Fixture();
+        var healthy = new Fixture(broken.workspaceId, broken.projectId);
+        broken.save(service, true);
+        healthy.save(service, true);
+
+        int updated = transactionTemplate.inTransaction(WRITE, handle -> {
+            var ids = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
+                    .findRuleIdsByQueueIds(broken.workspaceId, List.of(broken.queueId));
+            return handle.createUpdate("UPDATE automation_rules SET filters = :filters WHERE id IN (<ids>)")
+                    // Valid JSON in the wrong shape: a flat filter list, as evaluators store theirs.
+                    .bind("filters", "[{\"field\": \"feedback_scores\", \"operator\": \"<\", "
+                            + "\"key\": \"safety\", \"value\": \"0.5\"}]")
+                    .bindList("ids", ids.stream().map(UUID::toString).toList())
+                    .execute();
+        });
+        assertThat(updated).isOne();
+
+        assertThat(service.findEnabledByProjects(broken.workspaceId, Set.of(broken.projectId),
+                AnnotationScope.TRACE))
+                .extracting(QueueAutomation::queueId)
+                .containsExactly(healthy.queueId);
+    }
+
+    /**
+     * The previous release reads every router's conditions and fails on a NULL one, so a rollback to it must find a
+     * value it can parse: no condition groups, which match nothing there.
+     */
+    @Test
+    void save__writesConditionsThePreviousReleaseCanRead(
+            AnnotationQueueAutomationService service, TransactionTemplate transactionTemplate) {
+
+        var fixture = new Fixture();
+        fixture.save(service, true);
+
+        String conditions = transactionTemplate.inTransaction(WRITE, handle -> handle.createQuery(
+                "SELECT conditions FROM automation_rule_annotation_queue_routers WHERE queue_id = :queueId")
+                .bind("queueId", fixture.queueId.toString())
+                .mapTo(String.class)
+                .one());
+
+        assertThat(JsonUtils.getJsonNodeFromString(conditions))
+                .isEqualTo(JsonUtils.getJsonNodeFromString("{\"groups\": []}"));
+    }
+
     private static void awaitAnswer(AnnotationQueueAutomationService service, String workspaceId,
             UUID projectId, boolean expected) {
         Awaitility.await()
@@ -178,26 +232,32 @@ class AnnotationQueueAutomationServiceCacheTest {
 
     /** A workspace of its own per test, so one test's cached answers can never be read by another. */
     private static final class Fixture {
-        private final String workspaceId = UUID.randomUUID().toString();
+        private final String workspaceId;
         private final String userName = RandomStringUtils.secure().nextAlphanumeric(20);
         private final String queueName = RandomStringUtils.secure().nextAlphanumeric(20);
         private final UUID queueId = UUID.randomUUID();
-        private final UUID projectId = UUID.randomUUID();
+        private final UUID projectId;
+
+        private Fixture() {
+            this(UUID.randomUUID().toString(), UUID.randomUUID());
+        }
+
+        private Fixture(String workspaceId, UUID projectId) {
+            this.workspaceId = workspaceId;
+            this.projectId = projectId;
+        }
 
         private void save(AnnotationQueueAutomationService service, boolean enabled) {
             service.save(workspaceId, userName, queueId, projectId, AnnotationScope.TRACE, queueName,
                     AnnotationQueueAutomation.builder()
                             .enabled(enabled)
-                            // An enabled automation is rejected without at least one group.
-                            .conditions(Conditions.builder()
-                                    .groups(List.of(ConditionGroup.builder()
-                                            .conditions(List.of(ScoreCondition.builder()
-                                                    .scoreName(RandomStringUtils.secure().nextAlphanumeric(10))
-                                                    .operator(ScoreConditionOperator.GREATER_THAN)
-                                                    .value(0.5)
-                                                    .build()))
-                                            .build()))
-                                    .build())
+                            // An enabled automation is rejected without at least one filter.
+                            .filterGroups(List.of(List.of(AutomationFilter.builder()
+                                    .field("feedback_scores")
+                                    .operator(Operator.GREATER_THAN)
+                                    .key(RandomStringUtils.secure().nextAlphanumeric(10))
+                                    .value("0.5")
+                                    .build())))
                             .build());
         }
     }

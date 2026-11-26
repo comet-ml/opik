@@ -28,7 +28,6 @@ public record AutomationRuleAnnotationQueueRouterModel(
         String filters,
         UUID queueId,
         AnnotationQueue.AnnotationScope scope,
-        String conditions,
         Integer maxItemsInQueue,
         Instant createdAt,
         String createdBy,

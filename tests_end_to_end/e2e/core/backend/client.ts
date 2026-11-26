@@ -7672,15 +7672,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
                     : { max_items_in_queue: queue.automation.maxItemsInQueue }),
                   ...(queue.automation.groups
                     ? {
-                        conditions: {
-                          groups: queue.automation.groups.map((conditions) => ({
-                            conditions: conditions.map((condition) => ({
-                              score_name: condition.scoreName,
-                              operator: condition.operator,
-                              value: condition.value,
-                            })),
+                        // Score conditions are written as the feedback_scores filters that replaced them.
+                        filter_groups: queue.automation.groups.map((conditions) =>
+                          conditions.map((condition) => ({
+                            field: 'feedback_scores',
+                            operator: condition.operator,
+                            key: condition.scoreName,
+                            value: String(condition.value),
                           })),
-                        },
+                        ),
                       }
                     : {}),
                 },
@@ -7714,7 +7714,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           automation?: {
             enabled?: boolean;
             max_items_in_queue?: number;
-            conditions?: { groups?: Array<{ conditions?: Array<Record<string, unknown>> }> };
+            filter_groups?: Array<Array<Record<string, unknown>>>;
           };
         }
       ).automation;
@@ -7728,8 +7728,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled: automation.enabled,
         maxItemsInQueue:
           typeof automation.max_items_in_queue === 'number' ? automation.max_items_in_queue : null,
-        groups: (automation.conditions?.groups ?? []).map((group) =>
-          (group.conditions ?? []).map((condition) => {
+        groups: (automation.filter_groups ?? []).map((group) =>
+          group.map((condition) => {
+            if (condition.field !== 'feedback_scores') {
+              throw new Error(
+                `getAnnotationQueueAutomation('${id}'): expected only feedback_scores filters, got '${String(condition.field)}'.`,
+              );
+            }
             // Checked rather than cast: an operator the enum does not define
             // means the server answered something no caller can act on, and a
             // blind cast would present it to `toEqual` as a plain mismatch
@@ -7741,7 +7746,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
               );
             }
             return {
-              scoreName: String(condition.score_name ?? ''),
+              scoreName: String(condition.key ?? ''),
               operator,
               value: Number(condition.value),
             };
