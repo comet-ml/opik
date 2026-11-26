@@ -431,6 +431,34 @@ def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
         metric_cls(n_grams=n_grams, track=False)
 
 
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize(
+    "weights",
+    [
+        [math.nan, 0.0, 0.0, 0.0],
+        [math.inf, 0.0, 0.0, 0.0],
+        [-math.inf, 0.0, 0.0, 0.0],
+        # inf + (-inf) is NaN, so the `abs(sum(weights) - 1.0)` check passes
+        # even though no weight is finite.
+        [math.inf, -math.inf, 1.0, 1.0],
+    ],
+)
+def test_bleu__non_finite_weights__raises_value_error(metric_cls, weights):
+    # `abs(sum(weights) - 1.0) > 1e-6` is False for a NaN sum, so NaN weights
+    # (and cancelling infinities) slipped past validation and scored NaN.
+    with pytest.raises(ValueError, match="weights must be finite"):
+        metric_cls(n_grams=4, weights=weights, track=False)
+
+
+def test_bleu__valid_custom_weights__still_accepted():
+    # The finiteness guard is not a blanket rejection: a finite vector that
+    # sums to 1.0 must keep constructing and scoring as before.
+    metric = SentenceBLEU(n_grams=4, weights=[0.4, 0.3, 0.2, 0.1], track=False)
+    assert metric.weights == [0.4, 0.3, 0.2, 0.1]
+    result = metric.score("the cat is on the mat", "the cat is on the mat")
+    assert result.value == pytest.approx(1.0)
+
+
 @pytest.mark.parametrize(
     "candidate,reference,method",
     [

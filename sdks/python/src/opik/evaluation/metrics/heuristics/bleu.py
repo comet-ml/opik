@@ -1,3 +1,4 @@
+import math
 import warnings
 from contextlib import contextmanager
 from typing import Any, Iterator, List, Optional, Tuple, Union
@@ -29,14 +30,14 @@ class BaseBLEU(base_metric.BaseMetric):
         track: Whether to track the metric (depends on your system).
         n_grams: Up to which n-gram order to use (1 through n_grams). Must be an integer >= 1.
         smoothing_method: One of NLTK's SmoothingFunction methods (e.g. "method0", "method1", etc.).
-        weights: Optional custom weights for n-gram orders. Must sum to 1.0. If None,
-                 defaults to uniform distribution across `n_grams`.
+        weights: Optional custom weights for n-gram orders. Must be finite and sum
+                 to 1.0. If None, defaults to uniform distribution across `n_grams`.
         project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
 
     Raises:
         ValueError: If `n_grams` is not an integer or is less than 1, or if `weights`
-            does not have `n_grams` entries summing to 1.0.
+            does not have `n_grams` finite entries summing to 1.0.
         ImportError: If NLTK is not installed.
     """
 
@@ -78,6 +79,8 @@ class BaseBLEU(base_metric.BaseMetric):
                 raise ValueError(
                     f"Length of weights ({len(weights)}) != n_grams ({n_grams})."
                 )
+            if not all(math.isfinite(weight) for weight in weights):
+                raise ValueError("weights must be finite numbers")
             if abs(sum(weights) - 1.0) > 1e-6:
                 raise ValueError("Weights must sum to 1.0")
             self.weights = weights
