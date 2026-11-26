@@ -117,7 +117,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * an id past the 2300 ceiling falls back to, touches every filler week. That second case is also what shows the
  * first one is not passing for another reason.
  *
- * <p>The trace stats' {@code scored_span_ids} is covered here too: its bound is a subquery over the scored span ids
+ * <p>The trace stats' {@code scored_spans} is covered here too: its bound is a subquery over the scored span ids
  * rather than a set bound from Java, so it has no fallback to observe, and instead is shown to read only the weeks of
  * the spans that carry scores, far-future and past-ceiling ones included, while returning every one of their scores.
  *
