@@ -8,6 +8,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -39,6 +41,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.RUN_ID;
@@ -68,6 +72,7 @@ import static org.assertj.core.api.Assertions.within;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicsDaoStorageTest {
 
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final int BUILT = 120;
     private static final int WINDOW_DAYS = 30;
     private static final Instant NIGHT = Instant.parse("2026-10-15T00:00:00Z");
@@ -1066,5 +1071,44 @@ class TopicsDaoStorageTest {
 
     private static TopicWindowDAO.ProjectCount count(UUID projectId, long traces) {
         return TopicWindowDAO.ProjectCount.builder().projectId(projectId).traces(traces).build();
+    }
+
+    @Test
+    @DisplayName("one query reads the topics of several projects of one workspace, each project's in (born, id) "
+            + "order, and nothing of a project not asked or of another workspace")
+    void topicsOfSeveralProjects() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var notAsked = ID_GENERATOR.generateId();
+        var otherWorkspace = ID_GENERATOR.generateId();
+        data.savedList(workspaceId, first, NIGHT, 10);
+        data.savedList(workspaceId, second, NIGHT, 10);
+        data.savedList(workspaceId, notAsked, NIGHT, 10);
+        data.savedList(ID_GENERATOR.generateId().toString(), otherWorkspace, NIGHT, 10);
+        // Born a night before the saved topic: first in its project.
+        var older = Topic.builder()
+                .id(ID_GENERATOR.generateId())
+                .workspaceId(workspaceId)
+                .projectId(second)
+                .name("Refunds")
+                .definition("Requests to get money back")
+                .born(LocalDate.ofInstant(NIGHT.minus(Duration.ofDays(1)), ZoneOffset.UTC))
+                .size(5)
+                .vectors(new PrototypeVectors(List.of(TopicsTestData.unit(2))))
+                .build();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertTopics(List.of(older));
+            return null;
+        });
+
+        var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findByProjects(workspaceId, List.of(first, second, otherWorkspace)));
+
+        assertThat(rows).containsExactlyElementsOf(Stream.of(first, second)
+                .sorted(Comparator.comparing(UUID::toString))
+                .flatMap(projectId -> data.topics(projectId).stream()).toList());
+        assertThat(rows).filteredOn(topic -> topic.projectId().equals(second)).hasSize(2).first()
+                .isEqualTo(older);
     }
 }

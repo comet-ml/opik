@@ -17,6 +17,7 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -56,6 +57,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -129,13 +131,18 @@ class TopicsRunsIntegrationTest {
     private TransactionTemplate template;
     private TopicsRunPlanner planner;
     private TopicRunStore store;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
     private TopicsTestData data;
     private ProjectResourceClient projects;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, ClientSupport client) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicWindowDAO windowDAO,
+            @Jit TopicAlgorithm algorithm, ClientSupport client) {
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         ClientSupportUtils.config(client);
         this.projects = new ProjectResourceClient(client, TestUtils.getBaseUrl(client),
                 PodamFactoryUtils.newPodamFactory());
@@ -201,6 +208,7 @@ class TopicsRunsIntegrationTest {
                 .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
+        assertArrivalEqualsTheRun(workspaceId, built, buildRun);
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
         }
@@ -573,6 +581,34 @@ class TopicsRunsIntegrationTest {
      * workspace opted in, each plan cancels them as the planner does for an opt-out, and the pods or the planner end
      * the cancelled ones.
      */
+    /**
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
+     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
+     * {@code trace_topics}.
+     */
+    private void assertArrivalEqualsTheRun(String workspaceId, UUID projectId, UUID runId) {
+        var labels = data.traceTopics(workspaceId, projectId).stream()
+                .filter(row -> runId.equals(row.runId()))
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        // Wider than the test's window: only the run's traces are compared.
+        var from = tomorrowStart().minus(Duration.ofDays(90));
+        var to = tomorrowStart().plus(Duration.ofDays(1));
+        var window = windowDAO.readWindow(projectId, from, to, 100_000, 120)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, "test"))
+                .collectList().block()
+                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
+        assertThat(window).hasSize(labels.size()).isNotEmpty();
+
+        var project = data.topicProject(projectId);
+        var arrived = algorithm.labeller(data.topics(projectId), project.otherVectors())
+                .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
+        for (int i = 0; i < window.size(); i++) {
+            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
+                    .isEqualTo(labels.get(window.get(i).traceId()));
+        }
+    }
+
     private void endRunsInFlight() {
         Awaitility.await().atMost(WAIT).pollInterval(Duration.ofMillis(500)).until(() -> {
             planner.plan(Instant.now()).block();

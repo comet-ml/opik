@@ -102,7 +102,7 @@ def _build_file_tree(repo_root: Path, git_files: Optional[Set[str]]) -> str:
         for rel in sorted(git_files):
             parts = Path(rel).parts
             for i in range(len(parts) - 1):
-                d = str(Path(*parts[: i + 1])) + "/"
+                d = Path(*parts[: i + 1]).as_posix() + "/"
                 if d not in dirs_seen:
                     dirs_seen.add(d)
                     entries.append(d)
@@ -116,14 +116,14 @@ def _build_file_tree(repo_root: Path, git_files: Optional[Set[str]]) -> str:
             ]
             rel_root = Path(root).relative_to(repo_root)
             if str(rel_root) != ".":
-                d = str(rel_root) + "/"
+                d = rel_root.as_posix() + "/"
                 if d not in dirs_seen:
                     dirs_seen.add(d)
                     entries.append(d)
             for f in sorted(filenames):
                 if f.startswith("."):
                     continue
-                rel = str(rel_root / f) if str(rel_root) != "." else f
+                rel = (rel_root / f).as_posix() if str(rel_root) != "." else f
                 entries.append(rel)
 
     total = len(entries)
@@ -153,9 +153,7 @@ def _find_instrumentation(
             ]
             for f in filenames:
                 if Path(f).suffix in _CODE_EXTENSIONS:
-                    rel = str(Path(root).relative_to(repo_root) / f)
-                    if rel.startswith("./"):
-                        rel = rel[2:]
+                    rel = (Path(root).relative_to(repo_root) / f).as_posix()
                     code_files.append(rel)
         code_files.sort()
 

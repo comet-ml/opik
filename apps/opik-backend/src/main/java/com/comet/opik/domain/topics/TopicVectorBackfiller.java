@@ -80,11 +80,11 @@ class TopicVectorBackfiller {
     }
 
     /**
-     * One project's turn: what to record, if anything, whether the project should get another turn, and the keys it
-     * settled.
+     * One project's turn: what to record, if anything, whether the project should get another turn, the keys it
+     * settled, and the workspace's topic on arrival after it.
      */
     private record Turn(@NonNull TickResult result, @NonNull Optional<TopicBackfillProgress> progress, boolean more,
-            @NonNull Set<VectorKey> settled) {
+            @NonNull Set<VectorKey> settled, @NonNull ArrivalSteps arrival) {
     }
 
     /**
@@ -319,21 +319,23 @@ class TopicVectorBackfiller {
      * write at the end; a failed write only means the projects are read again next tick.
      *
      * @param window the backfill window's bounds and the workspace
+     * @param arrival the workspace's topic on arrival after its fresh phase
      */
     Mono<TickResult> backfill(@NonNull TopicVectorsMetrics.Workspace workspace,
             @NonNull Collection<TopicBackfill> projects,
-            @NonNull TopicVectorsFind window, @NonNull TickBudget budget) {
+            @NonNull TopicVectorsFind window, @NonNull TickBudget budget, @NonNull ArrivalSteps arrival) {
         if (projects.isEmpty()) {
             return Mono.just(TickResult.EMPTY);
         }
         var vectors = config.getVectors();
         var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
         var run = new Run(projects.stream().sorted(order(vectors.getMaxTracesPerTick()))
-                .collect(Collectors.toCollection(ArrayDeque::new)));
+                .collect(Collectors.toCollection(ArrayDeque::new)), arrival);
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(workspace, project, window, budget, run.settled).doOnNext(turn -> run.add(project, turn));
+            return turn(workspace, project, window, budget, run.settled, run.arrival)
+                    .doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
@@ -354,16 +356,19 @@ class TopicVectorBackfiller {
         private final List<TopicBackfillProgress> progress = new ArrayList<>();
         private final Set<VectorKey> settled = new HashSet<>();
         private TickResult result = TickResult.EMPTY;
+        private ArrivalSteps arrival;
         private boolean stopped;
 
-        private Run(ArrayDeque<TopicBackfill> queue) {
+        private Run(ArrayDeque<TopicBackfill> queue, ArrivalSteps arrival) {
             this.queue = queue;
+            this.arrival = arrival;
         }
 
         private void add(TopicBackfill project, Turn turn) {
             result = result.plus(turn.result());
             turn.progress().ifPresent(progress::add);
             settled.addAll(turn.settled());
+            arrival = turn.arrival();
             if (turn.more()) {
                 queue.addFirst(project);
             }
@@ -383,7 +388,7 @@ class TopicVectorBackfiller {
      * the project's turns.
      */
     private Mono<Turn> turn(TopicVectorsMetrics.Workspace workspace, TopicBackfill project, TopicVectorsFind window,
-            TickBudget budget, Set<VectorKey> settledBefore) {
+            TickBudget budget, Set<VectorKey> settledBefore, ArrivalSteps arrival) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
         // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
@@ -397,7 +402,7 @@ class TopicVectorBackfiller {
                     var candidates = read.candidates().stream()
                             .filter(candidate -> !settledBefore.contains(VectorKey.of(candidate)))
                             .toList();
-                    return writer.embedAndWrite(workspace, candidates, budget, null)
+                    return writer.embedAndWrite(workspace, candidates, budget, null, arrival)
                             .map(written -> {
                                 var result = written.result();
                                 boolean cut = written.leftForLater(candidates);
@@ -406,21 +411,22 @@ class TopicVectorBackfiller {
                                 // them out.
                                 boolean more = !read.complete() && !cut && !written.settled().isEmpty();
                                 if (!drained && result.written() == 0) {
-                                    return new Turn(result, Optional.empty(), more, written.settled());
+                                    return new Turn(result, Optional.empty(), more, written.settled(),
+                                            written.arrival());
                                 }
                                 return new Turn(result, Optional.of(TopicBackfillProgress.builder()
                                         .workspaceId(workspaceId)
                                         .projectId(project.projectId())
                                         .drainedAt(drained ? budget.start() : null)
                                         .written(result.written())
-                                        .build()), more, written.settled());
+                                        .build()), more, written.settled(), written.arrival());
                             });
                 })
                 .onErrorResume(exception -> {
                     metrics.readFailure("backfill", workspace, exception);
                     log.warn("Topic vectors backfill read failed, reading it again next tick, workspace '{}', project "
                             + "'{}'", workspaceId, project.projectId(), exception);
-                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false, Set.of()));
+                    return Mono.just(new Turn(TickResult.EMPTY, Optional.empty(), false, Set.of(), arrival));
                 });
     }
 }
