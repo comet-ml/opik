@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.infrastructure.db.HasValue;
 import com.comet.opik.infrastructure.inference.InferenceErrorCode;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
@@ -12,7 +13,9 @@ import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -142,19 +145,18 @@ class TopicVectorsMetrics {
     }
 
     void workspaceNotRead(@NonNull Workspace workspace, @NonNull NotRead reason) {
-        workspacesNotRead.add(1, workspace.attributes().toBuilder().put(stringKey("reason"), reason.value).build());
+        workspacesNotRead.add(1,
+                workspace.attributes().toBuilder().put(stringKey("reason"), reason.getValue()).build());
     }
 
     /** Why a tick's workspace read did not read an enabled workspace. */
-    enum NotRead {
+    @Getter
+    @RequiredArgsConstructor
+    enum NotRead implements HasValue {
         BUDGET("budget"),
         OVER_EXCLUDED("over_excluded");
 
         private final String value;
-
-        NotRead(String value) {
-            this.value = value;
-        }
     }
 
     static AttributesBuilder workspace(@NonNull String workspaceId, @NonNull String workspaceName) {

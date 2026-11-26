@@ -786,18 +786,16 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration leaseSlack;
 
-        // The three below start at their defaults, so a config without them (or one built in code) keeps them.
-
         /**
          * The most undrained projects a workspace read leaves out by id: the ids go into the query text, about 40 bytes
          * each. A workspace with more is not read by the workspace read until its backfill brings it under.
          */
         @JsonProperty
-        @Min(1) @Max(10_000) private int maxExcludedProjects = 2_000;
+        @Min(1) @Max(10_000) private int maxExcludedProjects;
 
         /** The most workspaces whose projects one tick discovers, so a new leader's first ticks still serve traces. */
         @JsonProperty
-        @Min(1) @Max(1_000) private int maxDiscoveriesPerTick = 5;
+        @Min(1) @Max(1_000) private int maxDiscoveriesPerTick;
 
         /**
          * A project with at most this many traces in the backfill window, as discovered, is read in one query over the
@@ -806,7 +804,7 @@ public class TopicsConfig {
          * default {@code find.maxMemoryUsage}, which leaves room for the count being approximate.
          */
         @JsonProperty
-        @Min(1) @Max(10_000_000) private long oneSliceMaxTraces = 250_000;
+        @Min(1) @Max(10_000_000) private long oneSliceMaxTraces;
 
         @Valid @NotNull @JsonProperty
         private FindConfig find;

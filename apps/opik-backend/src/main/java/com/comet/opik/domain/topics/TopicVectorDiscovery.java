@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -177,12 +178,14 @@ class TopicVectorDiscovery {
      * A workspace's discovery so far: the slices each read has left, and what the slices read so far found. Its bounds
      * and start are those of the tick that began it.
      */
+    @Builder(toBuilder = true)
     private record Discovery(@NonNull Instant start, @NonNull Instant lowerBound,
             @NonNull List<TopicVectorsDAO.Slice> toFind, @NonNull List<TopicVectorsDAO.Slice> toCount,
             @NonNull Map<UUID, TopicVectorsDAO.BackfillProject> projects, @NonNull Map<UUID, Long> withVectors) {
 
         static Discovery start(Instant start, Instant lowerBound, List<TopicVectorsDAO.Slice> slices) {
-            return new Discovery(start, lowerBound, List.copyOf(slices), List.copyOf(slices), Map.of(), Map.of());
+            return Discovery.builder().start(start).lowerBound(lowerBound).toFind(List.copyOf(slices))
+                    .toCount(List.copyOf(slices)).projects(Map.of()).withVectors(Map.of()).build();
         }
 
         boolean done() {
@@ -193,15 +196,13 @@ class TopicVectorDiscovery {
             var merged = new HashMap<>(projects);
             found.forEach(project -> merged.merge(project.projectId(), project,
                     TopicVectorsDAO.BackfillProject::merge));
-            return new Discovery(start, lowerBound, toFind.subList(1, toFind.size()), toCount, Map.copyOf(merged),
-                    withVectors);
+            return toBuilder().toFind(toFind.subList(1, toFind.size())).projects(Map.copyOf(merged)).build();
         }
 
         Discovery afterCounted(Map<UUID, Long> counts) {
             var merged = new HashMap<>(withVectors);
             counts.forEach((projectId, traces) -> merged.merge(projectId, traces, Long::sum));
-            return new Discovery(start, lowerBound, toFind, toCount.subList(1, toCount.size()), projects,
-                    Map.copyOf(merged));
+            return toBuilder().toCount(toCount.subList(1, toCount.size())).withVectors(Map.copyOf(merged)).build();
         }
     }
 }

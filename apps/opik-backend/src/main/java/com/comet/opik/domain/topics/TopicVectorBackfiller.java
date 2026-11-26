@@ -4,6 +4,7 @@ import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -172,12 +173,14 @@ class TopicVectorBackfiller {
      *
      * @param stopped an embed call failed: the service would answer the next project the same way this tick
      */
+    @Builder(toBuilder = true)
     private record Run(@NonNull List<TopicBackfill> queue, @NonNull List<TopicBackfillProgress> progress,
             @NonNull Set<VectorKey> settled, @NonNull TickResult result, @NonNull ArrivalSteps arrival,
             boolean stopped) {
 
         static Run start(List<TopicBackfill> queue, ArrivalSteps arrival) {
-            return new Run(queue, List.of(), Set.of(), TickResult.EMPTY, arrival, false);
+            return Run.builder().queue(queue).progress(List.of()).settled(Set.of()).result(TickResult.EMPTY)
+                    .arrival(arrival).build();
         }
 
         /** After {@code project}, the first in the queue, took {@code turn}: it goes first again when it has more. */
@@ -192,8 +195,9 @@ class TopicVectorBackfiller {
                     .orElse(progress);
             var nextSettled = new HashSet<>(settled);
             nextSettled.addAll(turn.settled());
-            return new Run(nextQueue, nextProgress, Set.copyOf(nextSettled), result.plus(turn.result()),
-                    turn.arrival(), turn.result().skipped().containsKey(SkipReason.EMBED_FAILED));
+            return toBuilder().queue(nextQueue).progress(nextProgress).settled(Set.copyOf(nextSettled))
+                    .result(result.plus(turn.result())).arrival(turn.arrival())
+                    .stopped(turn.result().skipped().containsKey(SkipReason.EMBED_FAILED)).build();
         }
     }
 

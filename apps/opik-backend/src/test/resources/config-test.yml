@@ -1109,6 +1109,9 @@ topics:
     embedConcurrency: 1
     embedTimeout: 10s
     leaseSlack: 5s
+    maxExcludedProjects: 2000
+    maxDiscoveriesPerTick: 5
+    oneSliceMaxTraces: 250000
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824

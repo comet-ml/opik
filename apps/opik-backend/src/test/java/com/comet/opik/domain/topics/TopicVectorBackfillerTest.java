@@ -26,9 +26,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,7 +49,8 @@ import static org.mockito.Mockito.when;
 class TopicVectorBackfillerTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
-    private static final TopicsConfig.VectorsConfig DEFAULTS = new TopicsConfig.VectorsConfig();
+    private static final int MAX_EXCLUDED_PROJECTS = 20;
+    private static final int MAX_DISCOVERIES_PER_TICK = 3;
 
     private final Instant now = TopicsTestClock.randomInstant();
 
@@ -78,6 +81,7 @@ class TopicVectorBackfillerTest {
         vectors.setFind(find);
         vectors.setEmbedTimeout(Duration.seconds(1));
         vectors.setLongWindowInterval(Duration.days(1));
+        vectors.setMaxDiscoveriesPerTick(MAX_DISCOVERIES_PER_TICK);
         var config = new TopicsConfig();
         config.setVectors(vectors);
         var dao = mock(TopicVectorsDAO.class);
@@ -178,7 +182,7 @@ class TopicVectorBackfillerTest {
     void discoveryMarksUnreadable() {
         var setup = new Setup();
         setup.slices(1);
-        var workspaces = IntStream.range(0, DEFAULTS.getMaxDiscoveriesPerTick() + 1)
+        var workspaces = IntStream.range(0, MAX_DISCOVERIES_PER_TICK + 1)
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
         setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
         setup.discovery.discover(List.of(workspaces.getLast()), now, now, setup.budget(50)).block();
@@ -187,7 +191,7 @@ class TopicVectorBackfillerTest {
 
         setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
 
-        verify(setup.backfills, times(workspaces.size() + DEFAULTS.getMaxDiscoveriesPerTick()))
+        verify(setup.backfills, times(workspaces.size() + MAX_DISCOVERIES_PER_TICK))
                 .discovered(any(), any(), any(), any());
     }
 
@@ -203,7 +207,7 @@ class TopicVectorBackfillerTest {
         setup.discovery.discover(List.of(inProgress), now, now, setup.budget(11)).block();
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
         setup.readsTake(java.time.Duration.ZERO);
-        var fresh = IntStream.range(0, DEFAULTS.getMaxDiscoveriesPerTick())
+        var fresh = IntStream.range(0, MAX_DISCOVERIES_PER_TICK)
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
         var workspaces = new ArrayList<>(fresh);
         workspaces.add(inProgress);
@@ -211,7 +215,7 @@ class TopicVectorBackfillerTest {
         setup.discovery.discover(workspaces, now, now, setup.budget(50)).block();
 
         var discovered = ArgumentCaptor.forClass(String.class);
-        verify(setup.backfills, times(DEFAULTS.getMaxDiscoveriesPerTick()))
+        verify(setup.backfills, times(MAX_DISCOVERIES_PER_TICK))
                 .discovered(discovered.capture(), any(), any(), any());
         assertThat(discovered.getAllValues()).first().isEqualTo(inProgress);
         assertThat(discovered.getAllValues()).doesNotContain(fresh.getLast());
@@ -250,12 +254,12 @@ class TopicVectorBackfillerTest {
             + "read leaves out the projects' ids again")
     void overExcludedProjects() {
         var setup = new Setup();
-        var undrained = IntStream.range(0, DEFAULTS.getMaxExcludedProjects() + 1)
+        var undrained = IntStream.range(0, MAX_EXCLUDED_PROJECTS + 1)
                 .mapToObj(i -> backfill(1, now)).toList();
 
         assertThat(setup.backfiller.readableWithout(setup.workspaceId, undrained)).isEmpty();
 
-        var atLimit = undrained.subList(0, DEFAULTS.getMaxExcludedProjects());
+        var atLimit = undrained.subList(0, MAX_EXCLUDED_PROJECTS);
         assertThat(setup.backfiller.readableWithout(setup.workspaceId, atLimit))
                 .contains(atLimit.stream().map(TopicBackfill::projectId).toList());
     }
@@ -296,13 +300,17 @@ class TopicVectorBackfillerTest {
         assertThat(result).isEqualTo(TickResult.written(19));
         var finds = ArgumentCaptor.forClass(TopicVectorsFind.class);
         verify(setup.dao, times(5)).findUnvectored(finds.capture());
-        assertThat(finds.getAllValues()).extracting(TopicVectorsFind::projectId).containsExactly(small.projectId(),
-                smallest.projectId(), largeRecent.projectId(), largeRecent.projectId(), largeOlder.projectId());
+        assertThat(finds.getAllValues()).isEqualTo(Stream.of(small, smallest, largeRecent, largeRecent, largeOlder)
+                .map(project -> setup.window(10).toBuilder().projectId(project.projectId()).limit(10)
+                        .maxExecutionSeconds(30).build())
+                .toList());
         var arrivals = ArgumentCaptor.forClass(ArrivalSteps.class);
         verify(setup.writer, times(5)).embedAndWrite(any(), any(), any(), any(), arrivals.capture());
-        assertThat(arrivals.getAllValues()).extracting(ArrivalSteps::spent).containsExactly(java.time.Duration.ZERO,
-                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(3),
-                java.time.Duration.ofSeconds(4));
+        assertThat(arrivals.getAllValues()).isEqualTo(IntStream.range(0, 5)
+                .mapToObj(spent -> spent == 0
+                        ? ArrivalSteps.OFF
+                        : ArrivalSteps.OFF.toBuilder().spent(java.time.Duration.ofSeconds(spent)).build())
+                .toList());
         verify(setup.backfills).record(List.of(
                 progress(setup.workspaceId, small, now, 1),
                 progress(setup.workspaceId, smallest, now, 2),
@@ -354,7 +362,7 @@ class TopicVectorBackfillerTest {
         vectors.getFind().setCreatedAtSlack(Duration.days(1));
         vectors.getFind().setSliceSize(Duration.days(1));
         var start = Instant.now();
-        var undrained = IntStream.range(0, DEFAULTS.getMaxExcludedProjects() + 1)
+        var undrained = IntStream.range(0, MAX_EXCLUDED_PROJECTS + 1)
                 .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
         when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());
@@ -398,7 +406,7 @@ class TopicVectorBackfillerTest {
         private final TopicVectorDiscovery discovery;
         private java.time.Duration readTime = java.time.Duration.ZERO;
         /** The store's discovery marks, which every pod reads. */
-        private final Map<String, Instant> checked = new java.util.concurrent.ConcurrentHashMap<>();
+        private final Map<String, Instant> checked = new ConcurrentHashMap<>();
 
         private Setup() {
             var find = new TopicsConfig.FindConfig();
@@ -408,6 +416,9 @@ class TopicVectorBackfillerTest {
             vectors.setEmbedTimeout(Duration.seconds(1));
             vectors.setLongWindowInterval(Duration.days(1));
             vectors.setMaxTracesPerTick(10);
+            vectors.setMaxExcludedProjects(MAX_EXCLUDED_PROJECTS);
+            vectors.setMaxDiscoveriesPerTick(MAX_DISCOVERIES_PER_TICK);
+            vectors.setOneSliceMaxTraces(250_000);
             config.setVectors(vectors);
             backfiller = new TopicVectorBackfiller(config, dao, backfills, writer, metrics);
             discovery = new TopicVectorDiscovery(config, dao, backfills, metrics);
