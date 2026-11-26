@@ -32,6 +32,7 @@ final class TopicsTestAlgorithm {
         config.setAuthorMaxExamples(10);
         config.setAssignMinCosine(0.75);
         config.setOtherGate(0.95);
+        config.setMergeCosine(0.96);
         config.setMaxTopics(10);
         config.setProvisionalBelow(1_000);
         config.setNightlyMinCandidate(20);

@@ -791,8 +791,11 @@ class TopicsNightlyRulesTest {
         @DisplayName("small groups the naming merges into one new topic are born when their window share reaches 2%")
         void merged() {
             var state = state(1, topic("East", EAST), topic("North", NORTH));
+            // In two dimensions the newborn's two far groups average out next to East; merging is tested apart.
+            var noMerge = TopicsTestAlgorithm.config();
+            noMerge.setMergeCosine(2.0);
 
-            var result = drive(NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG, TASKS),
+            var result = drive(NightlyUpdate.run(state, window(twoSmall()), 10, noMerge, TASKS),
                     named(Map.of("naming",
                             newTopics("{\"name\": \"Both\", \"definition\": \"B.\", \"clusters\": [0, 1]}"))));
 

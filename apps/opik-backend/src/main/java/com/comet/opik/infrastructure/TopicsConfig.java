@@ -108,6 +108,9 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
 
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("2.0") private double mergeCosine;
+
         /** Most topics in a project's list. */
         @JsonProperty
         @Min(1) @Max(100) private int maxTopics;

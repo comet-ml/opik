@@ -2848,6 +2848,11 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 0.96
+    #  Description: Two topics whose centres (the normalised mean of their members' vectors) have at least this cosine
+    #  are one theme split in two: every night folds the smaller into the larger. Above 1 never merges.
+    #  Depends on the embedding model's cosine spread
+    mergeCosine: ${TOPICS_ALGORITHM_MERGE_COSINE:-0.96}
     #  Default: 10
     #  Description: Most topics in a project's list. At most 100
     maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}

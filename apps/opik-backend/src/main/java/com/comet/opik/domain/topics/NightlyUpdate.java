@@ -35,7 +35,8 @@ import java.util.stream.IntStream;
  * <li>the final assignment, as the discovery run's ({@link PrototypeAssigner}, with the {@code otherGate} Other
  * gate);</li>
  * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
- * reassignment when one happened, then the sizes;</li>
+ * reassignment when one happened; then {@link NightState#mergeOverlapping} folds a topic covering the same traces as a
+ * larger one into it, with a reassignment when one merged; then the sizes;</li>
  * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
  * prototype's lifetime. A retired topic keeps no prototypes: a theme that comes back later is born as a new topic.</li>
  * </ol>
@@ -104,6 +105,9 @@ class NightlyUpdate {
         int liveBefore = state.liveCount();
         state.retireLowShare(last.labels(), config.getRetireShare(), config.getRetireNights());
         if (state.liveCount() < liveBefore) {
+            last = assignFinal(state, window, config);
+        }
+        if (state.mergeOverlapping(window.vectors(), last.labels(), d, config.getMergeCosine())) {
             last = assignFinal(state, window, config);
         }
         var labels = last.labels();

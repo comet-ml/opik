@@ -1190,6 +1190,7 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    mergeCosine: 0.96
     maxTopics: 10
     provisionalBelow: 1000
     nightlyMinCandidate: 20
