@@ -1,7 +1,7 @@
 ---
-description: Log Claude Code sessions to Opik with Claude Code's native OpenTelemetry export, and give Claude Code the Opik MCP tools and skills with the Opik connector or plugin.
+description: Log Claude Code sessions to Opik with Claude Code's native OpenTelemetry export, and give Claude Code the Opik skills and MCP tools with the Opik plugin.
 headline: Claude Code
-og:description: Trace Claude Code sessions in Opik with native OpenTelemetry export, and add the Opik connector or plugin to give Claude Code the Opik MCP tools and skills.
+og:description: Trace Claude Code sessions in Opik with native OpenTelemetry export, and install the Opik plugin to give Claude Code the Opik skills and MCP tools.
 og:site_name: Opik Documentation
 og:title: Claude Code Integration - Opik
 title: Observability for Claude Code with Opik
@@ -12,9 +12,9 @@ Opik works with [Claude Code](https://claude.ai/code) in two ways:
 - **Tracing:** Claude Code's native OpenTelemetry export sends each session to Opik as a trace, so
   you can review what developers asked, what the model answered, which tools ran and what each
   turn cost.
-- **MCP tools and skills:** the Opik connector or the Opik plugin gives Claude Code the Opik MCP
-  server tools and the Opik skills, so it can instrument your app, read and score traces, run
-  evaluations and explain failures in your Opik workspace.
+- **The Opik plugin:** gives Claude Code the Opik skills and the Opik MCP server tools, so it can
+  instrument your app, read and score traces, run evaluations and explain failures in your Opik
+  workspace.
 
 The two are independent, and you can use either or both.
 
@@ -80,35 +80,13 @@ For the full variable reference, endpoint modes and validation steps, see
    tokens and cost). The trace-level output stays empty. Tool calls appear as `claude_code.tool`
    spans with their input and result.
 
-## Opik MCP tools and skills
+## The Opik plugin: skills and MCP tools
 
-The hosted [Opik MCP server](/mcp-server) and the Opik skills let Claude Code work in your Opik
-workspace. They do not log Claude Code sessions to Opik. For that, use
-[OpenTelemetry export](#trace-claude-code-sessions-with-opentelemetry).
+The [Opik plugin](https://github.com/comet-ml/opik-mcp) installs the Opik skills and registers the
+hosted [Opik MCP server](/mcp-server) for Opik Cloud. The plugin does not log Claude Code sessions
+to Opik. For that, use [OpenTelemetry export](#trace-claude-code-sessions-with-opentelemetry).
 
-There are two ways to add them:
-
-- **The Opik connector (recommended):** the Opik MCP server from the Claude connector directory.
-  It adds the MCP tools.
-- **The Opik plugin:** installs the Opik skills and registers the hosted MCP server.
-
-### Add the Opik connector (recommended)
-
-<Note>
-  The Opik connector works with Opik Cloud only. For a self-hosted or open-source Opik, see
-  [Self-hosted Opik](#self-hosted-opik).
-</Note>
-
-1. In claude.ai, open **Settings** → **Connectors**, find **Opik** and connect it.
-2. Sign in to Opik in the browser. The server works in the workspace that you pick when you sign
-   in; there is no API key to set.
-3. Sign in to Claude Code with the same claude.ai account. `/mcp` shows the server as
-   `claude.ai Opik`.
-
-The connector does not install the skills in Claude Code. Claude Code can still load a skill on
-demand with the `read_skill` tool. To install the skills, use the Opik plugin.
-
-### Install the Opik plugin
+### Install the plugin
 
 Inside Claude Code:
 
@@ -128,8 +106,8 @@ browser; there is no API key to set. `/mcp` shows the server as `plugin:opik:opi
 
 ### Skills
 
-The Opik plugin installs these skills. They load as `opik:<skill>`, such as
-`opik:opik-instrument`. Claude Code picks the skill that fits your request.
+The skills load as `opik:<skill>`, such as `opik:opik-instrument`. Claude Code picks the skill
+that fits your request.
 
 | Skill | What it does |
 | --- | --- |
@@ -162,14 +140,14 @@ For the full list of operations, see the [MCP tools reference](/mcp-server/tools
 
 ### Self-hosted Opik
 
-The connector and the plugin connect to Opik Cloud. The skills work with any Opik. To use your
-own server:
+The plugin registers the server for Opik Cloud. The skills work with any Opik. To use your own
+server:
 
 1. Add your server:
    - For a self-hosted Comet that serves the MCP server, run
      `claude mcp add --transport http opik-mcp https://<host>/opik/api/v1/mcp`.
    - For any other self-hosted or open-source Opik, follow the [MCP server setup](/mcp-server).
-2. If you installed the plugin, disable `plugin:opik:opik-cloud` in `/mcp`.
+2. In `/mcp`, disable `plugin:opik:opik-cloud`.
 
 ### Update the plugin
 
