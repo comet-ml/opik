@@ -45,6 +45,7 @@ import static org.mockito.Mockito.when;
 class TopicVectorBackfillerTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final TopicsConfig.VectorsConfig DEFAULTS = new TopicsConfig.VectorsConfig();
 
     private final Instant now = TopicsTestClock.randomInstant();
 
@@ -156,7 +157,7 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("a tick discovers at most MAX_DISCOVERIES_PER_TICK workspaces, a discovery in progress before a new "
+    @DisplayName("a tick discovers at most maxDiscoveriesPerTick workspaces, a discovery in progress before a new "
             + "one")
     void discoveriesPerTick() {
         var setup = new Setup();
@@ -167,7 +168,7 @@ class TopicVectorBackfillerTest {
         setup.backfiller.discover(List.of(inProgress), now, now, setup.budget(11)).block();
         verify(setup.backfills, never()).discovered(any(), any(), any(), any());
         setup.readsTake(java.time.Duration.ZERO);
-        var fresh = IntStream.range(0, TopicVectorBackfiller.MAX_DISCOVERIES_PER_TICK)
+        var fresh = IntStream.range(0, DEFAULTS.getMaxDiscoveriesPerTick())
                 .mapToObj(i -> ID_GENERATOR.generateId().toString()).toList();
         var workspaces = new ArrayList<>(fresh);
         workspaces.add(inProgress);
@@ -175,7 +176,7 @@ class TopicVectorBackfillerTest {
         setup.backfiller.discover(workspaces, now, now, setup.budget(50)).block();
 
         var discovered = ArgumentCaptor.forClass(String.class);
-        verify(setup.backfills, times(TopicVectorBackfiller.MAX_DISCOVERIES_PER_TICK))
+        verify(setup.backfills, times(DEFAULTS.getMaxDiscoveriesPerTick()))
                 .discovered(discovered.capture(), any(), any(), any());
         assertThat(discovered.getAllValues()).first().isEqualTo(inProgress);
         assertThat(discovered.getAllValues()).doesNotContain(fresh.getLast());
@@ -207,16 +208,16 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("a workspace with more projects in backfill than MAX_EXCLUDED_PROJECTS is not read; at the limit the "
+    @DisplayName("a workspace with more projects in backfill than maxExcludedProjects is not read; at the limit the "
             + "read leaves out the projects' ids again")
     void overExcludedProjects() {
         var setup = new Setup();
-        var undrained = IntStream.range(0, TopicVectorBackfiller.MAX_EXCLUDED_PROJECTS + 1)
+        var undrained = IntStream.range(0, DEFAULTS.getMaxExcludedProjects() + 1)
                 .mapToObj(i -> backfill(1, now)).toList();
 
         assertThat(setup.backfiller.readableWithout(setup.workspaceId, undrained)).isEmpty();
 
-        var atLimit = undrained.subList(0, TopicVectorBackfiller.MAX_EXCLUDED_PROJECTS);
+        var atLimit = undrained.subList(0, DEFAULTS.getMaxExcludedProjects());
         assertThat(setup.backfiller.readableWithout(setup.workspaceId, atLimit))
                 .contains(atLimit.stream().map(TopicBackfill::projectId).toList());
     }
@@ -243,7 +244,7 @@ class TopicVectorBackfillerTest {
     }
 
     @Test
-    @DisplayName("on a pass tick, a workspace over MAX_EXCLUDED_PROJECTS is not read by the workspace read, and does "
+    @DisplayName("on a pass tick, a workspace over maxExcludedProjects is not read by the workspace read, and does "
             + "not hold the long-window pass")
     void overExcludedWorkspaceOnAPassTick() {
         var setup = new Setup();
@@ -258,7 +259,7 @@ class TopicVectorBackfillerTest {
         vectors.getFind().setCreatedAtSlack(Duration.days(1));
         vectors.getFind().setSliceSize(Duration.days(1));
         var start = Instant.now();
-        var undrained = IntStream.range(0, TopicVectorBackfiller.MAX_EXCLUDED_PROJECTS + 1)
+        var undrained = IntStream.range(0, DEFAULTS.getMaxExcludedProjects() + 1)
                 .mapToObj(i -> backfill(1, start).toBuilder().workspaceId(setup.workspaceId).build()).toList();
         when(setup.backfills.findUndrained(any())).thenReturn(Map.of(setup.workspaceId, undrained));
         when(setup.dao.findUnvectored(any())).thenReturn(Flux.empty());

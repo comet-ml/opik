@@ -3189,6 +3189,18 @@ topics:
     #  Description: How much longer than the rest the leader lock lasts, for the insert after the last embed call,
     #  which has no deadline of its own. The tick is cancelled when the lock's lease ends. At most 1m
     leaseSlack: ${TOPICS_VECTORS_LEASE_SLACK:-5s}
+    #  Default: 2000
+    #  Description: The most projects in backfill a workspace's fresh read leaves out by id. A workspace with more is
+    #  not read by the fresh phase until its backfill brings it under. At most 10000
+    maxExcludedProjects: ${TOPICS_VECTORS_MAX_EXCLUDED_PROJECTS:-2000}
+    #  Default: 5
+    #  Description: The most workspaces whose projects one tick discovers for the backfill. At most 1000
+    maxDiscoveriesPerTick: ${TOPICS_VECTORS_MAX_DISCOVERIES_PER_TICK:-5}
+    #  Default: 250000
+    #  Description: A project with at most this many traces in the backfill window is read in one query; a larger one
+    #  in find.sliceSize slices. Lower it with find.maxMemoryUsage: at the default, one such read uses about an eighth
+    #  of it. At most 10000000
+    oneSliceMaxTraces: ${TOPICS_VECTORS_ONE_SLICE_MAX_TRACES:-250000}
     find:
       #  Default: 30000000
       #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000

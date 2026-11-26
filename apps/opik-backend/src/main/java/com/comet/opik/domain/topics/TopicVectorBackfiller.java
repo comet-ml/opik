@@ -43,22 +43,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TopicVectorBackfiller {
 
-    /**
-     * The most undrained projects a workspace read leaves out by id: the ids go into the query text, about 40 bytes
-     * each. A workspace with more is not read by the workspace read until its backfill brings it under.
-     */
-    static final int MAX_EXCLUDED_PROJECTS = 2_000;
-    /** The most workspaces whose projects one tick discovers, so a new leader's first ticks still serve traces. */
-    static final int MAX_DISCOVERIES_PER_TICK = 5;
-    /**
-     * A project with at most this many traces in the backfill window, as discovered, is read in one query over the
-     * whole window; a larger one in {@code find.sliceSize} slices. Measured on ClickHouse 26.3 with the real DDL: one
-     * read of a project costs about 0.45 KB of memory and 6 rows read per trace, so at this value one read stays near
-     * 110 MB and 1.5M rows, an eighth of the default {@code find.maxMemoryUsage}, which leaves room for the count being
-     * approximate.
-     */
-    static final long ONE_SLICE_MAX_TRACES = 250_000;
-
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicVectorsDAO dao;
     private final @NonNull TopicVectorBackfillService backfills;
@@ -127,7 +111,7 @@ class TopicVectorBackfiller {
                             .map(last -> Duration.between(last, budget.start()).compareTo(interval) >= 0)
                             .orElse(true))
                     .sorted(Comparator.comparing(id -> !discoveries.containsKey(id)))
-                    .limit(MAX_DISCOVERIES_PER_TICK)
+                    .limit(config.getVectors().getMaxDiscoveriesPerTick())
                     .toList();
             long started = System.nanoTime();
             return Flux.fromIterable(due)
@@ -256,15 +240,16 @@ class TopicVectorBackfiller {
 
     /**
      * The projects a workspace read leaves out, those in backfill; empty when the workspace must not be read. That is
-     * when there are more than {@link #MAX_EXCLUDED_PROJECTS}: the workspace read skips it until its backfill brings it
+     * when there are more than {@code topics.vectors.maxExcludedProjects}: the workspace read skips it until its backfill brings it
      * under, and its traces are the backfill's for now.
      */
     Optional<List<UUID>> readableWithout(@NonNull String workspaceId, @NonNull List<TopicBackfill> undrained) {
-        if (undrained.size() > MAX_EXCLUDED_PROJECTS) {
+        int limit = config.getVectors().getMaxExcludedProjects();
+        if (undrained.size() > limit) {
             if (overExcluded.add(workspaceId)) {
                 log.warn("Topic vectors workspace reads skipped until the backfill brings the projects in backfill "
                         + "under the limit, workspace '{}', projects in backfill '{}', limit '{}'", workspaceId,
-                        undrained.size(), MAX_EXCLUDED_PROJECTS);
+                        undrained.size(), limit);
             }
             return Optional.empty();
         }
@@ -393,7 +378,7 @@ class TopicVectorBackfiller {
         var workspaceId = project.workspaceId();
         // A project the workspace read just started has no count yet (0): read it in slices too, as it may be large.
         var traces = project.backfillTracesTotal();
-        var sliceSize = traces == 0 || traces > ONE_SLICE_MAX_TRACES
+        var sliceSize = traces == 0 || traces > vectors.getOneSliceMaxTraces()
                 ? vectors.getFind().getSliceSize().toJavaDuration()
                 : null;
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
