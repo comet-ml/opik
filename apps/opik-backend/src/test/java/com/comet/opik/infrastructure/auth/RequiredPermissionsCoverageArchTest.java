@@ -105,7 +105,10 @@ class RequiredPermissionsCoverageArchTest {
             // GuardrailsAccess: the serviceToggles.guardrailsValidationsEnabled toggle and the organization's
             // guardrails enablement (403 "Guardrails is available on the Enterprise plan"), so any member of an
             // enabled workspace may call it.
-            "GuardrailsResource.validateGuardrails");
+            "GuardrailsResource.validateGuardrails",
+            // A read that is a POST only to carry a span's usage map. It prices that usage in memory and writes
+            // nothing, and it shows no more than the ungated GET of the same prices, which any member may read.
+            "ModelPricesResource.resolve");
 
     /**
      * How many unannotated mutating endpoints are still in the census, which started at 85 (the 86 found minus

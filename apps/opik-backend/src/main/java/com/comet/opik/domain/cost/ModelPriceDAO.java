@@ -7,6 +7,7 @@ import lombok.Builder;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -30,8 +31,10 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(CustomModelPriceKindMapper.class)
 @RegisterArgumentFactory(ModelPriceHistoryActionMapper.class)
+@RegisterColumnMapper(ModelPriceHistoryActionMapper.class)
 @RegisterRowMapper(ModelPriceDAO.ModelPriceRowMapper.class)
 @RegisterConstructorMapper(ModelPriceDAO.ListHeader.class)
+@RegisterConstructorMapper(ModelPriceDAO.HistoryRow.class)
 interface ModelPriceDAO {
 
     record ListHeader(long version, int rowCount) {
@@ -41,6 +44,10 @@ interface ModelPriceDAO {
     @Builder(toBuilder = true)
     record HistoryEntry(UUID id, UUID rowId, ModelPriceHistoryAction action, @Nullable String beforeRow,
             @Nullable String afterRow) {
+    }
+
+    record HistoryRow(long listVersion, String rowId, ModelPriceHistoryAction action, @Nullable String beforeRow,
+            @Nullable String afterRow, Instant createdAt, String createdBy) {
     }
 
     // Not INSERT IGNORE: on an existing row that takes a shared lock, and two saves holding one each then deadlock on
@@ -121,6 +128,23 @@ interface ModelPriceDAO {
             """)
     void insertHistory(@Bind("organizationId") String organizationId, @Bind("listVersion") long listVersion,
             @BindMethods("entry") List<HistoryEntry> entries, @Bind("userName") String userName);
+
+    @SqlQuery("""
+            SELECT list_version, row_id, action, before_row, after_row, created_at, created_by
+            FROM model_prices_history
+            WHERE organization_id = :organizationId
+            ORDER BY list_version DESC, created_at DESC, id
+            LIMIT :limit OFFSET :offset
+            """)
+    List<HistoryRow> findHistory(@Bind("organizationId") String organizationId, @Bind("limit") int limit,
+            @Bind("offset") long offset);
+
+    @SqlQuery("""
+            SELECT COUNT(*)
+            FROM model_prices_history
+            WHERE organization_id = :organizationId
+            """)
+    long countHistory(@Bind("organizationId") String organizationId);
 
     class ModelPriceRowMapper implements RowMapper<ModelPriceRow> {
 

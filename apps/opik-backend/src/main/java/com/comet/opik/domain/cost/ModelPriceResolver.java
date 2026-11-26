@@ -44,10 +44,13 @@ class ModelPriceResolver {
         NORMALIZED_VERSION_STRIPPED
     }
 
-    /** The price to bill, and the row the span matched: the organization's {@code customRow}, else a built-in one. */
+    /**
+     * The price to bill, and the row the span matched: the organization's {@code customRow}, else a built-in one. For
+     * an alias, {@code targetRow} is the organization's row it led to, if it led to one.
+     */
     @Builder(toBuilder = true)
     record PriceMatch(@NonNull ModelPrice price, @NonNull String provider, @NonNull NameForm nameForm,
-            @Nullable CustomModelPrice customRow) {
+            @Nullable CustomModelPrice customRow, @Nullable CustomModelPrice targetRow) {
     }
 
     @Builder(toBuilder = true)
@@ -155,6 +158,7 @@ class ModelPriceResolver {
                             .provider(alias.provider())
                             .nameForm(alias.nameForm())
                             .customRow(alias.row())
+                            .targetRow(match.customRow())
                             .build())
                     .or(() -> findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings));
         }

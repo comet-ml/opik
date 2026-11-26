@@ -1,6 +1,8 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.modelprice.CustomModelPriceRow;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.ws.rs.ClientErrorException;
@@ -15,6 +17,7 @@ import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -29,10 +32,11 @@ class ModelPriceStore {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    private record HistorySnapshot(@NonNull String model, @NonNull String provider,
-            @NonNull CustomModelPrice.Kind kind, @Nullable BigDecimal inputPrice, @Nullable BigDecimal outputPrice,
-            @Nullable BigDecimal cacheReadPrice, @Nullable BigDecimal cacheWritePrice, @Nullable String aliasModel,
-            @Nullable String aliasProvider, @Nullable String note) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record HistorySnapshot(@NonNull String model, @NonNull String provider, @NonNull CustomModelPrice.Kind kind,
+            @Nullable BigDecimal inputPrice, @Nullable BigDecimal outputPrice, @Nullable BigDecimal cacheReadPrice,
+            @Nullable BigDecimal cacheWritePrice, @Nullable String aliasModel, @Nullable String aliasProvider,
+            @Nullable String note) {
 
         static String jsonOf(ModelPriceRow row) {
             var snapshot = HistorySnapshot.builder()
@@ -48,6 +52,26 @@ class ModelPriceStore {
                     .note(row.note())
                     .build();
             return JsonUtils.valueToTree(snapshot).toString();
+        }
+
+        /** The stored snapshot as the API lists rows: string prices and alias_of, so history matches the list. */
+        static @Nullable CustomModelPriceRow rowOf(@Nullable String json) {
+            if (json == null) {
+                return null;
+            }
+            var snapshot = JsonUtils.readValue(json, HistorySnapshot.class);
+            var price = CustomModelPrice.builder()
+                    .modelName(snapshot.model())
+                    .provider(Objects.requireNonNullElse(snapshot.provider(), CustomModelPrice.ANY_PROVIDER))
+                    .kind(snapshot.kind())
+                    .inputPerMillion(snapshot.inputPrice())
+                    .outputPerMillion(snapshot.outputPrice())
+                    .cacheReadPerMillion(snapshot.cacheReadPrice())
+                    .cacheWritePerMillion(snapshot.cacheWritePrice())
+                    .aliasModelName(snapshot.aliasModel())
+                    .aliasProvider(snapshot.aliasProvider())
+                    .build();
+            return CustomModelPriceRow.from(price).toBuilder().note(snapshot.note()).build();
         }
     }
 
