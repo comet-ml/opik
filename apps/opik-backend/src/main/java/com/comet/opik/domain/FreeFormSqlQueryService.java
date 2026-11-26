@@ -68,7 +68,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * <li>{@code enforce}: results are returned only once the check passes, and are withheld on a violation,
  * a missing log entry or a failure.</li>
  * </ul>
- * Every outcome is counted in {@code opik.free_form_sql.post_run_check}, tagged by mode and outcome.
+ * Every outcome is counted in {@code opik.free_form_sql.post_run_check}, tagged by mode, outcome and operation.
  */
 @Slf4j
 @Singleton
@@ -81,6 +81,7 @@ public class FreeFormSqlQueryService {
     private static final AttributeKey<String> MODE_KEY = stringKey("mode");
     private static final AttributeKey<String> OUTCOME_KEY = stringKey("outcome");
     private static final AttributeKey<String> ACCOUNT_KEY = stringKey("account");
+    private static final AttributeKey<String> OPERATION_KEY = stringKey("operation");
 
     /**
      * The terminal outcome of a query, carrying its {@code (result, reason)} metric tags. The duration histogram is
@@ -104,6 +105,27 @@ public class FreeFormSqlQueryService {
 
         Outcome(String result, String reason) {
             this.attributes = Attributes.of(RESULT_KEY, result, REASON_KEY, reason);
+        }
+    }
+
+    /** Which entry point checked the query, as the {@code operation} metric tag: run executes it, save only checks it. */
+    @RequiredArgsConstructor
+    private enum Operation {
+        RUN("run"),
+        SAVE("save");
+
+        private final String tag;
+    }
+
+    /** One query's entry point and start, carried to wherever its outcome is recorded. */
+    private record Call(Operation operation, long startMillis) {
+
+        long elapsed() {
+            return System.currentTimeMillis() - startMillis;
+        }
+
+        Attributes attributes(Outcome outcome) {
+            return outcome.attributes.toBuilder().put(OPERATION_KEY, operation.tag).build();
         }
     }
 
@@ -197,7 +219,7 @@ public class FreeFormSqlQueryService {
         this.duration = meter
                 .histogramBuilder("%s.duration".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Duration of a single free-form SQL query, tagged by result and reason; its count is also the query counter")
+                        "Duration of a single free-form SQL query or save check, tagged by result, reason and operation; its count is also the query counter")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
@@ -213,7 +235,8 @@ public class FreeFormSqlQueryService {
                 .build();
         this.checks = meter
                 .counterBuilder("opik.free_form_sql.post_run_check")
-                .setDescription("Free-form SQL post-run check and scalar subquery outcomes, tagged by mode and outcome")
+                .setDescription(
+                        "Free-form SQL post-run check and scalar subquery outcomes, tagged by mode, outcome and operation")
                 .build();
     }
 
@@ -230,8 +253,12 @@ public class FreeFormSqlQueryService {
     }
 
     private void count(CheckOutcome outcome, FreeFormSqlAccount account) {
+        count(outcome, account, Operation.RUN);
+    }
+
+    private void count(CheckOutcome outcome, FreeFormSqlAccount account, Operation operation) {
         checks.add(1, Attributes.of(MODE_KEY, mode.name().toLowerCase(), OUTCOME_KEY, outcome.tag, ACCOUNT_KEY,
-                account.name().toLowerCase()));
+                account.name().toLowerCase(), OPERATION_KEY, operation.tag));
     }
 
     /**
@@ -241,37 +268,55 @@ public class FreeFormSqlQueryService {
      */
     public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull FreeFormSqlAccount account,
             @NonNull String workspaceId, @Nullable UUID projectId, @NonNull String query) {
-        long startMillis = System.currentTimeMillis();
-        String projectScope = projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
+        var call = new Call(Operation.RUN, System.currentTimeMillis());
+        String projectScope = projectScope(projectId);
+        return preRunChecks(account, workspaceId, projectScope, query, call)
+                .thenCompose(reads -> runQuery(account, workspaceId, projectScope, query, reads, call));
+    }
 
+    /**
+     * Runs every check {@link #executeQuery} runs before executing {@code query}, without executing it, for a query
+     * stored to run later. Completes exceptionally with the same rejections and messages as a run.
+     */
+    public CompletableFuture<Void> validate(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @Nullable UUID projectId, @NonNull String query) {
+        var call = new Call(Operation.SAVE, System.currentTimeMillis());
+        return preRunChecks(account, workspaceId, projectScope(projectId), query, call)
+                .thenAccept(reads -> duration.record(call.elapsed(), call.attributes(Outcome.SUCCESS)));
+    }
+
+    private static String projectScope(UUID projectId) {
+        return projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
+    }
+
+    /** The pre-execution checks: parse, resolve, then reject scalar reads of tables. */
+    private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> preRunChecks(FreeFormSqlAccount account,
+            String workspaceId, String projectScope, String query, Call call) {
         return freeFormSqlQueryDAO.explainAst(account, query)
-                .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, startMillis))
-                .thenCompose(queryTree -> {
-                    var reads = rejectScalarReads(account, queryTree, startMillis);
-                    return runQuery(account, workspaceId, projectScope, query, reads, startMillis);
-                });
+                .handle((nodeLabels, error) -> validateAst(nodeLabels, error, call))
+                .thenCompose(ignored -> resolvedMetadataCheck(account, workspaceId, projectScope, query, call))
+                .thenApply(queryTree -> rejectScalarReads(account, queryTree, call));
     }
 
     /** Resolve table reads and function calls before running the query. */
     private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, long startMillis) {
+            String projectScope, String query, Call call) {
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
                 .handle((queryTree, error) -> {
                     if (error != null) {
-                        throw mapExecutionError(error, startMillis);
+                        throw mapExecutionError(error, call);
                     }
                     try {
                         if (containsForbiddenResolvedTable(account, queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_TABLE, call, ACCESS_DENIED_MESSAGE, null);
                         }
                         if (containsForbiddenOrUnreadableFunction(queryTree)) {
-                            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                            throw reject(Outcome.FORBIDDEN_FUNCTION, call, ACCESS_DENIED_MESSAGE, null);
                         }
                     } catch (WebApplicationException e) {
                         throw e;
                     } catch (RuntimeException e) {
-                        throw mapExecutionError(e, startMillis);
+                        throw mapExecutionError(e, call);
                     }
                     return queryTree;
                 });
@@ -282,11 +327,11 @@ public class FreeFormSqlQueryService {
      * {@link FreeFormSqlPolicyCheck}), so it is rejected before running, with the rewrite the caller can apply.
      */
     private FreeFormSqlSubqueries.SubqueryReads rejectScalarReads(FreeFormSqlAccount account, List<String> queryTree,
-            long startMillis) {
+            Call call) {
         var subqueryReads = FreeFormSqlSubqueries.subqueryReads(queryTree, database);
         if (subqueryReads.hasScalar()) {
-            count(CheckOutcome.SCALAR_READ, account);
-            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, startMillis,
+            count(CheckOutcome.SCALAR_READ, account, call.operation());
+            throw reject(Outcome.SCALAR_SUBQUERY_NOT_ALLOWED, call,
                     SCALAR_SUBQUERY_MESSAGE.formatted(describe(subqueryReads)), null);
         }
         return subqueryReads;
@@ -308,33 +353,33 @@ public class FreeFormSqlQueryService {
      * through the standard execution-error mapping so it isn't mislabelled. A successful parse carrying a SETTINGS/SET
      * clause is rejected before execution.
      */
-    private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
+    private List<String> validateAst(List<String> nodeLabels, Throwable error, Call call) {
         if (error != null) {
             throw isSyntaxError(error)
-                    ? reject(Outcome.PARSE_ERROR, startMillis, PARSE_ERROR_MESSAGE, error)
-                    : mapExecutionError(error, startMillis);
+                    ? reject(Outcome.PARSE_ERROR, call, PARSE_ERROR_MESSAGE, error)
+                    : mapExecutionError(error, call);
         }
         if (containsSetNode(nodeLabels)) {
-            throw reject(Outcome.SETTINGS_CLAUSE, startMillis, SETTINGS_CLAUSE_MESSAGE, null);
+            throw reject(Outcome.SETTINGS_CLAUSE, call, SETTINGS_CLAUSE_MESSAGE, null);
         }
         if (containsCatalogReference(nodeLabels) || containsTableFunctionNode(nodeLabels)) {
-            throw reject(Outcome.FORBIDDEN_TABLE, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_TABLE, call, ACCESS_DENIED_MESSAGE, null);
         }
         if (containsForbiddenName(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
-            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+            throw reject(Outcome.FORBIDDEN_FUNCTION, call, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
             String projectScope, String query, FreeFormSqlSubqueries.SubqueryReads subqueryReads,
-            long startMillis) {
+            Call call) {
         String queryId = UUID.randomUUID().toString();
         return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query, queryId)
                 .handle((result, error) -> {
                     if (error != null) {
-                        throw mapExecutionError(error, startMillis);
+                        throw mapExecutionError(error, call);
                     }
                     return result;
                 })
@@ -345,10 +390,10 @@ public class FreeFormSqlQueryService {
                         yield CompletableFuture.completedFuture(result);
                     }
                     case ENFORCE -> verifyPolicies(account, workspaceId, projectScope, query, queryId, subqueryReads,
-                            startMillis).thenApply(verified -> result);
+                            call).thenApply(verified -> result);
                 })
                 .thenCompose(result -> {
-                    recordSuccess(result, startMillis);
+                    recordSuccess(result, call);
                     return resolveEntityNames(account, result, workspaceId);
                 });
     }
@@ -393,21 +438,21 @@ public class FreeFormSqlQueryService {
 
     /** Enforce: fails closed on a violation, a missing log entry and on any failure to run the check. */
     private CompletableFuture<Void> verifyPolicies(FreeFormSqlAccount account, String workspaceId, String projectScope,
-            String query, String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads, long startMillis) {
+            String query, String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads, Call call) {
         return check(account, workspaceId, projectScope, query, queryId, subqueryReads).handle((outcome, error) -> {
             if (error != null) {
                 count(CheckOutcome.CHECK_FAILED, account);
                 // The check's own queries count against the account's concurrency cap, like the query did.
                 if (isTooManySimultaneousQueries(error)) {
-                    throw busy(startMillis, error);
+                    throw busy(call, error);
                 }
                 log.error("Free-form SQL post-run policy check could not run for query '{}'", queryId, error);
-                throw fail(Outcome.POLICY_CHECK_FAILED, startMillis, Response.Status.SERVICE_UNAVAILABLE,
+                throw fail(Outcome.POLICY_CHECK_FAILED, call, Response.Status.SERVICE_UNAVAILABLE,
                         "Query result withheld: its scope could not be verified");
             }
             count(outcome, account);
             if (outcome != CheckOutcome.VERIFIED) {
-                throw fail(Outcome.POLICY_UNVERIFIED, startMillis, Response.Status.INTERNAL_SERVER_ERROR,
+                throw fail(Outcome.POLICY_UNVERIFIED, call, Response.Status.INTERNAL_SERVER_ERROR,
                         "Query result withheld: its scope could not be verified; this has been reported");
             }
             return null;
@@ -543,65 +588,65 @@ public class FreeFormSqlQueryService {
                         .orElse(true));
     }
 
-    private void recordSuccess(FreeFormSqlResult result, long startMillis) {
-        duration.record(elapsed(startMillis), Outcome.SUCCESS.attributes);
+    private void recordSuccess(FreeFormSqlResult result, Call call) {
+        duration.record(call.elapsed(), call.attributes(Outcome.SUCCESS));
         resultRows.record(result.resultRows());
         bytesRead.record(result.readBytes());
     }
 
-    private WebApplicationException mapExecutionError(Throwable error, long startMillis) {
+    private WebApplicationException mapExecutionError(Throwable error, Call call) {
         if (findCause(error, NoSuchColumnException.class) != null) {
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, RESULT_SHAPE_MESSAGE, error);
+            return error(Outcome.OTHER, call, Response.Status.BAD_REQUEST, RESULT_SHAPE_MESSAGE, error);
         }
 
         if (findCause(error, UncheckedIOException.class) != null) {
             // A non-JSON 'result' value is a bad query shape (caller's fault, not infra), so a 400 rather than a 503.
-            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, INVALID_JSON_RESULT_MESSAGE, error);
+            return error(Outcome.OTHER, call, Response.Status.BAD_REQUEST, INVALID_JSON_RESULT_MESSAGE, error);
         }
 
         ServerException serverException = findCause(error, ServerException.class);
         if (serverException == null) {
             // No response from ClickHouse (connection/transport failure): an infrastructure problem, not a bad query,
             // so surface it as 5xx for alerting instead of a misleading 400.
-            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, EXECUTION_FAILED_MESSAGE,
+            return error(Outcome.OTHER, call, Response.Status.SERVICE_UNAVAILABLE, EXECUTION_FAILED_MESSAGE,
                     error);
         }
 
         int code = serverException.getCode();
         if (CH_LIMIT_CODES.contains(code)) {
             // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
-            return error(Outcome.CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
+            return error(Outcome.CH_LIMIT, call, Response.Status.BAD_REQUEST,
                     code == ClickHouseErrorCodes.TOO_MANY_BYTES ? BYTES_LIMIT_MESSAGE : LIMIT_MESSAGE, error);
         }
         if (code == CH_TOO_MANY_SIMULTANEOUS_QUERIES) {
-            return busy(startMillis, error);
+            return busy(call, error);
         }
         if (code == CH_ACCESS_DENIED) {
-            return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
+            return error(Outcome.PERMISSION_DENIED, call, Response.Status.BAD_REQUEST,
                     ACCESS_DENIED_MESSAGE, error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
-        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
+        return error(Outcome.OTHER, call, Response.Status.BAD_REQUEST, EXECUTION_FAILED_MESSAGE, error);
     }
 
-    private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {
+    private WebApplicationException reject(Outcome outcome, Call call, String message, Throwable cause) {
         log.info("Free-form SQL query rejected: {}", message, cause);
-        return fail(outcome, startMillis, Response.Status.BAD_REQUEST, message);
+        return fail(outcome, call, Response.Status.BAD_REQUEST, message);
     }
 
-    private WebApplicationException busy(long startMillis, Throwable cause) {
-        return error(Outcome.CH_BUSY, startMillis, Response.Status.TOO_MANY_REQUESTS,
+    private WebApplicationException busy(Call call, Throwable cause) {
+        return error(Outcome.CH_BUSY, call, Response.Status.TOO_MANY_REQUESTS,
                 "Too many queries are running; retry shortly", cause);
     }
 
-    private WebApplicationException error(Outcome outcome, long startMillis, Response.Status status, String message,
+    private WebApplicationException error(Outcome outcome, Call call, Response.Status status, String message,
             Throwable cause) {
         log.warn("Free-form SQL query failed: {}", message, cause);
-        return fail(outcome, startMillis, status, message);
+        return fail(outcome, call, status, message);
     }
 
-    private WebApplicationException fail(Outcome outcome, long startMillis, Response.Status status, String message) {
-        duration.record(elapsed(startMillis), outcome.attributes);
+    private WebApplicationException fail(Outcome outcome, Call call, Response.Status status, String message) {
+        duration.record(call.elapsed(), call.attributes(outcome));
         var response = Response.status(status).entity(new ErrorMessage(List.of(message)));
         if (status == Response.Status.TOO_MANY_REQUESTS) {
             response.header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
@@ -632,7 +677,4 @@ public class FreeFormSqlQueryService {
         return serverException != null && serverException.getCode() == CH_TOO_MANY_SIMULTANEOUS_QUERIES;
     }
 
-    private static long elapsed(long startMillis) {
-        return System.currentTimeMillis() - startMillis;
-    }
 }
