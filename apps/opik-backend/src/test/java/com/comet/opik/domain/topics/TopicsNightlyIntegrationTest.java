@@ -29,7 +29,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
-import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
@@ -78,6 +77,7 @@ import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -881,31 +881,34 @@ class TopicsNightlyIntegrationTest {
     @DisplayName("a run that outlasts projectTimeout fails with timeout and keeps the previous list; the night's other "
             + "project still saves")
     void projectTimeout() {
-        var workspaceId = enabledWorkspace();
-        var first = discovered(workspaceId);
-        var second = discovered(workspaceId);
-        var rows = Map.of(first, data.topicProject(first), second, data.topicProject(second));
-        plant(workspaceId, first);
-        plant(workspaceId, second);
-        // The night's first LLM call answers after the project timeout; every later call answers at once.
-        stubAnswerInScenario(NAMED, 4_000, Scenario.STARTED, "answered");
-        stubAnswerInScenario(NAMED, 0, "answered", "answered");
+        // One project per workspace: the generate call names its workspace, so the slow answer is bound to one project.
+        var slowWorkspace = enabledWorkspace();
+        var fastWorkspace = enabledWorkspace();
+        var timedOut = discovered(slowWorkspace);
+        var saved = discovered(fastWorkspace);
+        var timedOutRow = data.topicProject(timedOut);
+        var savedRow = data.topicProject(saved);
+        var topics = data.topics(timedOut);
+        plant(slowWorkspace, timedOut);
+        plant(fastWorkspace, saved);
+        // Every call of the slow workspace answers after the project timeout; every other call answers at once.
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
+                .withRequestBody(matchingJsonPath("$.workspace_id", equalTo(slowWorkspace)))
+                .willReturn(TopicsTestData.answer(NAMED, 4_000)));
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(2).willReturn(TopicsTestData.answer(NAMED, 0)));
         var run = opikConfig.getTopics().getRun();
         var projectTimeout = run.getProjectTimeout();
         run.setProjectTimeout(Duration.seconds(2));
         NightResult result;
-        UUID timedOut;
         try {
             result = runNight(Instant.now());
-            timedOut = nightlyRun(first).status() == TopicProject.RunStatus.FAILED ? first : second;
-            var topics = data.topics(timedOut);
             // The cut update may still get its slow answer: past it, a save that raced the timeout would show.
             Awaitility.await().pollDelay(3, TimeUnit.SECONDS).atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 var update = nightlyRun(timedOut);
                 assertThat(runLog(update.runId())).anyMatch(line -> line.contains("projectTimeout"));
-                assertFailedNight(timedOut, rows.get(timedOut), update.runId(), TopicProject.RunError.TIMEOUT);
+                assertFailedNight(timedOut, timedOutRow, update.runId(), TopicProject.RunError.TIMEOUT);
                 assertThat(data.topics(timedOut)).isEqualTo(topics);
-                assertThat(labels(workspaceId, timedOut, update.runId())).isEmpty();
+                assertThat(labels(slowWorkspace, timedOut, update.runId())).isEmpty();
             });
         } finally {
             run.setProjectTimeout(projectTimeout);
@@ -913,8 +916,7 @@ class TopicsNightlyIntegrationTest {
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(result.failed()).isEqualTo(1);
-        var saved = timedOut.equals(first) ? second : first;
-        assertSavedNight(saved, rows.get(saved), nightlyRun(saved).runId(), todayStart(), today());
+        assertSavedNight(saved, savedRow, nightlyRun(saved).runId(), todayStart(), today());
     }
 
     @Test
@@ -1327,14 +1329,6 @@ class TopicsNightlyIntegrationTest {
     private void stubAnswer(JsonNode output, String prompt, int delayMillis) {
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).withRequestBody(containing(prompt))
                 .willReturn(TopicsTestData.answer(output, delayMillis)));
-    }
-
-    /**
-     * {@code output} after {@code delayMillis}, matched only in the scenario's {@code state}, which it then moves on.
-     */
-    private void stubAnswerInScenario(JsonNode output, int delayMillis, String state, String nextState) {
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).inScenario("answers").whenScenarioStateIs(state)
-                .willSetStateTo(nextState).willReturn(TopicsTestData.answer(output, delayMillis)));
     }
 
     private void stubAnswer(JsonNode answer) {
