@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS model_prices
 (
     id                CHAR(36)                NOT NULL,
     organization_id   VARCHAR(150)            NOT NULL,
-    -- Stored normalized, the form span names are looked up in (lower case, provider prefix removed). Binary, so the
-    -- unique key below compares names exactly as the validator does: utf8mb4_unicode_ci would also treat 'modèle'
+    -- The name as saved; spans are matched on a key derived from it (ModelPriceTable.rowModelName). Binary, so the
+    -- unique key never merges two names the validator keeps apart: utf8mb4_unicode_ci would also treat 'modèle'
     -- and 'modele' as one name and fail the insert after validation passed.
     model_name        VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
     -- '' means any provider. NOT NULL so the unique key below holds: MySQL treats every NULL as distinct, which
