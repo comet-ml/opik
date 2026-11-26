@@ -3,24 +3,7 @@ import { TagProps } from "@/ui/tag";
 import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 
-export const PRICE_UNIT_SUFFIX = "/1M tok";
-
-export const formatPrice = (perMillion?: string) => {
-  if (!perMillion) {
-    return undefined;
-  }
-  const value = Number(perMillion);
-  if (value >= 1) {
-    return `$${value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
-  if (value === 0 || value >= 0.001) {
-    return `$${value.toFixed(3)}`;
-  }
-  return `$${Number(value.toPrecision(2))}`;
-};
+export { PRICE_UNIT_SUFFIX, formatPrice } from "@/shared/CostBreakdown/format";
 
 // LiteLLM splits some providers into several names (vertex_ai-language-models,
 // bedrock_converse, ollama_chat); each family has one logo.

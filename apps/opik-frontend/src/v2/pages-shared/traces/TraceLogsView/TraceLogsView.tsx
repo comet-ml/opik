@@ -96,7 +96,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import CostCell from "@/shared/DataTableCells/CostCell";
+import { TraceCostCell } from "@/shared/CostBreakdown/CostBreakdownCells";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
@@ -224,7 +224,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "total_estimated_cost",
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
+    cell: TraceCostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
     statisticDataFormater: formatCost,

@@ -35,6 +35,7 @@ import { Filter } from "@/types/filters";
 import { cn } from "@/lib/utils";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import CostBreakdownHoverCard from "@/shared/CostBreakdown/CostBreakdownHoverCard";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import useAppStore from "@/store/AppStore";
@@ -499,8 +500,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </TooltipWrapper>
           {!isUndefined(thread?.total_estimated_cost) && (
-            <TooltipWrapper
-              content={`Estimated cost ${formatCost(
+            <CostBreakdownHoverCard
+              target={{
+                kind: "thread",
+                projectId,
+                threadId,
+                cost: thread?.total_estimated_cost,
+              }}
+              tooltip={`Estimated cost ${formatCost(
                 thread?.total_estimated_cost,
                 { modifier: "full" },
               )}`}
@@ -509,7 +516,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 <Coins className="size-3.5 shrink-0 text-muted-slate" />
                 {formatCost(thread?.total_estimated_cost)}
               </div>
-            </TooltipWrapper>
+            </CostBreakdownHoverCard>
           )}
           {Boolean(threadFeedbackScores.length) && (
             <FeedbackScoreHoverCard scores={threadFeedbackScores}>

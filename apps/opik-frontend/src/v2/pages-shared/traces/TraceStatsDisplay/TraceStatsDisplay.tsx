@@ -4,6 +4,8 @@ import isNumber from "lodash/isNumber";
 import isUndefined from "lodash/isUndefined";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import CostBreakdownHoverCard from "@/shared/CostBreakdown/CostBreakdownHoverCard";
+import { CostBreakdownTarget } from "@/shared/CostBreakdown/types";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 
@@ -13,6 +15,7 @@ type TraceStatsDisplayProps = {
   endTime?: string;
   totalTokens?: number;
   estimatedCost?: number;
+  costBreakdown?: CostBreakdownTarget;
 };
 
 const statClassName = "comet-body-s flex items-center gap-1 text-foreground";
@@ -23,6 +26,7 @@ const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
   endTime,
   totalTokens,
   estimatedCost,
+  costBreakdown,
 }) => {
   const formattedDuration = formatDuration(duration);
 
@@ -64,8 +68,9 @@ const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
         </TooltipWrapper>
       )}
       {!isUndefined(estimatedCost) && (
-        <TooltipWrapper
-          content={`Estimated cost ${formatCost(estimatedCost, {
+        <CostBreakdownHoverCard
+          target={costBreakdown}
+          tooltip={`Estimated cost ${formatCost(estimatedCost, {
             modifier: "full",
           })}`}
         >
@@ -73,7 +78,7 @@ const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
             <Coins className="size-3.5 shrink-0 text-muted-slate" />{" "}
             {formatCost(estimatedCost)}
           </div>
-        </TooltipWrapper>
+        </CostBreakdownHoverCard>
       )}
     </>
   );

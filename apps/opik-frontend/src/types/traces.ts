@@ -127,6 +127,7 @@ export interface Span extends BaseTraceData {
   workspace_name?: string;
   model?: string;
   provider?: string;
+  total_estimated_cost_version?: string;
 }
 
 export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";

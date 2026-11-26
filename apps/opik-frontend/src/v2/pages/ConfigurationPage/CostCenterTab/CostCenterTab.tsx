@@ -56,7 +56,7 @@ import ModelPriceDrawer, {
   DrawerTarget,
 } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
-import useBuiltInPrices from "./useBuiltInPrices";
+import useBuiltInPrices from "@/api/model-prices/useBuiltInPrices";
 
 const HISTORY_PAGE = { size: 1000 };
 const PAGE_SIZES = [25, 50, 100];
