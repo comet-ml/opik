@@ -9,6 +9,7 @@ import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.TraceThreadsCreated;
+import com.comet.opik.api.events.TraceThreadsUpdated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TagOperations;
@@ -77,6 +78,10 @@ public interface TraceThreadService {
     Mono<Void> batchUpdate(TraceThreadBatchUpdate batchUpdate);
 
     Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(List<UUID> threadModelIds);
+
+    Mono<List<TraceThreadIdModel>> getThreadIdModelsByThreadModelIds(List<UUID> threadModelIds);
+
+    Mono<Map<String, UUID>> findThreadModelIds(UUID projectId, Set<String> threadIds);
 }
 
 @Slf4j
@@ -182,7 +187,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
-                        traceThreadIdModel.projectId(), threadUpdate))
+                        traceThreadIdModel.projectId(), threadUpdate)
+                        .then(postThreadsUpdated(traceThreadIdModel.projectId(), Set.of(threadModelId))))
                 .onErrorResume(TagOperations::mapTagLimitError);
     }
 
@@ -194,12 +200,23 @@ class TraceThreadServiceImpl implements TraceThreadService {
         List<UUID> threadModelIds = new ArrayList<>(batchUpdate.ids());
         return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()))
+                .then(postThreadsUpdated(null, Set.copyOf(threadModelIds)))
                 .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     @Override
     public Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
         return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds);
+    }
+
+    @Override
+    public Mono<List<TraceThreadIdModel>> getThreadIdModelsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
+        return traceThreadIdService.getTraceThreadIdModelsByThreadModelIds(threadModelIds);
+    }
+
+    @Override
+    public Mono<Map<String, UUID>> findThreadModelIds(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
+        return traceThreadIdService.findThreadModelIds(projectId, threadIds);
     }
 
     private Mono<Void> saveTraceThreads(UUID projectId, List<TraceThreadModel> traceThreads) {
@@ -357,7 +374,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                             .doOnSuccess(count -> log.info(
                                     "Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
                                     count, projectId, workspaceId))
-                            .flatMap(count -> checkAndTriggerOnlineScoring(projectId, threads)
+                            .flatMap(count -> onThreadsClosed(projectId, threads)
                                     .thenReturn(count));
                 })
                 .reduce(0L, Long::sum)
@@ -380,14 +397,29 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .map(now::minus);
     }
 
-    private Mono<Void> checkAndTriggerOnlineScoring(UUID projectId, List<TraceThreadModel> closedThreads) {
+    private Mono<Void> onThreadsClosed(UUID projectId, List<TraceThreadModel> closedThreads) {
         if (closedThreads.isEmpty()) {
             log.info("No closed trace threads to process for projectId: '{}'. Skipping online scoring.", projectId);
             return Mono.empty();
         }
 
-        // Publish closed threads for online scoring
-        return onlineScorePublisher.publish(projectId, closedThreads);
+        return postThreadsUpdated(projectId, closedThreads.stream()
+                .map(TraceThreadModel::id)
+                .collect(Collectors.toSet()))
+                // Publish closed threads for online scoring
+                .then(onlineScorePublisher.publish(projectId, closedThreads));
+    }
+
+    /**
+     * Thread changes that no trace event carries: a thread's own tags, and its closing. Annotation queue automation
+     * filters read both.
+     */
+    private Mono<Void> postThreadsUpdated(UUID projectId, Set<UUID> threadModelIds) {
+        return Mono.deferContextual(context -> {
+            eventBus.post(new TraceThreadsUpdated(projectId, threadModelIds,
+                    context.get(RequestContext.WORKSPACE_ID), context.get(RequestContext.USER_NAME)));
+            return Mono.empty();
+        });
     }
 
     @Override
@@ -431,7 +463,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                         .projectId(verifiedProjectId)
                                         .threadIds(threadIds)
                                         .build())))
-                        .flatMap(threadModels -> checkAndTriggerOnlineScoring(verifiedProjectId, threadModels)));
+                        .flatMap(threadModels -> onThreadsClosed(verifiedProjectId, threadModels)));
     }
 
     private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {

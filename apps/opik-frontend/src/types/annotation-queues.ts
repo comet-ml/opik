@@ -1,3 +1,4 @@
+import { FilterOperator } from "@/types/filters";
 import { AggregatedFeedbackScore } from "@/types/shared";
 
 export enum ANNOTATION_QUEUE_SCOPE {
@@ -20,26 +21,21 @@ export interface AnnotationQueueItem {
   source: ANNOTATION_QUEUE_ITEM_SOURCE;
 }
 
-export interface AnnotationQueueScoreCondition {
-  score_name: string;
-  operator: ">" | "<" | "=";
-  value: number;
-}
-
-export interface AnnotationQueueConditionGroup {
-  conditions: AnnotationQueueScoreCondition[];
+export interface AnnotationQueueAutomationFilter {
+  field: string;
+  operator: FilterOperator;
+  key?: string;
+  value: string;
 }
 
 /**
- * Rules for populating a queue automatically. Groups are OR-ed, conditions within a group AND-ed.
- * A queue with automation enabled still accepts manual additions.
+ * Rules for populating a queue automatically: an item is added when it matches every filter of any one
+ * group. A queue with automation enabled still accepts manual additions.
  */
 export interface AnnotationQueueAutomation {
   enabled: boolean;
-  /** Absent means "leave the stored conditions alone", which is what a toggle-only request sends. */
-  conditions?: {
-    groups: AnnotationQueueConditionGroup[];
-  };
+  /** Absent means "leave the stored groups alone", which is what a toggle-only request sends. */
+  filter_groups?: AnnotationQueueAutomationFilter[][];
   /**
    * Automation stops adding once the queue holds this many items. Absent means "leave the stored
    * ceiling alone", as absent does for every field here; send clear_max_items_in_queue to remove one.

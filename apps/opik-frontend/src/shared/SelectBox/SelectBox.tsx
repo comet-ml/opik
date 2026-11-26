@@ -23,6 +23,7 @@ export type SelectBoxProps<DataType> = {
   testId?: string;
   renderOption?: (option: DropdownOption<DataType>) => React.ReactNode;
   renderTrigger?: (value: string) => React.ReactNode;
+  defaultOpen?: boolean;
 };
 
 export const SelectBox = <ValueType extends string>({
@@ -37,12 +38,18 @@ export const SelectBox = <ValueType extends string>({
   renderOption,
   renderTrigger,
   testId,
+  defaultOpen,
 }: SelectBoxProps<ValueType>) => {
   const variantClass =
     variant === "ghost" ? "border-0 focus:ring-0 h-9 bg-transparent" : "";
 
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={onChange}
+      disabled={disabled}
+      defaultOpen={defaultOpen}
+    >
       <SelectTrigger
         id={id}
         className={cn(

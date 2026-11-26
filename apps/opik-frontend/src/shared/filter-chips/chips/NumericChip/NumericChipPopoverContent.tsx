@@ -20,12 +20,16 @@ import {
   isNumericApplied,
 } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
 import { toNumber, trimValue } from "@/shared/filter-chips/lib/helpers";
+import { OperatorCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/OperatorCell";
+import { NumericCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/NumericCell";
+import { InlineFilterRow } from "@/shared/filter-chips/chips/QueryBuilderChip/FilterRow";
 
 interface NumericChipPopoverContentProps {
   definition: NumericChipDefinition;
   value: NumericChipValue | undefined;
   onApply: (value: NumericChipValue) => void;
   onClear: () => void;
+  inline?: boolean;
 }
 
 const OPERATOR_OPTIONS: FilterOperatorOption<NumericChipMode>[] = [
@@ -55,11 +59,30 @@ const initialFromDraft = (value: NumericChipValue | undefined): string => {
 const initialToDraft = (value: NumericChipValue | undefined): string =>
   value?.mode === "between" ? String(value.max) : "";
 
+const toNumericValue = (
+  mode: NumericChipMode,
+  from: number | null,
+  to: number | null,
+): NumericChipValue | null => {
+  if (from === null) return null;
+  switch (mode) {
+    case "exactly":
+      return { mode, exact: from };
+    case "atLeast":
+      return { mode, min: from };
+    case "atMost":
+      return { mode, max: from };
+    case "between":
+      return to !== null && from <= to ? { mode, min: from, max: to } : null;
+  }
+};
+
 const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   definition,
   value,
   onApply,
   onClear,
+  inline = false,
 }) => {
   const [mode, setMode] = useState<NumericChipMode>(
     value?.mode ?? NUMERIC_DEFAULT_MODE,
@@ -88,23 +111,11 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
       onClear();
       return;
     }
-    const f = toNumber(fromRaw);
-    const t = toNumber(toRaw);
-    switch (m) {
-      case "exactly":
-        if (f !== null) onApply({ mode: "exactly", exact: f });
-        break;
-      case "atLeast":
-        if (f !== null) onApply({ mode: "atLeast", min: f });
-        break;
-      case "atMost":
-        if (f !== null) onApply({ mode: "atMost", max: f });
-        break;
-      case "between":
-        if (f !== null && t !== null && f <= t)
-          onApply({ mode: "between", min: f, max: t });
-        break;
-    }
+    const value = toNumericValue(m, toNumber(fromRaw), toNumber(toRaw));
+    if (value) onApply(value);
+    // A popover keeps its last valid filter while one is mistyped. Inline, that filter would be saved
+    // while a different one is shown, so an invalid entry clears it instead.
+    else if (inline) onClear();
   };
 
   const handleModeChange = (next: NumericChipMode) => {
@@ -168,6 +179,72 @@ const NumericChipPopoverContent: React.FC<NumericChipPopoverContentProps> = ({
   const toNum = toNumber(toDraft);
   const betweenError =
     mode === "between" && fromNum !== null && toNum !== null && fromNum > toNum;
+
+  // The unit sits inside each value cell, as it does in the popover's inputs.
+  const renderInlineValue = (
+    draft: string,
+    onChange: (next: string) => void,
+    onBlur: (event: React.FocusEvent<HTMLInputElement>) => void,
+  ) => (
+    <div className="relative flex min-w-0 flex-1">
+      {format.prefix && (
+        <span className="comet-body-xs pointer-events-none absolute left-2 top-1/2 z-20 -translate-y-1/2 text-muted-slate">
+          {format.prefix}
+        </span>
+      )}
+      <NumericCell
+        grow
+        value={draft}
+        placeholder={format.placeholder}
+        onChange={onChange}
+        onBlur={onBlur}
+        className={cn(
+          "text-right",
+          format.prefix && "pl-5",
+          format.suffix && "pr-5",
+          betweenError && "border-destructive",
+        )}
+      />
+      {format.suffix && (
+        <span className="comet-body-xs pointer-events-none absolute right-2 top-1/2 z-20 -translate-y-1/2 text-muted-slate">
+          {format.suffix}
+        </span>
+      )}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div className="flex flex-col gap-1">
+        <InlineFilterRow>
+          <OperatorCell
+            value={mode}
+            options={OPERATOR_OPTIONS}
+            onSelect={handleModeChange}
+            ariaLabel="Operator"
+          />
+          {renderInlineValue(fromDraft, handleFromChange, (event) =>
+            padDraftOnBlur("from", event),
+          )}
+          {mode === "between" && (
+            <>
+              <span className="comet-body-xs shrink-0 px-2 text-muted-slate">
+                and
+              </span>
+              {renderInlineValue(toDraft, handleToChange, (event) =>
+                padDraftOnBlur("to", event),
+              )}
+            </>
+          )}
+        </InlineFilterRow>
+        {betweenError && (
+          <FormErrorSkeleton className="comet-body-xs">
+            From value must be less than or equal to To value
+          </FormErrorSkeleton>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-[291px] flex-col gap-4 p-3">

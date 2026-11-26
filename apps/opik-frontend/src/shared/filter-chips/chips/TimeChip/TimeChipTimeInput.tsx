@@ -15,12 +15,15 @@ import {
   type Slot,
   type SlotPatch,
 } from "@/shared/filter-chips/chips/TimeChip/TimeChipPopover.shared";
+import { cellBase } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/cellBase";
 
 interface TimeChipTimeInputProps {
   slot: Slot;
   invalid?: boolean;
   inputRef?: React.Ref<HTMLInputElement>;
   onChange: (patch: SlotPatch) => void;
+  /** Row height and text size of a filter cell, for a time sitting in a row of cells. */
+  compact?: boolean;
 }
 
 const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
@@ -28,6 +31,7 @@ const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
   invalid,
   inputRef,
   onChange,
+  compact = false,
 }) => {
   const commit = (raw: string) => {
     if (raw.trim() === "") {
@@ -67,11 +71,17 @@ const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div
+        data-filter-cell={compact ? "" : undefined}
         className={cn(
-          "group flex h-8 items-center gap-1 rounded-md border bg-background pl-3 pr-3 hover:shadow-sm",
+          "group flex items-center gap-1",
+          compact
+            ? cn(cellBase, "py-0 focus-within:z-10 focus-within:bg-background")
+            : "h-8 rounded-md border bg-background pl-3 pr-3 hover:shadow-sm",
           showError
             ? "border-destructive"
-            : "border-border focus-within:border-primary",
+            : compact
+              ? "focus-within:border-primary"
+              : "border-border focus-within:border-primary",
         )}
       >
         <DebounceInput
@@ -84,19 +94,30 @@ const TimeChipTimeInput: React.FC<TimeChipTimeInputProps> = ({
           onValueChange={(next) => commit(String(next ?? ""))}
           onBlur={() => onChange({ timeTouched: true })}
           onKeyDown={flushOnEnter}
-          className="comet-body-s peer min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-light-slate focus-visible:outline-none"
+          className={cn(
+            compact ? "comet-body-xs" : "comet-body-s",
+            "peer min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-light-slate focus-visible:outline-none",
+          )}
         />
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={togglePeriod}
-          className="comet-body-s flex shrink-0 cursor-pointer items-center gap-0.5 text-foreground"
+          className={cn(
+            compact ? "comet-body-xs" : "comet-body-s",
+            "flex shrink-0 cursor-pointer items-center gap-0.5 text-foreground",
+          )}
           aria-label={`Toggle AM/PM (current: ${slot.period})`}
         >
           <span>{slot.period}</span>
           <ChevronsUpDown className="hidden size-[14px] text-muted-slate peer-focus:inline-block" />
         </button>
-        <Clock className="pointer-events-none size-[14px] shrink-0 text-muted-slate" />
+        <Clock
+          className={cn(
+            "pointer-events-none shrink-0 text-muted-slate",
+            compact ? "size-3" : "size-[14px]",
+          )}
+        />
       </div>
       {slot.timeTouched && timeInvalid && (
         <FormErrorSkeleton className="comet-body-xs">
