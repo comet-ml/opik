@@ -446,13 +446,19 @@ class TopicsAlgorithmRulesTest {
                 int from = p > 0 && p % 5 == 0 ? p - 1 : p;
                 prototypes.add(Arrays.copyOfRange(flat, from * dimensions, (from + 1) * dimensions));
             }
+            // The assigner widens the rows to double once: on widened rows, dot2 and dot give the float dot bit for bit.
+            var wideVectors = widened(vectors);
+            var wideFlat = widened(flat);
             var cosines = new double[2];
             for (int i = 0; i < n; i++) {
                 for (int p = 0; p + 1 < count; p++) {
-                    VectorMath.dot2(vectors, i * dimensions, flat, p * dimensions, (p + 1) * dimensions, dimensions,
-                            cosines);
-                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(Double.doubleToRawLongBits(
-                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions)));
+                    VectorMath.dot2(wideVectors, i * dimensions, wideFlat, p * dimensions, (p + 1) * dimensions,
+                            dimensions, cosines);
+                    long single = Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions));
+                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(single);
+                    assertThat(Double.doubleToRawLongBits(VectorMath.dot(wideVectors, i * dimensions, wideFlat,
+                            p * dimensions, dimensions))).isEqualTo(single);
                     assertThat(Double.doubleToRawLongBits(cosines[1])).isEqualTo(Double.doubleToRawLongBits(
                             VectorMath.dot(vectors, i * dimensions, flat, (p + 1) * dimensions, dimensions)));
                 }
@@ -475,6 +481,14 @@ class TopicsAlgorithmRulesTest {
                 expected[i] = best;
             }
             assertThat(assigner.winners(vectors)).containsExactly(expected);
+        }
+
+        private static double[] widened(float[] values) {
+            var out = new double[values.length];
+            for (int i = 0; i < values.length; i++) {
+                out[i] = values[i];
+            }
+            return out;
         }
 
         private static float[] randomRows(SplittableRandom random, int rows, int dimensions) {
