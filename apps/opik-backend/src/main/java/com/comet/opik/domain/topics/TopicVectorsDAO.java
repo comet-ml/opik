@@ -288,7 +288,6 @@ public class TopicVectorsDAO {
         }
     }
 
-    /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
     /** A trace of one project: a client can give the same trace id to traces of two projects. */
     @Builder(toBuilder = true)
     record ProjectTrace(@NonNull UUID projectId, @NonNull UUID traceId) {
@@ -298,6 +297,7 @@ public class TopicVectorsDAO {
         }
     }
 
+    /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
     record Slice(@NonNull Instant from, @Nullable Instant before) {
     }
 

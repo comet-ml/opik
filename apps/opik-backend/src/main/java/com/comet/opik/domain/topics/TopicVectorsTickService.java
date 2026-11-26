@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -205,8 +206,9 @@ public class TopicVectorsTickService {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
                                 workspaceId, exception);
-                        return Mono.just(new Visit(workspace, longWindow, null, false, TickResult.EMPTY, List.of(),
-                                since(readStarted), Duration.ZERO, steps));
+                        return Mono.just(Visit.builder().workspace(workspace).longWindow(longWindow).complete(false)
+                                .result(TickResult.EMPTY).started(List.of()).readTime(since(readStarted))
+                                .embedTime(Duration.ZERO).arrival(steps).build());
                     });
         });
     }
@@ -225,8 +227,9 @@ public class TopicVectorsTickService {
             return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, steps)
                     .flatMap(written -> {
                         var complete = read.complete() && !written.leftForLater(served.candidates());
-                        var visit = new Visit(workspace, longWindow, null, complete, written.result(), served.started(),
-                                readTime, since(embedStarted), written.arrival());
+                        var visit = Visit.builder().workspace(workspace).longWindow(longWindow).complete(complete)
+                                .result(written.result()).started(served.started()).readTime(readTime)
+                                .embedTime(since(embedStarted)).arrival(written.arrival()).build();
                         if (longWindow) {
                             return complete
                                     ? saveProgress(workspaceId, () -> workspaces.setVectorsLongWindowRead(workspaceId,
@@ -310,6 +313,7 @@ public class TopicVectorsTickService {
      * to the backfill; {@code started} the projects its read saw for the first time; {@code arrival} its topic on
      * arrival, which the backfill phase goes on with.
      */
+    @Builder(toBuilder = true)
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean longWindow,
             @Nullable NotRead notRead,
             boolean complete, @NonNull TickResult result, @NonNull List<TopicBackfill> started,
@@ -319,8 +323,9 @@ public class TopicVectorsTickService {
         static Visit notRead(TopicVectorsMetrics.Workspace workspace, NotRead reason, boolean longWindow,
                 boolean complete,
                 ArrivalSteps arrival) {
-            return new Visit(workspace, longWindow, reason, complete, TickResult.EMPTY, List.of(), Duration.ZERO,
-                    Duration.ZERO, arrival);
+            return Visit.builder().workspace(workspace).longWindow(longWindow).notRead(reason).complete(complete)
+                    .result(TickResult.EMPTY).started(List.of()).readTime(Duration.ZERO).embedTime(Duration.ZERO)
+                    .arrival(arrival).build();
         }
     }
 
