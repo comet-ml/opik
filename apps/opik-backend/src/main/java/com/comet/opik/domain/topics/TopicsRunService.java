@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -113,7 +114,10 @@ public class TopicsRunService {
                         .flatMap(clustering -> timed(run, "llm",
                                 llm.generate(run, clustering.author(), AuthorAnswer::parse))
                                 .flatMap(answer -> cpu(run, "assign",
-                                        () -> assign(run, window, clustering, answer)))
+                                        () -> invariant(() -> clustering.finish(answer.value())))
+                                        .flatMap(step -> drive(run, step, answer.stats(), "assign")))
+                                .flatMap(finished -> cpu(run, "rows",
+                                        () -> assign(run, window, clustering, finished)))
                                 .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
@@ -124,19 +128,14 @@ public class TopicsRunService {
                 .onErrorResume(error -> outcomes.failed(run, error));
     }
 
-    /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
+    /** The list, as the rows the save writes, with the run's stats; a broken list is an invariant. */
     private TopicRunRows assign(TopicRun run, RunWindow window, Clustering clustering,
-            TopicsLlm.Answer<AuthorAnswer> answer) {
-        TopicRunRows rows;
-        try {
-            rows = TopicRunRows.of(run, window.traces(), clustering.finish(answer.value()), idGenerator::generateId);
-        } catch (IllegalArgumentException exception) {
-            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
-        }
+            Driven<DiscoveredTopics> finished) {
+        var rows = invariant(() -> TopicRunRows.of(run, window.traces(), finished.result(), idGenerator::generateId));
         var stats = TopicRunOutcomes.bounds(run);
         stats.setAll(window.stats());
         stats.setAll(clustering.stats());
-        stats.setAll(answer.stats());
+        stats.setAll(finished.calls());
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
@@ -223,19 +222,38 @@ public class TopicsRunService {
                 .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
     }
 
-    /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
     private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step, ObjectNode calls) {
+        return drive(run, step, calls, "update").map(done -> {
+            var stats = done.calls().deepCopy();
+            stats.setAll(done.result().stats());
+            return done.result().toBuilder().stats(stats).build();
+        });
+    }
+
+    /**
+     * Answers each {@link NightStep.Ask} in turn, one call at a time, until the step is done; {@code calls} gains each
+     * call's stats. The algorithm's steps run as {@code phase}.
+     */
+    private <T> Mono<Driven<T>> drive(TopicRun run, NightStep<T> step, ObjectNode calls, String phase) {
         return switch (step) {
-            case NightStep.Done<TopicUpdate> done -> {
-                var stats = calls.deepCopy();
-                stats.setAll(done.result().stats());
-                yield Mono.just(done.result().toBuilder().stats(stats).build());
-            }
-            case NightStep.Ask<TopicUpdate> ask ->
+            case NightStep.Done<T> done -> Mono.just(new Driven<>(done.result(), calls));
+            case NightStep.Ask<T> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .flatMap(answer -> cpu(run, "update", () -> ask.next().apply(answer.value()))
-                                .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
+                        .flatMap(answer -> cpu(run, phase, () -> ask.next().apply(answer.value()))
+                                .flatMap(next -> drive(run, next, plus(calls, answer.stats()), phase)));
         };
+    }
+
+    private record Driven<T>(T result, ObjectNode calls) {
+    }
+
+    /** {@code step}'s result; an {@link IllegalArgumentException} breaks an invariant and fails the run as one. */
+    private static <T> T invariant(Supplier<T> step) {
+        try {
+            return step.get();
+        } catch (IllegalArgumentException exception) {
+            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
+        }
     }
 
     /**

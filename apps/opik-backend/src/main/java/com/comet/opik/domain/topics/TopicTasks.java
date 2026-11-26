@@ -29,6 +29,8 @@ public class TopicTasks {
     static final String NAMING_NEW = "naming_new";
     /** A nightly update's verify of the first naming call's assigns: {@link TopicPrompts#verify}. */
     static final String VERIFY = LlmCall.VERIFY.getValue();
+    /** Names the topics a run merged: {@link TopicPrompts#merge}. */
+    static final String MERGE = "merge";
     public static final String MAX_TOPICS_PLACEHOLDER = "{{max_topics}}";
     public static final String CLUSTERS_PLACEHOLDER = "{{clusters}}";
     static final String TOPICS_PLACEHOLDER = "{{topics}}";
@@ -41,7 +43,8 @@ public class TopicTasks {
             AUTHOR, new TaskPlaceholders(Set.of(CLUSTERS_PLACEHOLDER), Set.of(), Set.of(MAX_TOPICS_PLACEHOLDER)),
             NAMING, NAMING_PLACEHOLDERS,
             NAMING_NEW, NAMING_PLACEHOLDERS,
-            VERIFY, new TaskPlaceholders(Set.of(PAIRS_PLACEHOLDER), Set.of(), Set.of()));
+            VERIFY, new TaskPlaceholders(Set.of(PAIRS_PLACEHOLDER), Set.of(), Set.of()),
+            MERGE, new TaskPlaceholders(Set.of(TOPICS_PLACEHOLDER), Set.of(), Set.of()));
 
     private final Map<String, AiLabelTask> tasks;
 
@@ -73,5 +76,9 @@ public class TopicTasks {
 
     AiLabelTask verify() {
         return tasks.get(VERIFY);
+    }
+
+    AiLabelTask merge() {
+        return tasks.get(MERGE);
     }
 }

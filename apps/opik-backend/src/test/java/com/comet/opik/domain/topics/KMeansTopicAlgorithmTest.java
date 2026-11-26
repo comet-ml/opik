@@ -58,7 +58,7 @@ class KMeansTopicAlgorithmTest {
         var task = new TopicTasks().author();
         var clustering = algorithm.cluster(randomWindow(40), 3);
 
-        var discovered = clustering.finish(AuthorAnswer.parse(emptyAnswer()));
+        var discovered = TopicsTestAlgorithm.finished(clustering.finish(AuthorAnswer.parse(emptyAnswer())));
 
         assertThat(clustering.author()).satisfies(call -> {
             assertThat(call.call()).isEqualTo(LlmCall.AUTHOR);

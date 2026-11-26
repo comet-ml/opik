@@ -1,10 +1,13 @@
 package com.comet.opik.domain.topics;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Finds topics that cover the same traces. A topic's centre is the normalised mean of its member vectors. Two topics
@@ -13,12 +16,91 @@ import java.util.List;
  * into the larger (more members; a tie keeps the lower index), the pair with the highest cosine first. The folded
  * topic's members count for the one that took it, so a chain of three merges into one. A topic with no member has no
  * centre and is never merged.
+ *
+ * <p>A merged topic covers what its former topics covered together, so neither former name fits it: {@link #rename}
+ * asks one call for a name per merged topic. A merged topic the answer leaves out or names badly keeps its first
+ * former name.
  */
 @UtilityClass
 class TopicMerger {
 
     /** One merge: {@code absorbed} is folded into {@code kept}. */
     record Merge(int kept, int absorbed, double cosine) {
+    }
+
+    /** A merged topic for the rename call: its former names and definitions, the kept one first. */
+    record Merged(@NonNull List<String> names, @NonNull List<String> definitions, double share,
+            @NonNull List<String> examples) {
+    }
+
+    record Name(@NonNull String name, @NonNull String definition) {
+    }
+
+    /** Per topic index, the index it ends up folded into after {@code merges}; itself when it was not folded. */
+    static int[] roots(int topicCount, @NonNull List<Merge> merges) {
+        var root = new int[topicCount];
+        for (int t = 0; t < topicCount; t++) {
+            root[t] = t;
+        }
+        for (var merge : merges) {
+            for (int t = 0; t < topicCount; t++) {
+                if (root[t] == merge.absorbed()) {
+                    root[t] = merge.kept();
+                }
+            }
+        }
+        return root;
+    }
+
+    /**
+     * The rename call over {@code merged}, then per merged topic its name, in order. A name left out, blank, a
+     * catch-all, or equal (by {@link AuthorApplier#nameKey}) to one in {@code taken} or to an earlier one keeps the
+     * first former name and definition.
+     *
+     * @param taken the names of the other live topics
+     */
+    static NightStep<List<Name>> rename(@NonNull List<Merged> merged, @NonNull Set<String> taken,
+            @NonNull TopicTasks tasks) {
+        if (merged.isEmpty()) {
+            return NightStep.done(List.of());
+        }
+        var task = tasks.merge();
+        var request = LlmRequest.builder()
+                .call(LlmCall.NAMING)
+                .tag(TopicTasks.MERGE)
+                .prompt(TopicPrompts.merge(task, merged))
+                .schema(task.schema())
+                .maxTokens(task.effectiveMaxTokens())
+                .build();
+        return NightStep.ask(request, answer -> NightStep.done(names(answer, merged, taken)));
+    }
+
+    private static List<Name> names(JsonNode answer, List<Merged> merged, Set<String> taken) {
+        var named = new Name[merged.size()];
+        var used = new HashSet<String>();
+        taken.forEach(name -> used.add(AuthorApplier.nameKey(name)));
+        for (var entry : NightJson.objects(answer == null ? null : answer.get("topics"))) {
+            var id = NightJson.integer(entry.get("id"));
+            var name = TopicText.name(text(entry.get("name")));
+            var definition = text(entry.get("definition"));
+            if (id == null || id < 0 || id >= merged.size() || named[id] != null || name.isEmpty()
+                    || definition.isEmpty() || AuthorApplier.isCatchAllName(name)
+                    || !used.add(AuthorApplier.nameKey(name))) {
+                continue;
+            }
+            named[id] = new Name(name, definition);
+        }
+        var out = new ArrayList<Name>();
+        for (int m = 0; m < merged.size(); m++) {
+            out.add(named[m] != null
+                    ? named[m]
+                    : new Name(merged.get(m).names().getFirst(), merged.get(m).definitions().getFirst()));
+        }
+        return out;
+    }
+
+    private static String text(JsonNode node) {
+        return node != null && node.isTextual() ? TopicText.pythonStrip(node.asText()) : "";
     }
 
     /**

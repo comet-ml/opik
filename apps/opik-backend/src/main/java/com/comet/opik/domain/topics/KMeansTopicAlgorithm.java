@@ -16,10 +16,13 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -34,6 +37,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /** The k-means seed: fixed, so the same window always gives the same groups. */
     static final long SEED = 0;
+    /** The rename prompt's examples of a merged topic: the first few of each of its groups', up to a cap. */
+    private static final int MERGE_EXAMPLES_PER_GROUP = 4;
+    private static final int MERGE_EXAMPLES = 16;
 
     private final AlgorithmConfig config;
     private final TopicTasks tasks;
@@ -82,7 +88,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 .schema(task.schema())
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
-        return new KMeansClustering(window.vectors(), maxTopics, groups, fit.centres(), author, stats);
+        return new KMeansClustering(window.vectors(), maxTopics, groups, examples, fit.centres(), author, stats);
     }
 
     /** The groups of one window, waiting for the author answer. */
@@ -92,6 +98,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         private final float[] vectors;
         private final int maxTopics;
         private final List<GroupSummary> groups;
+        private final List<List<String>> examples;
         private final float[] centres;
         private final LlmRequest author;
         private final ObjectNode stats;
@@ -107,7 +114,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         }
 
         @Override
-        public DiscoveredTopics finish(@NonNull AuthorAnswer answer) {
+        public NightStep<DiscoveredTopics> finish(@NonNull AuthorAnswer answer) {
             var applied = AuthorApplier.apply(answer, groups, maxTopics);
             var topics = applied.topics().stream()
                     .map(topic -> NewTopic.builder()
@@ -117,22 +124,63 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                             .build())
                     .toList();
             var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
-            var assigner = assigner(topics, otherPrototypes);
-            var merges = TopicMerger.merges(vectors, assigner.assign(vectors), topics.size(),
+            var merges = TopicMerger.merges(vectors, assigner(topics, otherPrototypes).assign(vectors), topics.size(),
                     IntStream.range(0, topics.size()).toArray(), TopicEmbedding.DIMENSIONS, config.getMergeCosine());
-            if (!merges.isEmpty()) {
-                topics = merged(topics, merges);
-                assigner = assigner(topics, otherPrototypes);
-            }
             var finishStats = JsonUtils.createObjectNode();
             finishStats.put("merged", merges.size());
             finishStats.put("other_groups", applied.other().size());
+            if (merges.isEmpty()) {
+                return NightStep.done(discovered(topics, otherPrototypes, finishStats));
+            }
+            var roots = TopicMerger.roots(topics.size(), merges);
+            var kept = IntStream.range(0, topics.size()).filter(t -> roots[t] == t).toArray();
+            var renamed = Arrays.stream(kept)
+                    .filter(root -> IntStream.range(0, topics.size()).anyMatch(t -> t != root && roots[t] == root))
+                    .boxed().toList();
+            var merged = renamed.stream().map(root -> merged(applied.topics(), roots, root)).toList();
+            var taken = Arrays.stream(kept).filter(t -> !renamed.contains(t)).mapToObj(t -> topics.get(t).name())
+                    .collect(Collectors.toSet());
+            return TopicMerger.rename(merged, taken, tasks).map(names -> {
+                var out = new ArrayList<NewTopic>();
+                for (int t : kept) {
+                    var prototypes = IntStream.range(0, topics.size()).filter(u -> roots[u] == t)
+                            .boxed().sorted(Comparator.comparingInt(u -> u == t ? -1 : u))
+                            .flatMap(u -> topics.get(u).prototypes().stream()).toList();
+                    int m = renamed.indexOf(t);
+                    var topic = topics.get(t).toBuilder().prototypes(prototypes);
+                    out.add(m < 0
+                            ? topic.build()
+                            : topic.name(names.get(m).name()).definition(names.get(m).definition()).build());
+                }
+                return discovered(out, otherPrototypes, finishStats);
+            });
+        }
+
+        /** A merged topic for the rename call: {@code root} first, then the topics folded into it. */
+        private TopicMerger.Merged merged(List<AppliedTopic> applied, int[] roots, int root) {
+            var members = IntStream.range(0, roots.length).filter(t -> roots[t] == root).boxed()
+                    .sorted(Comparator.comparingInt(t -> t == root ? -1 : t)).toList();
+            var groupsOf = members.stream().flatMap(t -> applied.get(t).groups().stream()).toList();
+            var byGroup = new HashMap<Integer, GroupSummary>();
+            groups.forEach(group -> byGroup.put(group.group(), group));
+            return new TopicMerger.Merged(
+                    members.stream().map(t -> applied.get(t).name()).toList(),
+                    members.stream().map(t -> applied.get(t).definition()).toList(),
+                    groupsOf.stream().mapToDouble(group -> byGroup.get(group).share()).sum(),
+                    groupsOf.stream().flatMap(group -> examples.get(group).stream().limit(MERGE_EXAMPLES_PER_GROUP))
+                            .limit(MERGE_EXAMPLES).toList());
+        }
+
+        private DiscoveredTopics discovered(List<NewTopic> topics, List<float[]> otherPrototypes,
+                ObjectNode finishStats) {
+            var assigner = assigner(topics, otherPrototypes);
+            var labels = assigner.assign(vectors);
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
             // near it is saved, so it would assign no trace.
             return DiscoveredTopics.builder()
                     .topics(topics)
-                    .labels(assigner.assign(vectors))
+                    .labels(labels)
                     .otherPrototypes(assigner.keptOther())
                     .stats(finishStats)
                     .build();
@@ -209,19 +257,6 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     private PrototypeAssigner assigner(List<NewTopic> topics, List<float[]> otherPrototypes) {
         return assigner(topics.stream().flatMap(topic -> topic.prototypes().stream()).toList(),
                 ownerOfEach(topics.stream().map(topic -> topic.prototypes().size()).toList()), otherPrototypes);
-    }
-
-    /** The topics after {@code merges}: a kept topic takes the prototypes of each one folded into it, in merge order. */
-    private static List<NewTopic> merged(List<NewTopic> topics, List<TopicMerger.Merge> merges) {
-        var prototypes = topics.stream().map(topic -> new ArrayList<>(topic.prototypes())).toList();
-        var gone = new boolean[topics.size()];
-        for (var merge : merges) {
-            prototypes.get(merge.kept()).addAll(prototypes.get(merge.absorbed()));
-            gone[merge.absorbed()] = true;
-        }
-        return IntStream.range(0, topics.size()).filter(t -> !gone[t])
-                .mapToObj(t -> topics.get(t).toBuilder().prototypes(List.copyOf(prototypes.get(t))).build())
-                .toList();
     }
 
     private PrototypeAssigner assigner(List<float[]> topicPrototypes, List<Integer> owners,

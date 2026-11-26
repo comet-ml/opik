@@ -45,6 +45,6 @@ class TopicTasksTest {
     void missing() {
         assertThatThrownBy(() -> new TopicTasks(List.of()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("missing topics tasks, names '[author, naming, naming_new, verify]'");
+                .hasMessageContaining("missing topics tasks, names '[author, merge, naming, naming_new, verify]'");
     }
 }

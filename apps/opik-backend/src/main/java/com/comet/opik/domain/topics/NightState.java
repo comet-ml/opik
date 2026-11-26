@@ -79,10 +79,11 @@ class NightState {
     }
 
     /**
-     * Folds each live topic that covers the same traces as a larger one into it ({@link TopicMerger}): the larger keeps
-     * its name and takes the other's prototypes, the other retires as {@code merged}. Returns whether any merged.
+     * Folds each live topic that covers the same traces as a larger one into it ({@link TopicMerger}): the larger takes
+     * the other's prototypes, the other retires as {@code merged}. Returns the merges, in the order made.
      */
-    boolean mergeOverlapping(@NonNull float[] vectors, @NonNull int[] labels, int dimensions, double mergeCosine) {
+    List<TopicMerger.Merge> mergeOverlapping(@NonNull float[] vectors, @NonNull int[] labels, int dimensions,
+            double mergeCosine) {
         var merges = TopicMerger.merges(vectors, labels, topics.size(), live(), dimensions, mergeCosine);
         for (var merge : merges) {
             var kept = topics.get(merge.kept());
@@ -91,7 +92,7 @@ class NightState {
             kept.setPrototypes(prototypes);
             topics.get(merge.absorbed()).retire(RetiredReason.MERGED);
         }
-        return !merges.isEmpty();
+        return merges;
     }
 
     /**

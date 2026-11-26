@@ -506,12 +506,12 @@ class TopicsRunServiceTest {
                     }
 
                     @Override
-                    public DiscoveredTopics finish(AuthorAnswer answer) {
+                    public NightStep<DiscoveredTopics> finish(AuthorAnswer answer) {
                         var labels = new int[window.size()];
                         for (int i = 0; i < labels.length; i++) {
                             labels[i] = i % 3 == 2 ? OTHER : i % 3;
                         }
-                        return DiscoveredTopics.builder()
+                        return NightStep.done(DiscoveredTopics.builder()
                                 .topics(List.of(
                                         NewTopic.builder().name("First").definition("one")
                                                 .prototypes(List.of(first)).build(),
@@ -520,7 +520,7 @@ class TopicsRunServiceTest {
                                 .labels(labels)
                                 .otherPrototypes(List.of(other))
                                 .stats(InferenceJson.MAPPER.createObjectNode())
-                                .build();
+                                .build());
                     }
                 };
             }

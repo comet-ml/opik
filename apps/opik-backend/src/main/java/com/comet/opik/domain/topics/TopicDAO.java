@@ -52,11 +52,12 @@ public interface TopicDAO {
             @BindList("projectIds") Collection<UUID> projectIds);
 
     /**
-     * The nightly update's save of a topic it kept. Only {@code low_nights}, {@code size} and {@code vectors} change:
-     * the night never changes a topic's id, name, definition or born.
+     * The nightly update's save of a topic it kept. The night never changes a topic's id or born; its name and
+     * definition change only when it took a merged topic.
      */
     @SqlBatch("""
-            UPDATE topics SET low_nights = :lowNights, size = :size, vectors = :vectors
+            UPDATE topics SET name = :name, definition = :definition, low_nights = :lowNights, size = :size,
+                vectors = :vectors
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND id = :id
             """)
     int[] updateTopics(@BindMethods List<Topic> topics);

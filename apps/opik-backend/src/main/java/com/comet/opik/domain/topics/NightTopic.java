@@ -14,14 +14,14 @@ import java.util.UUID;
 /**
  * A topic of one nightly update. {@code prototypes} are unit vectors in assignment order; {@code lowNights} is the
  * lifecycle streak; {@code size} its count in the window after the night. A topic retired tonight carries its reason
- * until the save deletes it.
+ * until the save deletes it. A topic that took another tonight gets a new name ({@link TopicMerger#rename}).
  */
 @Getter
 class NightTopic {
 
     private final UUID id;
-    private final String name;
-    private final String definition;
+    private String name;
+    private String definition;
     private final LocalDate born;
     private List<float[]> prototypes;
     private int lowNights;
@@ -61,6 +61,12 @@ class NightTopic {
 
     void retire(@NonNull RetiredReason reason) {
         retiredReason = reason;
+    }
+
+    /** A merged topic's new name: it covers what its former topics covered together. */
+    void rename(@NonNull String name, @NonNull String definition) {
+        this.name = name;
+        this.definition = definition;
     }
 
     void recordSize(int size) {

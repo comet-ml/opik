@@ -68,6 +68,14 @@ final class TopicsTestAlgorithm {
         return new KMeansTopicAlgorithm(topics, new TopicTasks());
     }
 
+    /** {@code step}'s result, every call it asks answered badly: a rename keeps the larger topic's name. */
+    static <T> T finished(NightStep<T> step) {
+        while (step instanceof NightStep.Ask<T> ask) {
+            step = ask.next().apply(null);
+        }
+        return ((NightStep.Done<T>) step).result();
+    }
+
     static KMeansTopicAlgorithm algorithm() {
         return algorithm(config());
     }
