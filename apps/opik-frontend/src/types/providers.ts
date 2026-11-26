@@ -14,6 +14,8 @@ export enum PROVIDER_TYPE {
 
 export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
+export type OpenRouterRegion = "global" | "eu" | "us" | "unknown";
+
 export interface ProviderGridOption {
   value: COMPOSED_PROVIDER_TYPE;
   label: string;
