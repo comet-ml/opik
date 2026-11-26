@@ -29,9 +29,10 @@ class ModelPriceStore {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    private record HistorySnapshot(String model, String provider, CustomModelPrice.Kind kind, BigDecimal inputPrice,
-            BigDecimal outputPrice, BigDecimal cacheReadPrice, BigDecimal cacheWritePrice, String aliasModel,
-            String aliasProvider, String note) {
+    private record HistorySnapshot(@NonNull String model, @NonNull String provider,
+            @NonNull CustomModelPrice.Kind kind, @Nullable BigDecimal inputPrice, @Nullable BigDecimal outputPrice,
+            @Nullable BigDecimal cacheReadPrice, @Nullable BigDecimal cacheWritePrice, @Nullable String aliasModel,
+            @Nullable String aliasProvider, @Nullable String note) {
 
         static String jsonOf(ModelPriceRow row) {
             var snapshot = HistorySnapshot.builder()
