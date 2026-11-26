@@ -296,6 +296,7 @@ const searchRank = (entry: CatalogEntry, needle: string): number => {
 const matchesSearch = (entry: CatalogEntry, needle: string): boolean =>
   !needle ||
   entry.model.toLowerCase().includes(needle) ||
+  (entry.builtIn?.model ?? "").toLowerCase().includes(needle) ||
   entry.provider.toLowerCase().includes(needle) ||
   (entry.row?.alias_of?.model ?? "").toLowerCase().includes(needle);
 
