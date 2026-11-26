@@ -49,6 +49,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -189,8 +190,9 @@ class AnnotationQueueRoutingSubscriberTest {
             UUID ownTrace = UUID.randomUUID();
             UUID otherProjectTrace = UUID.randomUUID();
             UUID otherProjectId = UUID.randomUUID();
-            when(traceDAO.getProjectIdsByTraceIds(any()))
-                    .thenReturn(Mono.just(Map.of(ownTrace, projectId, otherProjectTrace, otherProjectId)));
+            when(traceDAO.getAllProjectIdsByTraceIdsBounded(any()))
+                    .thenReturn(Mono.just(Map.of(ownTrace, Set.of(projectId), otherProjectTrace,
+                            Set.of(otherProjectId))));
             when(automationService.findEnabledByProjects(WORKSPACE_ID, Set.of(projectId, otherProjectId),
                     AnnotationQueue.AnnotationScope.TRACE))
                     .thenReturn(List.of(automation(List.of(List.of(scoreFilter)))));
@@ -202,6 +204,36 @@ class AnnotationQueueRoutingSubscriberTest {
             var criteria = ArgumentCaptor.forClass(TraceSearchCriteria.class);
             verify(traceDAO).search(eq(1), criteria.capture());
             assertThat(criteria.getValue().traceIds()).containsExactly(ownTrace);
+        }
+
+        @Test
+        void routesATraceIdReusedAcrossProjectsInEachProject() {
+            UUID traceId = UUID.randomUUID();
+            UUID otherProjectId = UUID.randomUUID();
+            UUID otherQueueId = UUID.randomUUID();
+            when(traceDAO.getAllProjectIdsByTraceIdsBounded(Set.of(traceId)))
+                    .thenReturn(Mono.just(Map.of(traceId, Set.of(projectId, otherProjectId))));
+            when(automationService.findEnabledByProjects(WORKSPACE_ID, Set.of(projectId, otherProjectId),
+                    AnnotationQueue.AnnotationScope.TRACE))
+                    .thenReturn(List.of(automation(List.of(List.of(scoreFilter))),
+                            automation(List.of(List.of(scoreFilter))).toBuilder()
+                                    .queueId(otherQueueId)
+                                    .projectId(otherProjectId)
+                                    .build()));
+            givenLoggingSource(traceId);
+            when(traceDAO.search(anyInt(), any())).thenReturn(Flux.just(trace(traceId)));
+            when(annotationQueueService.addItems(any(), any(), any())).thenReturn(Mono.just(1L));
+
+            process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId));
+
+            var criteria = ArgumentCaptor.forClass(TraceSearchCriteria.class);
+            verify(traceDAO, times(2)).search(eq(1), criteria.capture());
+            assertThat(criteria.getAllValues())
+                    .extracting(TraceSearchCriteria::projectId)
+                    .containsExactlyInAnyOrder(projectId, otherProjectId);
+            verify(annotationQueueService).addItems(queueId, Set.of(traceId), AnnotationQueueItemSource.AUTOMATED);
+            verify(annotationQueueService).addItems(otherQueueId, Set.of(traceId),
+                    AnnotationQueueItemSource.AUTOMATED);
         }
 
         /**
@@ -328,7 +360,7 @@ class AnnotationQueueRoutingSubscriberTest {
 
         @Test
         void routesNothingForEntitiesThatNoLongerExist() {
-            when(traceDAO.getProjectIdsByTraceIds(any())).thenReturn(Mono.just(Map.of()));
+            when(traceDAO.getAllProjectIdsByTraceIdsBounded(any())).thenReturn(Mono.just(Map.of()));
 
             process(AnnotationQueue.AnnotationScope.TRACE, Set.of(UUID.randomUUID()));
 
@@ -440,8 +472,8 @@ class AnnotationQueueRoutingSubscriberTest {
     }
 
     private void givenTraces(UUID... traceIds) {
-        when(traceDAO.getProjectIdsByTraceIds(any())).thenReturn(Mono.just(Arrays.stream(traceIds)
-                .collect(Collectors.toMap(Function.identity(), __ -> projectId))));
+        when(traceDAO.getAllProjectIdsByTraceIdsBounded(any())).thenReturn(Mono.just(Arrays.stream(traceIds)
+                .collect(Collectors.toMap(Function.identity(), __ -> Set.of(projectId)))));
     }
 
     private void givenMatchingTrace(UUID traceId) {

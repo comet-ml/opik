@@ -13,7 +13,6 @@ import com.comet.opik.domain.ThreadDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.threads.TraceThreadDAO;
-import com.comet.opik.domain.threads.TraceThreadIdModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -142,7 +141,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                         return Mono.just(0L);
                     }
 
-                    Set<UUID> projectIds = entities.values().stream()
+                    Set<UUID> projectIds = entities.stream()
                             .map(RoutedEntity::projectId)
                             .collect(Collectors.toSet());
 
@@ -174,10 +173,10 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * <p>It runs after the automation lookup so the read only happens for a project that actually has an
      * enabled automation, which is the minority of traffic.
      */
-    private Mono<Map<UUID, RoutedEntity>> retainProductionEntities(Map<UUID, RoutedEntity> entities,
+    private Mono<List<RoutedEntity>> retainProductionEntities(List<RoutedEntity> entities,
             Set<UUID> projectIds, AnnotationQueueRoutingMessage message) {
 
-        Set<UUID> entityIds = entities.keySet();
+        Set<UUID> entityIds = entities.stream().map(RoutedEntity::id).collect(Collectors.toSet());
 
         Mono<Set<UUID>> loggedBySdk = message.scope() == AnnotationQueue.AnnotationScope.THREAD
                 ? traceThreadDAO.getLoggingSourceIds(projectIds, entityIds)
@@ -185,43 +184,48 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
 
         return withSystemContext(loggedBySdk, message)
                 .map(kept -> {
-                    int skipped = entityIds.size() - kept.size();
+                    var production = entities.stream()
+                            .filter(entity -> kept.contains(entity.id()))
+                            .toList();
+                    int skipped = entities.size() - production.size();
                     if (skipped > 0) {
                         AnnotationQueueRoutingMetrics.NON_PRODUCTION_SKIPPED.add(skipped);
                         log.debug(
                                 "Skipped entities not logged by an SDK, skipped '{}', received '{}', workspace '{}'",
-                                skipped, entityIds.size(), message.workspaceId());
+                                skipped, entities.size(), message.workspaceId());
                     }
 
-                    return entities.entrySet().stream()
-                            .filter(entry -> kept.contains(entry.getKey()))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    return production;
                 });
     }
 
     /**
      * An entity that cannot be resolved — deleted since, or not yet visible on this replica — is dropped:
-     * there is nothing to route, and its next change publishes it again.
+     * there is nothing to route, and its next change publishes it again. A trace id reused across projects yields
+     * one entity per project, so each project's automations evaluate its own trace.
      */
-    private Mono<Map<UUID, RoutedEntity>> readEntities(AnnotationQueueRoutingMessage message) {
+    private Mono<List<RoutedEntity>> readEntities(AnnotationQueueRoutingMessage message) {
         List<UUID> ids = List.copyOf(message.entityIds());
 
         if (message.scope() == AnnotationQueue.AnnotationScope.THREAD) {
             return traceThreadService.getThreadIdModelsByThreadModelIds(ids)
                     .map(models -> models.stream()
-                            .collect(Collectors.toMap(TraceThreadIdModel::id, model -> RoutedEntity.builder()
+                            .map(model -> RoutedEntity.builder()
                                     .id(model.id())
                                     .projectId(model.projectId())
                                     .threadId(model.threadId())
-                                    .build(), (first, ignored) -> first)));
+                                    .build())
+                            .distinct()
+                            .toList());
         }
 
-        return withSystemContext(traceDAO.getProjectIdsByTraceIds(ids), message)
-                .map(projectIdByTrace -> projectIdByTrace.entrySet().stream()
-                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> RoutedEntity.builder()
+        return withSystemContext(traceDAO.getAllProjectIdsByTraceIdsBounded(Set.copyOf(ids)), message)
+                .map(projectIdsByTrace -> projectIdsByTrace.entrySet().stream()
+                        .flatMap(entry -> entry.getValue().stream().map(projectId -> RoutedEntity.builder()
                                 .id(entry.getKey())
-                                .projectId(entry.getValue())
-                                .build())));
+                                .projectId(projectId)
+                                .build()))
+                        .toList());
     }
 
     /**
@@ -239,11 +243,11 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * by id, so a filter here selects exactly what it selects on the traces or threads page.
      */
     private Mono<Long> addMatches(List<AnnotationQueueAutomationService.QueueAutomation> automations,
-            Map<UUID, RoutedEntity> entities, AnnotationQueueRoutingMessage message) {
+            List<RoutedEntity> entities, AnnotationQueueRoutingMessage message) {
 
         var failures = new ConcurrentLinkedQueue<Throwable>();
 
-        Map<UUID, List<RoutedEntity>> candidatesByProject = entities.values().stream()
+        Map<UUID, List<RoutedEntity>> candidatesByProject = entities.stream()
                 .collect(Collectors.groupingBy(RoutedEntity::projectId));
 
         Set<GroupSearch> searches = automations.stream()
