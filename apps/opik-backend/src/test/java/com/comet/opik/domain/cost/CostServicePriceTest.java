@@ -69,7 +69,20 @@ class CostServicePriceTest {
     }
 
     private static Stream<Arguments> organizationPrices() {
+        String local = "custom-llm/local/" + customName();
+        String aliasName = "team/aliases/" + customName();
         return Stream.of(
+                // 1000*1e-6 + 500*2e-6
+                Arguments.of("name with two slashes matches its own spans", local, "ollama:local",
+                        usage(1000, 0, 500), layers(fixed(local, "ollama:local", "1.00", "2.00")), "0.002"),
+                Arguments.of("alias whose name and target have two slashes", aliasName, "ollama:local",
+                        usage(1000, 0, 500), layers(alias(aliasName, "ollama:local", local, "ollama:local"),
+                                fixed(local, "ollama:local", "1.00", "2.00")),
+                        "0.002"),
+                // 1M*1e-6 + 100k*1e-5
+                Arguments.of("row typed with a vendor prefix and capitals", "gpt-5-mini", "openai",
+                        usage(1_000_000, 0, 100_000), layers(fixed("OpenAI/GPT-5-Mini", "openai", "1.00", "10.00")),
+                        "2.00"),
                 // 1M*1e-6 + 100k*1e-5. Trying one spelling at a time across both lists hits the built-in dated row and
                 // gives 1M*2.5e-7 + 100k*2e-6 = 0.45.
                 Arguments.of("dated name reaches the organization's base-name row", "gpt-5-mini-2025-08-07",
@@ -118,6 +131,24 @@ class CostServicePriceTest {
 
         assertThat(priced.cost()).isEqualByComparingTo("0.00125");
         assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
+    }
+
+    private static Stream<Arguments> spansOutsideARowWithTwoSlashes() {
+        String version = customName();
+        return Stream.of(
+                Arguments.of("another first segment and the same last one", "some-other/" + version, version),
+                Arguments.of("the name after the first slash, sent as the whole name", "fine-tune/" + version,
+                        version));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("spansOutsideARowWithTwoSlashes")
+    void priceOfARowWithTwoSlashesSkipsSpansWithAnotherNameAfterTheirFirstSlash(String description,
+            String spanModel, String version) {
+        var priced = CostService.price(spanModel, "vllm", usage(1000, 0, 500), null,
+                layers(fixed("my-org/fine-tune/" + version, "vllm", "1.00", "2.00")));
+
+        assertPriced(priced, new PricedCost(BigDecimal.ZERO, CostSource.NONE));
     }
 
     private static void assertPriced(PricedCost actual, PricedCost expected) {

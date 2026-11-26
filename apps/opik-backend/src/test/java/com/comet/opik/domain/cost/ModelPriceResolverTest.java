@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.cost.ModelPriceResolver.NameForm;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -8,6 +9,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -122,6 +124,27 @@ class ModelPriceResolverTest {
         var match = ModelPriceResolver.resolve("GPT-5-MINI", "OpenAI", layers(row));
 
         assertThat(match).map(ModelPriceResolver.PriceMatch::customRow).contains(row);
+    }
+
+    @Test
+    void resolveMatchesARowTypedWithAPrefixAndCapitalsByItsNameAfterThePrefix() {
+        var row = fixed("OpenAI/GPT-5-Mini", "openai", "1.00");
+
+        var match = ModelPriceResolver.resolve("gpt-5-mini", "openai", layers(row));
+
+        assertThat(match).map(ModelPriceResolver.PriceMatch::customRow).contains(row);
+    }
+
+    @Test
+    void resolveMatchesARowWithTwoSlashesOnlyBySpansWithTheSameNameAfterTheirFirstSlash() {
+        String model = "aide-" + RandomStringUtils.secure().nextAlphanumeric(16).toLowerCase(Locale.ROOT);
+        var row = fixed("custom-llm/local/" + model, "ollama:local", "1.00");
+
+        assertThat(ModelPriceResolver.resolve("custom-llm/local/" + model, "ollama:local", layers(row)))
+                .map(ModelPriceResolver.PriceMatch::customRow).contains(row);
+        assertThat(ModelPriceResolver.resolve("other/Local/" + model, "ollama:local", layers(row)))
+                .map(ModelPriceResolver.PriceMatch::customRow).contains(row);
+        assertThat(ModelPriceResolver.resolve("local/" + model, "ollama:local", layers(row))).isEmpty();
     }
 
     @Test

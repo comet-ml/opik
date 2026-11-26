@@ -23,8 +23,9 @@ import java.util.stream.Stream;
 
 /**
  * Checks an organization's price rows as sent, before any is saved: every problem of every row is reported at once,
- * like a form shows each invalid field. Rows are normalized the way span names are looked up, so a saved row matches
- * the spans it is meant for. Warnings flag rows that save but likely don't do what was meant.
+ * like a form shows each invalid field. A row keeps its model name as typed and is matched by the key
+ * {@link ModelPriceTable#rowModelName} derives from it, so saving the returned rows again changes nothing. Providers
+ * are saved the way span providers are looked up. Warnings flag rows that save but likely don't do what was meant.
  */
 @UtilityClass
 public class CustomModelPriceValidator {
@@ -103,7 +104,7 @@ public class CustomModelPriceValidator {
     public record ValidRow(@NonNull CustomModelPrice price, String note) {
     }
 
-    /** {@code rows} holds the normalized rows to save, and only when there are no errors. */
+    /** {@code rows} holds the rows to save, and only when there are no errors. */
     @Builder(toBuilder = true)
     public record Result(@NonNull List<ValidRow> rows, @NonNull List<Problem> errors,
             @NonNull List<Problem> warnings) {
@@ -114,7 +115,7 @@ public class CustomModelPriceValidator {
     }
 
     @Builder(toBuilder = true)
-    private record ParsedRow(int index, @NonNull String sentModel, @NonNull CustomModelPrice price, String note,
+    private record ParsedRow(int index, @NonNull CustomModelPrice price, String note,
             @NonNull List<Problem> normalized) {
     }
 
@@ -135,17 +136,17 @@ public class CustomModelPriceValidator {
         var errors = new ArrayList<Problem>();
         var parsedRows = new ArrayList<ParsedRow>();
         Set<String> invalidRowNames = new HashSet<>();
-        Map<RowKey, Integer> firstIndexByKey = new HashMap<>();
+        Map<RowKey, ParsedRow> firstRowByKey = new HashMap<>();
         for (int index = 0; index < rows.size(); index++) {
             Optional<ParsedRow> parsed = parse(index, rows.get(index), invalidRowNames, errors);
             if (parsed.isEmpty()) {
                 continue;
             }
-            CustomModelPrice price = parsed.get().price();
-            Integer firstIndex = firstIndexByKey.putIfAbsent(keyOf(price), index);
-            if (firstIndex != null) {
+            ParsedRow first = firstRowByKey.putIfAbsent(keyOf(parsed.get().price()), parsed.get());
+            if (first != null) {
                 errors.add(problem(index, MODEL, Code.DUPLICATE_ROW, "Row %d already prices '%s' on %s"
-                        .formatted(firstIndex + 1, price.modelName(), describeProvider(price.provider()))));
+                        .formatted(first.index() + 1, first.price().modelName(),
+                                describeProvider(first.price().provider()))));
                 continue;
             }
             parsedRows.add(parsed.get());
@@ -179,10 +180,10 @@ public class CustomModelPriceValidator {
 
         Optional<String> sentModel = text(index, node, MODEL, MODEL, errors);
         Optional<String> model = sentModel.flatMap(sent -> name(index, MODEL, sent, errors));
-        String modelName = model.map(ModelPriceTable::rowModelName).orElse("");
+        String lookupName = model.map(ModelPriceTable::rowModelName).orElse("");
         if (!isSet(node, MODEL) || model.filter(String::isEmpty).isPresent()) {
             errors.add(problem(index, MODEL, Code.MISSING_MODEL, "Every row needs a model"));
-        } else if (model.isPresent() && modelName.isEmpty()) {
+        } else if (model.isPresent() && lookupName.isEmpty()) {
             errors.add(problem(index, MODEL, Code.MISSING_MODEL, "The model has no name after its provider"));
         }
         Optional<String> sentProvider = text(index, node, PROVIDER, PROVIDER, errors);
@@ -198,7 +199,7 @@ public class CustomModelPriceValidator {
                         MAX_NOTE_LENGTH))));
 
         var priceBuilder = CustomModelPrice.builder()
-                .modelName(modelName)
+                .modelName(model.orElse(""))
                 .provider(rowProvider)
                 .kind(kind.orElse(CustomModelPrice.Kind.FIXED))
                 .inputPerMillion(prices.get(INPUT_PRICE))
@@ -206,8 +207,8 @@ public class CustomModelPriceValidator {
                 .cacheReadPerMillion(prices.get(CACHE_READ_PRICE))
                 .cacheWritePerMillion(prices.get(CACHE_WRITE_PRICE));
         var normalized = new ArrayList<Problem>();
-        normalized(index, MODEL, sentModel, modelName).ifPresent(normalized::add);
-        normalized(index, PROVIDER, sentProvider, rowProvider).ifPresent(normalized::add);
+        model.flatMap(saved -> modelNotice(index, sentModel, saved)).ifPresent(normalized::add);
+        providerNotice(index, PROVIDER, sentProvider, rowProvider).ifPresent(normalized::add);
         kind.ifPresent(rowKind -> {
             if (rowKind == CustomModelPrice.Kind.FIXED) {
                 checkFixed(index, node, errors);
@@ -216,14 +217,13 @@ public class CustomModelPriceValidator {
             }
         });
         if (errors.size() != errorsBefore) {
-            if (!modelName.isEmpty()) {
-                invalidRowNames.add(modelName);
+            if (!lookupName.isEmpty()) {
+                invalidRowNames.add(lookupName);
             }
             return Optional.empty();
         }
         return Optional.of(ParsedRow.builder()
                 .index(index)
-                .sentModel(model.orElse(""))
                 .price(priceBuilder.build())
                 .note(note.orElse(null))
                 .normalized(List.copyOf(normalized))
@@ -277,22 +277,36 @@ public class CustomModelPriceValidator {
         if (target.isEmpty()) {
             return;
         }
-        String targetName = target.get().toLowerCase(Locale.ROOT);
         String aliasProvider = ProviderRegistry.resolve(targetProvider.orElse(null), target.get())
                 .orElse(CustomModelPrice.SPAN_PROVIDER);
-        priceBuilder.aliasModelName(targetName).aliasProvider(aliasProvider);
-        normalized(index, ALIAS_OF_MODEL, sentTarget, targetName).ifPresent(normalized::add);
-        normalized(index, ALIAS_OF_PROVIDER, sentTargetProvider, aliasProvider).ifPresent(normalized::add);
+        priceBuilder.aliasModelName(target.get()).aliasProvider(aliasProvider);
+        if (!sentTarget.orElse("").equals(target.get())) {
+            normalized.add(problem(index, ALIAS_OF_MODEL, Code.NAME_NORMALIZED,
+                    "Prices like spans whose model is '%s'".formatted(target.get())));
+        }
+        providerNotice(index, ALIAS_OF_PROVIDER, sentTargetProvider, aliasProvider).ifPresent(normalized::add);
     }
 
-    private Optional<Problem> normalized(int index, String field, Optional<String> sent, String saved) {
+    // Shown whenever the name has a prefix, not only when the name changed: the row then matches spans by the name
+    // after the first '/' alone, whatever comes before it.
+    private Optional<Problem> modelNotice(int index, Optional<String> sent, String saved) {
+        String matched = ModelPriceTable.parseModelName(saved).trim();
+        if (sent.orElse("").equals(matched)) {
+            return Optional.empty();
+        }
+        String message = matched.equals(saved)
+                ? "Matches spans whose model is '%s'".formatted(saved)
+                : "Matches spans whose model, without the part before its first '/', is '%s'".formatted(matched);
+        return Optional.of(problem(index, MODEL, Code.NAME_NORMALIZED, message));
+    }
+
+    private Optional<Problem> providerNotice(int index, String field, Optional<String> sent, String saved) {
         if (sent.orElse("").equals(saved)) {
             return Optional.empty();
         }
         String savedAs = switch (field) {
             case PROVIDER -> describeProvider(saved);
-            case ALIAS_OF_PROVIDER -> saved.isEmpty() ? "the span's own provider" : "'%s'".formatted(saved);
-            default -> "'%s'".formatted(saved);
+            default -> saved.isEmpty() ? "the span's own provider" : "'%s'".formatted(saved);
         };
         return Optional.of(problem(index, field, Code.NAME_NORMALIZED,
                 "Saved as %s, the form spans are looked up in".formatted(savedAs)));
@@ -356,7 +370,7 @@ public class CustomModelPriceValidator {
                         "No built-in price is filed under '%s', so only these rows price its spans"
                                 .formatted(price.provider())));
             }
-            List<ModelPrice> bases = builtInBases(row);
+            List<ModelPrice> bases = builtInBases(price);
             if (price.kind() == CustomModelPrice.Kind.ALIAS) {
                 warnings.addAll(aliasRowWarnings(row.index(), price, bases));
             } else {
@@ -393,20 +407,19 @@ public class CustomModelPriceValidator {
                 .isPresent();
     }
 
-    // The built-in prices the row's spans would get without it. Saving strips a vendor prefix that spans keep: a span
-    // named openai/gpt-4o-mini on OpenRouter finds a built-in price through it, so each spelling such a span could
-    // have is looked up. An any-provider row applies under every provider that prices the model.
-    private List<ModelPrice> builtInBases(ParsedRow row) {
-        CustomModelPrice price = row.price();
-        Stream<String> names = Stream.of(price.modelName(), row.sentModel()).distinct();
+    // The built-in prices the row's spans would get without it. The typed name is looked up as a span with that name
+    // is, never the lookup key, which would lose one more segment. A span can also carry a vendor prefix the row's
+    // name lacks: a span named openai/gpt-4o-mini on OpenRouter finds a built-in price through it, so each spelling
+    // such a span could have is looked up. An any-provider row applies under every provider that prices the model.
+    private List<ModelPrice> builtInBases(CustomModelPrice price) {
         if (price.provider().isEmpty()) {
-            return names
-                    .flatMap(name -> ModelPriceResolver.builtInMatchesUnderEveryProvider(name).stream())
+            return ModelPriceResolver.builtInMatchesUnderEveryProvider(price.modelName()).stream()
                     .map(ModelPriceResolver.PriceMatch::price)
                     .distinct()
                     .toList();
         }
-        return Stream.concat(names, ModelPriceTable.prefixedModelNames(price.modelName(), price.provider()).stream())
+        return Stream.concat(Stream.of(price.modelName()), ModelPriceTable.prefixedModelNames(
+                ModelPriceTable.rowModelName(price.modelName()), price.provider()).stream())
                 .map(name -> ModelPriceResolver.resolve(name, price.provider()))
                 .flatMap(Optional::stream)
                 .map(ModelPriceResolver.PriceMatch::price)
@@ -554,9 +567,9 @@ public class CustomModelPriceValidator {
                     "%s is %d characters, at most %d".formatted(field, stripped.length(), MAX_NAME_LENGTH)));
             return Optional.empty();
         }
-        // Names are saved lower-cased, which can make them longer: 'İ' lower-cases to two characters.
+        // Providers are saved lower-cased, which can make them longer: 'İ' lower-cases to two characters.
         int savedLength = stripped.toLowerCase(Locale.ROOT).length();
-        if (savedLength > MAX_NAME_LENGTH) {
+        if (isProvider(field) && savedLength > MAX_NAME_LENGTH) {
             errors.add(problem(index, field, Code.NAME_TOO_LONG, "%s is %d characters once lower-cased, at most %d"
                     .formatted(field, savedLength, MAX_NAME_LENGTH)));
             return Optional.empty();
@@ -589,13 +602,20 @@ public class CustomModelPriceValidator {
         return Character.isISOControl(codePoint) || Character.getType(codePoint) == Character.FORMAT;
     }
 
+    private boolean isProvider(String field) {
+        return PROVIDER.equals(field) || ALIAS_OF_PROVIDER.equals(field);
+    }
+
     private boolean isSet(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value != null && !value.isNull();
     }
 
     private RowKey keyOf(CustomModelPrice price) {
-        return RowKey.builder().modelName(price.modelName()).provider(price.provider()).build();
+        return RowKey.builder()
+                .modelName(ModelPriceTable.rowModelName(price.modelName()))
+                .provider(price.provider())
+                .build();
     }
 
     private String describeProvider(String provider) {
