@@ -28,7 +28,8 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * {@code topics.runs.planInterval}. Every pod fires it every plan interval, each at its own second (Quartz starts the
  * trigger at boot). The same locks as {@link TopicVectorsJob} make that one plan per interval across the cluster:
  * <ul>
- * <li>the leader lock, held for the plan and released when it ends, so two plans never overlap; its lease
+ * <li>the leader lock, held for the plan and released when it ends, so two plans never overlap, a plan after a run
+ * ({@link TopicsRunPlanner#planAfterRun}) included; its lease
  * ({@link #leaderLease()}) only matters when the pod dies mid-plan, because a plan that runs longer is cancelled;</li>
  * <li>the plan lock, taken by the leader before it plans and never released: it expires one interval (less a small
  * margin for trigger jitter) after the plan started, so a pod that fires sooner skips.</li>
@@ -43,7 +44,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsDiscoveryJob extends Job implements InterruptableJob {
 
-    static final Lock LEADER_LOCK = new Lock("topics:discovery:leader");
+    static final Lock LEADER_LOCK = TopicsRunPlanner.LEADER_LOCK;
     static final Lock PLAN_LOCK = new Lock("topics:discovery:plan");
     private static final Duration MAX_JITTER = Duration.ofSeconds(1);
 
@@ -104,15 +105,9 @@ public class TopicsDiscoveryJob extends Job implements InterruptableJob {
                 });
     }
 
-    /**
-     * How long the leader lock lasts, and the plan with it: the plan's one deadline, {@code topics.runs.planBudget},
-     * cuts its counts and stops its queueing, {@code topics.run.countTimeout} covers the reconcile's counts before it,
-     * and {@code topics.runs.leaseSlack} the queue write and publish in flight at it.
-     */
+    /** {@link TopicsRunPlanner#leaderLease}: a plan after a run takes the same lock. */
     Duration leaderLease() {
-        return config.getRuns().getPlanBudget().toJavaDuration()
-                .plus(config.getRun().getCountTimeout().toJavaDuration())
-                .plus(config.getRuns().getLeaseSlack().toJavaDuration());
+        return TopicsRunPlanner.leaderLease(config);
     }
 
     /** One interval, less a margin for trigger jitter, so the pod whose trigger comes next is never one plan late. */

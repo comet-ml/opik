@@ -48,7 +48,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * night has not looked at yet ({@code last_night} before the night) and that have no run in flight. A project is
  * skipped when it is deleted, its list already covers the night, or its last {@code topics.nightly.pauseFailures}
  * runs failed within {@code topics.nightly.pauseNights} nights ({@link NightTriage}). Then, while slots are free, the
- * rest are counted, one count per workspace, and decided in {@link NightTriage#queueOrder}: one under
+ * rest are counted, one count per workspace, and decided one workspace at a time in turn, stalest first within each
+ * ({@link NightTriage#inTurn}): one under
  * {@code topics.run.minVectors} is skipped, one whose count fails is left for the next night, and the others are
  * queued with their count. A project with a run in flight waits for a later plan. No project is queued after the
  * budget: the first plan after it records every project the night did not look at as not reached.
@@ -238,7 +239,7 @@ class TopicsNightPass implements Managed {
                                     .windowVectors(workspace.getKey(), workspace.getValue(), night.date()))
                                     .map(counts -> Map.entry(workspace.getKey(), counts)))
                             .collectMap(Map.Entry::getKey, Map.Entry::getValue)
-                            .flatMap(counts -> Flux.fromIterable(due)
+                            .flatMap(counts -> Flux.fromIterable(NightTriage.inTurn(due))
                                     .filter(candidate -> counts.containsKey(candidate.workspaceId()))
                                     .concatMap(candidate -> decideOne(candidate,
                                             counts.get(candidate.workspaceId()).get(candidate.projectId()), night,

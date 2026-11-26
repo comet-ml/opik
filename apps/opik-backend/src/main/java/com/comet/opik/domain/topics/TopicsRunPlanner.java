@@ -5,6 +5,7 @@ import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -17,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -41,6 +43,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRunPlanner {
 
+    /** Held by the plan in flight, on any pod: two plans never overlap. */
+    public static final LockService.Lock LEADER_LOCK = new LockService.Lock("topics:discovery:leader");
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
     private final @NonNull TopicWorkspaceService workspaceService;
@@ -50,6 +55,39 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull TopicsNightPass nightPass;
+    private final @NonNull LockService lockService;
+
+    /**
+     * How long the leader lock lasts, and the plan with it: the plan's one deadline, {@code topics.runs.planBudget},
+     * cuts its counts and stops its queueing, {@code topics.run.countTimeout} covers the reconcile's counts before it,
+     * and {@code topics.runs.leaseSlack} the queue write and publish in flight at it.
+     */
+    public static Duration leaderLease(@NonNull TopicsConfig config) {
+        return config.getRuns().getPlanBudget().toJavaDuration()
+                .plus(config.getRun().getCountTimeout().toJavaDuration())
+                .plus(config.getRuns().getLeaseSlack().toJavaDuration());
+    }
+
+    /**
+     * Plans now, under the leader lock, once a run ended and freed its slot, so the slot does not stay free until the
+     * next interval. Best effort: nothing when another plan holds the lock, and a failure is logged. It does not take
+     * the interval's plan lock, so the interval's plans go on as before.
+     */
+    public Mono<Void> planAfterRun() {
+        if (!config.getRuns().isPlanAfterRun()) {
+            return Mono.empty();
+        }
+        var lease = leaderLease(config);
+        return lockService.bestEffortLock(LEADER_LOCK,
+                Mono.defer(() -> plan(Instant.now())).then(),
+                Mono.fromRunnable(() -> log.debug("Topics plan after a run skipped, another plan holds the lock")),
+                lease, Duration.ZERO)
+                .timeout(lease)
+                .onErrorResume(error -> {
+                    log.warn("Topics plan after a run failed; the next interval plans", error);
+                    return Mono.empty();
+                });
+    }
 
     /**
      * One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. The plan

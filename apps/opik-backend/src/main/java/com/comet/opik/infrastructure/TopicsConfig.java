@@ -732,6 +732,10 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration requeueWait;
 
+        /** Whether a run that ends starts a plan at once, to fill its slot before the next interval. */
+        @JsonProperty
+        private boolean planAfterRun;
+
         @Override
         @JsonIgnore
         public Codec getCodec() {

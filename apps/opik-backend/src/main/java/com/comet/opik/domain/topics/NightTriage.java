@@ -9,11 +9,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The night's triage of its due rows ({@link TopicProjectDAO#findNightDue}): the ones it skips without counting their
@@ -80,6 +82,17 @@ final class NightTriage {
     /** Whether the saved list's window already ends at or after {@code windowTo}: the night would count it twice. */
     static boolean covers(TopicProject row, Instant windowTo) {
         return row.windowUntil() != null && !row.windowUntil().isBefore(windowTo);
+    }
+
+    /**
+     * The candidates, sorted in {@link #queueOrder}, one workspace at a time in turn: each workspace's own stalest
+     * first, and the workspaces in the order of their stalest. So one workspace with many due projects does not take
+     * every free slot.
+     */
+    static List<NightCandidate> inTurn(@NonNull List<NightCandidate> sorted) {
+        var byWorkspace = sorted.stream().collect(Collectors.groupingBy(NightCandidate::workspaceId,
+                LinkedHashMap::new, Collectors.toList()));
+        return TopicsDiscoveryCandidates.roundRobin(List.copyOf(byWorkspace.values()));
     }
 
     /**

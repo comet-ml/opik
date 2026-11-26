@@ -118,7 +118,7 @@ class TopicsRunPlannerTest {
                 TopicsMetricsReader.metrics(InMemoryMetricReader.create()), workspaceNames, projectService,
                 mock(LockService.class));
         planner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
-                backfillGate, nightPass);
+                backfillGate, nightPass, mock(LockService.class));
     }
 
     private String workspace() {
@@ -129,9 +129,15 @@ class TopicsRunPlannerTest {
 
     /** A project of the workspace with a list saved for the night before. */
     private UUID listed(String workspaceId) {
+        return listed(workspaceId, 1);
+    }
+
+    /** A project of the workspace with a list saved {@code nightsAgo} nights before the night. */
+    private UUID listed(String workspaceId, int nightsAgo) {
         var projectId = ID_GENERATOR.generateId();
         listed.add(TopicProject.builder().workspaceId(workspaceId).projectId(projectId)
-                .listRunId(ID_GENERATOR.generateId()).windowUntil(NIGHT_START.minusSeconds(86_400)).build());
+                .listRunId(ID_GENERATOR.generateId()).windowUntil(NIGHT_START.minusSeconds(86_400L * nightsAgo))
+                .build());
         return projectId;
     }
 
@@ -140,6 +146,23 @@ class TopicsRunPlannerTest {
         var projectId = ID_GENERATOR.generateId();
         listless.add(ListlessProject.builder().workspaceId(workspaceId).projectId(projectId).build());
         return projectId;
+    }
+
+    @Test
+    @DisplayName("the night queues one workspace at a time in turn, stalest first within each: a workspace with "
+            + "three stale projects does not take both free slots from one with a fresher project")
+    void nightSharesTheSlotsAcrossWorkspaces() {
+        var crowded = workspace();
+        var stalest = listed(crowded, 5);
+        listed(crowded, 4);
+        listed(crowded, 3);
+        var other = workspace();
+        var fresher = listed(other, 1);
+
+        assertThat(planner.plan(IN_BUDGET).block()).isEqualTo(2);
+
+        assertThat(queued).extracting(PlannedRun::projectId).containsExactly(stalest, fresher);
+        assertThat(queued).extracting(PlannedRun::mode).containsOnly(TopicProject.RunMode.UPDATE);
     }
 
     @Test

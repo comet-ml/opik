@@ -19,6 +19,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -71,6 +72,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
 /**
@@ -174,6 +176,7 @@ class TopicsRunsIntegrationTest {
         opikConfig.getTopics().setEnabledWorkspaces("");
         endRunsInFlight();
         opikConfig.getTopics().getRuns().setMaxInFlight(2);
+        opikConfig.getTopics().getRuns().setPlanAfterRun(false);
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
                 0)));
@@ -241,6 +244,28 @@ class TopicsRunsIntegrationTest {
                 var project = data.topicProject(projectId);
                 assertThat(project).isNotNull();
                 assertThat(project.listRunId()).isNotNull();
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("a run that ends frees its slot at once: with one slot, one plan builds the first project, and the "
+            + "plan its end starts builds the second, well within one interval")
+    void endedRunPlansAgain() {
+        opikConfig.getTopics().getRuns().setMaxInFlight(1);
+        opikConfig.getTopics().getRuns().setPlanAfterRun(true);
+        var workspaceId = enabledWorkspace();
+        var projects = List.of(UUID.randomUUID(), UUID.randomUUID());
+        for (var projectId : projects) {
+            data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        }
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+
+        // No plan by hand from here: each run's end plans the next, its build's labelling pass, then the other build.
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> {
+            for (var projectId : projects) {
+                assertThat(data.topicProject(projectId)).isNotNull().extracting(TopicProject::listRunId).isNotNull();
             }
         });
     }
@@ -347,7 +372,7 @@ class TopicsRunsIntegrationTest {
             }
         };
         return new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
-                new TopicsBackfillGate(config), nightPass);
+                new TopicsBackfillGate(config), nightPass, mock(LockService.class));
     }
 
     @Test
