@@ -18,7 +18,7 @@ spec:
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
       {{ .Values.clickhouse.adminUser.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.adminUser.secretname }}/{{ .Values.clickhouse.adminUser.password_key }}
       {{- else }}
-      {{ .Values.clickhouse.adminUser.username }}/password: {{ .Values.clickhouse.adminUser.password }}
+      {{ .Values.clickhouse.adminUser.username }}/password: {{ .Values.clickhouse.adminUser.password | quote }}
       {{- end }}
       {{ .Values.clickhouse.adminUser.username }}/access_management: 1
       {{ .Values.clickhouse.adminUser.username }}/networks/ip:
@@ -29,7 +29,7 @@ spec:
       {{- if and $mon.useSecret $mon.useSecret.enabled }}
       {{ $mon.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ $mon.secretname }}/{{ $mon.password_key }}
       {{- else if $mon.password }}
-      {{ $mon.username }}/password: {{ $mon.password }}
+      {{ $mon.username }}/password: {{ $mon.password | quote }}
       {{- end }}
       {{ $mon.username }}/profile: {{ $mon.username }}
       {{- if not $mon.networks }}
@@ -48,7 +48,7 @@ spec:
       {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
       {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ .secretname | default $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
       {{- else }}
-      {{ .username }}/password: {{ .password }}
+      {{ .username }}/password: {{ required (printf "clickhouse.additionalUsers %s needs a password when clickhouse.adminUser.useSecret.enabled is false" .username) .password | quote }}
       {{- end }}
       {{- if .profile }}
       {{ .username }}/profile: {{ .profile }}

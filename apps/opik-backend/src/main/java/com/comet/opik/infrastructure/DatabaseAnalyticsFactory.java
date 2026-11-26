@@ -5,6 +5,7 @@ import com.google.common.base.Splitter;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.ConnectionFactoryOptions;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -13,6 +14,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.temporal.ChronoUnit;
@@ -24,7 +26,8 @@ import java.util.stream.Collectors;
 @Data
 public class DatabaseAnalyticsFactory {
 
-    private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%s@%s:%d/%s%s";
+    // No credentials in the URL: passed as options, the driver encodes them, so reserved characters can't break it.
+    private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
@@ -46,6 +49,7 @@ public class DatabaseAnalyticsFactory {
     private @NotBlank String host;
     private int port;
     private @NotBlank String username;
+    @ToString.Exclude
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
@@ -141,8 +145,11 @@ public class DatabaseAnalyticsFactory {
     public ConnectionFactory build() {
         var queryParametersOverrides = getQueryParametersOverrides(queryParameters, r2dbcOnlyServerSettings());
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);
-        var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
-        return ConnectionFactories.get(url);
+        var url = URL_TEMPLATE.formatted(protocol.getValue(), host, port, databaseName, options);
+        return ConnectionFactories.get(ConnectionFactoryOptions.parse(url).mutate()
+                .option(ConnectionFactoryOptions.USER, username)
+                .option(ConnectionFactoryOptions.PASSWORD, password)
+                .build());
     }
 
     /**

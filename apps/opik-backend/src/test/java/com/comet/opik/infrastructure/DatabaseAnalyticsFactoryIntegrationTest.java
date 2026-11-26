@@ -429,6 +429,33 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("a password with URL-reserved characters connects through both the R2DBC and the v2 client")
+    void passwordWithUrlReservedCharactersConnects() {
+        // In a URL's user-info part these characters cut the host off, and the driver falls back to localhost:8123.
+        var password = "a/b?c#d@e:f%%g=h+i%s".formatted(RandomStringUtils.secure().nextAlphanumeric(8));
+        try (var container = ClickHouseContainerUtils.newClickHouseContainer(false).withPassword(password)) {
+            container.start();
+            var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(container, "default");
+
+            var r2dbcUser = Mono.usingWhen(
+                    factory.build().create(),
+                    connection -> Flux.from(connection.createStatement("SELECT currentUser() AS user").execute())
+                            .flatMap(result -> result.map((row, _) -> row.get("user", String.class)))
+                            .single(),
+                    Connection::close)
+                    .block();
+
+            assertThat(r2dbcUser).isEqualTo(container.getUsername());
+
+            try (var client = factory.buildClient()) {
+                var v2User = client.queryAll("SELECT currentUser() AS user").getFirst().getString("user");
+
+                assertThat(v2User).isEqualTo(container.getUsername());
+            }
+        }
+    }
+
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {
         return readSettings(connectionFactory, List.of(names));
     }
