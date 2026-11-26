@@ -13,6 +13,12 @@ from cerebras.cloud.sdk.types.chat.chat_completion import (
     ChatCompletionResponseUsage,
 )
 
+try:
+    # cerebras_cloud_sdk>=2 moved from httpx to httpx2
+    import httpx2 as httpx
+except ImportError:
+    import httpx
+
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.cerebras import chat_completion_chunks_aggregator, track_cerebras
@@ -24,12 +30,6 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-
-try:
-    # cerebras_cloud_sdk>=2 moved from httpx to httpx2
-    import httpx2 as httpx
-except ImportError:
-    import httpx
 
 MODEL = "llama-3.3-70b"
 COMPLETIONS_PATH = "/v1/chat/completions"
