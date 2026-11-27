@@ -22,6 +22,7 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
@@ -60,6 +61,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -939,6 +941,45 @@ class TopicsNightlyIntegrationTest {
                 .isEqualTo(failed);
         assertThat(data.topics(projectId)).isEqualTo(topics);
         assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(labels);
+    }
+
+    @Test
+    @DisplayName("a nightly update whose window traces are deleted while it names writes no trace_topics row for them")
+    void tracesDeletedDuringTheNight() {
+        var workspaceId = enabledWorkspace();
+        var projectId = discovered(workspaceId);
+        plant(workspaceId, projectId);
+        // Traces of the night's window, which starts windowDays before today.
+        var windowFrom = todayStart().minus(opikConfig.getTopics().getRun().getWindowDays(), ChronoUnit.DAYS);
+        var deleted = data.traceTopics(workspaceId, projectId).stream()
+                .filter(label -> !label.traceCreatedAt().isBefore(windowFrom)).map(TraceTopic::traceId).distinct()
+                .limit(20).collect(Collectors.toUnmodifiableSet());
+        assertThat(deleted).hasSize(20);
+        stubAnswer(NAMED, NAMING_PROMPT, 3_000);
+        stubAnswer(sameAnswers(), VERIFY_PROMPT, 0);
+        int generatesBefore = wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))).size();
+
+        var queued = plan(Instant.now());
+        assertThat(queued).containsOnlyKeys(projectId);
+        // The night has read its window; while the LLM names the groups, the delete cascade runs for 20 of its traces.
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(generatesBefore + 1));
+        vectorsDAO.deleteByTraceIds(deleted, projectId)
+                .then(traceTopicsDAO.deleteByTraceIds(deleted, projectId))
+                .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, "test"))
+                .block();
+        // The delete ran before the night's insert.
+        assertThat(labels(workspaceId, projectId, queued.get(projectId))).isEmpty();
+        awaitEnded(projectId, queued.get(projectId));
+
+        var update = nightlyRun(projectId);
+        assertThat(update.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        int windowTraces = update.stats().path("window_traces").asInt();
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(data.traceTopics(workspaceId, projectId)).noneMatch(label -> deleted.contains(label.traceId()));
+            assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces - deleted.size());
+        });
     }
 
     @Test

@@ -428,6 +428,8 @@ class TopicRunStore {
      * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass, or of topic on arrival. A
      * transient error is retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per
      * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
+     * Then the rows of traces deleted since they were read are deleted
+     * ({@link TraceTopicsDAO#deleteRowsOfDeletedTraces}).
      */
     Mono<Void> insertTraceTopics(@NonNull TopicsMetrics.Workspace workspace, @NonNull List<TraceTopic> rows) {
         if (rows.isEmpty()) {
@@ -449,7 +451,15 @@ class TopicRunStore {
                     metrics.traceTopicsInsert(workspace, true);
                 })
                 .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
-                .then();
+                .then(Mono.defer(() -> traceTopicsDAO.deleteRowsOfDeletedTraces(rows)
+                        .onErrorResume(error -> {
+                            // The rows hold ids only, every reader takes only traces that exist, and retention
+                            // deletes them.
+                            log.warn("Topics could not check a trace_topics insert for deleted traces, source '{}', "
+                                    + "run '{}', project '{}'", rows.getFirst().source().getValue(),
+                                    rows.getFirst().runId(), rows.getFirst().projectId(), error);
+                            return Mono.empty();
+                        })));
     }
 
     /** The project's saved list: its row and its topics, read in one transaction so they are of the same save. */

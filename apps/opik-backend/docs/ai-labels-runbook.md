@@ -854,10 +854,12 @@ When that fails, `TopicsSweepJob` (every `TOPICS_STORAGE_SWEEP_INTERVAL` on each
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
 
-Topic on arrival (see "Topic on arrival") writes rows only for traces whose vectors the tick's deleted-trace check saw
-live. A trace deleted between that check and the arrival insert can still get an arrival row after the delete
-cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that exist), and
-retention removes it.
+A run reads its window minutes before it saves, and topic on arrival (see "Topic on arrival") reads vectors before
+it inserts. After each `trace_topics` insert, the rows of traces that have no summary vector left are deleted: the
+delete cascade deletes vectors before `trace_topics`, so a trace deleted in between loses the rows written for it.
+This logs INFO `Deleting the trace_topics rows of traces deleted since they were read`. If the check fails, the insert
+still counts as done and logs WARN `Topics could not check a trace_topics insert for deleted traces`; the rows hold ids
+only, and readers skip traces that do not exist.
 
 ## Topics nightly updates
 

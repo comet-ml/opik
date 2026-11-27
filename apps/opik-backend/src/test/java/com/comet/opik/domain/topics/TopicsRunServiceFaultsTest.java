@@ -112,6 +112,7 @@ class TopicsRunServiceFaultsTest {
         when(projectDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(projectDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
+        when(traceTopicsDAO.deleteRowsOfDeletedTraces(any())).thenReturn(Mono.empty());
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> IDS.generate());
         var metrics = TopicsMetricsReader.metrics(metricReader);
