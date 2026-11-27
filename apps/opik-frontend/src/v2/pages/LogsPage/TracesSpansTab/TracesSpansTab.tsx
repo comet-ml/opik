@@ -81,6 +81,7 @@ import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
   getVirtualizationConfig,
 } from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
@@ -1319,7 +1320,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Trace | Span>(),
+      generateSelectColumDef<Trace | Span>(
+        undefined,
+        PAGE_BODY_SELECT_COLUMN_SIZE,
+      ),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
         columnsOrder,
         selectedColumns,

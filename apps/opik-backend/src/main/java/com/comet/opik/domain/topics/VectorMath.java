@@ -37,12 +37,69 @@ class VectorMath {
         return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
     }
 
+    /** The same with double rows in {@code b}, as k-means' centres are. */
+    static double dot(float[] a, int aOffset, double[] b, int bOffset, int dimensions) {
+        double s0 = 0;
+        double s1 = 0;
+        double s2 = 0;
+        double s3 = 0;
+        double s4 = 0;
+        double s5 = 0;
+        double s6 = 0;
+        double s7 = 0;
+        int t = 0;
+        for (; t + 7 < dimensions; t += 8) {
+            s0 += a[aOffset + t] * b[bOffset + t];
+            s1 += a[aOffset + t + 1] * b[bOffset + t + 1];
+            s2 += a[aOffset + t + 2] * b[bOffset + t + 2];
+            s3 += a[aOffset + t + 3] * b[bOffset + t + 3];
+            s4 += a[aOffset + t + 4] * b[bOffset + t + 4];
+            s5 += a[aOffset + t + 5] * b[bOffset + t + 5];
+            s6 += a[aOffset + t + 6] * b[bOffset + t + 6];
+            s7 += a[aOffset + t + 7] * b[bOffset + t + 7];
+        }
+        for (; t < dimensions; t++) {
+            s0 += a[aOffset + t] * b[bOffset + t];
+        }
+        return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
+    }
+
+    /**
+     * The same with double rows in both: {@code a} and {@code b} widened from float rows give {@link #dot} of those
+     * rows bit for bit, as widening a float to double is exact and the products and their order are the same.
+     */
+    static double dot(double[] a, int aOffset, double[] b, int bOffset, int dimensions) {
+        double s0 = 0;
+        double s1 = 0;
+        double s2 = 0;
+        double s3 = 0;
+        double s4 = 0;
+        double s5 = 0;
+        double s6 = 0;
+        double s7 = 0;
+        int t = 0;
+        for (; t + 7 < dimensions; t += 8) {
+            s0 += a[aOffset + t] * b[bOffset + t];
+            s1 += a[aOffset + t + 1] * b[bOffset + t + 1];
+            s2 += a[aOffset + t + 2] * b[bOffset + t + 2];
+            s3 += a[aOffset + t + 3] * b[bOffset + t + 3];
+            s4 += a[aOffset + t + 4] * b[bOffset + t + 4];
+            s5 += a[aOffset + t + 5] * b[bOffset + t + 5];
+            s6 += a[aOffset + t + 6] * b[bOffset + t + 6];
+            s7 += a[aOffset + t + 7] * b[bOffset + t + 7];
+        }
+        for (; t < dimensions; t++) {
+            s0 += a[aOffset + t] * b[bOffset + t];
+        }
+        return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
+    }
+
     /**
      * The row at {@code aOffset} of {@code a} dotted with the rows at {@code bOffset0} and {@code bOffset1} of {@code b},
      * into {@code out[0]} and {@code out[1]}: each sum in {@link #dot}'s order, so each equals {@code dot} bit for bit,
      * while every value of {@code a} is read once for both.
      */
-    static void dot2(float[] a, int aOffset, float[] b, int bOffset0, int bOffset1, int dimensions, double[] out) {
+    static void dot2(double[] a, int aOffset, double[] b, int bOffset0, int bOffset1, int dimensions, double[] out) {
         double s0 = 0;
         double s1 = 0;
         double s2 = 0;
@@ -93,32 +150,5 @@ class VectorMath {
         }
         out[0] = ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
         out[1] = ((r0 + r1) + (r2 + r3)) + ((r4 + r5) + (r6 + r7));
-    }
-
-    /** The same with double rows in {@code b}, as k-means' centres are. */
-    static double dot(float[] a, int aOffset, double[] b, int bOffset, int dimensions) {
-        double s0 = 0;
-        double s1 = 0;
-        double s2 = 0;
-        double s3 = 0;
-        double s4 = 0;
-        double s5 = 0;
-        double s6 = 0;
-        double s7 = 0;
-        int t = 0;
-        for (; t + 7 < dimensions; t += 8) {
-            s0 += a[aOffset + t] * b[bOffset + t];
-            s1 += a[aOffset + t + 1] * b[bOffset + t + 1];
-            s2 += a[aOffset + t + 2] * b[bOffset + t + 2];
-            s3 += a[aOffset + t + 3] * b[bOffset + t + 3];
-            s4 += a[aOffset + t + 4] * b[bOffset + t + 4];
-            s5 += a[aOffset + t + 5] * b[bOffset + t + 5];
-            s6 += a[aOffset + t + 6] * b[bOffset + t + 6];
-            s7 += a[aOffset + t + 7] * b[bOffset + t + 7];
-        }
-        for (; t < dimensions; t++) {
-            s0 += a[aOffset + t] * b[bOffset + t];
-        }
-        return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
     }
 }

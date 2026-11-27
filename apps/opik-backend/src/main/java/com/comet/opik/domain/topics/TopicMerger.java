@@ -36,6 +36,45 @@ class TopicMerger {
     record Merge(int kept, int absorbed, double cosine) {
     }
 
+    /**
+     * Per topic index, the sum of its member vectors and their count. Only the candidate topics have a sum; a member
+     * of any other index is not counted.
+     */
+    record Members(@NonNull double[][] sums, @NonNull long[] counts, int dimensions) {
+
+        static Members of(int topicCount, @NonNull int[] candidates, int dimensions) {
+            var sums = new double[topicCount][];
+            for (int t : candidates) {
+                sums[t] = new double[dimensions];
+            }
+            return new Members(sums, new long[topicCount], dimensions);
+        }
+
+        /** Adds one member of {@code topic}: {@code dimensions} values of {@code vectors} from {@code offset}. */
+        void add(int topic, @NonNull float[] vectors, int offset) {
+            if (topic < 0 || topic >= sums.length || sums[topic] == null) {
+                return;
+            }
+            counts[topic]++;
+            var sum = sums[topic];
+            for (int j = 0; j < dimensions; j++) {
+                sum[j] += vectors[offset + j];
+            }
+        }
+
+        /** Adds {@code count} members of {@code topic} whose vectors sum to {@code sum}. */
+        void add(int topic, @NonNull double[] sum, long count) {
+            if (topic < 0 || topic >= sums.length || sums[topic] == null) {
+                return;
+            }
+            counts[topic] += count;
+            var into = sums[topic];
+            for (int j = 0; j < dimensions; j++) {
+                into[j] += sum[j];
+            }
+        }
+    }
+
     /** A merged topic for the rename call: its former names and definitions, the kept one first. */
     record Merged(@NonNull List<String> names, @NonNull List<String> definitions, double share,
             @NonNull List<String> examples) {
@@ -156,29 +195,40 @@ class TopicMerger {
      */
     static List<Merge> merges(@NonNull float[] vectors, @NonNull int[] labels, int topicCount,
             @NonNull int[] candidates, int dimensions, double mergeCosine) {
+        if (mergeCosine > 1 || candidates.length < 2) {
+            return new ArrayList<>();
+        }
+        return merges(members(vectors, labels, topicCount, candidates, dimensions), candidates, mergeCosine);
+    }
+
+    /**
+     * Per candidate topic, the sum and the count of its member vectors ({@code labels} per trace). The sums of the
+     * other topic indices are null.
+     */
+    static Members members(@NonNull float[] vectors, @NonNull int[] labels, int topicCount, @NonNull int[] candidates,
+            int dimensions) {
+        var members = Members.of(topicCount, candidates, dimensions);
+        for (int i = 0; i < labels.length; i++) {
+            members.add(labels[i], vectors, i * dimensions);
+        }
+        return members;
+    }
+
+    /**
+     * {@link #merges(float[], int[], int, int[], int, double)} from the member sums: the sums are changed, as each
+     * merge folds one sum into another.
+     */
+    static List<Merge> merges(@NonNull Members members, @NonNull int[] candidates, double mergeCosine) {
         var out = new ArrayList<Merge>();
         if (mergeCosine > 1 || candidates.length < 2) {
             return out;
         }
-        var sums = new double[topicCount][];
-        var counts = new long[topicCount];
-        var open = new boolean[topicCount];
+        var sums = members.sums();
+        var counts = members.counts();
+        int dimensions = members.dimensions();
+        var open = new boolean[counts.length];
         for (int t : candidates) {
-            sums[t] = new double[dimensions];
-            open[t] = true;
-        }
-        for (int i = 0; i < labels.length; i++) {
-            int t = labels[i];
-            if (t >= 0 && t < topicCount && open[t]) {
-                counts[t]++;
-                var sum = sums[t];
-                for (int j = 0; j < dimensions; j++) {
-                    sum[j] += vectors[i * dimensions + j];
-                }
-            }
-        }
-        for (int t : candidates) {
-            open[t] = counts[t] > 0;
+            open[t] = sums[t] != null && counts[t] > 0;
         }
         while (true) {
             int bestA = -1;

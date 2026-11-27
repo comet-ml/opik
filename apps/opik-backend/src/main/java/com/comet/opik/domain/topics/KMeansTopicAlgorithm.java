@@ -39,6 +39,12 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     private static final int MERGE_EXAMPLES_PER_GROUP = 4;
     private static final int MERGE_EXAMPLES = 16;
 
+    /**
+     * Below this many groups a discovery run keeps each trace's cosine to each group centre, {@code n * k} doubles,
+     * instead of the window's {@code n * dimensions} floats, which then need not outlive the clustering.
+     */
+    static final int COSINE_TABLE_BELOW_GROUPS = TopicEmbedding.DIMENSIONS / 2;
+
     private final AlgorithmConfig config;
     private final TopicTasks tasks;
 
@@ -59,12 +65,27 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     @Override
     public Clustering cluster(@NonNull TopicWindow window, int maxTopics) {
         var stats = JsonUtils.createObjectNode();
-        var merged = IntentMerger.merge(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        // The window's rows are reordered in place for the fit and the examples, not copied: a copy is the heap's
+        // largest item on a first build. They are restored before the window is read again.
+        var inPlace = IntentMerger.mergeInPlace(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        var merged = inPlace.merged();
+        KMeansResult fit;
+        List<List<String>> examples;
+        int k;
+        int perGroup;
+        try {
+            k = groups(merged.size());
+            var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
+            fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
+                    config.getKmeansMaxIterations(), config.getKmeansRestarts());
+            perGroup = authorExampleCount(k);
+            int frequent = Math.min(config.getAuthorFrequent(), perGroup);
+            examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
+                    perGroup - frequent);
+        } finally {
+            inPlace.restore();
+        }
         int unique = merged.size();
-        int k = groups(unique);
-        var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
-        var fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
-                config.getKmeansMaxIterations(), config.getKmeansRestarts());
         var groupOf = Arrays.stream(merged.textOfTrace()).map(text -> fit.labels()[text]).toArray();
         stats.put("unique_texts", unique);
         stats.put("k", k);
@@ -73,11 +94,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         stats.put("kmeans_iterations", fit.iterations());
 
         var groups = GroupSummaries.summarize(groupOf, k);
-        int perGroup = authorExampleCount(k);
-        int frequent = Math.min(config.getAuthorFrequent(), perGroup);
         stats.put("author_examples", perGroup);
-        var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
-                perGroup - frequent);
         var task = tasks.author();
         stats.put("author_task_version", task.version());
         var author = LlmRequest.builder()
@@ -86,14 +103,72 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 .schema(task.schema())
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
-        return new KMeansClustering(window.vectors(), maxTopics, groups, examples, fit.centres(), author, stats);
+        // The assignment after the author call compares each trace with group centres only. With fewer groups than
+        // COSINE_TABLE_BELOW_GROUPS, those cosines take less memory than the vectors, so the clustering keeps them,
+        // with the vectors summed for the overlap check, and the window can go while the call runs.
+        AssignmentInput traces;
+        if (k < COSINE_TABLE_BELOW_GROUPS) {
+            var table = PrototypeAssigner.cosines(window.vectors(), fit.centres(), k, TopicEmbedding.DIMENSIONS);
+            traces = AssignmentInput.table(table, k, GroupVectorSums.of(window.vectors(), table, fit.centres(), k,
+                    TopicEmbedding.DIMENSIONS, config.getAssignMinCosine(), config.getOtherGate()));
+        } else {
+            traces = AssignmentInput.vectors(window.vectors());
+        }
+        return new KMeansClustering(traces, maxTopics, groups, examples, fit.centres(), author, stats);
+    }
+
+    /**
+     * What the assignment reads per trace: its vector, or its cosine to each group centre. Both give the same labels,
+     * as {@link PrototypeAssigner#cosines} computes a cosine exactly as the assigner does, and every prototype of a
+     * discovery run is a group centre. The overlap check's member sums come from the vectors, or from the
+     * {@link GroupVectorSums} taken while the vectors were there: the same members, so the same merges.
+     */
+    private record AssignmentInput(float[] vectors, double[] table, int groups, GroupVectorSums sums) {
+
+        static AssignmentInput vectors(float[] vectors) {
+            return new AssignmentInput(vectors, null, 0, null);
+        }
+
+        static AssignmentInput table(double[] table, int groups, GroupVectorSums sums) {
+            return new AssignmentInput(null, table, groups, sums);
+        }
+
+        /**
+         * @param topicGroups per topic, its groups in the order of its prototypes
+         * @param otherGroups the Other groups, in the order of the known-Other prototypes
+         */
+        int[] assign(PrototypeAssigner assigner, List<List<Integer>> topicGroups, List<Integer> otherGroups) {
+            if (vectors != null) {
+                return assigner.assign(vectors);
+            }
+            return assigner.assign(table, groups, flattened(topicGroups), columns(otherGroups));
+        }
+
+        /** Per topic, the sum and count of the members {@link #assign} gives it. */
+        TopicMerger.Members members(PrototypeAssigner assigner, List<List<Integer>> topicGroups,
+                List<Integer> otherGroups, int[] candidates) {
+            if (vectors != null) {
+                return TopicMerger.members(vectors, assigner.assign(vectors), topicGroups.size(), candidates,
+                        TopicEmbedding.DIMENSIONS);
+            }
+            return sums.members(topicGroups.size(), candidates,
+                    assigner.columnsOf(groups, flattened(topicGroups), columns(otherGroups)), assigner::owner);
+        }
+
+        private static int[] flattened(List<List<Integer>> topicGroups) {
+            return topicGroups.stream().flatMap(List::stream).mapToInt(Integer::intValue).toArray();
+        }
+
+        private static int[] columns(List<Integer> groups) {
+            return groups.stream().mapToInt(Integer::intValue).toArray();
+        }
     }
 
     /** The groups of one window, waiting for the author answer. */
     @RequiredArgsConstructor
     private final class KMeansClustering implements Clustering {
 
-        private final float[] vectors;
+        private final AssignmentInput traces;
         private final int maxTopics;
         private final List<GroupSummary> groups;
         private final List<List<String>> examples;
@@ -121,33 +196,39 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                             .prototypes(topic.groups().stream().map(group -> centre(centres, group)).toList())
                             .build())
                     .toList();
+            var topicGroups = applied.topics().stream().map(AppliedTopic::groups).toList();
             var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
-            var merges = TopicMerger.merges(vectors, assigner(topics, otherPrototypes).assign(vectors), topics.size(),
-                    IntStream.range(0, topics.size()).toArray(), TopicEmbedding.DIMENSIONS, config.getMergeCosine());
+            var candidates = IntStream.range(0, topics.size()).toArray();
+            var merges = TopicMerger.merges(
+                    traces.members(assigner(topics, otherPrototypes), topicGroups, applied.other(), candidates),
+                    candidates, config.getMergeCosine());
             var finishStats = JsonUtils.createObjectNode();
             finishStats.put("merged", merges.size());
             finishStats.put("other_groups", applied.other().size());
             if (merges.isEmpty()) {
-                return NightStep.done(discovered(topics, otherPrototypes, finishStats));
+                return NightStep.done(discovered(topics, topicGroups, otherPrototypes, applied.other(), finishStats));
             }
             var roots = TopicMerger.roots(topics.size(), merges);
-            return TopicMerger.rename(merges, topics.size(), IntStream.range(0, topics.size()).toArray(),
+            return TopicMerger.rename(merges, topics.size(), candidates,
                     t -> topics.get(t).name(), (root, members) -> merged(applied.topics(), members), tasks)
                     .map(names -> {
                         var out = new ArrayList<NewTopic>();
+                        var outGroups = new ArrayList<List<Integer>>();
                         for (int t = 0; t < topics.size(); t++) {
                             if (roots[t] != t) {
                                 continue;
                             }
-                            var prototypes = TopicMerger.members(roots, t).stream()
-                                    .flatMap(u -> topics.get(u).prototypes().stream()).toList();
+                            var members = TopicMerger.members(roots, t);
+                            var prototypes = members.stream().flatMap(u -> topics.get(u).prototypes().stream())
+                                    .toList();
+                            outGroups.add(members.stream().flatMap(u -> topicGroups.get(u).stream()).toList());
                             var topic = topics.get(t).toBuilder().prototypes(prototypes);
                             var name = names.get(t);
                             out.add(name == null
                                     ? topic.build()
                                     : topic.name(name.name()).definition(name.definition()).build());
                         }
-                        return discovered(out, otherPrototypes, finishStats);
+                        return discovered(out, outGroups, otherPrototypes, applied.other(), finishStats);
                     });
         }
 
@@ -164,10 +245,11 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                             .limit(MERGE_EXAMPLES).toList());
         }
 
-        private DiscoveredTopics discovered(List<NewTopic> topics, List<float[]> otherPrototypes,
-                ObjectNode finishStats) {
+        /** @param topicGroups per topic, the groups whose centres are its prototypes, in prototype order */
+        private DiscoveredTopics discovered(List<NewTopic> topics, List<List<Integer>> topicGroups,
+                List<float[]> otherPrototypes, List<Integer> otherGroups, ObjectNode finishStats) {
             var assigner = assigner(topics, otherPrototypes);
-            var labels = assigner.assign(vectors);
+            var labels = traces.assign(assigner, topicGroups, otherGroups);
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
             // near it is saved, so it would assign no trace.
