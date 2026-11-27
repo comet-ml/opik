@@ -1,11 +1,11 @@
-name: Docker arm64 Build
-run-name: "Docker arm64 Build ${{ github.ref_name }} by @${{ github.actor }}"
+name: Docker Multi-Arch PR Build
+run-name: "Docker Multi-Arch PR Build ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
-# The other PR image builds are amd64 only, but build_apps.yml also publishes arm64 on main. An arm64
-# build breaks on its own only when an input resolves per arch: a base image whose pinned digest has no
-# arm64 manifest, or a dependency with no arm64 wheel or native binary. So arm64 is built when one of
-# those inputs changes, not on every source change.
+# Builds images the way build_apps.yml does on main, through build_and_push_docker.yaml
+# (amd64 and arm64 on native runners), without pushing. Only when an input that resolves
+# per arch changes: a base image digest, or a dependency's wheel or native binary. Source
+# changes are covered by the amd64 PR builds.
 on:
   pull_request:
     paths:
@@ -17,7 +17,8 @@ on:
       - "apps/opik-python-backend/requirements.txt"
       - "apps/opik-sandbox-executor-python/Dockerfile"
       - "apps/opik-sandbox-executor-python/requirements.txt"
-      - ".github/workflows/build_docker_arm64.yml"
+      - ".github/workflows/build_docker_pr.yml"
+      - ".github/workflows/build_and_push_docker.yaml"
   workflow_dispatch:
 
 concurrency:
@@ -44,9 +45,8 @@ jobs:
           EVENT: ${{ github.event_name }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          WORKFLOW_FILE: .github/workflows/build_docker_arm64.yml
         run: |
-          # opik-guardrails-backend is left out: build_apps.yml publishes it amd64 only.
+          # opik-guardrails-backend is left out: build_apps.yml does not build it.
           all=(opik-backend opik-frontend opik-python-backend opik-sandbox-executor-python)
           files=""
           if [[ "$EVENT" == "pull_request" ]]; then
@@ -55,7 +55,7 @@ jobs:
           selected=()
           for image in "${all[@]}"; do
             if [[ "$EVENT" != "pull_request" ]] \
-              || grep -qxF "$WORKFLOW_FILE" <<<"$files" \
+              || grep -qE '^\.github/workflows/(build_docker_pr\.yml|build_and_push_docker\.yaml)$' <<<"$files" \
               || grep -qE "^apps/${image}/(Dockerfile|package(-lock)?\.json|requirements\.txt)$" <<<"$files"; then
               selected+=("$image")
             fi
@@ -63,36 +63,22 @@ jobs:
           echo "images=$(jq -cn '$ARGS.positional' --args "${selected[@]}")" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build ${{ matrix.image }} (arm64)
+    name: ${{ matrix.image }}
     needs: detect
     if: needs.detect.outputs.images != '[]'
     strategy:
       fail-fast: false
       matrix:
         image: ${{ fromJson(needs.detect.outputs.images) }}
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      - name: Build ${{ matrix.image }} image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        env:
-          DOCKER_BUILD_RECORD_UPLOAD: false
-          DOCKER_BUILD_SUMMARY: false
-        with:
-          context: apps/${{ matrix.image }}
-          file: apps/${{ matrix.image }}/Dockerfile
-          platforms: linux/arm64
-          push: false
-          load: false
-          provenance: false
-          # The backend's `mvn versions:set` fails on an empty version.
-          build-args: |
-            OPIK_VERSION=latest
+    # The called workflow's jobs declare packages: write; with push: false nothing is written.
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build_and_push_docker.yaml
+    with:
+      image: ${{ matrix.image }}
+      version: ${{ github.sha }}
+      build_from: ${{ github.sha }}
+      build_comet_image: false
+      is_release: false
+      push: false
