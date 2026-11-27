@@ -19,7 +19,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -109,21 +108,14 @@ public class TopicsRunService {
         // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> {
-                    // After the clustering the run needs only the traces and the stats: nothing after it holds the
-                    // texts and vectors, so they can go during the author call. The step takes them from a holder it
-                    // clears, as the chain keeps the step until the run ends.
-                    var traces = window.traces();
-                    var windowStats = window.stats();
-                    var toCluster = new AtomicReference<>(window.topicWindow());
-                    return cpu(run, "cluster", () -> algorithm.cluster(toCluster.getAndSet(null), maxTopics))
-                            .flatMap(clustering -> timed(run, "llm",
-                                    llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                    .flatMap(answer -> cpu(run, "assign",
-                                            () -> assign(run, traces, windowStats, clustering, answer)))
-                                    .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
-                            .onErrorMap(error -> TopicsRunException.withStats(error, windowStats));
-                })
+                // A Flux flatMap lets go of the completed cluster step, and of the window it captured, before the
+                // author call.
+                .flux().flatMap(window -> cpu(run, "cluster", () -> cluster(window, maxTopics))).next()
+                .flatMap(clustered -> timed(run, "llm",
+                        llm.generate(run, clustered.clustering().author(), AuthorAnswer::parse))
+                        .flatMap(answer -> cpu(run, "assign", () -> assign(run, clustered, answer)))
+                        .onErrorMap(error -> TopicsRunException.withStats(error, clustered.clustering().stats()))
+                        .onErrorMap(error -> TopicsRunException.withStats(error, clustered.windowStats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
@@ -132,9 +124,25 @@ public class TopicsRunService {
                 .onErrorResume(error -> outcomes.failed(run, error));
     }
 
+    /**
+     * The window's groups, with what the run needs of the window after them: its traces and stats. The window's error
+     * mapping is here, as a lambda capturing the window would keep it through the author call.
+     */
+    private Clustered cluster(RunWindow window, int maxTopics) {
+        try {
+            return new Clustered(window.traces(), window.stats(), algorithm.cluster(window.topicWindow(), maxTopics));
+        } catch (RuntimeException exception) {
+            throw TopicsRunException.withStats(exception, window.stats());
+        }
+    }
+
+    private record Clustered(List<WindowTrace> traces, ObjectNode windowStats, Clustering clustering) {
+    }
+
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
-    private TopicRunRows assign(TopicRun run, List<WindowTrace> traces, ObjectNode windowStats, Clustering clustering,
-            TopicsLlm.Answer<AuthorAnswer> answer) {
+    private TopicRunRows assign(TopicRun run, Clustered clustered, TopicsLlm.Answer<AuthorAnswer> answer) {
+        var traces = clustered.traces();
+        var clustering = clustered.clustering();
         TopicRunRows rows;
         try {
             rows = TopicRunRows.of(run, traces, clustering.finish(answer.value()), idGenerator::generateId);
@@ -142,7 +150,7 @@ public class TopicsRunService {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
         var stats = TopicRunOutcomes.bounds(run);
-        stats.setAll(windowStats);
+        stats.setAll(clustered.windowStats());
         stats.setAll(clustering.stats());
         stats.setAll(answer.stats());
         stats.setAll(rows.stats());
