@@ -87,7 +87,10 @@ public class TopicVectorsDAO {
      *
      * <p>An as-of read ({@link TopicVectorsFind#asOf}) also bounds {@code done}'s statuses by {@code :upper_bound} before
      * the dedup, and {@code id_at} from above as a slice does: the tick's read narrowed after a size guard, whose cost
-     * then follows its status span.
+     * then follows its status span. This is the one read that filters {@code updated_at} from above before the dedup,
+     * on purpose: each trace takes its newest status at or before the bound, so the read returns what a plain read at
+     * that time would have, and the watermark moves only to the bound. A status written after the bound is read by a
+     * later tick; a vector is keyed by its task version, so that read writes nothing twice.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
