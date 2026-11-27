@@ -44,9 +44,10 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private final TopicsRunPublisher publisher;
     /**
      * The heartbeats' own timer, apart from {@code parallel()}: a run's CPU steps there cannot hold back a beat, so a
-     * healthy run is never recorded abandoned. Created on start, disposed on stop.
+     * healthy run is never recorded abandoned. Created with the subscriber, so it is there for any run, and disposed on
+     * stop; its thread starts with the first beat.
      */
-    private Scheduler heartbeats;
+    private final Scheduler heartbeats = Schedulers.newSingle("topics-heartbeat", true);
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
@@ -66,7 +67,6 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     @Override
     public void start() {
         if (config.isEnabled()) {
-            heartbeats = Schedulers.newSingle("topics-heartbeat", true);
             super.start();
         }
     }
@@ -75,8 +75,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     public void stop() {
         if (config.isEnabled()) {
             super.stop();
-            heartbeats.dispose();
         }
+        heartbeats.dispose();
     }
 
     @Override

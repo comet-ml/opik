@@ -28,9 +28,10 @@ class TopicsRunSubscriberTest {
     void errorInARunFailsItAtOnce() {
         var store = mock(TopicRunStore.class);
         var labelService = mock(TopicWindowLabelService.class);
+        var planner = mock(TopicsRunPlanner.class);
         var subscriber = new TopicsRunSubscriber(TestConfigUtils.loadConfigTest().getTopics(),
                 mock(RedissonReactiveClient.class), store, mock(TopicsRunService.class), labelService,
-                mock(TopicsRunPlanner.class), mock(TopicsRunPublisher.class));
+                planner, mock(TopicsRunPublisher.class));
         var message = TopicsRunMessage.builder().runId(UUID.randomUUID()).workspaceId("workspace")
                 .projectId(UUID.randomUUID()).mode(TopicProject.RunMode.LABELS).build();
         var workspace = new TopicsMetrics.Workspace("workspace", "name");
@@ -45,6 +46,7 @@ class TopicsRunSubscriberTest {
                 .thenReturn(Mono.just(LabelPassOutcome.COMPLETE).map(outcome -> {
                     throw new IllegalStateException(secret);
                 }));
+        when(planner.planAfterRun()).thenReturn(Mono.empty());
         var dropped = new ArrayList<Object>();
 
         // As BaseRedisSubscriber runs it: in a flatMap, under onErrorContinue.
@@ -54,6 +56,7 @@ class TopicsRunSubscriberTest {
                 .blockLast());
 
         verify(store).fail(message.runId(), workspace, message.projectId(), RunError.INTERNAL);
+        verify(planner).planAfterRun();
         assertThat(dropped).isEmpty();
         assertThat(logs).noneMatch(line -> line.contains(secret));
         assertThat(logs).anyMatch(line -> line.startsWith("Topics run '%s' failed, project '%s', mode 'labels', "
