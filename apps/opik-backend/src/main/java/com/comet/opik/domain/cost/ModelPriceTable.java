@@ -392,7 +392,9 @@ public class ModelPriceTable {
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
-    // Rows are saved under this name and prefixedModelNames is keyed by it, so the two always agree.
+    // The key a row is matched by, always derived from the name as typed and never stored: it drops everything up to
+    // the first '/', so applying it to its own result would drop one more segment. prefixedModelNames is keyed by it
+    // too, so the two always agree.
     static String rowModelName(@NonNull String modelName) {
         return parseModelName(modelName).trim().toLowerCase(Locale.ROOT);
     }

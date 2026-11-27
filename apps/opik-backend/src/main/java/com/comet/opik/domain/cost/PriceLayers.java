@@ -24,8 +24,10 @@ public final class PriceLayers {
     private PriceLayers(@Nullable String organizationId, long listVersion, List<CustomModelPrice> rows) {
         this.organizationId = organizationId;
         this.listVersion = listVersion;
+        // A row keeps its model name as typed, while a span is looked up by its name after the first '/'.
         this.rowsByKey = rows.stream()
-                .collect(Collectors.toUnmodifiableMap(row -> RowKey.of(row.modelName(), row.provider()),
+                .collect(Collectors.toUnmodifiableMap(
+                        row -> RowKey.of(ModelPriceTable.rowModelName(row.modelName()), row.provider()),
                         Function.identity(), (first, duplicate) -> first));
     }
 

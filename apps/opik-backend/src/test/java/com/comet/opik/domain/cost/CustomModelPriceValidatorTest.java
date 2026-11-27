@@ -38,6 +38,10 @@ class CustomModelPriceValidatorTest {
             + " cached tokens bill at the input price";
     private static final String OUT_OF_RANGE_MESSAGE = "%s per 1M tokens is far from the built-in %s: prices are per"
             + " 1M tokens, not per token";
+    private static final String MATCHES_AFTER_PREFIX_MESSAGE = "Matches spans whose model, without the part before its"
+            + " first '/', is '%s'";
+    private static final String PROVIDER_UNPRICED_MESSAGE = "No built-in price is filed under '%s', so only these rows"
+            + " price its spans";
 
     private static String customName() {
         return "team-" + RandomStringUtils.secure().nextAlphanumeric(32).toLowerCase(Locale.ROOT);
@@ -106,6 +110,30 @@ class CustomModelPriceValidatorTest {
         return Problem.builder().row(row).field(field).code(code).message(message).build();
     }
 
+    // The whole list as the UI sends it back on its next save: every saved row, as the API returns it.
+    private static List<Map<String, Object>> sentBack(Result saved) {
+        return saved.rows().stream()
+                .map(row -> {
+                    CustomModelPrice price = row.price();
+                    var sent = row("model", price.modelName(), "provider", price.provider(), "kind",
+                            price.kind().name().toLowerCase(Locale.ROOT), "note", row.note());
+                    if (price.kind() == CustomModelPrice.Kind.ALIAS) {
+                        sent.put("alias_of", target(price.aliasModelName(), price.aliasProvider()));
+                    } else {
+                        sent.put("input_price", price.inputPerMillion());
+                        sent.put("output_price", price.outputPerMillion());
+                        sent.put("cache_read_price", price.cacheReadPerMillion());
+                        sent.put("cache_write_price", price.cacheWritePerMillion());
+                    }
+                    return sent;
+                })
+                .toList();
+    }
+
+    private static PriceLayers layersOf(Result saved) {
+        return PriceLayers.of("org-1", 1, saved.rows().stream().map(ValidRow::price).toList());
+    }
+
     private static Result accepted(List<ValidRow> rows, Problem... warnings) {
         return Result.builder().rows(rows).errors(List.of()).warnings(List.of(warnings)).build();
     }
@@ -127,7 +155,7 @@ class CustomModelPriceValidatorTest {
     }
 
     @Test
-    void validateNormalizesRowsTheWaySpansAreLookedUp() {
+    void validateKeepsTheModelAsTypedAndSaysWhichSpansItMatches() {
         ModelPrice builtIn = builtIn("gpt-5-mini", "openai");
         BigDecimal input = builtIn.inputPrice().movePointRight(6).multiply(BigDecimal.TWO);
         BigDecimal output = builtIn.outputPrice().movePointRight(6).multiply(BigDecimal.TWO);
@@ -135,8 +163,8 @@ class CustomModelPriceValidatorTest {
         var result = validate(row("model", " OpenAI/GPT-5-Mini ", "kind", "fixed", "input_price",
                 input.toPlainString(), "output_price", output));
 
-        assertResult(result, accepted(List.of(valid(fixed("gpt-5-mini", "openai", input, output))),
-                problem(0, "model", Code.NAME_NORMALIZED, "Saved as 'gpt-5-mini', the form spans are looked up in"),
+        assertResult(result, accepted(List.of(valid(fixed("OpenAI/GPT-5-Mini", "openai", input, output))),
+                problem(0, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted("GPT-5-Mini")),
                 problem(0, "provider", Code.NAME_NORMALIZED, "Saved as 'openai', the form spans are looked up in")));
     }
 
@@ -170,7 +198,7 @@ class CustomModelPriceValidatorTest {
         var result = validate(row("model", sentModel, "provider", "openai", "kind", "fixed", "input_price", input));
 
         assertResult(result, accepted(List.of(valid(fixed("gpt-5-mini", "openai", input, null))),
-                problem(0, "model", Code.NAME_NORMALIZED, "Saved as 'gpt-5-mini', the form spans are looked up in")));
+                problem(0, "model", Code.NAME_NORMALIZED, "Matches spans whose model is 'gpt-5-mini'")));
     }
 
     @Test
@@ -180,13 +208,11 @@ class CustomModelPriceValidatorTest {
 
         var result = validate(row("model", "meta-llama/" + model, "kind", "fixed", "input_price", input));
 
-        assertResult(result, accepted(List.of(valid(fixed(model, "meta-llama", input, null))),
-                problem(0, "model", Code.NAME_NORMALIZED, "Saved as '%s', the form spans are looked up in"
-                        .formatted(model)),
+        assertResult(result, accepted(List.of(valid(fixed("meta-llama/" + model, "meta-llama", input, null))),
+                problem(0, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted(model)),
                 problem(0, "provider", Code.NAME_NORMALIZED, "Saved as 'meta-llama', the form spans are looked up in"),
-                problem(0, "provider", Code.PROVIDER_UNPRICED,
-                        "No built-in price is filed under 'meta-llama', so only these rows price its spans"),
-                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(model, "'meta-llama'"))));
+                problem(0, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("meta-llama")),
+                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted("meta-llama/" + model, "'meta-llama'"))));
         var layers = PriceLayers.of("org-1", 1, List.of(result.rows().getFirst().price()));
         assertPriced(CostService.price("meta-llama/" + model, null, Map.of("prompt_tokens", 1_000_000), null, layers),
                 new PricedCost(input, CostSource.ORGANIZATION));
@@ -195,16 +221,119 @@ class CustomModelPriceValidatorTest {
     }
 
     @Test
-    void validateNormalizesTheAliasTargetAndSaysSoOnItsFields() {
+    void validateKeepsTheAliasTargetAsTypedAndSaysSoOnItsFields() {
         String model = customName();
 
         var result = validate(row("model", model, "kind", "alias", "alias_of", target(" GPT-5-Mini ", "OpenAI")));
 
-        assertResult(result, accepted(List.of(valid(alias(model, ANY_PROVIDER, "gpt-5-mini", "openai"))),
-                problem(0, "alias_of.model", Code.NAME_NORMALIZED,
-                        "Saved as 'gpt-5-mini', the form spans are looked up in"),
+        assertResult(result, accepted(List.of(valid(alias(model, ANY_PROVIDER, "GPT-5-Mini", "openai"))),
+                problem(0, "alias_of.model", Code.NAME_NORMALIZED, "Prices like spans whose model is 'GPT-5-Mini'"),
                 problem(0, "alias_of.provider", Code.NAME_NORMALIZED,
                         "Saved as 'openai', the form spans are looked up in")));
+    }
+
+    @Test
+    void validateKeepsNamesWithTwoSlashesAsTypedWhenTheListIsSavedAgain() {
+        String local = "custom-llm/local/" + customName();
+        String fineTune = "my-org/Fine-Tune/" + customName();
+        BigDecimal localInput = randomPrice();
+        BigDecimal fineTuneInput = randomPrice();
+        BigDecimal fineTuneOutput = randomPrice();
+
+        var firstSave = validate(
+                row("model", local, "provider", "ollama:local", "kind", "fixed", "input_price", localInput),
+                row("model", fineTune, "provider", "vllm", "kind", "fixed", "input_price", fineTuneInput,
+                        "output_price", fineTuneOutput));
+        var secondSave = validate(sentBack(firstSave));
+
+        var expected = accepted(List.of(valid(fixed(local, "ollama:local", localInput, null)),
+                valid(fixed(fineTune, "vllm", fineTuneInput, fineTuneOutput))),
+                problem(0, "model", Code.NAME_NORMALIZED,
+                        MATCHES_AFTER_PREFIX_MESSAGE.formatted(StringUtils.substringAfter(local, "/"))),
+                problem(0, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")),
+                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(local, "'ollama:local'")),
+                problem(1, "model", Code.NAME_NORMALIZED,
+                        MATCHES_AFTER_PREFIX_MESSAGE.formatted(StringUtils.substringAfter(fineTune, "/"))),
+                problem(1, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("vllm")),
+                problem(1, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(fineTune, "'vllm'")));
+        assertResult(firstSave, expected);
+        assertResult(secondSave, expected);
+    }
+
+    @Test
+    void validateKeepsAnAliasWhoseNameAndTargetHaveTwoSlashesWhenTheListIsSavedAgain() {
+        String target = "custom-llm/local/" + customName();
+        String aliasName = "team/aliases/" + customName();
+        BigDecimal input = randomPrice();
+
+        var firstSave = validate(
+                row("model", target, "provider", "ollama:local", "kind", "fixed", "input_price", input),
+                row("model", aliasName, "provider", "ollama:local", "kind", "alias",
+                        "alias_of", target(target, "ollama:local")));
+        var secondSave = validate(sentBack(firstSave));
+
+        var expected = accepted(List.of(valid(fixed(target, "ollama:local", input, null)),
+                valid(alias(aliasName, "ollama:local", target, "ollama:local"))),
+                problem(0, "model", Code.NAME_NORMALIZED,
+                        MATCHES_AFTER_PREFIX_MESSAGE.formatted(StringUtils.substringAfter(target, "/"))),
+                problem(0, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")),
+                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted(target, "'ollama:local'")),
+                problem(1, "model", Code.NAME_NORMALIZED,
+                        MATCHES_AFTER_PREFIX_MESSAGE.formatted(StringUtils.substringAfter(aliasName, "/"))),
+                problem(1, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")));
+        assertResult(firstSave, expected);
+        assertResult(secondSave, expected);
+    }
+
+    @Test
+    void validateKeepsPricingTheSpansOfNamesWithTwoSlashesWhenTheListIsSavedAgain() {
+        String model = customName();
+        String version = customName();
+        String aliasName = "team/aliases/" + customName();
+        BigDecimal localInput = randomPrice();
+        BigDecimal fineTuneInput = randomPrice();
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000);
+
+        var firstSave = validate(
+                row("model", "custom-llm/local/" + model, "provider", "ollama:local", "kind", "fixed",
+                        "input_price", localInput),
+                row("model", "my-org/fine-tune/" + version, "provider", "vllm", "kind", "fixed",
+                        "input_price", fineTuneInput),
+                row("model", aliasName, "provider", "ollama:local", "kind", "alias",
+                        "alias_of", target("custom-llm/local/" + model, "ollama:local")));
+        var secondSave = validate(sentBack(firstSave));
+
+        for (Result saved : List.of(firstSave, secondSave)) {
+            assertPriced(CostService.price("custom-llm/local/" + model, "ollama:local", usage, null,
+                    layersOf(saved)), new PricedCost(localInput, CostSource.ORGANIZATION));
+            assertPriced(CostService.price(aliasName, "ollama:local", usage, null, layersOf(saved)),
+                    new PricedCost(localInput, CostSource.ORGANIZATION));
+            assertPriced(CostService.price("my-org/fine-tune/" + version, "vllm", usage, null, layersOf(saved)),
+                    new PricedCost(fineTuneInput, CostSource.ORGANIZATION));
+            assertPriced(CostService.price("some-other/" + version, "vllm", usage, null, layersOf(saved)),
+                    new PricedCost(BigDecimal.ZERO, CostSource.NONE));
+        }
+    }
+
+    @Test
+    void validateComparesANameWithTwoSlashesWithItsOwnBuiltInPriceAndKeepsItsSpans() {
+        ModelPrice europe = builtIn("azure/eu/gpt-4o", "azure");
+        ModelPrice global = builtIn("gpt-4o", "azure");
+        BigDecimal tenTimesTheEuropeInput = europe.inputPrice().movePointRight(6).multiply(BigDecimal.TEN);
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000);
+
+        var firstSave = validate(row("model", "azure/eu/gpt-4o", "provider", "azure", "kind", "fixed",
+                "input_price", tenTimesTheEuropeInput));
+        var secondSave = validate(sentBack(firstSave));
+
+        var expected = accepted(List.of(valid(fixed("azure/eu/gpt-4o", "azure", tenTimesTheEuropeInput, null))),
+                problem(0, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted("eu/gpt-4o")));
+        assertResult(firstSave, expected);
+        assertResult(secondSave, expected);
+        assertPriced(CostService.price("azure/eu/gpt-4o", "azure", usage, null, layersOf(secondSave)),
+                new PricedCost(tenTimesTheEuropeInput, CostSource.ORGANIZATION));
+        assertPriced(CostService.price("gpt-4o", "azure", usage, null, layersOf(secondSave)),
+                new PricedCost(global.inputPrice().movePointRight(6), CostSource.BUILT_IN));
     }
 
     @Test
@@ -290,8 +419,6 @@ class CustomModelPriceValidatorTest {
                         "model", Code.NAME_TOO_LONG, "model is 256 characters, at most 255"),
                 Arguments.of(row("model", "gpt-5-mini", "provider", tooLong, "kind", "fixed", "input_price", 1),
                         "provider", Code.NAME_TOO_LONG, "provider is 256 characters, at most 255"),
-                Arguments.of(row("model", longerOnceLowerCased, "kind", "fixed", "input_price", 1),
-                        "model", Code.NAME_TOO_LONG, "model is 510 characters once lower-cased, at most 255"),
                 Arguments.of(row("model", "gpt-5-mini", "provider", longerOnceLowerCased, "kind", "fixed",
                         "input_price", 1),
                         "provider", Code.NAME_TOO_LONG, "provider is 510 characters once lower-cased, at most 255"),
@@ -335,9 +462,9 @@ class CustomModelPriceValidatorTest {
                 Arguments.of(row("model", customName(), "kind", "alias", "alias_of", target(tooLong, null)),
                         "alias_of.model", Code.NAME_TOO_LONG, "alias_of.model is 256 characters, at most 255"),
                 Arguments.of(row("model", customName(), "kind", "alias", "alias_of",
-                        target(longerOnceLowerCased, null)),
-                        "alias_of.model", Code.NAME_TOO_LONG,
-                        "alias_of.model is 510 characters once lower-cased, at most 255"),
+                        target("gpt-5-mini", longerOnceLowerCased)),
+                        "alias_of.provider", Code.NAME_TOO_LONG,
+                        "alias_of.provider is 510 characters once lower-cased, at most 255"),
                 Arguments.of(row("model", customName(), "kind", "alias", "alias_of", target("gpt-5-mini",
                         "open​ai")), "alias_of.provider", Code.CONTROL_CHARACTERS,
                         "alias_of.provider can't contain control or invisible characters"),
@@ -412,6 +539,44 @@ class CustomModelPriceValidatorTest {
 
         assertResult(result, rejected(List.of(problem(1, "model", Code.DUPLICATE_ROW,
                 "Row 1 already prices 'gpt-5-mini' on 'openai'"))));
+    }
+
+    @Test
+    void validateRejectsTwoNamesThatMatchTheSameSpansAfterTheirFirstSlash() {
+        String model = customName();
+
+        var result = validate(
+                row("model", "custom-llm/local/" + model, "provider", "ollama:local", "kind", "fixed",
+                        "input_price", 1),
+                row("model", "other/LOCAL/" + model, "provider", "ollama:local", "kind", "fixed", "input_price", 2));
+
+        assertResult(result, rejected(List.of(problem(1, "model", Code.DUPLICATE_ROW,
+                "Row 1 already prices 'custom-llm/local/%s' on 'ollama:local'".formatted(model))),
+                problem(0, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted("local/" + model)),
+                problem(0, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")),
+                problem(0, "model", Code.NO_BASE,
+                        NO_BASE_MESSAGE.formatted("custom-llm/local/" + model, "'ollama:local'"))));
+    }
+
+    @Test
+    void validateAcceptsANameAndTheSameNameAfterItsFirstSlash() {
+        String model = customName();
+        BigDecimal input = randomPrice();
+
+        var result = validate(
+                row("model", "local/" + model, "provider", "ollama:local", "kind", "fixed", "input_price", input),
+                row("model", "custom-llm/local/" + model, "provider", "ollama:local", "kind", "fixed",
+                        "input_price", input));
+
+        assertResult(result, accepted(List.of(valid(fixed("local/" + model, "ollama:local", input, null)),
+                valid(fixed("custom-llm/local/" + model, "ollama:local", input, null))),
+                problem(0, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted(model)),
+                problem(0, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")),
+                problem(0, "model", Code.NO_BASE, NO_BASE_MESSAGE.formatted("local/" + model, "'ollama:local'")),
+                problem(1, "model", Code.NAME_NORMALIZED, MATCHES_AFTER_PREFIX_MESSAGE.formatted("local/" + model)),
+                problem(1, "provider", Code.PROVIDER_UNPRICED, PROVIDER_UNPRICED_MESSAGE.formatted("ollama:local")),
+                problem(1, "model", Code.NO_BASE,
+                        NO_BASE_MESSAGE.formatted("custom-llm/local/" + model, "'ollama:local'"))));
     }
 
     private static Stream<Arguments> invalidAliasTargets() {
@@ -676,7 +841,7 @@ class CustomModelPriceValidatorTest {
         return Stream.of(
                 Arguments.of("gpt-4o-mini", List.of()),
                 Arguments.of("openai/gpt-4o-mini", List.of(problem(0, "model", Code.NAME_NORMALIZED,
-                        "Saved as 'gpt-4o-mini', the form spans are looked up in"))));
+                        MATCHES_AFTER_PREFIX_MESSAGE.formatted("gpt-4o-mini")))));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -689,7 +854,7 @@ class CustomModelPriceValidatorTest {
         var result = validate(row("model", sentModel, "provider", "openrouter", "kind", "fixed",
                 "input_price", input, "output_price", output));
 
-        assertResult(result, accepted(List.of(valid(fixed("gpt-4o-mini", "openrouter", input, output))),
+        assertResult(result, accepted(List.of(valid(fixed(sentModel, "openrouter", input, output))),
                 warnings.toArray(Problem[]::new)));
     }
 
