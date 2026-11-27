@@ -35,7 +35,8 @@ import java.util.stream.IntStream;
  * <li>the final assignment, as the discovery run's ({@link PrototypeAssigner}, with the {@code otherGate} Other
  * gate);</li>
  * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
- * reassignment when one happened, then the sizes;</li>
+ * reassignment when one happened; then {@link NightState#mergeOverlapping} folds a topic covering the same traces as a
+ * larger one into it, with a reassignment when one merged; then the sizes;</li>
  * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
  * prototype's lifetime. A retired topic keeps no prototypes: a theme that comes back later is born as a new topic.</li>
  * </ol>
@@ -76,14 +77,14 @@ class NightlyUpdate {
                 : ForcedBirth.apply(state, candidates,
                         () -> liveTopics(state, window, before, recent, config.getNightlyTopicExamples()), maxTopics,
                         config, tasks);
-        return naming.map(named -> decided(state, window, config, owners, before, grouped, grouping, candidates,
-                big, named, memory));
+        return naming.then(named -> decided(state, window, config, tasks, owners, before, grouped, grouping,
+                candidates, big, named, memory));
     }
 
-    /** Steps d to g, once the naming has decided. */
-    private static Result decided(NightState state, NightWindow window, AlgorithmConfig config, int[] owners,
-            int[] before, int[] grouped, CandidateGrouper.Grouping grouping, List<NightGroup> candidates,
-            List<Integer> big, ForcedBirth.Named named, List<float[]> memory) {
+    /** Steps d to g, once the naming has decided, then the rename call when topics merged. */
+    private static NightStep<Result> decided(NightState state, NightWindow window, AlgorithmConfig config,
+            TopicTasks tasks, int[] owners, int[] before, int[] grouped, CandidateGrouper.Grouping grouping,
+            List<NightGroup> candidates, List<Integer> big, ForcedBirth.Named named, List<float[]> memory) {
         int d = window.dimensions();
         var map = named.groupMap();
         var forced = named.outcomes();
@@ -106,11 +107,15 @@ class NightlyUpdate {
         if (state.liveCount() < liveBefore) {
             last = assignFinal(state, window, config);
         }
+        var merges = state.mergeOverlapping(window.vectors(), last.labels(), d, config.getMergeCosine());
+        if (!merges.isEmpty()) {
+            last = assignFinal(state, window, config);
+        }
         var labels = last.labels();
         state.recordSizes(labels);
         // g. prototypes that won no trace in the last final assignment
         dropIdle(state, last);
-        return Result.builder()
+        var result = Result.builder()
                 .labels(labels)
                 .before(before)
                 .unassigned(grouped.length)
@@ -119,6 +124,24 @@ class NightlyUpdate {
                 .forced(forced)
                 .groupMap(Map.copyOf(map))
                 .build();
+        return rename(state, window, labels, merges, config.getNightlyTopicExamples(), tasks).map(renamed -> result);
+    }
+
+    /** The rename call over the topics that took others tonight; each gets its name. */
+    private static NightStep<Integer> rename(NightState state, NightWindow window, int[] labels,
+            List<TopicMerger.Merge> merges, int examples, TopicTasks tasks) {
+        return TopicMerger.rename(merges, state.getTopics().size(), state.live(),
+                t -> state.topic(t).getName(), (root, members) -> {
+                    var traces = IntStream.range(0, labels.length).filter(i -> labels[i] == root).toArray();
+                    return new TopicMerger.Merged(
+                            members.stream().map(t -> state.topic(t).getName()).toList(),
+                            members.stream().map(t -> state.topic(t).getDefinition()).toList(),
+                            (double) traces.length / labels.length,
+                            examples(window, traces, state.topic(root).getPrototypes(), examples));
+                }, tasks).map(names -> {
+                    names.forEach((root, name) -> state.topic(root).rename(name.name(), name.definition()));
+                    return names.size();
+                });
     }
 
     /**

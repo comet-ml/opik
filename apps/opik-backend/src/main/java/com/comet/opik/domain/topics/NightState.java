@@ -79,6 +79,23 @@ class NightState {
     }
 
     /**
+     * Folds each live topic that covers the same traces as a larger one into it ({@link TopicMerger}): the larger takes
+     * the other's prototypes, the other retires as {@code merged}. Returns the merges, in the order made.
+     */
+    List<TopicMerger.Merge> mergeOverlapping(@NonNull float[] vectors, @NonNull int[] labels, int dimensions,
+            double mergeCosine) {
+        var merges = TopicMerger.merges(vectors, labels, topics.size(), live(), dimensions, mergeCosine);
+        for (var merge : merges) {
+            var kept = topics.get(merge.kept());
+            var prototypes = new ArrayList<>(kept.getPrototypes());
+            prototypes.addAll(topics.get(merge.absorbed()).getPrototypes());
+            kept.setPrototypes(prototypes);
+            topics.get(merge.absorbed()).retire(RetiredReason.MERGED);
+        }
+        return merges;
+    }
+
+    /**
      * Step f, after the final assignment. A topic's share is its count over the window's traces; a topic born after
      * the discovery run is measured as any other. A live topic that holds no trace retires tonight. Otherwise its streak
      * grows on a night with a share below {@code retireShare} and goes back to 0 on any other; at {@code retireNights}
@@ -122,7 +139,9 @@ class NightState {
         /** No trace in the window, or a share under {@code retireShare} on {@code retireNights} nights in a row. */
         LOW_SHARE("low_share"),
         /** Replaced by a forced new topic on a full list. */
-        REPLACED("replaced");
+        REPLACED("replaced"),
+        /** Folded into a live topic that covers the same traces ({@link TopicMerger}). */
+        MERGED("merged");
 
         private final String value;
     }

@@ -116,7 +116,10 @@ public class TopicsRunService {
                 .flux().flatMap(window -> cpu(run, "cluster", () -> cluster(window, maxTopics))).next()
                 .flatMap(clustered -> timed(run, "llm",
                         llm.generate(run, clustered.clustering().author(), AuthorAnswer::parse))
-                        .flatMap(answer -> cpu(run, "assign", () -> assign(run, clustered, answer)))
+                        .flatMap(answer -> cpu(run, "assign",
+                                () -> invariant(() -> clustered.clustering().finish(answer.value())))
+                                .flatMap(step -> drive(run, step, answer.stats(), "assign")))
+                        .flatMap(finished -> cpu(run, "rows", () -> assign(run, clustered, finished)))
                         .onErrorMap(error -> TopicsRunException.withStats(error, clustered.clustering().stats()))
                         .onErrorMap(error -> TopicsRunException.withStats(error, clustered.windowStats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
@@ -148,20 +151,15 @@ public class TopicsRunService {
             @NonNull Clustering clustering) {
     }
 
-    /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
-    private TopicRunRows assign(TopicRun run, Clustered clustered, TopicsLlm.Answer<AuthorAnswer> answer) {
+    /** The list, as the rows the save writes, with the run's stats; a broken list is an invariant. */
+    private TopicRunRows assign(TopicRun run, Clustered clustered, Driven<DiscoveredTopics> finished) {
         var traces = clustered.traces();
         var clustering = clustered.clustering();
-        TopicRunRows rows;
-        try {
-            rows = TopicRunRows.of(run, traces, clustering.finish(answer.value()), idGenerator::generateId);
-        } catch (IllegalArgumentException exception) {
-            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
-        }
+        var rows = invariant(() -> TopicRunRows.of(run, traces, finished.result(), idGenerator::generateId));
         var stats = TopicRunOutcomes.bounds(run);
         stats.setAll(clustered.windowStats());
         stats.setAll(clustering.stats());
-        stats.setAll(answer.stats());
+        stats.setAll(finished.calls());
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                 + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), traces.size(),
@@ -252,35 +250,54 @@ public class TopicsRunService {
                 .flatMap(step -> night(run, step, JsonUtils.createObjectNode()));
     }
 
-    /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
     private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step, ObjectNode calls) {
+        return drive(run, step, calls, "update").map(done -> {
+            var stats = done.calls().deepCopy();
+            stats.setAll(done.result().stats());
+            return done.result().toBuilder().stats(stats).build();
+        });
+    }
+
+    /**
+     * Answers each {@link NightStep.Ask} in turn, one call at a time, until the step is done; {@code calls} gains each
+     * call's stats. The algorithm's steps run as {@code phase}.
+     */
+    private <T> Mono<Driven<T>> drive(TopicRun run, NightStep<T> step, ObjectNode calls, String phase) {
         return switch (step) {
-            case NightStep.Done<TopicUpdate> done -> {
-                var stats = calls.deepCopy();
-                stats.setAll(done.result().stats());
-                yield Mono.just(done.result().toBuilder().stats(stats).build());
-            }
-            case NightStep.Ask<TopicUpdate> ask ->
+            case NightStep.Done<T> done -> Mono.just(new Driven<>(done.result(), calls));
+            case NightStep.Ask<T> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .map(answer -> Called.builder()
+                        .map(answer -> Called.<T>builder()
                                 .next(() -> ask.next().apply(answer.value()))
                                 .calls(plus(calls, answer.stats()))
                                 .build())
-                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(Called.builder()
+                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(Called.<T>builder()
                                 .next(ask.failed())
                                 .calls(degraded(run, ask.request(), (TopicsRunException) error, calls))
                                 .build()))
-                        .flatMap(called -> cpu(run, "update", called.next()::get)
-                                .flatMap(next -> night(run, next, called.calls())));
+                        .flatMap(called -> cpu(run, phase, called.next()::get)
+                                .flatMap(next -> drive(run, next, called.calls(), phase)));
         };
     }
 
-    /** After one call: the night's next step, and the calls' stats so far. */
-    @Builder(toBuilder = true)
-    private record Called(@NonNull Supplier<NightStep<TopicUpdate>> next, @NonNull ObjectNode calls) {
+    private record Driven<T>(T result, ObjectNode calls) {
     }
 
-    /** A call that timed out or errored; a bad answer and any other failure still end the night. */
+    /** After one call: the step's next step, and the calls' stats so far. */
+    @Builder(toBuilder = true)
+    private record Called<T>(@NonNull Supplier<NightStep<T>> next, @NonNull ObjectNode calls) {
+    }
+
+    /** {@code step}'s result; an {@link IllegalArgumentException} breaks an invariant and fails the run as one. */
+    private static <T> T invariant(Supplier<T> step) {
+        try {
+            return step.get();
+        } catch (IllegalArgumentException exception) {
+            throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
+        }
+    }
+
+    /** A call that timed out or errored; a bad answer and any other failure still end the run. */
     private static boolean isFailedCall(Throwable error) {
         return error instanceof TopicsRunException failure
                 && (failure.getCode() == RunError.LLM_TIMEOUT || failure.getCode() == RunError.LLM_ERROR);
@@ -290,8 +307,8 @@ public class TopicsRunService {
     private ObjectNode degraded(TopicRun run, LlmRequest call, TopicsRunException failure, ObjectNode calls) {
         // The error types, not the exception: its causes can quote the answer, as for a failed run.
         log.warn("Topics run '{}' call '{}' failed, project '{}', error code '{}', message '{}', errors '{}': the "
-                + "night goes on without it, its groups stay in Other until the next night", run.runId(), call.tag(),
-                run.projectId(), failure.getCode().getValue(), failure.getMessage(),
+                + "run goes on without it", run.runId(), call.tag(), run.projectId(), failure.getCode().getValue(),
+                failure.getMessage(),
                 ExceptionUtils.getThrowableList(failure).stream().map(TopicsErrors::formatError).toList());
         metrics.degradedCall(run.workspace(), call.call(), failure.getCode());
         var stats = calls.deepCopy();

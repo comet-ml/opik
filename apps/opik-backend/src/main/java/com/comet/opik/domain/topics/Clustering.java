@@ -4,7 +4,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * A discovery run up to the LLM call: {@link TopicAlgorithm#cluster} groups the window and writes the author request, the
- * run makes the call, and {@link #finish} turns the answer into the list. Pure: no I/O, no clock.
+ * run makes the call, and {@link #finish} turns the answer into the list, with one more call when topics merged
+ * ({@link TopicMerger#rename}). Pure: no I/O, no clock.
  */
 public interface Clustering {
 
@@ -15,5 +16,5 @@ public interface Clustering {
     ObjectNode stats();
 
     /** The list from the parsed author answer, labelling every window trace. */
-    DiscoveredTopics finish(AuthorAnswer answer);
+    NightStep<DiscoveredTopics> finish(AuthorAnswer answer);
 }

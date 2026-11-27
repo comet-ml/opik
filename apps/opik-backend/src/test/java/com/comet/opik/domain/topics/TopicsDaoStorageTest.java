@@ -1115,8 +1115,7 @@ class TopicsDaoStorageTest {
         var updated = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                 .updateTopics(List.of(kept)));
         assertThat(updated).containsExactly(1);
-        assertThat(data.topics(projectId)).singleElement()
-                .isEqualTo(kept.toBuilder().name(topic.name()).definition(topic.definition()).build());
+        assertThat(data.topics(projectId)).singleElement().isEqualTo(kept);
 
         var savedAt = NIGHT.plus(Duration.ofDays(1));
         template.inTransaction(WRITE, handle -> {

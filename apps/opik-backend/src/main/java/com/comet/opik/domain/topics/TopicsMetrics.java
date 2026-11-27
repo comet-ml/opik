@@ -104,7 +104,8 @@ public class TopicsMetrics {
                 .setDescription("Live topics of a project after each saved nightly update")
                 .build();
         this.retired = meter.counterBuilder("topics.topics.retired")
-                .setDescription("Topics retired (deleted) by saved nightly updates, by reason: low_share, replaced")
+                .setDescription(
+                        "Topics retired (deleted) by saved nightly updates, by reason: low_share, replaced, merged")
                 .build();
         this.born = meter.counterBuilder("topics.topics.born")
                 .setDescription("Topics born by saved nightly updates")

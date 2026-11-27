@@ -83,15 +83,7 @@ public class PrototypeAssigner {
     public int[] assign(@NonNull double[] cosines, int columns, @NonNull int[] topicColumns,
             @NonNull int[] otherColumns) {
         Preconditions.checkArgument(columns > 0 && cosines.length % columns == 0, "cosines must be whole rows");
-        Preconditions.checkArgument(topicColumns.length + keptOtherIndexes.length == owners.length,
-                "every topic prototype needs a column");
-        var columnOf = new int[owners.length];
-        System.arraycopy(topicColumns, 0, columnOf, 0, topicColumns.length);
-        for (int o = 0; o < keptOtherIndexes.length; o++) {
-            columnOf[topicColumns.length + o] = otherColumns[keptOtherIndexes[o]];
-        }
-        Arrays.stream(columnOf).forEach(column -> Preconditions.checkArgument(column >= 0 && column < columns,
-                "a prototype column must be in [0, '%s'), got '%s'", columns, column));
+        var columnOf = columnsOf(columns, topicColumns, otherColumns);
         int n = cosines.length / columns;
         var out = new int[n];
         for (int i = 0; i < n; i++) {
@@ -186,6 +178,29 @@ public class PrototypeAssigner {
             out[i] = bestCosine < minCosine ? NO_WINNER : best;
         }
         return out;
+    }
+
+    /**
+     * Per prototype, in prototype order, its row of the matrix {@link #assign(double[], int, int[], int[])} reads: topic
+     * prototype {@code p} is row {@code topicColumns[p]}, a kept known-Other prototype the row of its index among the
+     * known-Other prototypes given. A gated known-Other prototype has no entry.
+     */
+    int[] columnsOf(int columns, @NonNull int[] topicColumns, @NonNull int[] otherColumns) {
+        Preconditions.checkArgument(topicColumns.length + keptOtherIndexes.length == owners.length,
+                "every topic prototype needs a column");
+        var columnOf = new int[owners.length];
+        System.arraycopy(topicColumns, 0, columnOf, 0, topicColumns.length);
+        for (int o = 0; o < keptOtherIndexes.length; o++) {
+            columnOf[topicColumns.length + o] = otherColumns[keptOtherIndexes[o]];
+        }
+        Arrays.stream(columnOf).forEach(column -> Preconditions.checkArgument(column >= 0 && column < columns,
+                "a prototype column must be in [0, '%s'), got '%s'", columns, column));
+        return columnOf;
+    }
+
+    /** The owner of prototype {@code prototype}: a topic index, or {@link TopicAlgorithm#OTHER} for a known-Other one. */
+    int owner(int prototype) {
+        return owners[prototype];
     }
 
     /** The owner per winner: a topic index, or {@link TopicAlgorithm#OTHER} for a known-Other prototype or no winner. */

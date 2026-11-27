@@ -100,6 +100,27 @@ class TopicPrompts {
     }
 
     /**
+     * The merge prompt: per merged topic its id, the former names and definitions, its share and examples.
+     *
+     * @param task {@link TopicTasks#merge()}
+     */
+    static String merge(@NonNull AiLabelTask task, @NonNull List<TopicMerger.Merged> merged) {
+        var body = new StringJoiner("\n");
+        for (int id = 0; id < merged.size(); id++) {
+            var topic = merged.get(id);
+            var block = new StringBuilder("  merged topic ").append(id).append(": share ")
+                    .append(TopicText.fixed(100 * topic.share(), 1)).append("%\n    former topics:\n");
+            for (int f = 0; f < topic.names().size(); f++) {
+                block.append("      - ").append(name(topic.names().get(f))).append(" — ")
+                        .append(definition(topic.definitions().get(f))).append("\n");
+            }
+            block.append("    example requests:\n").append(bullets(topic.examples(), topic.examples().size()));
+            body.add(block);
+        }
+        return fill(task.prompt().user(), Map.of("topics", body.toString()));
+    }
+
+    /**
      * Puts each {@code {{name}}} of {@code template} in one pass over the template, so a value that holds a placeholder
      * (trace text such as "{{clusters}}") stays as it is. Other braces, such as JSON examples, stay too.
      */

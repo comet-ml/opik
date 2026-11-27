@@ -32,6 +32,7 @@ final class TopicsTestAlgorithm {
         config.setAuthorMaxExamples(10);
         config.setAssignMinCosine(0.75);
         config.setOtherGate(0.95);
+        config.setMergeCosine(0.96);
         config.setMaxTopics(10);
         config.setProvisionalBelow(1_000);
         config.setNightlyMinCandidate(20);
@@ -67,6 +68,14 @@ final class TopicsTestAlgorithm {
         var topics = new TopicsConfig();
         topics.setAlgorithm(config);
         return new KMeansTopicAlgorithm(topics, new TopicTasks());
+    }
+
+    /** {@code step}'s result, every call it asks answered badly: a rename keeps the larger topic's name. */
+    static <T> T finished(NightStep<T> step) {
+        while (step instanceof NightStep.Ask<T> ask) {
+            step = ask.next().apply(null);
+        }
+        return ((NightStep.Done<T>) step).result();
     }
 
     static KMeansTopicAlgorithm algorithm() {

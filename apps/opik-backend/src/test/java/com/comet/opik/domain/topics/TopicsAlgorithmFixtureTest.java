@@ -205,7 +205,7 @@ class TopicsAlgorithmFixtureTest {
                 .containsExactly(fixture.javaGroups);
         var clustering = DISCOVERY.cluster(window(), 10);
 
-        var discovered = clustering.finish(AuthorAnswer.parse(fixture.discoveryAnswer));
+        var discovered = TopicsTestAlgorithm.finished(clustering.finish(AuthorAnswer.parse(fixture.discoveryAnswer)));
 
         var want = fixture.expected.get("discovery");
         var prototypes = want.get("prototypes");
@@ -230,7 +230,8 @@ class TopicsAlgorithmFixtureTest {
     @Test
     @DisplayName("the labeller over a saved discovery run labels the window as the run did")
     void labellerMatchesDiscovery() {
-        var discovered = DISCOVERY.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.discoveryAnswer));
+        var discovered = TopicsTestAlgorithm.finished(
+                DISCOVERY.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.discoveryAnswer)));
         var topics = IntStream.range(0, discovered.topics().size())
                 .mapToObj(t -> TopicsTestAlgorithm.topic(WORKSPACE_ID, PROJECT_ID)
                         .name(discovered.topics().get(t).name())
