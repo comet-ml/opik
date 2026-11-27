@@ -7,8 +7,10 @@ import {
   isImageContent,
   parseAudioValue,
   parseImageValue,
+  parsePdfValue,
   parseVideoValue,
   processInputData,
+  processInputDataInternal,
 } from "@/lib/images";
 import { ATTACHMENT_TYPE } from "@/types/attachments";
 
@@ -41,6 +43,77 @@ describe("processInputData", () => {
     const result = processInputData(input);
     expect(result.media).toEqual([]);
     expect(result.formattedData).toEqual(input);
+  });
+
+  it("extracts PDF URLs and replaces inline PDFs with numbered placeholders", () => {
+    const url = "https://example.com/report.png.PDF?version=2#page=1";
+    const inline = "data:application/pdf;base64,JVBERi0xLjc=";
+    const result = processInputData({ documents: [url, inline, inline] });
+
+    expect(result.media).toEqual([
+      {
+        url: inline,
+        name: "Base64 PDF: [pdf_0]",
+        type: ATTACHMENT_TYPE.PDF,
+        hasPlaceholder: true,
+      },
+      { url, name: "report.png.PDF", type: ATTACHMENT_TYPE.PDF },
+    ]);
+    expect(result.formattedData).toEqual({
+      documents: [url, "[pdf_0]", "[pdf_1]"],
+    });
+  });
+
+  it("keeps a PDF file in a message out of the audio and video lists", () => {
+    const url = "https://example.com/report.pdf";
+    const content = [{ type: "file", file: { file_id: url } }];
+    expect(processInputData({ messages: [{ content }] }).media).toEqual([
+      { url, name: "report.pdf", type: ATTACHMENT_TYPE.PDF },
+    ]);
+  });
+
+  it("recognizes PDF data URIs with MIME parameters", () => {
+    const url = "data:application/pdf;name=x.pdf;charset=utf-8;base64,JVBERg==";
+    expect(parsePdfValue(url)).toEqual({ url, name: "Base64 PDF" });
+    const result = processInputDataInternal({ document: url });
+    expect(result.media).toEqual([
+      {
+        url,
+        name: "Base64 PDF: [pdf_0]",
+        type: ATTACHMENT_TYPE.PDF,
+        hasPlaceholder: true,
+      },
+    ]);
+    expect(result.formattedData).toEqual({ document: "[pdf_0]" });
+  });
+
+  it.each([".", ")", "!", ",", ";", ":"])(
+    "extracts a PDF URL before trailing %s in prose",
+    (punctuation) => {
+      const url = "https://example.com/report.pdf";
+      const input = { text: `Read ${url}${punctuation} Then continue.` };
+      expect(processInputData(input)).toEqual({
+        media: [{ url, name: "report.pdf", type: ATTACHMENT_TYPE.PDF }],
+        formattedData: input,
+      });
+    },
+  );
+
+  it.each(["video_url", "audio_url"])("keeps only the PDF from %s", (type) => {
+    const url = "https://example.com/report.pdf";
+    const input = { messages: [{ content: [{ type, [type]: { url } }] }] };
+    const expected = [{ url, name: "report.pdf", type: ATTACHMENT_TYPE.PDF }];
+    expect(processInputDataInternal(input).media).toEqual(expected);
+    expect(processInputData(input).media).toEqual(expected);
+  });
+
+  it("only recognizes a PDF extension in the URL path", () => {
+    const values = [
+      "https://example.com/a.pdf.txt",
+      "https://example.com/a.pdfx",
+      "https://example.com/?q=a.pdf",
+    ];
+    expect(processInputData({ values }).media).toEqual([]);
   });
 
   it("should extract OpenAI image URLs from messages", () => {

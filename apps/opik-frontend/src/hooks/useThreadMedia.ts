@@ -18,9 +18,12 @@ export const useThreadMedia = (
 } => {
   const media = useMemo(() => {
     const allMedia: UnifiedMediaItem[] = [];
-    let imageIndex = 0;
-    let videoIndex = 0;
-    let audioIndex = 0;
+    const nextIndex = {
+      [ATTACHMENT_TYPE.IMAGE]: 0,
+      [ATTACHMENT_TYPE.VIDEO]: 0,
+      [ATTACHMENT_TYPE.AUDIO]: 0,
+      [ATTACHMENT_TYPE.PDF]: 0,
+    };
 
     traces.forEach((trace) => {
       // Process input and output for each trace
@@ -29,12 +32,7 @@ export const useThreadMedia = (
 
       // Convert input media to UnifiedMediaItem format
       inputResult.media.forEach((item) => {
-        const index =
-          item.type === ATTACHMENT_TYPE.IMAGE
-            ? imageIndex++
-            : item.type === ATTACHMENT_TYPE.VIDEO
-              ? videoIndex++
-              : audioIndex++;
+        const index = nextIndex[item.type]++;
 
         allMedia.push({
           id: `trace-${trace.id}-input-${index}`,
@@ -50,12 +48,7 @@ export const useThreadMedia = (
 
       // Convert output media to UnifiedMediaItem format
       outputResult.media.forEach((item) => {
-        const index =
-          item.type === ATTACHMENT_TYPE.IMAGE
-            ? imageIndex++
-            : item.type === ATTACHMENT_TYPE.VIDEO
-              ? videoIndex++
-              : audioIndex++;
+        const index = nextIndex[item.type]++;
 
         allMedia.push({
           id: `trace-${trace.id}-output-${index}`,

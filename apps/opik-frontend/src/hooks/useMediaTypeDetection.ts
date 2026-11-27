@@ -5,6 +5,7 @@ import {
   parseVideoValue,
   parseImageValue,
   parseAudioValue,
+  parsePdfValue,
   isVideoBase64String,
   isImageBase64String,
   isAudioBase64String,
@@ -14,15 +15,9 @@ import {
   isHttpUrl,
   createMediaData,
 } from "@/lib/media";
-import {
-  ParsedImageData,
-  ParsedVideoData,
-  ParsedAudioData,
-  ParsedMediaData,
-  ATTACHMENT_TYPE,
-} from "@/types/attachments";
+import { ParsedMediaData, ATTACHMENT_TYPE } from "@/types/attachments";
 
-export type DetectedMediaType = "video" | "image" | "audio" | "none";
+export type DetectedMediaType = "video" | "image" | "audio" | "pdf" | "none";
 
 export type UseMediaTypeDetectionReturn = {
   mediaType: DetectedMediaType;
@@ -45,7 +40,7 @@ const MAX_URL_REGEX_LENGTH = 10_000;
 
 function cacheAndReturn(
   key: string,
-  parsed: ParsedImageData | ParsedVideoData | ParsedAudioData | undefined,
+  parsed: Omit<ParsedMediaData, "type"> | undefined,
   mediaType: DetectedMediaType,
   attachmentType: ATTACHMENT_TYPE,
 ): DetectionResult | null {
@@ -86,6 +81,12 @@ function detectSync(stringValue: string): DetectionResult | null {
           "audio",
           ATTACHMENT_TYPE.AUDIO,
         )) ||
+      cacheAndReturn(
+        stringValue,
+        parsePdfValue(stringValue),
+        "pdf",
+        ATTACHMENT_TYPE.PDF,
+      ) ||
       null;
 
     if (result) return result;
@@ -109,6 +110,12 @@ function detectSync(stringValue: string): DetectionResult | null {
 
   // Normal-length strings: run full sync detection (extension + base64 checks)
   return (
+    cacheAndReturn(
+      stringValue,
+      parsePdfValue(stringValue),
+      "pdf",
+      ATTACHMENT_TYPE.PDF,
+    ) ??
     cacheAndReturn(
       stringValue,
       parseVideoValue(stringValue),

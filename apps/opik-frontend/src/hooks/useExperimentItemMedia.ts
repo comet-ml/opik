@@ -6,7 +6,7 @@ import { processInputDataInternal } from "@/lib/images";
 import { detectAdditionalMedia } from "@/lib/media";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 
-const PLACEHOLDER_TOKEN_REGEX = /\[(?:image|video|audio)_\d+\]/;
+const PLACEHOLDER_TOKEN_REGEX = /\[(?:image|video|audio|pdf)_\d+\]/;
 
 /** Reads the placeholder the extractor recorded in the media item's name. */
 const extractPlaceholderToken = (name: string): string | undefined =>
