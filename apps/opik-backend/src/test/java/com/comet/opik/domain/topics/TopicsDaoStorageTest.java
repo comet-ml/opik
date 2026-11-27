@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -594,16 +595,18 @@ class TopicsDaoStorageTest {
         var lastRunId = data.topicProject(projectId).listRunId();
 
         int older = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, projectId, newId(), "test"));
+                .markLabelsComplete(workspaceId, projectId, newId(), fingerprint()));
 
         assertThat(older).isZero();
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
+        var fingerprint = fingerprint();
         int last = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, projectId, lastRunId, "test"));
+                .markLabelsComplete(workspaceId, projectId, lastRunId, fingerprint));
 
         assertThat(last).isEqualTo(1);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsFingerprint()).isEqualTo(fingerprint);
     }
 
     @Test
@@ -621,7 +624,7 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
         var completeRunId = data.topicProject(complete).listRunId();
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, complete, completeRunId, "test"));
+                .markLabelsComplete(workspaceId, complete, completeRunId, fingerprint()));
         data.savedList(newId().toString(), newId(), NIGHT.minus(Duration.ofDays(5)), BUILT);
 
         var unfinished = template.inTransaction(READ_ONLY,
@@ -905,7 +908,7 @@ class TopicsDaoStorageTest {
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.LABELS, NIGHT),
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.UPDATE, NIGHT),
                     dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.DISCOVERY, NIGHT));
-            dao.markLabelsComplete(workspaceId, listed, buildRun, "test");
+            dao.markLabelsComplete(workspaceId, listed, buildRun, fingerprint());
             var labelsComplete = dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.LABELS, NIGHT);
             return List.of(refused.get(0), refused.get(1), refused.get(2), labelsComplete,
                     dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.UPDATE, NIGHT),
@@ -1039,6 +1042,11 @@ class TopicsDaoStorageTest {
                 .toList();
         traceTopicsDAO.insert(rows).block();
         return rows;
+    }
+
+    /** A random labels fingerprint, 64 hex characters as a pass stores it. */
+    private static String fingerprint() {
+        return RandomStringUtils.secure().next(64, "0123456789abcdef");
     }
 
     private static UUID traceId(Instant at) {
