@@ -131,7 +131,7 @@ public class JsonRowValues {
      * </ul>
      *
      * <p>Anything else is written as that text: ClickHouse would store a raw root string without its quotes and
-     * a raw {@code null} as an empty string, which are not the cells the string path writes.
+     * a raw {@code null} as an empty string, which is not the text {@link TruncationUtils#toJsonWithSlim(JsonNode)} gives.
      */
     public void putJsonWithSlim(@NonNull ObjectNode node, String field, String slimField,
             @Nullable JsonNode value) {

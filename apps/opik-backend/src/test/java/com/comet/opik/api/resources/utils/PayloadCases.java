@@ -4,6 +4,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -17,6 +18,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +36,15 @@ public class PayloadCases {
     /**
      * Deep enough to nest raw JSON well inside the row, shallow enough for the recursive comparison in the span and
      * trace assertions, which recurses per level and overflows the test thread's stack near the 1000-level limit.
-     * {@code StreamedPayloadsResourceTest} covers that limit itself, compared as text.
+     * {@link #deepestPayload()} covers that limit itself.
      */
     private static final int NESTED_ARRAYS_DEPTH = 100;
+
+    /**
+     * As deep as a batch create accepts: its request nests the payload three levels down
+     * ({@code {"traces":[{"input":}, or {@code "spans"}), and requests are parsed with the default nesting limit.
+     */
+    private static final int DEEPEST_PAYLOAD_DEPTH = StreamReadConstraints.DEFAULT_MAX_DEPTH - 3;
 
     public static Stream<JsonNode> payloads() {
         int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
@@ -213,6 +221,20 @@ public class PayloadCases {
 
     private static String cut(String text) {
         return text.substring(0, TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH) + "...";
+    }
+
+    public static JsonNode deepestPayload() {
+        return nestedArrays(DEEPEST_PAYLOAD_DEPTH);
+    }
+
+    /**
+     * The {@code input} and {@code output} of each stored item as text, for {@code items} items written with
+     * {@code payload} as both. Compared as text, because the recursive comparison in the trace and span assertions
+     * overflows the stack at {@link #deepestPayload()}'s depth.
+     */
+    public static List<List<String>> storedAsText(JsonNode payload, int items) {
+        var json = payload.toString();
+        return Collections.nCopies(items, List.of(json, json));
     }
 
     /** {@code depth} arrays, each holding the next, around one short string. */

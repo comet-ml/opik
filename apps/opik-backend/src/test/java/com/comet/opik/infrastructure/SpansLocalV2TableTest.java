@@ -46,7 +46,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.utils.TruncationUtils.createSlimJsonString;
+import static com.comet.opik.utils.TruncationUtils.toJsonWithSlim;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -407,8 +407,8 @@ class SpansLocalV2TableTest {
                 // Decimal(38, 12): scale the random value to the column's precision so the round-trip compares equal.
                 .totalEstimatedCost(randomCost())
                 .truncationThreshold(truncationThreshold)
-                .inputSlim(createSlimJsonString(input.toString()))
-                .outputSlim(createSlimJsonString(output.toString()))
+                .inputSlim(toJsonWithSlim(input).slim())
+                .outputSlim(toJsonWithSlim(output).slim())
                 .isDeleted((byte) 0) // 0 = live row, not a tombstone
                 // Materialized columns: the values the DDL formulas are expected to compute
                 .inputLength(toByteLength(input))

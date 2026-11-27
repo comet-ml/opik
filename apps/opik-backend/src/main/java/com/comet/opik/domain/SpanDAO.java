@@ -2183,7 +2183,7 @@ public class SpanDAO {
 
                         return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost,
                                 costVersion, spanColumnsNonNullable(),
-                                configuration.getResponseFormatting().getTruncationSize(), streamPayloads());
+                                configuration.getResponseFormatting().getTruncationSize());
                     });
         });
     }
@@ -2202,7 +2202,7 @@ public class SpanDAO {
                     .bind("start_time", span.startTime().toString())
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
                     .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-            StreamedPayload.bind(statement, streamPayloads(), span.input(), span.output(),
+            StreamedPayload.bind(statement, span.input(), span.output(),
                     Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
@@ -2484,12 +2484,8 @@ public class SpanDAO {
     }
 
     private void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
-        StreamedPayload.bind(statement, streamPayloads(), spanUpdate.input(), spanUpdate.output(),
+        StreamedPayload.bind(statement, spanUpdate.input(), spanUpdate.output(),
                 Objects.toString(spanUpdate.metadata(), null));
-    }
-
-    private boolean streamPayloads() {
-        return configuration.getDatabaseAnalytics().isStreamPayloads();
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,

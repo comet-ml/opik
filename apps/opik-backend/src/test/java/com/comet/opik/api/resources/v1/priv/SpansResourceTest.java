@@ -2591,6 +2591,24 @@ class SpansResourceTest {
             getAndAssert(batchSpan, API_KEY, TEST_WORKSPACE);
             getAndAssert(singleSpan, API_KEY, TEST_WORKSPACE);
         }
+
+        @Test
+        @DisplayName("the deepest payload a batch create and a single create accept is stored and read back as sent")
+        void storeTheDeepestPayload() {
+            var payload = PayloadCases.deepestPayload();
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchSpan = PayloadCases.span(podamFactory, projectName, payload);
+            var singleSpan = PayloadCases.span(podamFactory, projectName, payload);
+
+            spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(singleSpan, API_KEY, TEST_WORKSPACE);
+
+            var actual = Stream.of(batchSpan, singleSpan)
+                    .map(span -> spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY))
+                    .map(span -> List.of(span.input().toString(), span.output().toString()))
+                    .toList();
+            assertThat(actual).isEqualTo(PayloadCases.storedAsText(payload, 2));
+        }
     }
 
     private Span getAndAssert(Span expectedSpan, String apiKey, String workspaceName) {

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Span;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TruncationUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,7 +47,7 @@ class SpanJsonRowMapperTest {
     void nullableColumnsWriteNulls() {
         var span = span().toBuilder().endTime(null).ttft(null).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         assertThat(row.get("end_time").isNull()).isTrue();
         assertThat(row.get("ttft").isNull()).isTrue();
@@ -59,7 +58,7 @@ class SpanJsonRowMapperTest {
     void nonNullableColumnsWriteSentinels() {
         var span = span().toBuilder().endTime(null).ttft(null).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", true, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", true, 10001);
 
         // The instant, not its spelling -- see TraceJsonRowMapperTest for why.
         assertThat(Instant.parse(row.get("end_time").asText())).isEqualTo(Instant.EPOCH);
@@ -75,8 +74,8 @@ class SpanJsonRowMapperTest {
         var span = span();
 
         var estimated = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "1.1", false,
-                10001, true);
-        var supplied = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+                10001);
+        var supplied = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         // toPlainString, not toString: BigDecimal renders this scale as 1.23456E-7, which the Decimal
         // parser rejects.
@@ -91,7 +90,7 @@ class SpanJsonRowMapperTest {
         var metadata = JsonUtils.getJsonNodeFromString("{\"a\":1,\"b\":\"two\"}");
         var span = span().toBuilder().metadata(metadata).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         // The asymmetry is deliberate and lives in the binder: input/output go through
         // TruncationUtils.toJsonString, metadata does not.
@@ -106,7 +105,7 @@ class SpanJsonRowMapperTest {
         double ttft = 1.2583709557071319E9;
         var span = span().toBuilder().ttft(ttft).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         assertThat(row.get("ttft").asDouble()).isEqualTo(ttft);
         // Through the serialized text too, which is what actually reaches ClickHouse.
@@ -122,7 +121,7 @@ class SpanJsonRowMapperTest {
         var lastUpdatedAt = Instant.parse("2026-09-22T10:11:13.987654Z");
         var span = span().toBuilder().startTime(startTime).lastUpdatedAt(lastUpdatedAt).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         assertThat(Instant.parse(row.get("start_time").asText())).isEqualTo(startTime);
         assertThat(Instant.parse(row.get("last_updated_at").asText())).isEqualTo(lastUpdatedAt);
@@ -133,7 +132,7 @@ class SpanJsonRowMapperTest {
     void absentLastUpdatedAtUsesTheBatchInstant() {
         var span = span().toBuilder().lastUpdatedAt(null).build();
 
-        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
+        var row = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001);
 
         // Exactly the batch value: last_updated_at is the ReplacingMergeTree version column, so a
         // per-row clock would make a retried row win against itself with different bytes.
@@ -145,7 +144,7 @@ class SpanJsonRowMapperTest {
     void writesExactlyTheExpectedColumns() {
         // See TraceJsonRowMapperTest: the column set is the part of the row that breaks silently.
         var row = SpanJsonRowMapper.toJsonRow(span(), user, workspaceId, nowForBatch, cost, "1.1", false,
-                10_001, true);
+                10_001);
 
         var columns = new HashSet<String>();
         row.fieldNames().forEachRemaining(columns::add);
@@ -156,23 +155,5 @@ class SpanJsonRowMapperTest {
                 "total_estimated_cost", "total_estimated_cost_version", "tags", "usage",
                 "last_updated_at", "error_info", "created_by", "last_updated_by", "truncation_threshold",
                 "input_slim", "output_slim", "ttft", "source", "environment");
-    }
-
-    @Test
-    @DisplayName("with streamPayloads off, input, output and their slim copies are written as escaped strings")
-    void payloadsAsStringsWhenNotStreamed() {
-        var input = JsonUtils.createObjectNode().put("text", RandomStringUtils.secure().nextAlphanumeric(20_000));
-        var output = JsonUtils.createArrayNode().add(RandomStringUtils.secure().nextAlphanumeric(50));
-        var span = span().toBuilder().input(input).output(output).build();
-
-        var expected = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, true);
-        expected.put("input", TruncationUtils.toJsonString(input));
-        expected.put("output", TruncationUtils.toJsonString(output));
-        expected.put("input_slim", TruncationUtils.createSlimJsonString(TruncationUtils.toJsonString(input)));
-        expected.put("output_slim", TruncationUtils.createSlimJsonString(TruncationUtils.toJsonString(output)));
-
-        var actual = SpanJsonRowMapper.toJsonRow(span, user, workspaceId, nowForBatch, cost, "", false, 10001, false);
-
-        assertThat(actual).isEqualTo(expected);
     }
 }
