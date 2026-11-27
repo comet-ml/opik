@@ -294,6 +294,34 @@ class TestRecursiveDescent:
         assert ids == {"root", "err"}
 
 
+    @pytest.mark.parametrize(
+        "expression,expected_ids",
+        [
+            # JSON booleans and numbers are distinct types: Python's
+            # `True == 1` / `False == 0` must not leak into the predicate.
+            ("..|select(.flag == 1)", {"one"}),
+            ("..|select(.flag == true)", {"true"}),
+            ("..|select(.flag == 0)", {"zero"}),
+            ("..|select(.flag == false)", {"false"}),
+            ("..|select(.flag? and .flag != 1)", {"true", "zero", "false"}),
+            ("..|select(.flag? and .flag != false)", {"one", "true", "zero"}),
+        ],
+    )
+    def test_evaluate__select_equality__does_not_conflate_booleans_and_numbers(
+        self, expression, expected_ids
+    ):
+        document = {
+            "items": [
+                {"id": "one", "flag": 1},
+                {"id": "true", "flag": True},
+                {"id": "zero", "flag": 0},
+                {"id": "false", "flag": False},
+            ]
+        }
+        results = path_evaluator.evaluate(expression, document)
+        assert {r["id"] for r in results} == expected_ids
+
+
 # Parse-time errors -----------------------------------------------------------
 
 

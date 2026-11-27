@@ -588,9 +588,9 @@ def _eval_predicate(pred: Predicate, value: Any) -> bool:
         parent = _first_result(pred.path, value)
         return isinstance(parent, dict) and pred.field_name in parent
     if isinstance(pred, Equal):
-        return _first_result(pred.path, value) == pred.literal
+        return _json_equal(_first_result(pred.path, value), pred.literal)
     if isinstance(pred, NotEqual):
-        return _first_result(pred.path, value) != pred.literal
+        return not _json_equal(_first_result(pred.path, value), pred.literal)
     if isinstance(pred, Not):
         return not _eval_predicate(pred.inner, value)
     if isinstance(pred, And):
@@ -598,6 +598,18 @@ def _eval_predicate(pred: Predicate, value: Any) -> bool:
     if isinstance(pred, Or):
         return _eval_predicate(pred.left, value) or _eval_predicate(pred.right, value)
     return False
+
+
+def _json_equal(resolved: Any, literal: Any) -> bool:
+    """Compare a resolved value with a predicate literal as JSON values.
+
+    Python's `bool` is an `int`, so a bare `==` makes `true == 1` and
+    `false == 0` hold. In JSON (and jq) booleans and numbers are distinct,
+    so `select(.flag == 1)` must not match `{"flag": true}`.
+    """
+    if isinstance(resolved, bool) or isinstance(literal, bool):
+        return type(resolved) is type(literal) and resolved == literal
+    return bool(resolved == literal)
 
 
 def _first_result(path: PathExpr, value: Any) -> Any:
