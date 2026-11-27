@@ -37,9 +37,9 @@ import java.util.function.Function;
  *
  * <p>A nightly update ({@link #nightlyUpdate}) reads the same window and the project's saved list, has the algorithm
  * update the list and saves the changed list the same way: one transaction that checks no other run saved the project
- * since this one read it, then the {@code trace_topics} insert. A retired topic's row is deleted, with a log line and
- * {@code topics.topics.retired}. A save that leaves no live topic deletes them all and clears the project's list instead, so
- * a later discovery run makes a new one.
+ * since this one read it; its labelling pass then writes the window's topics that changed. A retired topic's row is
+ * deleted, with a log line and {@code topics.topics.retired}. A save that leaves no live topic deletes them all and
+ * clears the project's list instead, so a later discovery run makes a new one.
  */
 @Slf4j
 @Singleton
@@ -84,10 +84,10 @@ public class TopicsRunService {
      * Updates the project's saved topic list for {@code night}, the UTC date whose start ends the window, which the
      * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context: the window read, the
      * saved list read ({@link TopicRunStore#readList}), the algorithm's steps ({@link #update}), the save
-     * ({@link TopicRunStore#saveUpdate}), then the {@code trace_topics} insert. Never errors: a failure is recorded on
-     * the run and returned, and the previous list stays. The same time limit and cancel as {@link #discover}. A save
-     * that leaves no live topic deletes them all and clears the project's list, so a later discovery run makes a new
-     * one; it inserts no {@code trace_topics}.
+     * ({@link TopicRunStore#saveUpdate}); the {@code trace_topics} are its labelling pass's. Never errors: a failure
+     * is recorded on the run and returned, and the previous list stays. The same time limit and cancel as
+     * {@link #discover}. A save that leaves no live topic deletes them all and clears the project's list, so a later
+     * discovery run makes a new one.
      */
     Mono<TopicRunOutcome> nightlyUpdate(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
             long windowTraces) {
@@ -180,7 +180,7 @@ public class TopicsRunService {
                         })
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
                 .flatMap(updated -> timed(run, "save", store.saveUpdate(run, updated.list(), updated.save()))
-                        .map(kept -> kept ? updated : updated.discarded())
+                        .thenReturn(updated)
                         .onErrorMap(error -> TopicsRunException.withStats(error, updated.stats())))
                 .timeout(timeout, Mono.error(this::timedOut))
                 .flatMap(updated -> savedNight(run, updated))
@@ -218,7 +218,8 @@ public class TopicsRunService {
 
     /**
      * After the commit: the night's metrics, a log line and {@code topics.topics.retired} per retired topic, then the
-     * shared post-save step. A cleared list has no {@code trace_topics} to write.
+     * shared post-save step. The night writes no {@code trace_topics}: its labelling pass writes the ones that changed,
+     * where a full write of the sample would mostly repeat the topics the traces have.
      */
     private Mono<TopicRunOutcome> savedNight(TopicRun run, NightRows night) {
         metrics.topics(run.workspace(), night.live(), night.born());
@@ -233,7 +234,7 @@ public class TopicsRunService {
             log.info("Topics run '{}' saved, project '{}', no topic stayed live: its topics are deleted and its list "
                     + "cleared, so a later discovery run makes a new one", run.runId(), run.projectId());
         }
-        return afterSave(run, night.traceTopics(), night.otherShare(), night.stats());
+        return afterSave(run, List.of(), night.otherShare(), night.stats());
     }
 
     /**

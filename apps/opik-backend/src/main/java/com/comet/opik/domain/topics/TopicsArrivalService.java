@@ -204,7 +204,10 @@ class TopicsArrivalService {
                 noPrototypes += group.size();
                 continue;
             }
-            var topicIds = labeller.label(group.stream().map(TopicVector::vector).toList());
+            // The stored copy: the labelling pass skips a trace whose arrival row is newer than its vector, so the
+            // two must label the same values.
+            var topicIds = labeller.label(group.stream().map(vector -> TopicEmbedding.stored(vector.vector()))
+                    .toList());
             for (int i = 0; i < group.size(); i++) {
                 var vector = group.get(i);
                 rows.add(TraceTopic.builder()

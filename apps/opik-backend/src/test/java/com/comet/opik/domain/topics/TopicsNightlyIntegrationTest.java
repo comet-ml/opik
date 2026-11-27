@@ -163,7 +163,8 @@ class TopicsNightlyIntegrationTest {
     }
 
     /** A run's own ids and times, and its prototypes: new on every run. */
-    private static final String[] RUN_FIELDS = {"runId", "listRunId", "otherVectors", "lastSuccessAt",
+    private static final String[] RUN_FIELDS = {"runId", "listRunId", "otherVectors", "labelsFingerprint",
+            "lastSuccessAt",
             "runStartedAt", "runFinishedAt", "runQueuedAt", "deadlineAt", "heartbeatAt"};
     /** The times a failed attempt sets; its run id and code are known, so they are compared. */
     private static final String[] FAILED_FIELDS = {"runStartedAt", "runFinishedAt", "runQueuedAt", "deadlineAt",
@@ -288,7 +289,7 @@ class TopicsNightlyIntegrationTest {
                             .ignoringFields(RUN_FIELDS).isEqualTo(expected));
             var listRunId = data.topicProject(projectId).listRunId();
             assertThat(listRunId).isNotEqualTo(before.get(projectId).listRunId());
-            data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, projectId, listRunId, todayStart());
+            data.assertArrivalEqualsTheLabels(windowDAO, algorithm, workspaceId, projectId, todayStart());
         }
         assertThat(data.topicProject(small)).isEqualTo(smallBefore.toBuilder().lastNight(today()).build());
 
@@ -554,13 +555,14 @@ class TopicsNightlyIntegrationTest {
                 });
         var liveIds = live.stream().map(Topic::id).collect(Collectors.toSet());
 
-        var labels = labels(workspaceId, projectId, update.runId());
+        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
+        // Every window trace's topic, whichever run wrote it: the pass writes only the ones that changed.
+        var labels = windowLabels(workspaceId, projectId);
         assertThat(labels).hasSize(stats.path("vectors").asInt())
                 .allSatisfy(label -> assertThat(label.topicId().equals(TraceTopic.OTHER)
                         || liveIds.contains(label.topicId())).isTrue());
         live.forEach(topic -> assertThat(labels.stream().filter(label -> label.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
-        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
     }
 
     @Test
@@ -593,8 +595,8 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a window over maxVectors: the night saves its sample's labels, then its labelling pass gives every "
-            + "trace of the window a row of the run, and marks the labels complete")
+    @DisplayName("a window over maxVectors: the night groups its sample, then its labelling pass gives every trace of "
+            + "the window a topic, and marks the labels complete")
     void nightOnASample() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
@@ -617,8 +619,17 @@ class TopicsNightlyIntegrationTest {
         int windowTraces = stats.path("window_traces").asInt();
         assertThat(windowTraces).isGreaterThan(100);
         assertThat(stats.path("sample_traces").asInt()).isEqualTo(100);
-        assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces);
         assertSavedNight(projectId, row, update.runId(), todayStart(), today());
+        // The pass labels the whole window, not only the run's sample.
+        assertThat(windowLabels(workspaceId, projectId)).hasSize(windowTraces);
+    }
+
+    /** The latest labels of the traces in today's window; older traces keep the labels of earlier runs. */
+    private List<TraceTopic> windowLabels(String workspaceId, UUID projectId) {
+        var from = todayStart().minus(java.time.Duration.ofDays(opikConfig.getTopics().getRun().getWindowDays()));
+        return data.traceTopics(workspaceId, projectId).stream()
+                .filter(label -> !label.traceCreatedAt().isBefore(from))
+                .toList();
     }
 
     @Test
@@ -766,7 +777,7 @@ class TopicsNightlyIntegrationTest {
         assertThat(retired(update.runId())).containsOnlyKeys(before.stream().map(Topic::id).toList())
                 .allSatisfy((topicId, reason) -> assertThat(reason).isEqualTo("low_share"));
         var cleared = row.toBuilder().savedRuns(row.savedRuns() + 1).listRunId(null).windowUntil(null)
-                .labelsComplete(false).otherVectors(null).embedModel(null).runId(update.runId())
+                .labelsComplete(false).labelsFingerprint(null).otherVectors(null).embedModel(null).runId(update.runId())
                 .runMode(TopicProject.RunMode.UPDATE).runStatus(TopicProject.RunStatus.SAVED).lastNight(today())
                 .build();
         assertThat(data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(SAVED_FIELDS)
@@ -838,23 +849,24 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a night's run whose trace_topics rows are lost and whose labelling pass did not finish is finished "
-            + "by a later plan's labels run: the run's rows are written and its labels marked complete")
+    @DisplayName("a night whose labelling pass did not finish, with the project's trace_topics rows lost, is finished "
+            + "by a later plan's labels run: every window trace gets a row of the run and its labels are marked "
+            + "complete")
     void nightAfterLostInsert() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
         stubNightly(emptyNaming(), sameAnswers());
         assertThat(runNight(Instant.now()).saved()).isEqualTo(1);
         var lost = nightlyRun(projectId);
-        // As after an insert out of retries and a pass cut by its deadline: no row of the run, labels not complete.
+        // As after inserts out of retries and a pass cut by its deadline: no topic left, labels not complete.
         clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(
-                "ALTER TABLE trace_topics DELETE WHERE run_id = '%s' SETTINGS mutations_sync = 2"
-                        .formatted(lost.runId()))
+                "ALTER TABLE trace_topics DELETE WHERE project_id = '%s' SETTINGS mutations_sync = 2"
+                        .formatted(projectId))
                 .execute()).flatMap(result -> Mono.from(result.getRowsUpdated()))).block();
         labelsIncomplete(projectId);
         // The delete is a mutation: wait until it is applied.
         Awaitility.await().atMost(30, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(labels(workspaceId, projectId, lost.runId())).isEmpty());
+                .untilAsserted(() -> assertThat(data.traceTopics(workspaceId, projectId)).isEmpty());
         var row = data.topicProject(projectId);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
@@ -1022,6 +1034,8 @@ class TopicsNightlyIntegrationTest {
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(result.failed()).isEqualTo(1);
+        // The 2 s timeout also cut the saved project's labelling pass; the next plan resumes it.
+        planner.plan(Instant.now()).block();
         assertSavedNight(saved, savedRow, nightlyRun(saved).runId(), todayStart(), today());
     }
 
@@ -1141,7 +1155,7 @@ class TopicsNightlyIntegrationTest {
     /** A saved list with its window until yesterday's start, its labels complete: no run of its own is due. */
     private void listedYesterday(String workspaceId, UUID projectId) {
         data.savedList(workspaceId, projectId, yesterdayStart(), FIXTURE.size());
-        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
+        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId(), "test").block();
     }
 
     /**
@@ -1162,8 +1176,11 @@ class TopicsNightlyIntegrationTest {
         var expected = before.toBuilder().savedRuns(before.savedRuns() + 1).windowUntil(windowUntil)
                 .labelsComplete(true).runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED)
                 .lastNight(lastNight).build();
-        assertThat(data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(RUN_FIELDS)
-                .isEqualTo(expected);
+        // The labelling pass is a run of its own, queued after the save; it starts once arrival can't still be
+        // labelling by the list before.
+        Awaitility.await().atMost(WAIT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(RUN_FIELDS)
+                .isEqualTo(expected));
         assertThat(data.topicProject(projectId).listRunId()).isEqualTo(runId);
     }
 

@@ -7,22 +7,16 @@ import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * What a nightly update saves, with the counts its metrics carry after the commit: the MySQL save, the retired
- * topics that were stored, one {@code trace_topics} row per window trace (none when no topic stayed live), and the
- * night's stats. No I/O, no clock.
+ * topics that were stored, and the night's stats. No I/O, no clock. It writes no {@code trace_topics}: the labelling
+ * pass after the save writes the window's topics that changed.
  */
 @Builder(toBuilder = true)
 record NightRows(@NonNull NightList list, @NonNull NightSave save, @NonNull List<NightTopic> retired,
-        @NonNull List<TraceTopic> traceTopics, int born, int live, double otherShare, @NonNull TopicChurn.Churn churn,
+        int born, int live, double otherShare, @NonNull TopicChurn.Churn churn,
         @NonNull ObjectNode stats) {
-
-    /** Saved, but its project was deleted meanwhile: no {@code trace_topics} to write. */
-    NightRows discarded() {
-        return toBuilder().traceTopics(List.of()).build();
-    }
 
     /**
      * The rows of {@code list}'s state after the night's {@code result} over the window's {@code traces}, in the run's
@@ -40,14 +34,9 @@ record NightRows(@NonNull NightList list, @NonNull NightSave save, @NonNull List
         var state = list.state();
         boolean keep = state.liveCount() > 0;
         int other = 0;
-        var topicIds = new UUID[labels.length];
-        for (int i = 0; i < labels.length; i++) {
-            other += labels[i] == TopicAlgorithm.OTHER ? 1 : 0;
-            topicIds[i] = labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : state.topic(labels[i]).getId();
+        for (int label : labels) {
+            other += label == TopicAlgorithm.OTHER ? 1 : 0;
         }
-        var traceTopics = keep
-                ? TopicRunRows.traceTopics(run.workspaceId(), run.projectId(), run.runId(), traces, topicIds)
-                : List.<TraceTopic>of();
         var inserted = new ArrayList<Topic>();
         var updated = new ArrayList<Topic>();
         var retired = new ArrayList<NightTopic>();
@@ -100,7 +89,6 @@ record NightRows(@NonNull NightList list, @NonNull NightSave save, @NonNull List
                 .list(list)
                 .save(save)
                 .retired(List.copyOf(retired))
-                .traceTopics(traceTopics)
                 .born(born)
                 .live(state.liveCount())
                 .otherShare(otherShare)

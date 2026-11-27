@@ -549,10 +549,14 @@ class TopicRunStore {
         });
     }
 
-    /** Sets {@code labels_complete} for the run, only while the project still names it; false when it no longer does. */
-    Mono<Boolean> markLabelsComplete(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+    /**
+     * Sets {@code labels_complete} for the run, with the fingerprint of the labeller the pass labelled by, only while
+     * the project still names the run; false when it no longer does.
+     */
+    Mono<Boolean> markLabelsComplete(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId,
+            @NonNull String fingerprint) {
         return jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, projectId, runId)) > 0);
+                .markLabelsComplete(workspaceId, projectId, runId, fingerprint)) > 0);
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {
