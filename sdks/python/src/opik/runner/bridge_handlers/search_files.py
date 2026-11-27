@@ -1,5 +1,6 @@
 """search_files bridge command handler."""
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
@@ -21,6 +22,8 @@ _MAX_BYTES = 512 * 1024
 _MAX_LINE_LENGTH = 500
 _CONTEXT_LINES = 3
 _MAX_PATTERN_LENGTH = 500
+# A content line under a file heading is `N:text` (match) or `N-text` (context).
+_CONTENT_LINE = re.compile(r"(\d+)([:-])")
 
 
 class SearchFilesHandler(BaseHandler):
@@ -54,6 +57,8 @@ class SearchFilesHandler(BaseHandler):
             "grep",
             "--untracked",
             "-n",
+            "--heading",
+            "--break",
             f"-C{_CONTEXT_LINES}",
             "--no-color",
             "-P",
@@ -72,14 +77,13 @@ class SearchFilesHandler(BaseHandler):
                 cmd,
                 cwd=str(self._repo_root),
                 capture_output=True,
-                text=True,
                 timeout=min(timeout, 30.0),
             )
         except subprocess.TimeoutExpired:
             raise CommandError("timeout", "Search timed out")
 
         if result.returncode not in (0, 1):
-            stderr = result.stderr.strip()
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
             if "invalid" in stderr.lower():
                 raise CommandError("match_not_found", f"Invalid pattern: {stderr}")
             raise CommandError("search_failed", f"git grep failed: {stderr}")
@@ -106,37 +110,36 @@ class SearchFilesHandler(BaseHandler):
             else:
                 truncated = True
 
-        for raw_line in result.stdout.splitlines():
-            if raw_line == "--":
+        # With --heading and --break, git prints each file name on its own line,
+        # then its `N:text` / `N-text` lines, and a blank line before the next file.
+        # Split the raw bytes on b"\n" only. Text mode would also split a line at
+        # a lone "\r", and splitlines() at "\x0c" or U+2028. A blank fragment from
+        # such a split would look like the end of a file.
+        current_file = ""
+        expect_file = True
+
+        for raw_bytes in result.stdout.split(b"\n"):
+            raw_line = raw_bytes.removesuffix(b"\r").decode("utf-8", errors="replace")
+            if raw_line == "":
+                expect_file = True
+                continue
+
+            if expect_file or raw_line == "--":
                 _flush_entry()
                 current_entry = {}
                 context_before = []
                 context_after = []
+                if expect_file:
+                    current_file = raw_line
+                    expect_file = False
                 continue
 
-            sep_idx = raw_line.find("-")
-            colon_idx = raw_line.find(":")
-            if colon_idx == -1 and sep_idx == -1:
+            content_line = _CONTENT_LINE.match(raw_line)
+            if content_line is None:
                 continue
-
-            is_match = colon_idx != -1 and (sep_idx == -1 or colon_idx < sep_idx)
-            if is_match:
-                idx = colon_idx
-            else:
-                idx = sep_idx
-
-            file_part = raw_line[:idx]
-            rest = raw_line[idx + 1 :]
-
-            line_sep = rest.find(":" if is_match else "-")
-            if line_sep == -1:
-                continue
-
-            try:
-                line_num = int(rest[:line_sep])
-            except ValueError:
-                continue
-            line_content = rest[line_sep + 1 :][:_MAX_LINE_LENGTH]
+            line_num = int(content_line.group(1))
+            is_match = content_line.group(2) == ":"
+            line_content = raw_line[content_line.end() :][:_MAX_LINE_LENGTH]
 
             if is_match:
                 if current_entry:
@@ -145,7 +148,7 @@ class SearchFilesHandler(BaseHandler):
                     context_after = []
                 total_matches += 1
                 current_entry = {
-                    "file": file_part,
+                    "file": current_file,
                     "line": line_num,
                     "content": line_content,
                 }

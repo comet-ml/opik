@@ -136,8 +136,8 @@ class TestSearchFiles:
         def side_effect(*args, **kwargs):
             result = MagicMock()
             result.returncode = 0
-            result.stdout = ""
-            result.stderr = ""
+            result.stdout = b""
+            result.stderr = b""
             return result
 
         mock_run.side_effect = side_effect
@@ -159,8 +159,8 @@ class TestSearchFiles:
         def side_effect(*args, **kwargs):
             result = MagicMock()
             result.returncode = 0
-            result.stdout = ""
-            result.stderr = ""
+            result.stdout = b""
+            result.stderr = b""
             return result
 
         mock_run.side_effect = side_effect
@@ -176,3 +176,74 @@ class TestSearchFiles:
         cmd = grep_call[0][0]
         assert "*.txt" in cmd
         assert "src" not in cmd[cmd.index("--") + 1 :]
+
+    @pytest.mark.parametrize(
+        "file_name",
+        [
+            "getting-started.md",
+            "2024-11-27-notes.md",
+            "a-12-b.md",
+            "12-3.txt",
+            "dir-one/x-y.md",
+        ],
+    )
+    def test_search_files__hyphen_in_file_name__reports_match_and_context(
+        self, tmp_path: Path, file_name: str
+    ) -> None:
+        _git_init(tmp_path)
+        target = tmp_path / file_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("first\nsecond\nTARGET\nfourth\nfifth\n")
+        (tmp_path / "plain.md").write_text("TARGET\n")
+        _git_add_commit(tmp_path)
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        by_file = {m["file"]: m for m in result["matches"]}
+        assert result["total_matches"] == 2
+        assert by_file[file_name]["line"] == 3
+        assert by_file[file_name]["content"] == "TARGET"
+        assert by_file[file_name]["context_before"] == ["first", "second"]
+        assert by_file[file_name]["context_after"] == ["fourth", "fifth"]
+
+    def test_search_files__line_separator_characters_in_text__keep_file_names(
+        self, tmp_path: Path
+    ) -> None:
+        _git_init(tmp_path)
+        (tmp_path / "a-1.txt").write_bytes(
+            b"TARGET one\x0c\n2-x\x0b\r\rq\n\xc2\x85\xe2\x80\xa8TARGET two\n"
+        )
+        (tmp_path / "b-2.txt").write_bytes(b"x\nTARGET three\n")
+        _git_add_commit(tmp_path)
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        assert [(m["file"], m["line"]) for m in result["matches"]] == [
+            ("a-1.txt", 1),
+            ("a-1.txt", 3),
+            ("b-2.txt", 2),
+        ]
+        assert result["matches"][0]["content"] == "TARGET one\x0c"
+
+    @patch("opik.runner.bridge_handlers.search_files.subprocess.run")
+    def test_search_files__heading_output_with_leading_blank_line__is_parsed(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        _git_init(tmp_path)
+        mock_run.side_effect = lambda *args, **kwargs: MagicMock(
+            returncode=0,
+            stdout=b"\nfoo-bar.md\n1-a\n2:TARGET\n\nb-1.md\n5:TARGET\n6-c\n",
+            stderr=b"",
+        )
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        assert [(m["file"], m["line"]) for m in result["matches"]] == [
+            ("foo-bar.md", 2),
+            ("b-1.md", 5),
+        ]
+        assert result["matches"][0]["context_before"] == ["a"]
+        assert result["matches"][1]["context_before"] == []
