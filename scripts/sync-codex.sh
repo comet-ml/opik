@@ -28,7 +28,7 @@ find "$generated_rules_dir" -type f -name "*.md" -delete
 mapfile -t rule_sources < <(find "$rules_dir" -type f -name "*.mdc" | sort)
 
 for src in "${rule_sources[@]}"; do
-    rel="${src#$rules_dir/}"
+    rel="${src#"$rules_dir"/}"
     dest="$generated_rules_dir/${rel%.mdc}.md"
     mkdir -p "$(dirname "$dest")"
     "$script_dir/convert-frontmatter.sh" cursor-to-codex "$src" "$dest"
@@ -50,7 +50,7 @@ trap 'rm -f "$tmp_file"' EXIT
     echo "- Regenerate with \`make codex\`."
 
     for src in "${rule_sources[@]}"; do
-        rel="${src#$rules_dir/}"
+        rel="${src#"$rules_dir"/}"
         generated="$generated_rules_dir/${rel%.mdc}.md"
         echo
         echo "---"

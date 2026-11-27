@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Fidelity QA driver for the spans cutover (runbook: ../README.md, "Verifying the migration").
 #
@@ -219,8 +220,9 @@ done
 # own argv element, never interpolated into SQL.
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^\[?[A-Za-z0-9._:-]+\]?$ ]] || { echo "ERROR: --host must be a hostname, IPv4, or IPv6 literal." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
-[[ "$COVERAGE" =~ ^[1-9][0-9]*$ ]] && (( ${#COVERAGE} <= 3 && COVERAGE <= 100 )) \
-    || { echo "ERROR: --coverage must be an integer percentage from 1 to 100." >&2; exit 2; }
+if ! [[ "$COVERAGE" =~ ^[1-9][0-9]*$ ]] || (( ${#COVERAGE} > 3 || COVERAGE > 100 )); then
+    echo "ERROR: --coverage must be an integer percentage from 1 to 100." >&2; exit 2
+fi
 # The week bounds are capped at nine digits, lexically and before any arithmetic: bash wraps silently past 2^63, and a
 # wrapped stride or batch span turns negative and steps the week loops below backwards forever. Nine digits still lets
 # a YYYYMMDD partition name through to the clearer --to-week error further down. No leading zeros either: bash reads
@@ -352,6 +354,7 @@ render_block() {
     #
     # Masked first because every check below needs the executable text: comments are not whitespace, and a block's own
     # prose can contain the token that identifies it.
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         log "ERROR: the '$block' block from $VERIFY_SQL rendered no executable SQL (empty, or comments only)." >&2
@@ -672,8 +675,8 @@ fi
 # run's pace, an aborted run included. Runs on every exit from here on and never changes the exit status.
 DONE_EST_BYTES=0
 report_actuals() {
-    local elapsed=$(( SECONDS - RUN_T0 )) rate
-    local line="Actual vs predicted: $(human_duration "$elapsed") elapsed against an ETA of"
+    local elapsed=$(( SECONDS - RUN_T0 )) rate line
+    line="Actual vs predicted: $(human_duration "$elapsed") elapsed against an ETA of"
     line+=" ~$(human_duration "$EST_SECONDS") for ~$(human_bytes "$EST_BYTES")."
     if (( elapsed > 0 && DONE_EST_BYTES > 0 )); then
         rate=$(( DONE_EST_BYTES / elapsed / 1000000 ))

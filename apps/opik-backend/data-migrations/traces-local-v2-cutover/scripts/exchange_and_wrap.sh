@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Driver for step 3 of the traces cutover: settle gate + EXCHANGE + Distributed wrap (runbook: ../README.md).
 #
@@ -149,7 +150,10 @@ done
 # then reads the unset sample variables as 0 and passes — so an out-of-range value would reach the EXCHANGE without
 # having read replication at all. A numeric `<= SETTLE_TIMEOUT_MAX` test cannot catch that, because the wrapped value is
 # negative and compares as in-range. 0 is accepted, and means a single sample.
-[[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] && (( SETTLE_TIMEOUT <= SETTLE_TIMEOUT_MAX )) || { echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample. An hour of pre-swap polling is already past the point of aborting and resolving the lag." >&2; exit 2; }
+if ! [[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] || (( SETTLE_TIMEOUT > SETTLE_TIMEOUT_MAX )); then
+    echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample. An hour of pre-swap polling is already past the point of aborting and resolving the lag." >&2
+    exit 2
+fi
 
 # One place for the connection and client-side options, so every call site below carries the same host, port,
 # database and the two timeouts. log_comment is NOT here, because clickhouse-client rejects a setting passed twice and
@@ -293,6 +297,7 @@ require_rendered() {
         echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         return 2
     fi
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # POST-SWAP reconciliation driver for the spans cutover (runbook: ../README.md).
 #
@@ -274,7 +275,10 @@ done
 # Digit-capped BEFORE any arithmetic sees it, for the reason exchange_and_wrap.sh's identical check spells out: a leading
 # zero reads as octal, and past 2^63 bash arithmetic wraps silently, which would make the gate's `polls` negative, run
 # its loop zero times, and pass a verdict on unset (0) counters without having read replication at all.
-[[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] && (( SETTLE_TIMEOUT <= SETTLE_TIMEOUT_MAX )) || { echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample." >&2; exit 2; }
+if ! [[ "$SETTLE_TIMEOUT" =~ ^(0|[1-9][0-9]{0,3})$ ]] || (( SETTLE_TIMEOUT > SETTLE_TIMEOUT_MAX )); then
+    echo "ERROR: --settle-timeout must be an integer between 0 and $SETTLE_TIMEOUT_MAX seconds, with no leading zero; 0 takes a single sample." >&2
+    exit 2
+fi
 [[ "$MAX_PASSES" =~ ^[1-9][0-9]?$ ]] || { echo "ERROR: --max-passes must be 1..99." >&2; exit 2; }
 # 0 is meaningful (ClickHouse reads it as "unlimited"). Upper-bounded at 6 digits for the same reason as in backfill.sh:
 # an out-of-range value would otherwise be rendered into the SQL and rejected by the server mid-run instead of here.
@@ -381,8 +385,7 @@ SCOPE_MODE=""          # skip | unbounded | scoped. Set by derive_delete_scope, 
 SCOPE_PARTITIONS=()    # the partition values, ascending, when SCOPE_MODE is `scoped`.
 SCOPE_WINDOW_END=""    # the instant the derivation bounded its bridge read at; rendered into the replay's own match.
 SCOPE_REASON=""        # one line for the operator saying which mode was chosen and why.
-SCOPE_TARGET=""        # the table the replay mutates, kept so verify_delete_scope re-derives against the same one.
-SCOPE_ANCHOR=""        # the event_time floor, kept for the same reason.
+SCOPE_ANCHOR=""        # the event_time floor, kept so verify_delete_scope reports against the same window.
 
 # One `-- >>> BEGIN <name>` .. `-- >>> END <name>` block (exact-line markers) out of a text held in a variable. The
 # same marker grammar extract() parses out of a file; this reads a string because the callers below splice a block
@@ -430,7 +433,7 @@ run_scope_derivation() {
 derive_delete_scope() {
     local target="$1" anchor="$2" row found partition_key expected scope_row bridged underivable partitions p
     SCOPE_MODE="" SCOPE_PARTITIONS=() SCOPE_WINDOW_END="" SCOPE_REASON=""
-    SCOPE_TARGET="$target" SCOPE_ANCHOR="$anchor"
+    SCOPE_ANCHOR="$anchor"
 
     [[ -f "$SCOPE_SQL" ]] || { echo "ERROR: cannot find $SCOPE_SQL" >&2; exit 2; }
 
@@ -1066,6 +1069,7 @@ require_rendered() {
         echo "       so the block would capture to end of file and sweep every later block into it. Refusing to run it." >&2
         exit 2
     fi
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     if [[ -z "${masked//[[:space:]]/}" ]]; then
         echo "ERROR: the '$what' block from $file rendered no executable SQL (empty, or comments only)." >&2
@@ -1138,6 +1142,7 @@ run_block() {
         # Both reports still run. A pass that emitted NO statement covers a late-visible or late-bridged delete no
         # better than one that named the wrong partitions, and this is the branch where that is easiest to miss:
         # without them this returns silently and RECONCILED prints underneath it.
+        # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
         if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
             verify_delete_scope
             report_late_bridged_deletes
@@ -1200,6 +1205,7 @@ run_reverse_deletion_replay() {
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
     sql="$(expand_scope "$sql" reverse-replay)" || exit 2
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     if [[ -z "$(sed 's/--.*$//' <<<"$sql" | tr -d '[:space:]')" ]]; then
         verify_delete_scope
         return 0
@@ -1360,6 +1366,7 @@ require_postcondition_projection() {
     local sql="$1" block="$2" aliases masked
     # Comments stripped first, exactly as require_rendered does: a `--` line mentioning one of these aliases is
     # documentation, not projection, and counting it would refuse a valid block for describing itself.
+    # shellcheck disable=SC2001  # strips -- comments per line of multi-line SQL; ${var//} cannot anchor to each line
     masked="$(sed 's/--.*$//' <<<"$sql")"
     aliases="$(grep -oE 'AS (missing_keys|stale_keys|payload_mismatch_keys|newer_keys)' <<<"$masked" \
         | sed 's/^AS //' | paste -sd, -)"

@@ -15,7 +15,7 @@
 # Run from the repo root:  scripts/test_opik_startup_timings.sh
 set -uo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)" || exit 1
 fails=0
 check() { # check <name> <expected-substring> <actual>
 	if printf '%s' "$3" | grep -qF -- "$2"; then
@@ -179,7 +179,7 @@ check "the warning still names the variable" "Ignoring OPIK_MAX_STARTUP_RETRIES"
 # Assert the shipped DEFAULT, with no override in play — otherwise every test here pins its
 # own budget and a change to the default itself would go unnoticed.
 export HEALTH_PLAN="be:starting"
-out=$(OPIK_MAX_STARTUP_RETRIES= run_start_default be)
+out=$(OPIK_MAX_STARTUP_RETRIES='' run_start_default be)
 check "default budget is 90 retries" "still not healthy after 90s" "$out"
 
 echo "per-container attribution (the regression the table exists to catch):"

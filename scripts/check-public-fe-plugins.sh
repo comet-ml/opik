@@ -16,6 +16,7 @@ violations="$(git diff --cached --name-only --diff-filter=AM \
 
 if [ -n "${violations}" ]; then
   echo "ERROR: refusing to commit non-public plugin files to the public repo:"
+  # shellcheck disable=SC2001  # prefixes every line of a multi-line list; ${var//} cannot anchor to each line
   echo "${violations}" | sed 's/^/  - /'
   echo
   echo "Private plugins are symlinked in and must not be committed here."

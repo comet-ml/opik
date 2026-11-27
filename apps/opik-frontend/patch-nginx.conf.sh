@@ -16,6 +16,7 @@ export NGINX_EXTRA_ERROR_LOG="${NGINX_EXTRA_ERROR_LOG:-}"
 export NGINX_ACCESS_LOG_FORMAT="${NGINX_ACCESS_LOG_FORMAT:-main}"
 export NGINX_ERROR_LOG_LEVEL="${NGINX_ERROR_LOG_LEVEL:-error}"
 
+# shellcheck disable=SC2016  # literal $NAME list for envsubst's SHELL-FORMAT argument, not an expansion
 VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT $OTEL_TRACES_EXPORTER $OTEL_EXPORTER_OTLP_TRACES_ENDPOINT $NGINX_EXTRA_ACCESS_LOG $NGINX_EXTRA_ERROR_LOG $NGINX_ACCESS_LOG_FORMAT $NGINX_ERROR_LOG_LEVEL'
     
 # Note: .template files in conf.d/ are handled by /docker-entrypoint.d/20-envsubst-on-templates.sh

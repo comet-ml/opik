@@ -10,7 +10,7 @@
 # Requires: helm, python3. Run from the chart directory or anywhere.
 set -eu
 
-CHART_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+CHART_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -113,7 +113,10 @@ chmod +x "$WORK/bin/kubectl"
 run_bounce() { # $1=MOCK_MODE  $2=seconds of budget  [$3=bounce, default true]
   CALL_LOG="$WORK/calls"; export CALL_LOG
   : > "$CALL_LOG"
+  # bounce, remaining, nap and die are read by the extracted $WORK/bounce.sh sourced below.
+  # shellcheck disable=SC2034,SC2329
   (
+    # shellcheck disable=SC2030  # PATH override is scoped to this subshell on purpose
     PATH="$WORK/bin:$PATH"
     export PATH
     bounce="${3:-true}"
@@ -125,6 +128,7 @@ run_bounce() { # $1=MOCK_MODE  $2=seconds of budget  [$3=bounce, default true]
     remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
     nap() { n="$1"; r="$(remaining)"; [ "$r" -lt "$n" ] && n="$r"; [ "$n" -gt 0 ] && sleep "$n"; return 0; }
     die() { echo "ERROR: $*" >&2; exit 1; }
+    # shellcheck source=/dev/null  # generated at runtime from the rendered chart
     . "$WORK/bounce.sh"
     echo "REACHED_READINESS_WAIT"
   ) >"$WORK/out" 2>"$WORK/err"
@@ -135,9 +139,11 @@ echo "cold-tier migration script"
 # A Deployment that genuinely does not exist: warn and fall through to the readiness
 # wait, which covers the passive self-heal.
 if run_bounce absent 5; then
-  grep -q "not found" "$WORK/err" && grep -q REACHED_READINESS_WAIT "$WORK/out" \
-    && pass "confirmed absence warns and continues to the readiness wait" \
-    || fail "confirmed absence warns and continues to the readiness wait" "no warning on stderr"
+  if grep -q "not found" "$WORK/err" && grep -q REACHED_READINESS_WAIT "$WORK/out"; then
+    pass "confirmed absence warns and continues to the readiness wait"
+  else
+    fail "confirmed absence warns and continues to the readiness wait" "no warning on stderr"
+  fi
 else
   fail "confirmed absence warns and continues to the readiness wait" "exited non-zero"
 fi
@@ -147,9 +153,11 @@ fi
 if run_bounce forbidden 2; then
   fail "Forbidden probe fails the hook" "exited 0"
 else
-  grep -q "could not determine whether" "$WORK/err" \
-    && pass "Forbidden probe retries then fails the hook" \
-    || fail "Forbidden probe retries then fails the hook" "wrong diagnostic"
+  if grep -q "could not determine whether" "$WORK/err"; then
+    pass "Forbidden probe retries then fails the hook"
+  else
+    fail "Forbidden probe retries then fails the hook" "wrong diagnostic"
+  fi
 fi
 
 # Same for a connection error.
@@ -173,16 +181,20 @@ fi
 if run_bounce refused 5; then
   fail "refused restart fails the hook" "exited 0"
 else
-  grep -q "restart was refused" "$WORK/err" \
-    && pass "refused restart fails the hook" \
-    || fail "refused restart fails the hook" "wrong diagnostic"
+  if grep -q "restart was refused" "$WORK/err"; then
+    pass "refused restart fails the hook"
+  else
+    fail "refused restart fails the hook" "wrong diagnostic"
+  fi
 fi
 
 # Healthy path: probe succeeds, restart succeeds, control reaches the readiness wait.
 if run_bounce ok 5; then
-  grep -q "restarting operator" "$WORK/err" || grep -q "restarting operator" "$WORK/out" \
-    && pass "healthy path restarts the operator and continues" \
-    || fail "healthy path restarts the operator and continues" "no restart message"
+  if grep -q "restarting operator" "$WORK/err" || grep -q "restarting operator" "$WORK/out"; then
+    pass "healthy path restarts the operator and continues"
+  else
+    fail "healthy path restarts the operator and continues" "no restart message"
+  fi
 else
   fail "healthy path restarts the operator and continues" "exited non-zero"
 fi
@@ -196,9 +208,11 @@ elapsed=$( (
   nap() { n="$1"; r="$(remaining)"; [ "$r" -lt "$n" ] && n="$r"; [ "$n" -gt 0 ] && sleep "$n"; return 0; }
   s=$(date +%s); nap 10; e=$(date +%s); echo $(( e - s ))
 ) )
-[ "$elapsed" -le 3 ] \
-  && pass "nap() caps the sleep at the remaining budget (${elapsed}s, not 10s)" \
-  || fail "nap() caps the sleep at the remaining budget" "slept ${elapsed}s"
+if [ "$elapsed" -le 3 ]; then
+  pass "nap() caps the sleep at the remaining budget (${elapsed}s, not 10s)"
+else
+  fail "nap() caps the sleep at the remaining budget" "slept ${elapsed}s"
+fi
 
 # Every retry site must use nap(); a bare `sleep` can overshoot the deadline.
 if grep -qE '^\s+sleep [0-9]+' "$WORK/script.sh"; then
@@ -219,9 +233,11 @@ fi
 # The healthy path must probe first, then restart exactly once, in that order.
 run_bounce ok 5 || true
 seq=$(cut -d' ' -f1 "$WORK/calls" | tr '\n' ',')
-[ "$seq" = "get,rollout," ] \
-  && pass "healthy path calls get then rollout, once each" \
-  || fail "healthy path calls get then rollout, once each" "call sequence was '$seq'"
+if [ "$seq" = "get,rollout," ]; then
+  pass "healthy path calls get then rollout, once each"
+else
+  fail "healthy path calls get then rollout, once each" "call sequence was '$seq'"
+fi
 
 # StatefulSets that already carry the cache volume need no bounce: touch nothing.
 if run_bounce ok 5 false && [ ! -s "$WORK/calls" ]; then
@@ -234,12 +250,14 @@ fi
 # future change that drops --ignore-not-found or targets the wrong object fails
 # here instead of passing silently.
 CALL_LOG="$WORK/probe-guard"; export CALL_LOG; : > "$CALL_LOG"
+# shellcheck disable=SC2031  # the outer PATH is the one wanted; run_bounce changes only its subshell copy
 if PATH="$WORK/bin:$PATH" MOCK_MODE=ok kubectl get deployment/wrong-name -n default -o name --ignore-not-found >/dev/null 2>&1; then
   fail "mock rejects a probe against the wrong Deployment" "call was accepted"
 else
   pass "mock rejects a probe against the wrong Deployment"
 fi
 CALL_LOG="$WORK/probe-guard2"; export CALL_LOG; : > "$CALL_LOG"
+# shellcheck disable=SC2031  # the outer PATH is the one wanted; run_bounce changes only its subshell copy
 if PATH="$WORK/bin:$PATH" MOCK_MODE=ok kubectl get deployment/opik-altinity-clickhouse-operator -n default -o name >/dev/null 2>&1; then
   fail "mock rejects a probe without --ignore-not-found" "call was accepted"
 else

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Driver for rolling the traces cutover back (runbook: ../README.md).
 #
@@ -815,7 +816,7 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     fi
 
     if ! sentinel_after="$(sentinel_counts)"; then sentinel_after=""; fi
-    read -r after_end_time after_ttft after_negative after_stale <<< "$sentinel_after"
+    read -r after_end_time after_ttft _ after_stale <<< "$sentinel_after"
     if ! [[ "$after_end_time" =~ ^[0-9]+$ && "$after_ttft" =~ ^[0-9]+$ && "$after_stale" =~ ^[0-9]+$ ]]; then
         echo "WARNING: sentinel postcondition COULD NOT BE EVALUATED — the counts came back unreadable. The mutation" >&2
         echo "         reported success, but treat the repair as unverified: re-run this mode to re-read the counts." >&2

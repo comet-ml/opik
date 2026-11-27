@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # '${NAME}' is a literal SQL-template placeholder this script substitutes, not a shell expansion
 #
 # Driver for step 2 of the traces cutover: delta-insert + deletion replay (runbook: ../README.md).
 #
