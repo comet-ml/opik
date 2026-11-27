@@ -412,18 +412,18 @@ class TopicsRunsIntegrationTest {
     }
 
     @Test
-    @DisplayName("a run whose CPU steps wait behind busy CPU threads for twice topics.runs.abandonGrace keeps its "
-            + "heartbeat: the plans meanwhile do not record it abandoned, and it saves once the threads are free")
-    void heartbeatWhileTheCpuThreadsAreBusy(@Jit TopicsRunSchedulers schedulers) throws InterruptedException {
+    @DisplayName("a run whose CPU steps wait behind busy parallel() threads for twice topics.runs.abandonGrace keeps "
+            + "its heartbeat: the plans meanwhile do not record it abandoned, and it saves once the threads are free")
+    void heartbeatWhileTheCpuThreadsAreBusy() throws InterruptedException {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         var abandonGrace = opikConfig.getTopics().getRuns().getAbandonGrace().toJavaDuration();
         var release = new CountDownLatch(1);
-        // One task per CPU thread: the scheduler hands its tasks to its threads in turn.
+        // One task per parallel() thread: the scheduler hands its tasks to its threads in turn.
         var held = new CountDownLatch(Schedulers.DEFAULT_POOL_SIZE);
         for (int i = 0; i < Schedulers.DEFAULT_POOL_SIZE; i++) {
-            schedulers.cpu().schedule(() -> {
+            Schedulers.parallel().schedule(() -> {
                 held.countDown();
                 try {
                     release.await();
@@ -793,7 +793,7 @@ class TopicsRunsIntegrationTest {
     @DisplayName("a pod that stops mid-run puts the run back to queued, with its run id, and counts no failure; it "
             + "publishes the run again, so another pod runs it without waiting for republishAfter")
     void stopMidRunRequeues(RedissonReactiveClient redisson, @Jit TopicsRunService runService,
-            @Jit TopicWindowLabelService labelService, @Jit TopicsRunSchedulers schedulers) {
+            @Jit TopicWindowLabelService labelService) {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
@@ -806,10 +806,8 @@ class TopicsRunsIntegrationTest {
         var config = spy(opikConfig.getTopics());
         doReturn(runs).when(config).getRuns();
         var publisher = new TopicsRunPublisher(redisson, config);
-        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher,
-                schedulers);
-        var other = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher,
-                schedulers);
+        var pod = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
+        var other = new TopicsRunSubscriber(config, redisson, store, runService, labelService, planner, publisher);
         pod.start();
         try {
             var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
