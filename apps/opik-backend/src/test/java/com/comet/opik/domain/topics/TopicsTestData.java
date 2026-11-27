@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -427,6 +428,25 @@ final class TopicsTestData {
                         .execute()))
                 .flatMap(result -> result.map((row, metadata) -> List.of(row.get("settings", String[].class))))
                 .collectList())
+                .block();
+    }
+
+    /** How many {@code queryName} queries of the workspaces finished, from {@code system.query_log}. */
+    long finishedQueries(String queryName, Collection<String> workspaceIds) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS cnt
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query
+                        AND startsWith(log_comment, concat(:query_name, ':'))
+                        AND has(:workspace_ids, splitByChar(':', log_comment)[3])
+                        """)
+                        .bind("query_name", queryName)
+                        .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
                 .block();
     }
 

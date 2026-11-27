@@ -54,7 +54,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -246,6 +248,32 @@ class TopicsRunsIntegrationTest {
                 assertThat(project.listRunId()).isNotNull();
             }
         });
+    }
+
+    @Test
+    @DisplayName("the discovery phase counts a workspace only when its turn comes: with five workspaces of two "
+            + "projects and two free slots, a plan counts two of them and queues one run in each")
+    void discoveryCountsLazily() {
+        var workspaces = IntStream.range(0, 5).mapToObj(i -> enabledWorkspace()).toList();
+        var projects = new HashMap<UUID, String>();
+        for (var workspaceId : workspaces) {
+            for (int i = 0; i < 2; i++) {
+                var projectId = UUID.randomUUID();
+                data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+                projects.put(projectId, workspaceId);
+            }
+        }
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(2);
+
+        assertThat(data.finishedQueries("topics:count_window", workspaces)).isEqualTo(2);
+        assertThat(projects.entrySet().stream()
+                .filter(project -> {
+                    var row = data.topicProject(project.getKey());
+                    return row != null && row.runId() != null;
+                })
+                .map(Map.Entry::getValue)
+                .toList()).hasSize(2).doesNotHaveDuplicates();
     }
 
     @Test
