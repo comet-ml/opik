@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
  * Guardrail checks on opik-inference: the thresholds that turn the decision model's probabilities into verdicts.
  * Server-side only: the validations endpoint rejects a threshold sent by the caller. The defaults come from the
  * evaluation of 2026-10-21 (design OPIK-8803, section 04). The service's URL and credential are the shared
- * {@code aiLabels.inference} settings.
+ * {@code inference} settings.
  */
 @Data
 @NoArgsConstructor

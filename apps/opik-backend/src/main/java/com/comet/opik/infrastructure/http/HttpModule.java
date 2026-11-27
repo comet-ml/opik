@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.http;
 
+import com.comet.opik.infrastructure.InferenceConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Provides;
@@ -25,8 +26,10 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
      */
     @Provides
     @Singleton
-    public Client client(@Config("jerseyClient") JerseyClientConfiguration config) {
-        return buildClient(new DestinationGuardJerseyClientBuilder(environment()), config);
+    public Client client(@Config("jerseyClient") JerseyClientConfiguration config,
+            @Config("inference") InferenceConfig inference) {
+        return buildClient(new DestinationGuardJerseyClientBuilder(environment(),
+                pool -> HttpClientPoolMetrics.publish(pool, inference.getUrl())), config);
     }
 
     /**

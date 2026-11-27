@@ -133,6 +133,24 @@ databaseAnalytics:
   #   turn true only for the Distributed (Hyperscale) topology.
   clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
   #  Default: false
+  #  Description: How span and trace input/output are written to ClickHouse. true writes each payload and its slim copy
+  #   from the parsed JSON without reparsing it, embeds them in JSONEachRow rows as raw JSON, and writes bulk insert rows
+  #   straight into the request body while it is sent, so the batch is never buffered (each insert then holds its
+  #   pooled connection while its rows are serialized). false is the string path: payloads serialized to strings, slim
+  #   copies reparsed from them, and bulk insert bodies buffered before the connection is taken.
+  #   Turn it on together with a larger clientMaxOpenConnections (20 was tested), sized to ClickHouse's headroom: at
+  #   the default 10, large batches can wait past the pool's lease timeout. Watch opik.clickhouse.client.pool.pending
+  #   to see inserts waiting for a connection; turning it off again restores the string path.
+  streamPayloads: ${ANALYTICS_DB_STREAM_PAYLOADS:-false}
+  #  Default: 10
+  #  Description: Size of the ClickHouse v2 client's connection pool per backend instance. Every JSONEachRow bulk insert
+  #   and v2 query holds one connection for its whole request, including ClickHouse's async-insert wait, so this caps how
+  #   many run at once; a request that cannot get one within 10s is retried by the client. Every backend instance opens
+  #   up to this many, so ClickHouse sees instances x this: keep that within its max_concurrent_queries headroom, and
+  #   raise it only while opik.clickhouse.client.pool.pending stays above zero and ClickHouse insert and read latency
+  #   have room. max_open_connections in queryParameters does not apply here: it only reaches the R2DBC driver.
+  clientMaxOpenConnections: ${ANALYTICS_DB_CLIENT_MAX_OPEN_CONNECTIONS:-10}
+  #  Default: false
   #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
   #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);
   #   turn true only once the S3 disk is activated.
@@ -217,7 +235,9 @@ databaseAnalyticsDataModel:
   #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
   #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
   #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
-  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  #   backfill has planned its chunks and done them all, as spans it has not indexed yet would be skipped. In the spans
+  #   cutover, turn true only after its EXCHANGE, and back to false with a rollback that restores the legacy table: in
+  #   both windows spans is the legacy table while spanColumnsNonNullable is true.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
@@ -310,6 +330,10 @@ customCharts:
   #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
   #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
   enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
+  #  Default: false (public endpoints off)
+  #  Description: Exposes the public Custom Charts endpoints (POST /v1/private/analytics-queries) to API keys and the
+  #   Opik MCP server. Off, they answer 501. Requires enabled above.
+  publicEndpointsEnabled: ${TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -319,10 +343,9 @@ customCharts:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: "${FREE_FORM_SQL_POST_RUN_CHECK_MODE:-audit}"
   #  Default: 10s
@@ -553,6 +576,24 @@ authentication:
   # Default: 1s
   # Description: Upper bound on the exponential backoff between auth request attempts.
   requestRetryMaxBackoff: ${AUTH_REQUEST_RETRY_MAX_BACKOFF:-1s}
+  # Default: 10m
+  # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
+  #   Used for organization settings such as custom model prices. After this time, requests still get the old
+  #   answer at once while Comet is asked again in the background, so a workspace moved to another organization
+  #   picks up the new one shortly after this time. Between 1m and 60m.
+  organizationCacheTTL: ${AUTH_ORGANIZATION_CACHE_TTL:-10m}
+  # Default: 60m
+  # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
+  #   for background jobs that carry no organization of their own. Comet brownouts last minutes, so an hour covers
+  #   them with room to spare. At least organizationCacheTTL, and between 1m and 60m.
+  organizationCacheStaleTTL: ${AUTH_ORGANIZATION_CACHE_STALE_TTL:-60m}
+  # Default: 30s
+  # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
+  #   When Comet itself fails (a 5xx, or no answer in time), a workspace with no known organization gets none for
+  #   this time, without asking Comet. Each attempt already retries per requestMaxRetries with backoff, so this is
+  #   the pause between those rounds: shorter notices recovery sooner but sends more calls to a failing Comet.
+  #   Between 1s and 5m; a value above organizationCacheStaleTTL is capped at it.
+  organizationCacheRetryAfterFailure: ${AUTH_ORGANIZATION_CACHE_RETRY_AFTER_FAILURE:-30s}
 
 # Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)
 sharedHttpClientHealthCheck:
@@ -864,6 +905,21 @@ rateLimit:
       userFacingBucketName: dashboard_widget_queries
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
+    analyticsQueries:
+      # Default: 120
+      # Description: how many queries the public analytics-queries endpoint (API keys and the Opik MCP server) allows
+      #   per workspace in the specified time bucket. Separate from dashboardWidgetQueries, so programmatic callers
+      #   cannot use up the budget of dashboard and insights view viewers.
+      limit: ${RATE_LIMIT_ANALYTICS_QUERIES_PER_WORKSPACE_LIMIT:-120}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_ANALYTICS_QUERIES_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Analytics-Queries
+      # Description: User facing bucket name
+      userFacingBucketName: analytics_queries
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for analytics queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
@@ -914,6 +970,20 @@ rateLimit:
       headerName: Get-Traces
       # Description: User facing bucket name
       userFacingBucketName: get_traces
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    getProjectTopics:
+      # Default: 60
+      # Description: how many getProjectTopics requests are allowed per workspace in the specified time bucket; each
+      # ready request not in the cache runs one ClickHouse query over the window of the project's trace topics
+      limit: ${RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT:-60}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Project-Topics
+      # Description: User facing bucket name
+      userFacingBucketName: get_project_topics
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     searchTraces:
@@ -1588,6 +1658,10 @@ partitionMetrics:
   interval: ${PARTITION_METRICS_INTERVAL:-5m}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
+  # Tiered-storage gauges from system.query_log / system.part_log (fans out to every replica).
+  tieredStorageEnabled: ${PARTITION_METRICS_TIERED_STORAGE_ENABLED:-false}
+  # How far behind now the tiered-storage window ends, to wait for the system log flush (default 15s). Min 1s, max 5m.
+  tieredStorageLogFlushLag: ${PARTITION_METRICS_TIERED_STORAGE_LOG_FLUSH_LAG:-15s}
 
 # LLM providers client configuration
 # Configuration for dynamic token auth on custom LLM providers (auth_config recipes)
@@ -1620,6 +1694,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: ${LLM_PROVIDER_CLIENT_MAX_ATTEMPTS:-3}
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: ${LLM_PROVIDER_CLIENT_JUDGE_MAX_RETRIES:-0}
   # Default: 500
   # Description: Number of milliseconds to wait between retry attempts
   delayMillis: ${LLM_PROVIDER_CLIENT_DELAY_MILLIS:-500}
@@ -1797,6 +1875,22 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
+    # Default: PT10M
+    # Description: Cache TTL for workspace names read from the React service. A renamed workspace keeps its old name
+    # for up to this long.
+    workspace_name_by_id: ${CACHE_MANAGER_WORKSPACE_NAME_BY_ID_DURATION:-PT10M}
+    # Default: PT10M
+    # Description: How long a failed workspace name lookup is remembered: the id stands in for the name, and the React
+    # service isn't asked again for that workspace until it expires.
+    workspace_name_lookup_failures: ${CACHE_MANAGER_WORKSPACE_NAME_LOOKUP_FAILURES_DURATION:-PT10M}
+    # Default: PT5M
+    # Description: Cache TTL for the topics read API's counts per topic and day of a ready project. A saved run starts
+    # a new entry, so the TTL is how old the counts of traces labelled since can be
+    topics_day_counts: ${CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION:-PT5M}
+    # Default: PT1M
+    # Description: Cache TTL for the topics read API's vector count of a collecting project. Only the vectors tick
+    # writes vectors, once a topics.vectors.tickInterval, so keep it at that interval
+    topics_vector_counts: ${CACHE_MANAGER_TOPICS_VECTOR_COUNTS_DURATION:-PT1M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1929,6 +2023,10 @@ jerseyClient:
   # Default: 5m
   # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
   timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 30s
+  # Description: How long an idle connection is kept for reuse, so a call doesn't pay a new TCP and TLS handshake.
+  # Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+  keepAlive: ${JERSEY_CLIENT_KEEP_ALIVE:-30s}
   # Default: 256
   # Description: The maximum number of concurrent open connections.
   maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
@@ -1965,6 +2063,9 @@ serviceToggles:
   # Description: Whether or not the backend runs guardrails itself: the checks on opik-inference (POST /v1/private/guardrails/validations) and the guardrail policies API
   guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
   # Default: false
+  # Description: Whether or not workspaces can train their own guardrail models: the guardrail models API
+  guardrailsTrainingEnabled: ${TOGGLE_GUARDRAILS_TRAINING_ENABLED:-"false"}
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false
@@ -1997,6 +2098,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not organization admins can set custom model prices through /v1/private/model-prices
+  modelPricesEnabled: ${TOGGLE_MODEL_PRICES_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
@@ -2510,6 +2614,89 @@ redaction:
   # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
 
+# opik-inference: the client that ai-labels, guardrail checks and Topics call it with. Each variable that existed
+# before under the AI_LABELS_INFERENCE_* name still falls back to it, so deployments that set the old name keep working.
+inference:
+  #  Description: opik-inference base URL. Required when ai-labels, guardrail checks or Topics are on. Whenever set: https,
+  #  or http only to localhost or a loopback address; the backend refuses to start with any other URL
+  url: ${OPIK_INFERENCE_URL:-${AI_LABELS_INFERENCE_URL:-}}
+  #  Description: opik-inference deployment credential, from a secret. Required with url. Never logged.
+  credential: ${OPIK_INFERENCE_CREDENTIAL:-${AI_LABELS_INFERENCE_CREDENTIAL:-}}
+  #  Default: 5s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline
+  connectTimeout: ${OPIK_INFERENCE_CONNECT_TIMEOUT:-${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}}
+  #  Default: 30s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline. Also the time an ai-labels
+  #  tick's sends get past aiLabels.tickBudget, so it lengthens the leader lease
+  readTimeout: ${OPIK_INFERENCE_READ_TIMEOUT:-${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}}
+  #  Default: 48
+  #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance, each on a thread
+  #  of its own. A call over it retries after a short backoff, then fails. Decide calls share the jerseyClient connection
+  #  pool with the other calls to opik-inference, so when guardrail validations are on, this plus
+  #  aiLabels.loadConcurrency (when ai-labels is on), topics.vectors.embedConcurrency and maxConcurrentGenerates (when
+  #  Topics is on) must be below jerseyClient.maxConnectionsPerRoute
+  maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
+  #  Default: 4
+  #  Description: Most synchronous generate calls (Topics runs) in flight from one backend instance, each on a thread
+  #  of its own while the model answers. They share the jerseyClient connection pool with the other calls to
+  #  opik-inference (see maxConcurrentDecides)
+  maxConcurrentGenerates: ${OPIK_INFERENCE_MAX_CONCURRENT_GENERATES:-4}
+  #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+  #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+  #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+  #  flight can hold this much heap
+  maxResponseBytes: ${OPIK_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
+  # What the service accepts in one call. The defaults are the opik-inference contract's limits; set them to match a
+  # service configured otherwise, since a call over its limit is rejected
+  limits:
+    #  Default: 256
+    #  Description: Inputs in one /v1/embed call. topics.vectors.embedBatchSize must not be above it
+    maxEmbedInputs: ${OPIK_INFERENCE_MAX_EMBED_INPUTS:-256}
+    #  Default: 60s
+    #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
+    #  topics.vectors.embedTimeout must not be above it
+    maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 5s
+    #  Description: The most deadline_ms a realtime-lane decide call sends (the service's
+    #  decide_realtime_max_deadline_ms). inference.realtime.decideDeadline must not be above it
+    maxDecideRealtimeDeadline: ${OPIK_INFERENCE_MAX_DECIDE_REALTIME_DEADLINE:-5s}
+    #  Default: 60s
+    #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
+    maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
+    #  Default: 300s
+    #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
+    #  topics.run.llmDeadline, namingDeadline and verifyDeadline must not be above it
+    maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
+    #  Default: 10000
+    #  Description: Items in one batch submit
+    maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
+    #  Default: 1000
+    #  Description: Job ids in one batch status call
+    maxStatusJobIds: ${OPIK_INFERENCE_MAX_STATUS_JOB_IDS:-1000}
+  retry:
+    #  Default: 2
+    #  Description: Retries after the first attempt, for a retryable failure. A submit or embed answered with
+    #  quota_exceeded is never retried
+    maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
+    #  Default: 100ms
+    #  Description: The wait before the first retry, doubled for each one after and jittered by up to half either way,
+    #  unless the service sends Retry-After
+    baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
+    #  Default: 1048576 (1 MiB)
+    #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
+    #  per this many bytes sent
+    submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+  # The synchronous calls a request waits on
+  realtime:
+    #  Default: 5s
+    #  Description: The deadline a guardrail check's decide call sends, the time the service may spend on it. At most
+    #  inference.limits.maxDecideRealtimeDeadline
+    decideDeadline: ${OPIK_INFERENCE_REALTIME_DECIDE_DEADLINE:-5s}
+    #  Default: 1s
+    #  Description: Room past decideDeadline for the answer to arrive, or for a quick retry of an overloaded call. A
+    #  check not answered by then fails closed. At most 5s, so a request never waits on a check much past 10s
+    decideMargin: ${OPIK_INFERENCE_REALTIME_DECIDE_MARGIN:-1s}
+
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
 # Requires databaseAnalyticsDataModel.traceColumnsNonNullable (the cut-over traces table).
@@ -2520,30 +2707,6 @@ aiLabels:
   #  Default: unset (the tasks bundled under ai-labels/tasks/)
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
-  inference:
-    #  Description: opik-inference base URL. Required when enabled.
-    url: ${AI_LABELS_INFERENCE_URL:-}
-    #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
-    credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
-    #  Default: 5s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline
-    connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
-    #  Default: 30s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
-    #  sends get past tickBudget, so it lengthens the leader lease
-    readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
-    #  Default: 256
-    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
-    #  retries after a short backoff, then fails
-    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
-    #  Default: 30s
-    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
-    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
-    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
-    #  Default: 5m
-    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
-    #  upstream instances after a rollout
-    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
@@ -2648,7 +2811,463 @@ aiLabels:
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
 
-# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
+# trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
+# Calls opik-inference's /v1/embed through the inference block. The k-means topic algorithm's tunables are under
+# algorithm; its LLM call is the author task in topics/tasks/author.yaml.
+topics:
+  algorithm:
+    #  Default: 30
+    #  Description: Fewest k-means groups a discovery run makes (never more than its unique texts)
+    minGroups: ${TOPICS_ALGORITHM_MIN_GROUPS:-30}
+    #  Default: 50
+    #  Description: Most k-means groups a discovery run makes; the author prompt lists every group. At least minGroups
+    maxGroups: ${TOPICS_ALGORITHM_MAX_GROUPS:-50}
+    #  Default: 30
+    #  Description: Unique texts per group: k = unique texts / textsPerGroup, within minGroups and maxGroups
+    textsPerGroup: ${TOPICS_ALGORITHM_TEXTS_PER_GROUP:-30}
+    #  Default: 150
+    #  Description: Lloyd iterations one k-means restart may take; a fit that reaches it stops there
+    kmeansMaxIterations: ${TOPICS_ALGORITHM_KMEANS_MAX_ITERATIONS:-150}
+    #  Default: 3
+    #  Description: k-means++ starts; the one with the lowest weighted inertia is kept. Fit time grows with it
+    kmeansRestarts: ${TOPICS_ALGORITHM_KMEANS_RESTARTS:-3}
+    #  Default: 5
+    #  Description: Most repeated texts the author sees per group before the ones nearest the group's centre
+    authorFrequent: ${TOPICS_ALGORITHM_AUTHOR_FREQUENT:-5}
+    #  Default: 250
+    #  Description: Example texts in the author prompt over all groups: per group round(authorBudget / k), within
+    #  authorMinExamples and authorMaxExamples. Keeps the prompt about as long as the longest one known to work
+    authorBudget: ${TOPICS_ALGORITHM_AUTHOR_BUDGET:-250}
+    #  Default: 5
+    #  Description: Fewest example texts per group in the author prompt
+    authorMinExamples: ${TOPICS_ALGORITHM_AUTHOR_MIN_EXAMPLES:-5}
+    #  Default: 10
+    #  Description: Most example texts per group in the author prompt. At least authorMinExamples
+    authorMaxExamples: ${TOPICS_ALGORITHM_AUTHOR_MAX_EXAMPLES:-10}
+    #  Default: 0.75
+    #  Description: A trace takes its nearest prototype's topic when their cosine is at least this, else it is Other.
+    #  Higher labels fewer traces with more precision. Depends on the embedding model's cosine spread
+    assignMinCosine: ${TOPICS_ALGORITHM_ASSIGN_MIN_COSINE:-0.75}
+    #  Default: 0.95
+    #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
+    #  topic's traces into Other. Depends on the embedding model's cosine spread
+    otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 10
+    #  Description: Most topics in a project's list. At most 100
+    maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}
+    #  Default: 1000
+    #  Description: A discovery run over fewer traces is marked provisional in its stats
+    provisionalBelow: ${TOPICS_ALGORITHM_PROVISIONAL_BELOW:-1000}
+    #  Default: 20
+    #  Description: Nightly: the traces no topic took are grouped only when at least this many; a group of at least
+    #  this many traces is a candidate for a new topic
+    nightlyMinCandidate: ${TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE:-20}
+    #  Default: 2
+    #  Description: Fewest k-means groups the nightly grouping makes (never more than its unique texts)
+    nightlyMinGroups: ${TOPICS_ALGORITHM_NIGHTLY_MIN_GROUPS:-2}
+    #  Default: 20
+    #  Description: Most k-means groups the nightly grouping makes. At least nightlyMinGroups
+    nightlyMaxGroups: ${TOPICS_ALGORITHM_NIGHTLY_MAX_GROUPS:-20}
+    #  Default: 40
+    #  Description: Nightly: k = unique texts of the traces no topic took / nightlyTextsPerGroup, within
+    #  nightlyMinGroups and nightlyMaxGroups (the discovery run's rule, with its own numbers)
+    nightlyTextsPerGroup: ${TOPICS_ALGORITHM_NIGHTLY_TEXTS_PER_GROUP:-40}
+    #  Default: 3
+    #  Description: Most repeated texts a nightly group shows before the ones nearest its centre
+    nightlyFrequent: ${TOPICS_ALGORITHM_NIGHTLY_FREQUENT:-3}
+    #  Default: 5
+    #  Description: Example texts a nightly group shows. At least nightlyFrequent
+    nightlyExamples: ${TOPICS_ALGORITHM_NIGHTLY_EXAMPLES:-5}
+    #  Default: 7
+    #  Description: A group's recent share counts the traces of the last recentDays days (24 hours each) before the night
+    recentDays: ${TOPICS_ALGORITHM_RECENT_DAYS:-7}
+    #  Default: 0.005
+    #  Description: A topic whose share of the window is below this on a night has a low night
+    retireShare: ${TOPICS_ALGORITHM_RETIRE_SHARE:-0.005}
+    #  Default: 3
+    #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
+    retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
+    #  Default: 0.80
+    #  Description: Nightly: a candidate group whose tightness is below this is known Other without a naming call
+    nightlyMinTightness: ${TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS:-0.80}
+    #  Default: 0.02
+    #  Description: Nightly: a candidate whose share of the window is at least this is big, and a new topic needs its
+    #  groups' share to be at least this
+    nightlyBigShare: ${TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE:-0.02}
+    #  Default: 0.95
+    #  Description: Nightly: a known-Other prototype within this cosine of one already kept is not kept again
+    nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
+    #  Default: 25
+    #  Description: Nightly: the verify call's tokens per pair it checks, on top of the max_tokens of
+    #  topics/tasks/verify.yaml. That max_tokens + this x nightlyMaxGroups must be at most 4096, the inference
+    #  service's limit: checked at startup
+    nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
+    #  Default: 4
+    #  Description: Nightly: member texts a live topic shows in the naming prompt
+    nightlyTopicExamples: ${TOPICS_ALGORITHM_NIGHTLY_TOPIC_EXAMPLES:-4}
+    #  Default: 3
+    #  Description: Nightly: how many of a live topic's nightlyTopicExamples texts the verify prompt shows per pair
+    verifyTopicExamples: ${TOPICS_ALGORITHM_VERIFY_TOPIC_EXAMPLES:-3}
+    #  Default: 5
+    #  Description: Nightly: how many of a group's nightlyExamples texts the verify prompt shows per pair
+    verifyGroupExamples: ${TOPICS_ALGORITHM_VERIFY_GROUP_EXAMPLES:-5}
+  #  A topic run's settings: a discovery run, a nightly update and their labelling pass
+  run:
+    #  Default: 15m
+    #  Description: One project's run is stopped and failed with timeout after this. At most 2h
+    projectTimeout: ${TOPICS_RUN_PROJECT_TIMEOUT:-15m}
+    #  Default: 100
+    #  Description: A project gets a discovery run when its window holds at least this many traces with a vector. At most 100000
+    minVectors: ${TOPICS_RUN_MIN_VECTORS:-100}
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the day it ends on. The discovery job's window ends at
+    #  tomorrow's start, so it holds today's traces so far. At most 90
+    windowDays: ${TOPICS_RUN_WINDOW_DAYS:-30}
+    #  Default: 100000
+    #  Description: A larger window is sampled: the run finds topics on this many of its traces, spread evenly by a
+    #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
+    maxVectors: ${TOPICS_RUN_MAX_VECTORS:-100000}
+    #  Default: 120s
+    #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
+    llmDeadline: ${TOPICS_RUN_LLM_DEADLINE:-120s}
+    #  Default: 30s
+    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
+    #  projectTimeout
+    namingDeadline: ${TOPICS_RUN_NAMING_DEADLINE:-30s}
+    #  Default: 60s
+    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
+    verifyDeadline: ${TOPICS_RUN_VERIFY_DEADLINE:-60s}
+    #  Default: 120s
+    #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
+    #  attempt of its trace_topics insert. At most 30m
+    readTimeout: ${TOPICS_RUN_READ_TIMEOUT:-120s}
+    #  Default: 60s
+    #  Description: A ClickHouse count of a window stops after this: the labelling pass's, with its slice bounds (or
+    #  the pass's deadline, when sooner), and the planner's count of each workspace's discovery candidates. At most
+    #  30m
+    countTimeout: ${TOPICS_RUN_COUNT_TIMEOUT:-60s}
+    #  Default: 25000
+    #  Description: Traces the labelling pass reads, labels and inserts at once: about 15 MiB of vectors per 10000.
+    #  Between 1 and 100000
+    labelPageTraces: ${TOPICS_RUN_LABEL_PAGE_TRACES:-25000}
+    #  Default: 25000
+    #  Description: Traces per slice of the window the labelling pass reads in pages; a page's read costs about one
+    #  slice of keys, so a slice the size of a page reads only its own keys. Between 1 and 1000000
+    labelSliceTraces: ${TOPICS_RUN_LABEL_SLICE_TRACES:-25000}
+    #  Default: 3
+    #  Description: Retries of the trace_topics insert after the save's commit. At most 10
+    insertRetries: ${TOPICS_RUN_INSERT_RETRIES:-3}
+    #  Default: 500ms
+    #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
+    insertBackoff: ${TOPICS_RUN_INSERT_BACKOFF:-500ms}
+    #  Default: 30s
+    #  Description: Added to a run's longest trace_topics insert (every attempt and backoff) in its deadline. At most
+    #  10m
+    insertSlack: ${TOPICS_RUN_INSERT_SLACK:-30s}
+    #  The ClickHouse guards of the run's reads (window count, window read, unlabelled read, topic counts), apart
+    #  from the vectors tick's: the run reads a whole window, the window read about three times
+    read:
+      #  Default: 300000000
+      #  Description: Per read; the window read reads about three rows per trace in the window. At most 1000000000
+      maxRowsToRead: ${TOPICS_RUN_READ_MAX_ROWS_TO_READ:-300000000}
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per read. At most 8589934592 (8 GiB)
+      maxMemoryUsage: ${TOPICS_RUN_READ_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 2
+      #  Description: ClickHouse threads per read, so the run stays a small share of the server. From 1 to 16
+      maxThreads: ${TOPICS_RUN_READ_MAX_THREADS:-2}
+      #  Default: 100
+      #  Description: ClickHouse priority of the window count and the unlabelled read; a higher number yields to
+      #  lower ones, 0 is none. From 0 to 1000
+      priority: ${TOPICS_RUN_READ_PRIORITY:-100}
+      #  Default: 1024
+      #  Description: Rows per block of the run's reads: the window count's in-flight per-trace arrays and the window
+      #  and page reads' vector column grow with it. From 1024 to 1048576
+      maxBlockSize: ${TOPICS_RUN_READ_MAX_BLOCK_SIZE:-1024}
+      #  Default: 1d
+      #  Description: The topic counts read the window in slices of this much trace creation time, one query each, so
+      #  a query's memory follows the slice and not the window. From 1h to 7d
+      countSlice: ${TOPICS_RUN_READ_COUNT_SLICE:-1d}
+  discovery:
+    #  Default: 72h
+    #  Description: A project's discovery run waits for its vectors backfill to drain. Past this long since the backfill
+    #  started, it is built anyway once timedOutShare of the backfill's traces have a vector; with fewer it keeps
+    #  waiting, and the planner logs a warning. At least 1m, at most 30d
+    backfillMaxWait: ${TOPICS_DISCOVERY_BACKFILL_MAX_WAIT:-72h}
+    #  Default: 0.99
+    #  Description: The share of a backfill's traces with a vector that lets a discovery run start past backfillMaxWait.
+    #  Between 0.5 and 1.0
+    timedOutShare: ${TOPICS_DISCOVERY_TIMED_OUT_SHARE:-0.99}
+    #  Default: 1h,6h,1d
+    #  Description: The wait after a project's first, second, ... failed discovery run; the last applies to every later
+    #  one. The first is also the wait after a failed labelling pass. 1 to 10 comma-separated entries
+    retryDelays: ${TOPICS_DISCOVERY_RETRY_DELAYS:-1h,6h,1d}
+  #  The nightly update of each project that has a topic list, for the workspaces listed at stage nightly or later.
+  #  Each plan of topics.runs queues the night's updates as runs; to stop it for a workspace, list it at an earlier
+  #  stage
+  nightly:
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date it fires on and starts at its first fire that day;
+    #  from then each plan of topics.runs queues the night's nightly updates
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project is queued after this much of the night, from its start; the rest run the next night,
+    #  first. Nightly updates share topics.runs.maxInFlight with discovery runs. At most 20h
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
+    #  Default: 3
+    #  Description: A project whose last this many discovery runs or nightly updates failed in a row is paused for
+    #  pauseNights. From 1 to 100
+    pauseFailures: ${TOPICS_NIGHTLY_PAUSE_FAILURES:-3}
+    #  Default: 7
+    #  Description: How many nights a paused project waits, from the night its last failed run started. From 1 to 90
+    pauseNights: ${TOPICS_NIGHTLY_PAUSE_NIGHTS:-7}
+  #  Topics runs across pods. The leader plans: it queues runs on topic_projects and publishes each on the stream
+  #  below. Any pod claims a run with a compare-and-set on its row and runs it
+  runs:
+    #  Default: topics-runs
+    #  Description: Redis stream of queued Topics runs
+    streamName: ${TOPICS_RUNS_STREAM_NAME:-'topics-runs'}
+    #  Default: topics-runs-consumers
+    #  Description: Consumer group of the Topics runs stream
+    consumerGroupName: ${TOPICS_RUNS_CONSUMER_GROUP_NAME:-'topics-runs-consumers'}
+    #  Default: 2
+    #  Description: Runs one pod runs at a time. Each holds its window in memory (about 200 MiB at 100k traces), so
+    #  this is a per-pod memory budget; set it to maxInFlight so one pod can fill every slot. At most 8
+    consumerBatchSize: ${TOPICS_RUNS_CONSUMER_BATCH_SIZE:-2}
+    #  Default: 5s
+    #  Description: How often a pod polls the stream for queued runs. At most 10s
+    poolingInterval: ${TOPICS_RUNS_POOLING_INTERVAL:-5s}
+    #  Default: 5s
+    #  Description: Timeout of a blocking read of the stream (long polling). At most 20s
+    longPollingDuration: ${TOPICS_RUNS_LONG_POLLING_DURATION:-5s}
+    #  Default: 2
+    #  Description: Claim pending messages every N polling intervals. From 2 to 100
+    claimIntervalRatio: ${TOPICS_RUNS_CLAIM_INTERVAL_RATIO:-2}
+    #  Default: 5m
+    #  Description: A message no pod acked for this long goes to another pod, which runs it when its row is queued
+    #  again (its pod stopped) and only acks it otherwise. From 1m to 1h
+    pendingMessageDuration: ${TOPICS_RUNS_PENDING_MESSAGE_DURATION:-5m}
+    #  Default: 3
+    #  Description: Deliveries of a message that keeps failing before it is dropped; the planner publishes its run
+    #  again. At most 10
+    maxRetries: ${TOPICS_RUNS_MAX_RETRIES:-3}
+    #  Default: 10000
+    #  Description: Maximum stream length before old entries are trimmed
+    streamMaxLen: ${TOPICS_RUNS_STREAM_MAX_LEN:-10000}
+    #  Default: 100
+    #  Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+    streamTrimLimit: ${TOPICS_RUNS_STREAM_TRIM_LIMIT:-100}
+    #  Default: 2
+    #  Description: Runs queued, running or cancelling across the cluster; the planner queues no more. Each reads a
+    #  window from ClickHouse and calls the LLM. A run started by hand is not capped. At most 100
+    maxInFlight: ${TOPICS_RUNS_MAX_IN_FLIGHT:-2}
+    #  Default: 20s
+    #  Description: How often a running run writes its heartbeat on its row; a write that finds the row no longer
+    #  running (cancelled) stops the run. At most 5m
+    heartbeatInterval: ${TOPICS_RUNS_HEARTBEAT_INTERVAL:-20s}
+    #  Default: 60s
+    #  Description: A run whose heartbeat is older than this lost its pod, and the planner records it abandoned. At
+    #  least 3 times heartbeatInterval, so one or two slow beats do not abandon a healthy run; at most 1h
+    abandonGrace: ${TOPICS_RUNS_ABANDON_GRACE:-60s}
+    #  Default: 10m
+    #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
+    republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
+    #  Default: 2m
+    #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
+    planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
+    #  Default: 5m
+    #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them
+    #  plans. Longer than planBudget, at least 10s, at most 1h
+    planInterval: ${TOPICS_RUNS_PLAN_INTERVAL:-5m}
+    #  Default: 1m
+    #  Description: How much longer than planBudget plus topics.run.countTimeout the leader lock lasts, for the queue
+    #  writes and publishes after the counts. At most 5m
+    leaseSlack: ${TOPICS_RUNS_LEASE_SLACK:-1m}
+    #  Default: 5s
+    #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
+    requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 4m. A longer query outlives
+    #  the progress headers the driver can take at the default databaseAnalytics.httpHeadersProgressIntervalMs
+    maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
+    #  At most 68719476736 (64 GiB)
+    maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
+  #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
+  #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
+  #  trip or a spent budget answers 503 with Retry-After
+  read:
+    #  Default: 30000000
+    #  Description: Per query; the counts run one query per UTC day of the window. At most 1000000000
+    maxRowsToRead: ${TOPICS_READ_MAX_ROWS_TO_READ:-30000000}
+    #  Default: 1073741824 (1 GiB)
+    #  Description: Per query. At most 8589934592 (8 GiB)
+    maxMemoryUsage: ${TOPICS_READ_MAX_MEMORY_USAGE:-1073741824}
+    #  Default: 2
+    #  Description: ClickHouse threads per query. From 1 to 16
+    maxThreads: ${TOPICS_READ_MAX_THREADS:-2}
+    #  Default: 0
+    #  Description: ClickHouse priority of the collecting count; a higher number yields to lower ones, 0 is none. The
+    #  counts per day run at the server's default priority. From 0 to 1000
+    priority: ${TOPICS_READ_PRIORITY:-0}
+    #  Default: 1024
+    #  Description: Rows per block of the collecting count; its in-flight per-trace arrays grow with it. From 1024 to
+    #  1048576
+    maxBlockSize: ${TOPICS_READ_MAX_BLOCK_SIZE:-1024}
+    #  Default: 10s
+    #  Description: A request's ClickHouse reads end within this. From 1s to 60s
+    budget: ${TOPICS_READ_BUDGET:-10s}
+  #  The topics state's MySQL writes
+  storage:
+    #  Default: 100
+    #  Description: Projects per transaction when the topics rows of deleted projects are deleted, so one delete stays
+    #  bounded however many projects went at once. From 1 to 10000
+    deleteBatchSize: ${TOPICS_STORAGE_DELETE_BATCH_SIZE:-100}
+    #  Default: 24h
+    #  Description: How often each pod deletes the topics of deleted projects that the project delete left. At
+    #  least 1h, at most 7d
+    sweepInterval: ${TOPICS_STORAGE_SWEEP_INTERVAL:-24h}
+    #  Default: 5m
+    #  Description: How long one sweep, and its lock, may last; a sweep cut by it frees the lock, so the next fire
+    #  sweeps again. At least 10s, at most 30m
+    sweepTimeout: ${TOPICS_STORAGE_SWEEP_TIMEOUT:-5m}
+
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. With enabledWorkspaces, it
+  #  sets the UI toggle topics_enabled for the caller's workspace
+  enabled: ${TOPICS_ENABLED:-false}
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for, each as id or id:stage. Stages, in order: vectors,
+  #  build, arrival, nightly, ui; a workspace at a stage runs that stage and every earlier one, and an id without a
+  #  stage runs every stage. An unknown stage or an id listed with two stages stops the backend at startup. A listed
+  #  workspace runs only while it is also enabled in the ai_label_workspaces table. Set in Helm, so a change needs a
+  #  deploy
+  enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
+  #  Topic on arrival: after the vectors of one workspace read are written, every live trace of a project with a
+  #  saved topic list gets the topic of its nearest saved prototype (trace_topics, source arrival, no run_id). The
+  #  next run's row for the trace wins. Only for a workspace listed at the arrival stage or a later one in
+  #  enabledWorkspaces
+  arrival:
+    #  Default: 5s
+    #  Description: The arrival steps of one workspace in one vectors tick (the saved lists read and the trace_topics
+    #  insert after each workspace read's vectors) take this in total, and each ends before the tick's budget ends.
+    #  Any failure stops arrival for the workspace for the rest of the tick
+    timeout: ${TOPICS_ARRIVAL_TIMEOUT:-5s}
+    #  Default: 1s
+    #  Description: A step starts only with at least this much left of topics.arrival.timeout and of the tick's
+    #  budget; otherwise its traces count as over_budget. Must not be above topics.arrival.timeout
+    minStepTime: ${TOPICS_ARRIVAL_MIN_STEP_TIME:-1s}
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each
+    #  tick runs the fresh phase (window), or the daily pass in its place when that is due (longWindow, in slices),
+    #  then project discovery for the workspaces due for it, then the backfill phase (longWindow or backfillWindow,
+    #  progress in the MySQL table topic_projects).
+    #  At most 1h
+    tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
+    tickBudget: ${TOPICS_VECTORS_TICK_BUDGET:-50s}
+    #  Default: 24h
+    #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
+    #  traces without a vector. Never before the task's applies_from
+    window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 15m
+    #  Description: How far before its watermark each workspace's fresh read starts. Covers a done status that becomes
+    #  visible after a later one was read: a write to a lagging replica, or a status visible before its output row.
+    #  Each tick re-reads this much of the window, less the traces that have a vector. A status visible later than this
+    #  is left to the daily pass. At most window
+    watermarkOverlap: ${TOPICS_VECTORS_WATERMARK_OVERLAP:-15m}
+    #  Default: 7d
+    #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
+    #  window
+    longWindow: ${TOPICS_VECTORS_LONG_WINDOW:-7d}
+    #  Default: 1d
+    #  Description: How often each workspace's daily pass is due, counted from its last complete long read
+    #  (topic_vector_watermarks.long_window_read_at). A long read that does not finish sets a per-workspace Redis key
+    #  for 1.5 tick intervals; while it lasts the workspace takes its fresh read, then its long read again. Also how
+    #  often the tick discovers each workspace's projects for the backfill. At most 7d
+    longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
+    #  Default: 0 (off)
+    #  Description: When above zero, the backfill phase and the daily pass use this window instead of longWindow, to
+    #  embed the traces summarised before topics were enabled. 0 or at least window; at most 365d. A workspace's
+    #  project discovery reads it in slices of find.discoverySliceSize, two reads per slice, and must finish within one
+    #  tick, in at least discoveryMinShare and at most half of tickBudget: one cut short starts again next tick
+    #  (topics.vectors.discoveries_total, outcome cut).
+    #  With a large window, raise find.discoverySliceSize (for example 30d for 365d)
+    backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
+    #  Default: 5000
+    #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
+    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read
+    maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
+    #  Default: 256 (inference.limits.maxEmbedInputs)
+    #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
+    embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
+    #  Default: 1
+    #  Description: Workspaces a tick visits at a time, each with one embed call in flight, so also the most embed
+    #  calls in flight. Set it to the embed pool's replica count: the pool computes one call at a time per replica, so
+    #  more only makes each call wait longer, toward embedTimeout, and a call over the service's queue is answered with
+    #  quota_exceeded (429)
+    embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
+    #  Default: 10s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. At
+    #  least 1s under tickBudget, at most inference.limits.maxEmbedDeadline
+    embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
+    #  Default: 5s
+    #  Description: How much longer than the rest the leader lock lasts, for the insert after the last embed call,
+    #  which has no deadline of its own. The tick is cancelled when the lock's lease ends. At most 1m
+    leaseSlack: ${TOPICS_VECTORS_LEASE_SLACK:-5s}
+    #  Default: 2000
+    #  Description: The most projects in backfill a workspace's fresh read leaves out by id. A workspace with more is
+    #  not read by the fresh phase until its backfill brings it under. At most 10000
+    maxExcludedProjects: ${TOPICS_VECTORS_MAX_EXCLUDED_PROJECTS:-2000}
+    #  Default: 5
+    #  Description: The most workspaces whose projects one tick discovers for the backfill. At most 1000
+    maxDiscoveriesPerTick: ${TOPICS_VECTORS_MAX_DISCOVERIES_PER_TICK:-5}
+    #  Default: 0.5
+    #  Description: The share of tickBudget the fresh phase leaves to project discovery, which runs after it, on a tick
+    #  with a workspace due for discovery. On other ticks the fresh phase may use the whole budget. At most 0.5
+    discoveryMinShare: ${TOPICS_VECTORS_DISCOVERY_MIN_SHARE:-0.5}
+    #  Default: 250000
+    #  Description: A project with at most this many traces in the backfill window is read in one query; a larger one
+    #  in find.sliceSize slices. Lower it with find.maxMemoryUsage: at the default, one such read uses about an eighth
+    #  of it. At most 10000000
+    oneSliceMaxTraces: ${TOPICS_VECTORS_ONE_SLICE_MAX_TRACES:-250000}
+    find:
+      #  Default: 30000000
+      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000
+      maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
+      maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Adds to the leader lock's lease. At most
+      #  tickBudget
+      maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 2
+      #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
+      #  to 16
+      maxThreads: ${TOPICS_VECTORS_FIND_MAX_THREADS:-2}
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
+      createdAtSlack: ${TOPICS_VECTORS_FIND_CREATED_AT_SLACK:-1d}
+      #  Default: 1d
+      #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
+      #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
+      sliceSize: ${TOPICS_VECTORS_FIND_SLICE_SIZE:-1d}
+      #  Default: 7d
+      #  Description: The backfill's discovery and vector count read in slices of this much trace creation time. Their
+      #  memory stays small, so the slices are wide: each slice re-reads the granules across its edges. A discovery
+      #  reads all its slices within one tick (see backfillWindow). From 1h to 365d
+      discoverySliceSize: ${TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE:-7d}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
 guardrails:
   # Default: 0.5
@@ -2660,3 +3279,22 @@ guardrails:
   # Default: 0.4
   # Description: A prompt injection check fails when the probability is at or above this
   promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}
+
+# Training data of the guardrail models a workspace trains (the guardrail models API): the limits a member's JSONL upload
+# is held to. The trainer on opik-inference applies the same rules and reads the same variables.
+guardrailsTrainingDataset:
+  # Default: 50
+  # Description: Largest training data file, in MB
+  maxFileSizeMb: ${GUARDRAILS_TRAINING_DATASET_MAX_FILE_SIZE_MB:-50}
+  # Default: 20
+  # Description: Fewest valid rows a file can train on
+  minRows: ${GUARDRAILS_TRAINING_DATASET_MIN_ROWS:-20}
+  # Default: 50000
+  # Description: Most valid rows a file can hold
+  maxRows: ${GUARDRAILS_TRAINING_DATASET_MAX_ROWS:-50000}
+  # Default: 5
+  # Description: Fewest rows of each label, yes and no
+  minRowsPerLabel: ${GUARDRAILS_TRAINING_DATASET_MIN_ROWS_PER_LABEL:-5}
+  # Default: 12000
+  # Description: Longest text of a row, in characters (Unicode code points, as Python's len() counts them); at most 100000
+  maxTextLength: ${GUARDRAILS_TRAINING_DATASET_MAX_TEXT_LENGTH:-12000}

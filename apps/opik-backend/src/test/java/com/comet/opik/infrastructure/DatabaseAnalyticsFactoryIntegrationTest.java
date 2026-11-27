@@ -8,6 +8,8 @@ import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -22,14 +24,19 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DatabaseAnalyticsFactoryIntegrationTest {
@@ -46,6 +53,80 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     void tearDown() {
         if (clickhouse != null && clickhouse.isRunning()) {
             clickhouse.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("clientMaxOpenConnections sizes the v2 client's connection pool")
+    void clientMaxOpenConnectionsSizesTheV2Pool() {
+        var maxOpenConnections = RandomUtils.secure().randomInt(11, 101);
+        var factory = factoryWith("");
+        factory.setClientMaxOpenConnections(maxOpenConnections);
+
+        try (Client client = factory.buildClient()) {
+            assertThat(client.getConfiguration()).containsEntry("max_open_connections",
+                    String.valueOf(maxOpenConnections));
+        }
+    }
+
+    @Test
+    @DisplayName("pool metrics report a request waiting for a connection while every connection is leased")
+    void poolMetricsReportPendingRequestsWhenThePoolIsFull() throws Exception {
+        var table = "pool_metrics_%s".formatted(RandomStringUtils.secure().nextAlphabetic(12).toLowerCase());
+        var factory = factoryWith("");
+        factory.setClientMaxOpenConnections(1);
+        var poolMetrics = new ClickHouseClientPoolMetrics();
+        var release = new CountDownLatch(1);
+
+        try (Client client = factory.buildClient(poolMetrics)) {
+            client.query("CREATE TABLE %s (name String) ENGINE = Memory".formatted(table)).get().close();
+
+            var insert = client.insert(table, out -> {
+                awaitRelease(release);
+                out.write("{\"name\":\"%s\"}%n".formatted(table).getBytes(StandardCharsets.UTF_8));
+            }, ClickHouseFormat.JSONEachRow, new InsertSettings());
+            var leased = ClickHouseClientPoolMetrics.PoolStats.builder()
+                    .max(1)
+                    .leased(1)
+                    .available(0)
+                    .pending(0)
+                    .build();
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(poolMetrics.stats()).contains(leased));
+
+            var query = client.query("SELECT 1");
+            var waiting = leased.toBuilder()
+                    .pending(1)
+                    .build();
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(poolMetrics.stats()).contains(waiting));
+
+            release.countDown();
+            insert.get(10, TimeUnit.SECONDS).close();
+            query.get(10, TimeUnit.SECONDS).close();
+        } finally {
+            release.countDown();
+        }
+    }
+
+    private static void awaitRelease(CountDownLatch release) throws IOException {
+        try {
+            release.await();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException(exception);
+        }
+    }
+
+    @Test
+    @DisplayName("max_open_connections in queryParameters does not size the v2 client's connection pool")
+    void maxOpenConnectionsInQueryParametersDoesNotSizeTheV2Pool() {
+        var maxOpenConnections = RandomUtils.secure().randomInt(11, 129);
+        var factory = factoryWith("max_open_connections=%d".formatted(maxOpenConnections));
+
+        try (Client client = factory.buildClient()) {
+            assertThat(client.getConfiguration()).doesNotContainEntry("max_open_connections",
+                    String.valueOf(maxOpenConnections));
         }
     }
 
@@ -346,6 +427,54 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                 assertThat(records.getFirst().getString("tz")).isEqualTo("UTC");
             }
         }
+    }
+
+    // Alphanumeric is what existing installs use. Reserved characters cut the host off a URL's user-info part, so the
+    // driver fell back to localhost:8123. A percent-escape or '+' was decoded in the URL, so it must now stay literal.
+    Stream<Arguments> passwordScenarios() {
+        return Stream.of(
+                Arguments.of("alphanumeric", ""),
+                Arguments.of("URL-reserved characters", "a/b?c#d@e:f%g=h+i"),
+                Arguments.of("percent-escapes and plus", "p%40ss+word%2F"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("passwordScenarios")
+    @DisplayName("the password connects as-is through both the R2DBC and the v2 client")
+    void passwordConnects(String name, String passwordPrefix) {
+        var password = passwordPrefix + RandomStringUtils.secure().nextAlphanumeric(8);
+        try (var container = ClickHouseContainerUtils.newClickHouseContainer(false).withPassword(password)) {
+            container.start();
+            var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(container, "default");
+
+            var r2dbcUser = Mono.usingWhen(
+                    factory.build().create(),
+                    connection -> Flux.from(connection.createStatement("SELECT currentUser() AS user").execute())
+                            .flatMap(result -> result.map((row, _) -> row.get("user", String.class)))
+                            .single(),
+                    Connection::close)
+                    .block();
+
+            assertThat(r2dbcUser).isEqualTo(container.getUsername());
+
+            try (var client = factory.buildClient()) {
+                var v2User = client.queryAll("SELECT currentUser() AS user").getFirst().getString("user");
+
+                assertThat(v2User).isEqualTo(container.getUsername());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("toString leaves the credentials out")
+    void toStringLeavesCredentialsOut() {
+        var username = RandomStringUtils.secure().nextAlphanumeric(16);
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setUsername(username);
+        factory.setPassword(password);
+
+        assertThat(factory.toString()).doesNotContain(username, password);
     }
 
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {

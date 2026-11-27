@@ -1,8 +1,8 @@
-# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# syntax=docker/dockerfile:1@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM docker:29.10.0@sha256:4bbc7223f81db790097c6dea42fb93e05b8fead4f0431fbe6ccaba6e8473201c AS builder
+FROM docker:29.10.1@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0 AS builder
 
 # Alpine base ships /bin/ash, not bash; ash honors -o pipefail for the RUN
 # below whose pipe into xargs would otherwise mask a failing find.
@@ -14,7 +14,7 @@ RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libff
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
-COPY --from=ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.10@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f /uv /usr/local/bin/uv
 
 WORKDIR /opt/opik-python-backend
 
@@ -44,11 +44,13 @@ RUN set -eux; \
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM docker:29.10.0@sha256:4bbc7223f81db790097c6dea42fb93e05b8fead4f0431fbe6ccaba6e8473201c
+FROM docker:29.10.1@sha256:fbbc96e0af32cdc190aff92ba97a1281a115351a723afe21af78879cc55126b0
 
-# tini (PID 1 reaper) + python3 are the runtime-only OS deps.
+# tini (PID 1 reaper) + python3 are the runtime-only OS deps. The buildx and compose CLI plugins are never
+# run here (the executor uses the Docker SDK; the entrypoint only needs docker info/load) and only carry CVEs.
 # hadolint ignore=DL3018
-RUN apk add --no-cache tini python3
+RUN apk add --no-cache tini python3 && \
+    rm -rf /usr/local/libexec/docker/cli-plugins /usr/local/bin/docker-compose
 
 WORKDIR /opt/opik-python-backend
 

@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -134,7 +135,11 @@ public record Span(
     }
 
     public static class View {
-        public static class Write {
+        /**
+         * JSON view and validation group for spans sent through the public create endpoints, where {@code trace_id}
+         * is required. Extends {@link Default} so the ungrouped constraints still run.
+         */
+        public interface Write extends Default {
         }
 
         public static class Public {

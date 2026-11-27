@@ -18,6 +18,7 @@ import {
   getDefaultReasoningEffort,
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
+  getGeminiDefaultTemperature,
   getOpenRouterDefaultMaxTokens,
   isClaudeModel,
   resolveOpenAIEffort,
@@ -218,7 +219,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.GEMINI) {
     const config: LLMGeminiConfigsType = {
-      temperature: DEFAULT_GEMINI_CONFIGS.TEMPERATURE,
+      temperature: getGeminiDefaultTemperature(model),
       maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
       throttling: DEFAULT_GEMINI_CONFIGS.THROTTLING,
@@ -234,7 +235,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.VERTEX_AI) {
     const config: LLMVertexAIConfigsType = {
-      temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
+      temperature: getGeminiDefaultTemperature(model),
       maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
       throttling: DEFAULT_VERTEX_AI_CONFIGS.THROTTLING,

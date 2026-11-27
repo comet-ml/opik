@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.comet.opik.infrastructure.ShippedConfig;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,7 +26,10 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_DECIDE;
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_GENERATE;
+import static com.comet.opik.infrastructure.inference.InferenceContract.CONTRACT;
+import static com.comet.opik.infrastructure.inference.InferenceContract.EMBED;
 import static com.comet.opik.infrastructure.inference.InferenceContract.GET_JOB;
+import static com.comet.opik.infrastructure.inference.InferenceContract.JOBS_STATUS;
 import static com.comet.opik.infrastructure.inference.InferenceContract.resource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -68,7 +72,6 @@ class InferenceModelsTest {
         var request = BatchDecideRequest.builder()
                 .orgId("workspace-1")
                 .workspaceId("workspace-1")
-                .requestId(REQUEST_ID)
                 .cache(false)
                 .items(List.of(BatchDecideItem.builder()
                         .itemId(TRACE_ID)
@@ -92,7 +95,6 @@ class InferenceModelsTest {
         var request = BatchGenerateRequest.builder()
                 .orgId("workspace-1")
                 .workspaceId("workspace-1")
-                .requestId(REQUEST_ID)
                 .cache(true)
                 .items(List.of(BatchGenerateItem.builder()
                         .itemId(TRACE_ID + ":summary")
@@ -159,6 +161,27 @@ class InferenceModelsTest {
                     .isEqualTo(InferenceJson.MAPPER.treeToValue(clean, fixture.getValue()));
         }
         assertThat(visited).containsExactlyInAnyOrderElementsOf(RESPONSE_MODELS);
+    }
+
+    @Test
+    void shippedLimitsMatchTheContract() throws Exception {
+        var limits = ShippedConfig.load(Map.of()).getInference().getLimits();
+        var endpoints = CONTRACT.path("endpoints");
+
+        assertThat(limits.getMaxEmbedInputs()).isEqualTo(maxItems(endpoints.path(EMBED), "inputs"));
+        assertThat(limits.getMaxEmbedDeadline().toMilliseconds())
+                .isEqualTo(CONTRACT.path("limits").path("embed_max_deadline_ms").path("value").asLong());
+        assertThat(limits.getMaxDecideRealtimeDeadline().toMilliseconds())
+                .isEqualTo(CONTRACT.path("limits").path("decide_realtime_max_deadline_ms").path("value").asLong());
+        assertThat(limits.getMaxBatchItems()).isEqualTo(maxItems(endpoints.path(BATCH_DECIDE), "items"))
+                .isEqualTo(maxItems(endpoints.path(BATCH_GENERATE), "items"));
+        assertThat(limits.getMaxStatusJobIds()).isEqualTo(maxItems(endpoints.path(JOBS_STATUS), "job_ids"));
+    }
+
+    private static int maxItems(JsonNode endpoint, String property) {
+        var maxItems = endpoint.path("request").path("properties").path(property).path("maxItems");
+        assertThat(maxItems.isInt()).as("maxItems of '%s'", property).isTrue();
+        return maxItems.asInt();
     }
 
     @Test

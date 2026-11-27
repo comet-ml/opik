@@ -86,10 +86,13 @@ cd tests_end_to_end/e2e && npx playwright test --ui  # UI mode
 ## Workflow
 
 ### Step 1: Run Tests
+
 Execute the appropriate test command for the requested scope.
 
 ### Step 2: Parse Results
+
 Extract:
+
 - Total test count
 - Passed count
 - Failed count
@@ -97,13 +100,16 @@ Extract:
 - Failure details (test name, error message, stack trace)
 
 ### Step 3: Analyze Failures
+
 For each failure:
+
 - What test failed
 - What was expected vs actual
 - Where in the code (file:line)
 - Is this likely a test issue or code issue?
 
 ### Step 4: Report Summary
+
 Provide concise summary with actionable next steps.
 
 ## Output Format
@@ -130,7 +136,9 @@ Provide concise summary with actionable next steps.
 **Location**: [File:line]
 
 ```
+
 [Relevant stack trace or assertion diff]
+
 ```
 
 **Likely cause**: [Brief analysis]

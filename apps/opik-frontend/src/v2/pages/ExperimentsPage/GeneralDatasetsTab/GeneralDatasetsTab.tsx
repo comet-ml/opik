@@ -33,7 +33,6 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { isTestSuiteExperiment } from "@/lib/experiments";
 import {
   transformExperimentScores,
   getScoreDisplayName,
@@ -47,26 +46,24 @@ import {
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  DynamicColumn,
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
+import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
-import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
 import useExperimentsPinning from "@/v2/pages-shared/experiments/useExperimentsPinning";
-import {
-  FILTER_AND_GROUP_COLUMNS,
-  useExperimentsGroupsAndFilters,
-} from "@/v2/pages-shared/experiments/useExperimentsGroupsAndFilters";
+import { useExperimentsGroupsAndFilters } from "@/v2/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/v2/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/v2/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/v2/pages-shared/experiments/useExpandingConfig";
@@ -81,12 +78,23 @@ import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import ItemSourceCell, {
-  ITEM_SOURCE_LABEL,
-} from "@/v2/pages-shared/experiments/ItemSourceCell";
-import { EXPERIMENT_STATUS } from "@/types/datasets";
+import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
+import {
+  DATASET_TYPE,
+  EVALUATION_METHOD,
+  EXPERIMENT_STATUS,
+} from "@/types/datasets";
+import { Filter } from "@/types/filters";
+import DatasetVersionCell from "@/v2/pages-shared/experiments/DatasetVersionCell";
 import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Skeleton } from "@/ui/skeleton";
+import { getEvaluationMethodFilter } from "../experimentsTabs";
+import {
+  COLUMN_DATASET_VERSION_ID,
+  COLUMN_PASS_RATE_ID,
+  EXPERIMENTS_TAB_STORAGE,
+  isExcludedTabColumn,
+} from "@/constants/experiments";
 
 const PASS_RATE_LABEL = "Pass rate";
 
@@ -110,34 +118,62 @@ const withRunningSkeleton = <TValue,>(
   return WrappedCell;
 };
 
-const STORAGE_KEY_PREFIX = "experiments";
-const PAGINATION_SIZE_KEY = "experiments-pagination-size";
-const COLUMNS_SORT_KEY = "experiments-columns-sort";
+const NO_DYNAMIC_SCORES_COLUMNS: DynamicColumn[] = [];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_NAME_ID,
-  COLUMN_DATASET_ID,
-  "pass_rate",
-  "created_at",
-  "duration.p50",
-  "total_estimated_cost_avg",
-  COLUMN_FEEDBACK_SCORES_ID,
-];
+type TabConfig = {
+  datasetType: DATASET_TYPE;
+  itemSourceLabel: string;
+  versionLabel: string;
+  defaultSelectedColumns: string[];
+};
+
+const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
+  [EVALUATION_METHOD.TEST_SUITE]: {
+    datasetType: DATASET_TYPE.TEST_SUITE,
+    itemSourceLabel: "Test suite",
+    versionLabel: "Test suite version",
+    defaultSelectedColumns: [
+      COLUMN_NAME_ID,
+      COLUMN_DATASET_VERSION_ID,
+      COLUMN_PASS_RATE_ID,
+      "total_estimated_cost_avg",
+      "trace_count",
+      "duration.p50",
+      "created_at",
+      "prompt",
+    ],
+  },
+  [EVALUATION_METHOD.DATASET]: {
+    datasetType: DATASET_TYPE.DATASET,
+    itemSourceLabel: "Dataset",
+    versionLabel: "Dataset version",
+    defaultSelectedColumns: [
+      COLUMN_NAME_ID,
+      COLUMN_DATASET_VERSION_ID,
+      COLUMN_FEEDBACK_SCORES_ID,
+      "trace_count",
+      "duration.p50",
+      "created_at",
+      "prompt",
+    ],
+  },
+};
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  COLUMN_DATASET_ID,
-  "pass_rate",
+  COLUMN_DATASET_VERSION_ID,
+  COLUMN_PASS_RATE_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+  "total_estimated_cost_avg",
   "trace_count",
   "duration.p50",
   "duration.p90",
   "duration.p99",
-  "total_estimated_cost_avg",
-  "total_estimated_cost",
-  COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   "prompt",
+  COLUMN_DATASET_ID,
+  "total_estimated_cost",
   COLUMN_COMMENTS_ID,
   "tags",
   COLUMN_METADATA_ID,
@@ -147,12 +183,19 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 type GeneralDatasetsTabProps = {
+  evaluationMethod: EVALUATION_METHOD;
   isExistencePending?: boolean;
 };
 
 const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
+  evaluationMethod,
   isExistencePending = false,
 }) => {
+  const { datasetType, itemSourceLabel, versionLabel, defaultSelectedColumns } =
+    TAB_CONFIG[evaluationMethod];
+  const { storageKeyPrefix, excludedColumnIds } =
+    EXPERIMENTS_TAB_STORAGE[evaluationMethod];
+  const isTestSuiteTab = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
@@ -168,7 +211,9 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
+  const [size, setSize] = useTablePageSize(
+    `${storageKeyPrefix}-pagination-size`,
+  );
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -180,19 +225,19 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [pinnedIds, setPinnedIds] = useLocalStorageState<string[]>(
-    `${STORAGE_KEY_PREFIX}-pinned-experiments-${activeProjectId}`,
+    `${storageKeyPrefix}-pinned-experiments-${activeProjectId}`,
     { defaultValue: [] },
   );
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
-    COLUMNS_SORT_KEY,
+    `${storageKeyPrefix}-columns-sort`,
     {
       defaultValue: [],
     },
   );
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
-    return [
+    const allColumns: ColumnData<GroupedExperiment>[] = [
       {
         id: COLUMN_NAME_ID,
         label: "Name",
@@ -208,8 +253,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         cell: IdCell as never,
       },
       {
+        id: COLUMN_DATASET_VERSION_ID,
+        label: versionLabel,
+        type: COLUMN_TYPE.string,
+        cell: DatasetVersionCell as never,
+      },
+      {
         id: COLUMN_DATASET_ID,
-        label: ITEM_SOURCE_LABEL,
+        label: itemSourceLabel,
         type: COLUMN_TYPE.string,
         cell: ItemSourceCell as never,
         customMeta: {
@@ -314,7 +365,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         },
       },
       {
-        id: "pass_rate",
+        id: COLUMN_PASS_RATE_ID,
         label: "Pass rate",
         type: COLUMN_TYPE.number,
         iconType: "pass_rate",
@@ -362,17 +413,32 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         cell: CodeCell as never,
       },
     ];
-  }, []);
+    return allColumns.filter(
+      (column) => !isExcludedTabColumn(column.id, excludedColumnIds),
+    );
+  }, [versionLabel, itemSourceLabel, excludedColumnIds]);
+
+  const evaluationMethodFilters = useMemo<Filter[]>(
+    () => [getEvaluationMethodFilter(evaluationMethod)],
+    [evaluationMethod],
+  );
+
+  const queryFilters = useMemo<Filter[]>(
+    () => [...filters, ...evaluationMethodFilters],
+    [filters, evaluationMethodFilters],
+  );
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores({ projectId: activeProjectId ?? undefined });
 
-  const { groups, setGroups, filtersAndGroupsConfig } =
+  const { groups, setGroups, filtersAndGroupsConfig, filterAndGroupColumns } =
     useExperimentsGroupsAndFilters({
-      storageKeyPrefix: STORAGE_KEY_PREFIX,
+      storageKeyPrefix,
       sortedColumns,
-      filters,
+      filters: queryFilters,
       projectId: activeProjectId,
+      datasetType,
+      itemSourceLabel,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -385,7 +451,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       workspaceName,
       projectId: activeProjectId ?? undefined,
       groupLimit,
-      filters,
+      filters: queryFilters,
       sorting: sortedColumns,
       groups,
       search: search!,
@@ -406,6 +472,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     projectId: activeProjectId ?? undefined,
     pinnedIds,
     setPinnedIds,
+    evaluationMethodFilters,
     enabled: groups.length === 0,
     polling: true,
   });
@@ -457,19 +524,22 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     getExperimentRowId,
     getExperimentRowClassName,
   } = useExperimentsTableConfig({
-    storageKeyPrefix: STORAGE_KEY_PREFIX,
+    storageKeyPrefix,
     defaultColumns: columnsDef,
-    defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
+    defaultSelectedColumns,
     defaultColumnsOrder: DEFAULT_COLUMNS_ORDER,
     groups,
     sortableBy,
-    dynamicScoresColumns,
+    dynamicScoresColumns: isTestSuiteTab
+      ? NO_DYNAMIC_SCORES_COLUMNS
+      : dynamicScoresColumns,
     experiments,
     rowSelection,
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
     datasetTypeMap,
+    itemSourceLabel,
   });
 
   const handleRowClick = useCallback(
@@ -533,7 +603,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: ITEM_SOURCE_LABEL,
+              label: itemSourceLabel,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -573,14 +643,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                 const groupField = groups[index]?.field;
                 const groupLabel =
                   groupField === COLUMN_DATASET_ID
-                    ? ITEM_SOURCE_LABEL
+                    ? itemSourceLabel
                     : calculateGroupLabel(groups[index]);
 
                 return {
                   label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted item source"
+                      ? `Deleted ${itemSourceLabel.toLowerCase()}`
                       : label || value || "Undefined",
                 };
               }),
@@ -606,17 +676,17 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
 
       groupExperiments.forEach((experiment) => {
         const scores: Record<string, number> = {};
-        (experiment.feedback_scores ?? []).forEach((s) => {
-          scores[s.name] = s.value;
-        });
-        (experiment.experiment_scores ?? []).forEach((s) => {
-          scores[s.name] = s.value;
-        });
-        if (
-          isTestSuiteExperiment(experiment) &&
-          isNumber(experiment.pass_rate)
-        ) {
-          scores[PASS_RATE_LABEL] = experiment.pass_rate;
+        if (isTestSuiteTab) {
+          if (isNumber(experiment.pass_rate)) {
+            scores[PASS_RATE_LABEL] = experiment.pass_rate;
+          }
+        } else {
+          (experiment.feedback_scores ?? []).forEach((s) => {
+            scores[s.name] = s.value;
+          });
+          (experiment.experiment_scores ?? []).forEach((s) => {
+            scores[s.name] = s.value;
+          });
         }
 
         groupsMap[groupKey].data.unshift({
@@ -643,11 +713,13 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     return Object.values(groupsMap);
   }, [
     hasGroups,
+    itemSourceLabel,
     experiments,
     flattenGroups,
     groups,
     expandingConfig.expanded,
     groupFieldNames,
+    isTestSuiteTab,
   ]);
 
   const isTableLoading =
@@ -682,64 +754,74 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                 </Card>
               }
               areAggregatedScores
+              legendPosition={isTestSuiteTab ? "bottom" : "right"}
             />
           )}
         </PageBodyStickyContainer>
       )}
-      <PageBodyStickyContainer
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
-        direction="bidirectional"
-        limitWidth
-      >
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
-          <GroupsButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            groups={groups}
-            onChange={setGroups}
-          />
-        </div>
-        <div className="flex items-center gap-2">
+      {selectedRows.length > 0 ? (
+        <SelectionActionBar
+          selectedCount={selectedRows.length}
+          onDeselectAll={() => setRowSelection({})}
+        >
           <ExperimentsActionsPanel
             experiments={selectedRows}
             onTagsAdded={() => {
               setRowSelection({});
             }}
+            buttonVariant="ghostInverted"
+            buttonSize="2xs"
           />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <RefreshButton
-            tooltip="Refresh experiments list"
-            isFetching={isFetching}
-            onRefresh={() => {
-              refetch();
-              refetchPinned();
-            }}
-          />
-          <ColumnsButton
-            columns={availableColumns}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-            layout="labeled"
-          ></ColumnsButton>
-        </div>
-      </PageBodyStickyContainer>
+        </SelectionActionBar>
+      ) : (
+        <PageBodyStickyContainer
+          className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-2"
+          direction="bidirectional"
+          limitWidth
+        >
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search"
+              className="w-[200px]"
+              dimension="sm"
+            ></SearchInput>
+            <GroupsButton
+              columns={filterAndGroupColumns}
+              config={filtersAndGroupsConfig as never}
+              groups={groups}
+              onChange={setGroups}
+            />
+            <FiltersButton
+              columns={filterAndGroupColumns}
+              config={filtersAndGroupsConfig as never}
+              filters={filters}
+              onChange={setFilters}
+              layout="add"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <ColumnsButton
+              columns={availableColumns}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+              sections={columnSections}
+              layout="labeled"
+            ></ColumnsButton>
+            <RefreshButton
+              tooltip="Refresh experiments list"
+              isFetching={isFetching}
+              onRefresh={() => {
+                refetch();
+                refetchPinned();
+              }}
+            />
+          </div>
+        </PageBodyStickyContainer>
+      )}
       <DataTable
         key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}

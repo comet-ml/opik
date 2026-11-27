@@ -12,11 +12,16 @@ import lombok.experimental.UtilityClass;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.Optional;
+import java.util.function.BiFunction;
 
 @UtilityClass
 class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
     private static final String INPUT_CHARACTERS_KEY = "input_characters";
+    // Shared instances, so a price can be told apart by its calculator: each method reference is a new object.
+    static final BiFunction<ModelPrice, SpanUsage, BigDecimal> DEFAULT_COST_CALCULATOR = SpanCostCalculator::defaultCost;
+    static final BiFunction<ModelPrice, SpanUsage, BigDecimal> AUDIO_SPEECH_CALCULATOR = SpanCostCalculator::audioSpeechCost;
+    static final BiFunction<ModelPrice, SpanUsage, BigDecimal> VIDEO_GENERATION_CALCULATOR = SpanCostCalculator::videoGenerationCost;
 
     /**
      * Prices the provider's own usage record, so every token bucket gets its own rate whatever client logged it. Usage
@@ -157,7 +162,7 @@ class SpanCostCalculator {
     // A rate no tier publishes keeps its base ratio to the rate the matched tier changes: a 1-hour cache write to the
     // 5-minute one, as Claude's own tiers do, and reasoning and audio tokens to the text rate they're part of, as
     // Gemini Pro's do. LiteLLM keeps the base rate there.
-    private static BigDecimal scaledToTier(BigDecimal baseRate, BigDecimal baseTextRate, BigDecimal tierTextRate) {
+    static BigDecimal scaledToTier(BigDecimal baseRate, BigDecimal baseTextRate, BigDecimal tierTextRate) {
         return isPositive(baseTextRate) && tierTextRate.compareTo(baseTextRate) != 0
                 ? baseRate.multiply(tierTextRate).divide(baseTextRate, MathContext.DECIMAL64)
                 : baseRate;

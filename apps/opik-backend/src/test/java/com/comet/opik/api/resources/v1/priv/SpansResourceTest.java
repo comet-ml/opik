@@ -33,6 +33,7 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.PayloadCases;
 import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -1482,6 +1483,21 @@ class SpansResourceTest {
         }
 
         @Test
+        void create__whenTraceIdIsNull__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callCreateSpan(span, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("traceId must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         void createAndGetById() {
             var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .feedbackScores(null)
@@ -2192,6 +2208,32 @@ class SpansResourceTest {
             }
         }
 
+        @Test
+        void batch__whenTraceIdIsNull__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(List.of(span), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("spans[0].traceId must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
+        void batch__whenSpanIsNull__thenReturnUnprocessableEntity() {
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(Arrays.asList((Span) null), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("spans[0].<list element> must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource
         void batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent(
@@ -2523,6 +2565,31 @@ class SpansResourceTest {
                         })))
                         .defaultIfEmpty(0L);
             }).block();
+        }
+    }
+
+    @Nested
+    @DisplayName("Payload storage:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PayloadStorage {
+
+        Stream<JsonNode> batchAndSingleCreateStoreTheSamePayload() {
+            return PayloadCases.payloads();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a batch create and a single create store the same input and output")
+        void batchAndSingleCreateStoreTheSamePayload(JsonNode payload) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var batchSpan = PayloadCases.span(podamFactory, projectName, payload);
+            var singleSpan = PayloadCases.span(podamFactory, projectName, payload);
+
+            spanResourceClient.batchCreateSpans(List.of(batchSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(singleSpan, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(batchSpan, API_KEY, TEST_WORKSPACE);
+            getAndAssert(singleSpan, API_KEY, TEST_WORKSPACE);
         }
     }
 

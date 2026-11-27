@@ -3,7 +3,7 @@
 set -e
 
 if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
-  # Opt-in daemon hardening: prints a config merged from any mounted daemon.json, or nothing when off.
+  # Daemon hardening (on unless set to false): prints a config merged from any mounted daemon.json, or nothing when off.
   # A bad value or unreadable config fails startup (set -e).
   DOCKERD_CONFIG_FILE=$(python3 ./src/opik_backend/docker_daemon_config.py)
 
@@ -21,7 +21,7 @@ if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
   done
 
   if [ $attempts -ge $MAX_ATTEMPTS ]; then
-    echo "Docker daemon did not start after $MAX_ATTEMPTS attempts"
+    echo "Docker daemon did not start after $MAX_ATTEMPTS attempts. The docker strategy needs the python-backend container to run privileged. Docker Compose and the Helm chart set it from PYTHON_CODE_EXECUTOR_STRATEGY; with Helm, set component.python-backend.securityContext.privileged=true if the strategy comes from envFrom or secretRefs"
     exit 1
   fi
 

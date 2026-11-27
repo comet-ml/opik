@@ -7,13 +7,21 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.template.TemplateUtils;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.stringtemplate.v4.ST;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -35,10 +43,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * End-to-end validation of the cutover that migrates {@code spans} to its partitioned, sharding-ready successor
@@ -168,9 +178,18 @@ class SpansLocalV2CutoverTest {
      */
     private static final String PAST_CEILING_ID = "ffffffff-ffff-7fff-8000-03b8d2a8d5e2";
 
+    /** The week {@code span_weeks} holds for {@link #PAST_CEILING_ID}: the Monday of the saturated 2299-12-31. */
+    private static final long PAST_CEILING_WEEK = 22991225L;
+
     /** Rows spread across three consecutive weekly partitions, so the backfill runs as three weekly batches. */
     private static final int SEED_WEEKS = 3;
     private static final int SURVIVORS_PER_WEEK = 30;
+
+    /** The analytics tables' rows per granule (ClickHouse's default {@code index_granularity}). */
+    private static final int INDEX_GRANULARITY = 8192;
+
+    /** A compare at full coverage: verify.sh's default, which applies no row filter. */
+    private static final int FULL_COVERAGE_PCT = 100;
     private static final int PRE_EXISTING_DELETED_PER_WEEK = 10;
     private static final int CASCADE_DELETED_PER_WEEK = 40;
     private static final int DELTA_UPSERTS = 12;
@@ -2081,6 +2100,141 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * The runbook's "Retrying the cutover after a stage B/C rollback — without re-backfilling" procedure. It rests on
+     * one physical claim: {@code spans_post_rollback_backup} IS the object Liquibase created as {@code spans_local_v2}
+     * (a ReplicatedMergeTree's replica path is fixed at CREATE and survives renames), so renaming it back yields a
+     * usable shadow and the retry needs only a delta, not a second full backfill. The procedure is deliberately manual,
+     * but an operator follows it under pressure, so the mechanism it depends on is pinned rather than taken on trust.
+     *
+     * <p>It also pins the consequences the runbook has to warn about, because each looks like a fault if unexpected:
+     * <ul>
+     * <li>the reused shadow is a <b>superset</b> of the restored original by exactly the post-cutover writes the
+     * rollback discarded, so a fidelity compare legitimately differs there;</li>
+     * <li>after the retry's {@code EXCHANGE} those writes are <b>live again</b>;</li>
+     * <li>except an id <b>deleted and then re-created</b> after {@code cutover_start}, which does NOT come back: the
+     * rollback's guard-less reverse replay masked it on the restored original, so the retry's forward replay finds it
+     * not live on the source and masks the re-creation on the shadow too. Pinned so a change to the resurrection guard
+     * cannot silently alter it.</li>
+     * </ul>
+     */
+    @Test
+    void rollbackBackupIsReusableAsTheShadowForARetryWithoutRebackfilling() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedSpans(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+
+        // Walk the chain the reuse claim depends on, so a failure localizes itself instead of only showing a wrong end
+        // state: the first backfill populated the shadow...
+        assertThat(liveCount("spans_local_v2", idStrings(survivors), workspaceId))
+                .as("the first backfill populated the shadow")
+                .isEqualTo(survivors.size());
+
+        // Written to the original after the last delta and before the EXCHANGE, and not swept forward here — so the
+        // shadow never receives it, and only a retry delta anchored before it (the ORIGINAL backfill_start) catches it.
+        var gapWrite = mintIdsAt(1, Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros())));
+        insertRows(gapWrite, workspaceId, projectId, "gap", _ -> gapWrite.getFirst().createdAt());
+
+        var cutoverStart = nowMicros();
+        exchangeTables();
+        assertThat(liveCount("spans", idStrings(survivors), workspaceId))
+                .as("...and the EXCHANGE made that copy live")
+                .isEqualTo(survivors.size());
+
+        // Accepted by the successor after cutover_start, so the stage-B promote makes it non-live. It is the row whose
+        // fate the runbook has to be explicit about on a retry.
+        var postCutover = mintIdsAt(3, Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros())));
+        postCutover.forEach(span -> insertSuccessorSpan(span, workspaceId, projectId, "post-cutover"));
+        // Deleted by the trace-delete cascade after cutover_start, then re-created under the SAME full key on the
+        // successor: bridged as deleted, yet live in the copy the rollback parks.
+        var recreated = survivors.getFirst();
+        var recreatedId = Set.of(recreated.id().toString());
+        var untouched = idStrings(survivors.subList(1, survivors.size()));
+        recordDeletionEvents(recreatedId, workspaceId, projectId.toString(), "cascade");
+        lightweightDeleteScoped(recreatedId, workspaceId, projectId);
+        insertSuccessorSpan(recreated, workspaceId, projectId, "recreated-after-cutover");
+
+        // Fingerprint the shadow while it is still live. Row counts alone would accept a parked copy holding the right
+        // ids with mangled or missing field values, which is not a reusable shadow — and reuse is the whole claim here.
+        var parkedCopy = fingerprint("spans", Shape.NEW, workspaceId);
+
+        rollbackExchangeBack();
+        reverseReplay(cutoverStart);
+
+        // ...and the rollback parked that same copy rather than discarding it. This is the assertion the whole
+        // procedure rests on: if the parked backup were empty (or recycled), reuse would be a re-backfill wearing a
+        // rename.
+        assertThat(liveCount("spans_post_rollback_backup", untouched, workspaceId))
+                .as("...and the rollback parked that copy intact, which is what makes it reusable")
+                .isEqualTo(untouched.size());
+        assertThat(liveCount("spans", idStrings(postCutover), workspaceId))
+                .as("baseline: the promote made the post-cutover writes non-live on the restored original")
+                .isZero();
+        assertThat(liveCount("spans", recreatedId, workspaceId))
+                .as("baseline: the reverse replay masked the deleted-then-re-created id on the restored original")
+                .isZero();
+
+        // The documented reuse: hand the parked successor back to the shadow name. No re-backfill.
+        execute("RENAME TABLE spans_post_rollback_backup TO spans_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        });
+
+        assertThat(fingerprint("spans_local_v2", Shape.NEW, workspaceId))
+                .as("""
+                        the reused shadow holds the parked copy field-for-field, so the rename yields a shadow the \
+                        delta can resume onto rather than one that has to be rebuilt""")
+                .isEqualTo(parkedCopy);
+        assertThat(liveCount("spans_local_v2", idStrings(gapWrite), workspaceId))
+                .as("negative control: the gap write never reached the shadow, so it is the delta's to bring back")
+                .isZero();
+        assertThat(newestNames("spans_local_v2", recreatedId, workspaceId))
+                .as("""
+                        negative control: the shadow still serves the re-creation, so its absence after the retry is \
+                        the forward replay's doing rather than something the shadow simply lacked""")
+                .containsExactly("recreated-after-cutover");
+
+        // Resume the normal forward flow — delta_replay.sh — from the ORIGINAL anchor, as the runbook prescribes.
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart);
+
+        assertThat(liveCount("spans_local_v2", idStrings(gapWrite), workspaceId))
+                .as("the delta from the original backfill_start catches what the first cutover left on the original")
+                .isEqualTo(1L);
+        assertThat(liveCount("spans_local_v2", untouched, workspaceId))
+                .as("survivors reconcile after the delta")
+                .isEqualTo(untouched.size());
+        assertThat(liveCount("spans_local_v2", idStrings(postCutover), workspaceId))
+                .as("the reused shadow is a SUPERSET: it still carries the writes the rollback discarded")
+                .isEqualTo(postCutover.size());
+        assertThat(destinationLogicalRows(workspaceId))
+                .as("...by exactly those writes and nothing else — hence the expected one-sided fidelity difference")
+                .isEqualTo(sourceLogicalRows(workspaceId) + postCutover.size());
+
+        exchangeTables();
+
+        assertThat(columnType("spans", "end_time"))
+                .as("the retry's EXCHANGE lands the successor schema, from a shadow that was never re-backfilled")
+                .doesNotStartWith("Nullable");
+        assertThat(liveCount("spans", union(untouched, idStrings(gapWrite)), workspaceId))
+                .as("every row live on the original is live after the retry")
+                .isEqualTo(untouched.size() + gapWrite.size());
+        assertThat(liveCount("spans", idStrings(postCutover), workspaceId))
+                .as("and the discarded post-cutover writes are LIVE AGAIN — the caveat the runbook must state")
+                .isEqualTo(postCutover.size());
+        assertThat(liveCount("spans", recreatedId, workspaceId))
+                .as("""
+                        except the deleted-then-re-created id, which stays absent: the delete is honoured and the \
+                        re-creation is lost with the other discarded writes""")
+                .isZero();
+    }
+
+    /**
      * The rollback's sentinel repair ({@code 000004_rollback_sentinel_repair.sql}) and the counts that verify it
      * ({@code 000004_rollback_verify_sentinels.sql}) — the one shipped rollback statement nothing else exercises.
      *
@@ -2089,46 +2243,93 @@ class SpansLocalV2CutoverTest {
      * {@code end_time IS NOT NULL} and so computed a large NEGATIVE value from the epoch sentinel — is RECOMPUTED by
      * the mutation rather than left stale. {@code stale_duration} in the verify block exists for exactly that doubt;
      * asserting it reaches 0 is what makes the documented repair sufficient on its own.
+     *
+     * <p>The repair carries two commands with different predicates in one mutation, so a row carrying only one
+     * sentinel must get only that column restored. On spans that is the common shape — a finished span that made no
+     * LLM call has a real {@code end_time} and no {@code ttft} — so merging the two commands would null real end times
+     * across the whole window.
+     *
+     * <p>The window is what keeps the repair off client data, so the controls sit on both sides of it. Inside it, a
+     * <b>genuine</b> negative duration — a client that really sent {@code end_time} before {@code start_time} —
+     * matches neither predicate. Before it, a row carrying both sentinels holds values a client sent, not flag damage.
+     * Both must come through unchanged: an over-matching repair would null client data in place, and the window-scoped
+     * counts would still report success. A row created before the window and updated inside it is the opposite case —
+     * its sentinels came from that update — and must be repaired, which pins the {@code last_updated_at} arm.
      */
     @Test
-    void sentinelRepairRestoresNullAndRecomputesTheNegativeDuration() {
+    void sentinelRepairRestoresNullAndRecomputesDurationLeavingGenuineNegativesAlone() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
 
         // What the flag writes while spanColumnsNonNullable is live: the epoch / NaN sentinels, stored in the still-
         // Nullable ORIGINAL. Planted directly, because that is the state a rollback inherits rather than creates.
         var at = weekInstant(0, 7);
-        var affected = mintIdsInWeek(0, 1).getFirst();
-        execute("""
-                INSERT INTO spans (id, workspace_id, project_id, trace_id, name, start_time, end_time, ttft,
-                                   created_at, last_updated_at)
-                VALUES (:id, :workspace_id, :project_id, :trace_id, 'sentinel-bearing',
-                        toDateTime64(:at, 9), toDateTime64('1970-01-01 00:00:00', 9), toFloat64('nan'),
-                        toDateTime64(:at, 9), toDateTime64(:at_micros, 6))
-                """, statement -> statement
-                .bind("id", affected.id().toString())
-                .bind("workspace_id", workspaceId)
-                .bind("project_id", projectId)
-                .bind("trace_id", affected.traceId().toString())
-                .bind("at", ClickHouseDateTimeFormat.formatNanos(at))
-                .bind("at_micros", ClickHouseDateTimeFormat.formatMicros(at)));
+        // An hour before the window opens, so no bound is anywhere near it.
+        var earlier = at.minusSeconds(3600);
+        var ended = at.plusMillis(100);
+        // A real end_time 5 s BEFORE start_time, with a real ttft: a negative duration owed to the client.
+        var endedEarly = at.minusSeconds(5);
+        var spans = mintIdsInWeek(0, 6);
+        insertShapedSpan(spans.get(0), workspaceId, projectId, "sentinel-both", at, Instant.EPOCH, "nan", at, at);
+        insertShapedSpan(spans.get(1), workspaceId, projectId, "sentinel-end-time-only", at, Instant.EPOCH, "1.5", at,
+                at);
+        insertShapedSpan(spans.get(2), workspaceId, projectId, "sentinel-ttft-only", at, ended, "nan", at, at);
+        insertShapedSpan(spans.get(3), workspaceId, projectId, "genuine-negative", at, endedEarly, "2.5", at, at);
+        insertShapedSpan(spans.get(4), workspaceId, projectId, "updated-in-window", earlier, Instant.EPOCH, "nan",
+                earlier, at);
+        insertShapedSpan(spans.get(5), workspaceId, projectId, "outside-window", earlier, Instant.EPOCH, "nan",
+                earlier, earlier);
 
         var windowFrom = ClickHouseDateTimeFormat.formatMicros(at.minusSeconds(60));
         var windowTo = ClickHouseDateTimeFormat.formatMicros(at.plusSeconds(60));
+        var epoch = ClickHouseDateTimeFormat.formatNanos(Instant.EPOCH);
+        // What the original's duration computes from an epoch end_time: start_time's distance from 1970, negated.
+        var negativeFromSentinelAt = (double) -at.toEpochMilli();
+        var negativeFromSentinelEarlier = (double) -earlier.toEpochMilli();
+        var sentinelBoth = SentinelColumns.builder()
+                .endTime(epoch)
+                .ttft(Double.NaN)
+                .duration(negativeFromSentinelAt)
+                .build();
+        var sentinelEndTimeOnly = sentinelBoth.toBuilder().ttft(1.5).build();
+        var sentinelTtftOnly = SentinelColumns.builder()
+                .endTime(ClickHouseDateTimeFormat.formatNanos(ended))
+                .ttft(Double.NaN)
+                .duration(100.0)
+                .build();
+        var genuineNegative = SentinelColumns.builder()
+                .endTime(ClickHouseDateTimeFormat.formatNanos(endedEarly))
+                .ttft(2.5)
+                .duration(-5000.0)
+                .build();
+        var sentinelBothEarlier = sentinelBoth.toBuilder().duration(negativeFromSentinelEarlier).build();
+        assertThat(sentinelColumns(workspaceId))
+                .as("precondition: every row is stored as planted, each epoch end_time with a large negative duration")
+                .isEqualTo(Map.of(
+                        "sentinel-both", sentinelBoth,
+                        "sentinel-end-time-only", sentinelEndTimeOnly,
+                        "sentinel-ttft-only", sentinelTtftOnly,
+                        "genuine-negative", genuineNegative,
+                        "updated-in-window", sentinelBothEarlier,
+                        "outside-window", sentinelBothEarlier));
 
         var before = sentinelCounts(windowFrom, windowTo, workspaceId);
-        assertThat(before.sentinelEndTime()).as("precondition: the epoch sentinel is stored").isEqualTo(1L);
-        assertThat(before.sentinelTtft()).as("and the NaN one").isEqualTo(1L);
+        assertThat(before.sentinelEndTime())
+                .as("precondition: the window holds three epoch sentinels, one of them only updated in it")
+                .isEqualTo(3L);
+        assertThat(before.sentinelTtft()).as("and three NaN ones").isEqualTo(3L);
         assertThat(before.negativeFromSentinel())
                 .as("""
-                        and the original's MATERIALIZED duration turned it into a large negative — the failure the \
-                        repair exists for, and why restoring the two columns is not the whole job""")
-                .isEqualTo(1L);
+                        and the original's MATERIALIZED duration turned each epoch end_time into a large negative — \
+                        the failure the repair exists for, and why restoring the two columns is not the whole job""")
+                .isEqualTo(3L);
 
         sentinelRepair(windowFrom, windowTo);
 
         var after = sentinelCounts(windowFrom, windowTo, workspaceId);
-        assertThat(after.sentinelEndTime()).as("the repair restores NULL on end_time").isZero();
+        assertThat(after.sentinelEndTime())
+                .as("the repair restores NULL on end_time, including on the row only updated inside the window")
+                .isZero();
         assertThat(after.sentinelTtft()).as("and on ttft").isZero();
         assertThat(after.negativeFromSentinel()).as("so no row carries a sentinel-derived negative duration").isZero();
         assertThat(after.staleDuration())
@@ -2136,6 +2337,18 @@ class SpansLocalV2CutoverTest {
                         and duration was RECOMPUTED by the mutation rather than left stale — which is what makes the \
                         ALTER UPDATE sufficient, where a MATERIALIZE COLUMN would re-evaluate the same expression""")
                 .isZero();
+        assertThat(sentinelColumns(workspaceId))
+                .as("""
+                        each in-window sentinel is restored to NULL — only on the column that carried it — and \
+                        duration is recomputed from the result, while the genuine negative and the row written before \
+                        the window keep every value exactly""")
+                .isEqualTo(Map.of(
+                        "sentinel-both", SentinelColumns.builder().build(),
+                        "sentinel-end-time-only", sentinelEndTimeOnly.toBuilder().endTime(null).duration(null).build(),
+                        "sentinel-ttft-only", sentinelTtftOnly.toBuilder().ttft(null).build(),
+                        "genuine-negative", genuineNegative,
+                        "updated-in-window", SentinelColumns.builder().build(),
+                        "outside-window", sentinelBothEarlier));
     }
 
     // --- schema parity -------------------------------------------------------------------------------------------
@@ -2272,6 +2485,256 @@ class SpansLocalV2CutoverTest {
         assertThat(tableExists("spans_dist_old"))
                 .as("the data-less ex-wrapper is dropped, not left to block the next un-wrap")
                 .isFalse();
+    }
+
+    // --- span_weeks registration (span_weeks_mv) ----------------------------------------------------------------
+
+    /**
+     * {@code span_weeks_mv} is bound to the name {@code spans}, not to the table behind it: in every topology the
+     * runbook can leave, rollbacks and the un-wrap included, it is on {@code spans} alone and registers the spans
+     * written through it, and nothing the cutover copies is left unindexed. The copies write around the name, so they
+     * register nothing; their spans were registered when first written through it, under the same ids. The spans
+     * written include a far-future and a past-ceiling id: their weeks come from the id, never from the legacy
+     * {@code id_at} that wraps the first, and the runbook's check must derive the same weeks or it reports them.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void spanWeeksViewFollowsTheSpansNameInEveryTopology(Runnable reachTopology) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+
+        seedSpans(mintIdsInWeek(0, 3), workspaceId, projectId);
+        backfillWeek(0);
+        reachTopology.run();
+        var written = Stream.of(ID_GENERATOR.generateId(weekInstant(1, 1)), ID_GENERATOR.generateId(FAR_FUTURE),
+                UUID.fromString(PAST_CEILING_ID))
+                .map(id -> SeededSpan.builder().id(id).traceId(traceId).createdAt(Instant.now()).build())
+                .toList();
+        written.forEach(span -> insertSuccessorSpan(span, workspaceId, projectId, "through-the-name", "spans"));
+        var writtenIds = written.stream().map(span -> span.id().toString()).collect(Collectors.toUnmodifiableSet());
+
+        assertThat(liveCount("spans", writtenIds, workspaceId))
+                .as("the spans written are live under `spans`, so the check below covers them")
+                .isEqualTo(written.size());
+        assertThat(tablesWithDependentView("span_weeks_mv"))
+                .as("the view is on `spans` alone, never left on a renamed table")
+                .containsExactly("spans");
+        assertThat(spanWeeks(workspaceId, projectId, traceId))
+                .as("each span written through `spans` is registered in the week of its id")
+                .containsExactlyInAnyOrder(yyyymmdd(ANCHOR_MONDAY.plusWeeks(1)), FAR_FUTURE_HONEST_WEEK,
+                        PAST_CEILING_WEEK);
+        assertThat(unindexedSpanWeeks(workspaceId, projectId))
+                .as("and no span live under `spans` is missing from the index")
+                .isZero();
+    }
+
+    /** The topologies the runbook can leave {@code spans} in: before the swap, after it, wrapped, and each way back. */
+    private Stream<Arguments> spanWeeksViewFollowsTheSpansNameInEveryTopology() {
+        Runnable original = () -> {
+        };
+        Runnable exchanged = this::exchangeTables;
+        Runnable wrapped = () -> {
+            exchangeTables();
+            wrapInDistributed();
+        };
+        Runnable rolledBackAfterExchange = () -> {
+            exchangeTables();
+            rollbackExchangeBack();
+        };
+        Runnable rolledBackAfterWrap = () -> {
+            wrapped.run();
+            rollbackPromoteOriginal();
+        };
+        Runnable unwrapped = () -> {
+            wrapped.run();
+            unwrap();
+        };
+        return Stream.of(
+                arguments(Named.of("original", original)),
+                arguments(Named.of("exchanged", exchanged)),
+                arguments(Named.of("wrapped", wrapped)),
+                arguments(Named.of("rolled back after the exchange", rolledBackAfterExchange)),
+                arguments(Named.of("rolled back after the wrap", rolledBackAfterWrap)),
+                arguments(Named.of("unwrapped", unwrapped)));
+    }
+
+    /**
+     * The negative control for the runbook's unindexed-spans check: a span written around the {@code spans} name, here
+     * straight into the shadow as a partition import would be, is missed by {@code span_weeks_mv}, and the check finds
+     * it once the swap makes it live.
+     */
+    @Test
+    void unindexedSpanWeeksCheckFindsASpanWrittenAroundTheSpansName() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        seedSpans(mintIdsInWeek(0, 3), workspaceId, projectId);
+        backfillWeek(0);
+        var aroundTheName = mintIdsInWeek(1, 1).getFirst();
+        insertSuccessorSpan(aroundTheName, workspaceId, projectId, "around-the-name", "spans_local_v2");
+        exchangeTables();
+
+        assertThat(spanWeeks(workspaceId, projectId, aroundTheName.traceId())).isEmpty();
+        assertThat(unindexedSpanWeeks(workspaceId, projectId)).isEqualTo(1L);
+    }
+
+    // --- single-pass compare and coverage (000005 compare-weeks) -------------------------------------------------
+
+    /**
+     * {@code compare-weeks} must return, for every week, exactly the verdict {@code compare} returns on that week's own
+     * window: {@code verify.sh --single-pass} prints its rows where the weekly walk prints {@code compare}'s. Proven at
+     * every stage the runbook verifies, on the table pair it names there; the wrapped stage reads the successor through
+     * the {@code Distributed} wrapper.
+     *
+     * <p>The seed carries the two shapes that make the old side's reduction load-bearing: a span held under two parents
+     * (the source keeps both rows, the destination one) and, from the delta on, a span updated during the window. It
+     * also places a span at week 1's first instant and one a microsecond before it, where the single pass's week number
+     * and the window's half-open bounds must agree.
+     */
+    @ParameterizedTest
+    @EnumSource(CompareStage.class)
+    void singlePassReturnsEachWeeksCompareVerdictAtEveryStage(CompareStage stage) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var seeded = mintIds(4);
+        seedSpans(seeded, workspaceId, projectId);
+        insertRowsWithParent(List.of(seeded.getFirst()), workspaceId, projectId, "reparented",
+                span -> span.createdAt().plusSeconds(60), ID_GENERATOR.generateId().toString());
+        var weekOneStart = ANCHOR_MONDAY.plusWeeks(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        seedSpans(mintIdsAt(1, weekOneStart.minusNanos(1_000)), workspaceId, projectId);
+        seedSpans(mintIdsAt(1, weekOneStart), workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        IntStream.range(0, SEED_WEEKS).forEach(this::backfillWeek);
+        if (stage != CompareStage.POST_BACKFILL) {
+            insertRows(List.of(seeded.get(5)), workspaceId, projectId, "updated",
+                    _ -> Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros())));
+            deltaInsert(backfillStart);
+        }
+        switch (stage) {
+            case POST_EXCHANGE -> exchangeTables();
+            case WRAPPED -> {
+                exchangeTables();
+                wrapInDistributed();
+            }
+            case POST_ROLLBACK -> {
+                exchangeTables();
+                rollbackExchangeBack();
+            }
+            default -> {
+            }
+        }
+
+        var expected = weeklyCompare(stage.oldTable(), stage.newTable(), FULL_COVERAGE_PCT);
+        var actual = compareWeeks(stage.oldTable(), stage.newTable(), FULL_COVERAGE_PCT);
+
+        assertThat(expected)
+                .as("precondition: the boundary spans fall either side of week 1's start")
+                .extractingByKeys(0, 1, 2)
+                .extracting(WeekVerdict::srcRows)
+                .containsExactly(5L, 5L, 4L);
+        assertThat(expected.values())
+                .as("precondition: every week matches")
+                .allSatisfy(verdict -> assertThat(verdict.ok()).isTrue());
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    /**
+     * A genuine difference must fail its own week in the single pass, with the same counts and checksums
+     * {@code compare} reports on that week's window, and leave every other week passing: the week is what the driver
+     * then resolves on its own window. Week 1 differs in each way a copy can: content that differs on both sides, a
+     * week the destination never received, and rows deleted on the source but still live on the destination. The last
+     * two leave the week on one side only, which the single pass must still report under its own week, with zero rows
+     * on the other side.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void aGenuineDifferenceFailsItsOwnWeekAndNoOtherInTheSinglePass(Consumer<WeekSpans> divergeWeekOne,
+            long expectedSrcRows, long expectedDstRows) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var seeded = mintIds(4);
+        seedSpans(seeded, workspaceId, projectId);
+        backfillWeek(0);
+        backfillWeek(2);
+        divergeWeekOne.accept(WeekSpans.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .spans(seeded.subList(4, 8))
+                .build());
+
+        var expected = weeklyCompare("spans", "spans_local_v2", FULL_COVERAGE_PCT);
+        var actual = compareWeeks("spans", "spans_local_v2", FULL_COVERAGE_PCT);
+
+        assertThat(actual).isEqualTo(expected);
+        assertThat(actual).extractingByKeys(0, 1, 2)
+                .extracting(WeekVerdict::ok)
+                .containsExactly(true, false, true);
+        assertThat(actual.get(1))
+                .extracting(WeekVerdict::srcRows, WeekVerdict::dstRows)
+                .containsExactly(expectedSrcRows, expectedDstRows);
+    }
+
+    private Stream<Arguments> aGenuineDifferenceFailsItsOwnWeekAndNoOtherInTheSinglePass() {
+        Consumer<WeekSpans> contentDiffers = week -> {
+            backfillWeek(1);
+            // A WINNING version on the destination only, so the live rows genuinely disagree.
+            var diverged = week.spans().getFirst();
+            insertSuccessorSpanAt(diverged, week.workspaceId(), week.projectId(), "diverged-content",
+                    diverged.createdAt().plusSeconds(60), "spans_local_v2");
+        };
+        Consumer<WeekSpans> notCopied = _ -> {
+        };
+        Consumer<WeekSpans> deletionNotReplayed = week -> {
+            backfillWeek(1);
+            lightweightDelete(idStrings(week.spans()), week.workspaceId());
+        };
+        return Stream.of(
+                arguments(Named.of("content differs", contentDiffers), 4L, 4L),
+                arguments(Named.of("week not copied", notCopied), 4L, 0L),
+                arguments(Named.of("deletion not replayed", deletionNotReplayed), 0L, 4L));
+    }
+
+    /**
+     * {@code --coverage PCT} compares the spans created in the first {@code 36 * PCT} seconds of every UTC hour. Each
+     * week holds one span per minute of one hour, so 1% keeps the span at :00, 10% the six at :00-:05 and 50% the
+     * thirty at :00-:29: in every week, and the same rows on both sides.
+     */
+    @ParameterizedTest
+    @CsvSource({"1, 1", "10, 6", "50, 30"})
+    void coverageComparesTheSameSliceOfEveryWeek(int coverage, int rowsPerWeek) {
+        seedSpans(mintIdsEveryMinuteOfAnHour(), UUID.randomUUID().toString(), ID_GENERATOR.generateId());
+        IntStream.range(0, SEED_WEEKS).forEach(this::backfillWeek);
+
+        var actual = compareWeeks("spans", "spans_local_v2", coverage);
+
+        assertThat(actual.values())
+                .hasSize(SEED_WEEKS)
+                .allSatisfy(verdict -> {
+                    assertThat(verdict.srcRows()).isEqualTo(rowsPerWeek);
+                    assertThat(verdict.dstRows()).isEqualTo(rowsPerWeek);
+                    assertThat(verdict.ok()).isTrue();
+                });
+    }
+
+    /**
+     * Unlike the retired hash of the id, the coverage slice lets the {@code created_at} minmax skip index drop the
+     * granules lying outside it under {@code FINAL}, on both tables — the premise of {@code --coverage} shrinking the
+     * read. The seed is four granules of one project's spans, 100 ms apart from the top of an hour, so each granule
+     * holds about 13.7 minutes: a slice ending at :00:36 (1%), :15 (25%) or :30 (50%) reaches into 1, 2 or 3 of them.
+     * Asserted on the index analysis ({@code EXPLAIN ESTIMATE}), which is also what the driver's estimate reads.
+     */
+    @ParameterizedTest
+    @CsvSource({"100, 4", "50, 3", "25, 2", "1, 1"})
+    void aCoverageSliceSkipsTheGranulesOutsideIt(int coverage, int expectedGranules) {
+        seedOneHourOfGranules(4);
+        backfillWeek(0);
+
+        assertThat(estimatedGranules("spans", coverage)).isEqualTo(expectedGranules);
+        assertThat(estimatedGranules("spans_local_v2", coverage)).isEqualTo(expectedGranules);
     }
 
     // --- cutover steps (mirror the runbook SQL) ------------------------------------------------------------------
@@ -2682,6 +3145,24 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * Rollback stage C (000004_rollback_stage_c_promote_original): one atomic multi-target RENAME rotates the wrapper
+     * out, the original back into {@code spans} and the shard to {@code spans_post_rollback_backup}; then the data-less
+     * ex-wrapper is dropped.
+     */
+    private void rollbackPromoteOriginal() {
+        execute("""
+                RENAME TABLE
+                    spans TO spans_dist_old,
+                    spans_pre_cutover_backup TO spans,
+                    spans_local TO spans_post_rollback_backup
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
+        });
+        execute("DROP TABLE IF EXISTS spans_dist_old ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+    }
+
+    /**
      * The reverse deletion replay (000004_rollback_reverse_replay): re-apply the deletes that fired on the successor
      * since {@code cutover_start} onto the restored original. Deliberately NO resurrection guard — rollback abandons
      * post-cutover writes while still honouring post-cutover deletes, and {@code spans} here is the RESTORED ORIGINAL,
@@ -2771,7 +3252,10 @@ class SpansLocalV2CutoverTest {
         });
     }
 
-    /** A row written directly into the SUCCESSOR schema — a post-cutover write, or one into the wrapped shard. */
+    /**
+     * A row written directly into the SUCCESSOR schema — a post-cutover write, or one into the wrapped shard. Through a
+     * {@code Distributed} {@code spans} it is delivered before the insert returns, so a read straight after sees it.
+     */
     private void insertSuccessorSpan(SeededSpan span, String workspaceId, UUID projectId, String name) {
         insertSuccessorSpan(span, workspaceId, projectId, name, "spans");
     }
@@ -2779,6 +3263,7 @@ class SpansLocalV2CutoverTest {
     private void insertSuccessorSpan(SeededSpan span, String workspaceId, UUID projectId, String name, String table) {
         execute("""
                 INSERT INTO %s (id, workspace_id, project_id, trace_id, name, created_at, last_updated_at)
+                SETTINGS distributed_foreground_insert = 1
                 VALUES (:id, :workspace_id, :project_id, :trace_id, :name, now64(6), now64(6))
                 """.formatted(table), statement -> statement
                 .bind("id", span.id().toString())
@@ -3315,6 +3800,51 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * A row in the ORIGINAL schema with explicit {@code end_time} and {@code ttft}, as the flag or a client left it.
+     * {@code ttft} is a Float64 literal, so {@code "nan"} plants the sentinel.
+     */
+    private void insertShapedSpan(SeededSpan span, String workspaceId, UUID projectId, String name, Instant startTime,
+            Instant endTime, String ttft, Instant createdAt, Instant lastUpdatedAt) {
+        execute("""
+                INSERT INTO spans (id, workspace_id, project_id, trace_id, name, start_time, end_time, ttft,
+                                   created_at, last_updated_at)
+                VALUES (:id, :workspace_id, :project_id, :trace_id, :name,
+                        toDateTime64(:start_time, 9, 'UTC'), toDateTime64(:end_time, 9, 'UTC'), toFloat64(:ttft),
+                        toDateTime64(:created_at, 9, 'UTC'), toDateTime64(:last_updated_at, 6, 'UTC'))
+                """, statement -> statement
+                .bind("id", span.id().toString())
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("trace_id", span.traceId().toString())
+                .bind("name", name)
+                .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
+                .bind("end_time", ClickHouseDateTimeFormat.formatNanos(endTime))
+                .bind("ttft", ttft)
+                .bind("created_at", ClickHouseDateTimeFormat.formatNanos(createdAt))
+                .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt)));
+    }
+
+    /** {@code end_time}, {@code ttft} and {@code duration} of every span in the workspace, keyed by name. */
+    private Map<String, SentinelColumns> sentinelColumns(String workspaceId) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT name, toString(end_time) AS end_time, ttft, duration
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                """)
+                .bind("workspace_id", workspaceId)
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> Map.entry(
+                        row.get("name", String.class),
+                        SentinelColumns.builder()
+                                .endTime(row.get("end_time", String.class))
+                                .ttft(row.get("ttft", Double.class))
+                                .duration(row.get("duration", Double.class))
+                                .build()))))
+                .collectList().block().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
      * The four counts of 000004_rollback_verify_sentinels, workspace-scoped and without the cluster function the
      * shipped block uses — a single-node container has one replica, and that function is about reach, not arithmetic.
      */
@@ -3358,6 +3888,63 @@ class SpansLocalV2CutoverTest {
                             .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("c", Long.class))));
                 })
                 .block();
+    }
+
+    /** The tables in the database that feed {@code view}: those whose inserts it receives. */
+    private List<String> tablesWithDependentView(String view) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT name
+                FROM system.tables
+                WHERE database = :db
+                  AND has(dependencies_table, :view)
+                """)
+                .bind("db", DATABASE_NAME)
+                .bind("view", view)
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> row.get("name", String.class))))
+                .collectList().block();
+    }
+
+    /** The weeks {@code span_weeks} holds for one trace. */
+    private List<Long> spanWeeks(String workspaceId, UUID projectId, UUID traceId) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT DISTINCT id_week
+                FROM span_weeks
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id = :trace_id
+                  AND is_deleted = 0
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("trace_id", traceId.toString())
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> row.get("id_week", Long.class))))
+                .collectList().block();
+    }
+
+    /**
+     * The runbook's check before turning {@code spanWeeksReadEnabled} on: how many (trace, week) pairs of the
+     * project's spans live under {@code spans} the {@code span_weeks} index does not hold. The week comes from the id,
+     * as {@code span_weeks_mv} and the backfill derive it.
+     */
+    private long unindexedSpanWeeks(String workspaceId, UUID projectId) {
+        return scalar("""
+                SELECT count() AS c
+                FROM (
+                    SELECT DISTINCT workspace_id, project_id, trace_id,
+                        toUInt32(toYYYYMMDD(toDate32(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'))
+                            - toIntervalDay(toDayOfWeek(toDateTime64(UUIDv7ToDateTime(toUUID(id)), 0, 'UTC'), 1))))
+                            AS id_week
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                ) AS s
+                LEFT ANTI JOIN (
+                    SELECT workspace_id, project_id, trace_id, id_week
+                    FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND is_deleted = 0
+                ) AS w USING (workspace_id, project_id, trace_id, id_week)
+                """, statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString()));
     }
 
     /**
@@ -3773,13 +4360,222 @@ class SpansLocalV2CutoverTest {
      * is needed. Argument order matches on both shapes (both iterate COPIED_COLUMNS), so a faithfully-migrated row
      * hashes identically under {@link #OLD_HASH_OVERRIDES} and {@link #NEW_HASH_OVERRIDES}.
      */
-    private static String rowHash(Map<String, String> overrides) {
+    private String rowHash(Map<String, String> overrides) {
         var args = Arrays.stream(COPIED_COLUMNS.split(","))
                 .map(String::trim)
                 .filter(column -> !column.isEmpty())
                 .map(column -> overrides.getOrDefault(column, column))
                 .collect(Collectors.joining(",\n    "));
         return "cityHash64(\n    %s)".formatted(args);
+    }
+
+    // --- per-week compare (000005 compare, compare-weeks) --------------------------------------------------------
+
+    /** 000005 {@code compare} on each seed week's own window: the verdicts the weekly walk prints. */
+    private Map<Integer, WeekVerdict> weeklyCompare(String oldTable, String newTable, int coverage) {
+        return IntStream.range(0, SEED_WEEKS).boxed()
+                .collect(Collectors.toMap(week -> week,
+                        week -> compareWindow(oldTable, newTable, weekStart(week), weekStart(week + 1), coverage)));
+    }
+
+    /**
+     * 000005 {@code compare} over one {@code created_at} window: the fidelity fingerprint of each side, the old side
+     * reduced twice as in {@link #fingerprint}.
+     */
+    private WeekVerdict compareWindow(String oldTable, String newTable, String windowLo, String windowHi,
+            int coverage) {
+        var compare = TemplateUtils.newST("""
+                WITH
+                    src AS (
+                        SELECT count() AS c, sum(h) AS h
+                        FROM (
+                            SELECT argMax(<old_hash>, last_updated_at) AS h
+                            FROM <old_table> FINAL
+                            WHERE created_at >= toDateTime64(:window_lo, 9, 'UTC')
+                              AND created_at \\<  toDateTime64(:window_hi, 9, 'UTC')
+                              <if(coverage)>AND (toMinute(created_at) \\< :slice_minute
+                                  OR (toMinute(created_at) = :slice_minute
+                                      AND toSecond(created_at) \\< :slice_second))<endif>
+                            GROUP BY workspace_id, project_id, trace_id, id
+                        )
+                    ),
+                    dst AS (
+                        SELECT count() AS c, sum(<new_hash>) AS h
+                        FROM <new_table> FINAL
+                        WHERE created_at >= toDateTime64(:window_lo, 6, 'UTC')
+                          AND created_at \\<  toDateTime64(:window_hi, 6, 'UTC')
+                          <if(coverage)>AND (toMinute(created_at) \\< :slice_minute
+                              OR (toMinute(created_at) = :slice_minute
+                                  AND toSecond(created_at) \\< :slice_second))<endif>
+                    )
+                SELECT
+                    src.c AS src_rows,
+                    dst.c AS dst_rows,
+                    ifNull(src.h, 0) AS src_checksum,
+                    ifNull(dst.h, 0) AS dst_checksum
+                FROM src, dst
+                SETTINGS use_skip_indexes_if_final = 1
+                """);
+        var sql = renderCompare(compare, oldTable, newTable, coverage);
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("window_lo", windowLo)
+                    .bind("window_hi", windowHi);
+            bindCoverageSlice(statement, coverage);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, ignored) -> toWeekVerdict(row))));
+        }).block();
+    }
+
+    /**
+     * 000005 {@code compare-weeks} over the seed weeks: {@code compare} with the week added to the {@code GROUP BY}, one
+     * row per week holding data on either side, read in one pass.
+     */
+    private Map<Integer, WeekVerdict> compareWeeks(String oldTable, String newTable, int coverage) {
+        var compare = TemplateUtils.newST("""
+                WITH
+                    src AS (
+                        SELECT week, count() AS c, sum(h) AS h
+                        FROM (
+                            SELECT
+                                intDiv(dateDiff('day', toDate(:anchor), toDate(created_at, 'UTC')), 7) AS week,
+                                argMax(<old_hash>, last_updated_at) AS h
+                            FROM <old_table> FINAL
+                            WHERE created_at >= toDateTime64(:window_lo, 9, 'UTC')
+                              AND created_at \\<  toDateTime64(:window_hi, 9, 'UTC')
+                              <if(coverage)>AND (toMinute(created_at) \\< :slice_minute
+                                  OR (toMinute(created_at) = :slice_minute
+                                      AND toSecond(created_at) \\< :slice_second))<endif>
+                            GROUP BY workspace_id, project_id, trace_id, id, week
+                        )
+                        GROUP BY week
+                    ),
+                    dst AS (
+                        SELECT
+                            intDiv(dateDiff('day', toDate(:anchor), toDate(created_at, 'UTC')), 7) AS week,
+                            count() AS c,
+                            sum(<new_hash>) AS h
+                        FROM <new_table> FINAL
+                        WHERE created_at >= toDateTime64(:window_lo, 6, 'UTC')
+                          AND created_at \\<  toDateTime64(:window_hi, 6, 'UTC')
+                          <if(coverage)>AND (toMinute(created_at) \\< :slice_minute
+                              OR (toMinute(created_at) = :slice_minute
+                                  AND toSecond(created_at) \\< :slice_second))<endif>
+                        GROUP BY week
+                    )
+                SELECT
+                    week,
+                    src.c AS src_rows,
+                    dst.c AS dst_rows,
+                    ifNull(src.h, 0) AS src_checksum,
+                    ifNull(dst.h, 0) AS dst_checksum
+                FROM src
+                FULL OUTER JOIN dst USING (week)
+                ORDER BY week
+                SETTINGS join_use_nulls = 0, use_skip_indexes_if_final = 1, optimize_aggregation_in_order = 0
+                """);
+        var sql = renderCompare(compare, oldTable, newTable, coverage);
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("anchor", ANCHOR_MONDAY.toString())
+                    .bind("window_lo", weekStart(0))
+                    .bind("window_hi", weekStart(SEED_WEEKS));
+            bindCoverageSlice(statement, coverage);
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, ignored) -> Map.entry(
+                            row.get("week", Long.class).intValue(), toWeekVerdict(row))))
+                    .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+        }).block();
+    }
+
+    /**
+     * Renders a compare over the table pair with the fidelity hash of each shape. Below 100, {@code coverage} adds
+     * verify.sh's {@code --coverage} ROW_FILTER, bound by {@link #bindCoverageSlice}; at 100 there is no filter, as
+     * verify.sh renders it.
+     */
+    private String renderCompare(ST compare, String oldTable, String newTable, int coverage) {
+        return compare
+                .add("old_table", oldTable)
+                .add("new_table", newTable)
+                .add("old_hash", rowHash(OLD_HASH_OVERRIDES))
+                .add("new_hash", rowHash(NEW_HASH_OVERRIDES))
+                .add("coverage", coverage < FULL_COVERAGE_PCT)
+                .render();
+    }
+
+    /** {@code --coverage}'s slice: the spans created in the first {@code 36 * coverage} s of every UTC hour. */
+    private void bindCoverageSlice(Statement statement, int coverage) {
+        if (coverage < FULL_COVERAGE_PCT) {
+            var sliceSeconds = coverage * 36;
+            statement.bind("slice_minute", sliceSeconds / 60)
+                    .bind("slice_second", sliceSeconds % 60);
+        }
+    }
+
+    private WeekVerdict toWeekVerdict(Row row) {
+        return WeekVerdict.builder()
+                .srcRows(row.get("src_rows", Long.class))
+                .dstRows(row.get("dst_rows", Long.class))
+                .srcChecksum(row.get("src_checksum", Long.class))
+                .dstChecksum(row.get("dst_checksum", Long.class))
+                .build();
+    }
+
+    /**
+     * Granules a coverage compare of {@code table} reads after index analysis, with the settings verify.sh runs a
+     * coverage compare under: exact mode off, as its re-read of each selected granule's key neighbours would undo the
+     * skip.
+     */
+    private long estimatedGranules(String table, int coverage) {
+        var sql = TemplateUtils.newST("""
+                SELECT sum(marks) AS c
+                FROM (
+                    EXPLAIN ESTIMATE SELECT count() FROM <table> FINAL
+                    <if(coverage)>WHERE toMinute(created_at) \\< :slice_minute
+                        OR (toMinute(created_at) = :slice_minute AND toSecond(created_at) \\< :slice_second)<endif>
+                    SETTINGS use_skip_indexes_if_final = 1, use_skip_indexes_if_final_exact_mode = 0
+                )
+                """)
+                .add("table", table)
+                .add("coverage", coverage < FULL_COVERAGE_PCT)
+                .render();
+        return scalar(sql, statement -> bindCoverageSlice(statement, coverage));
+    }
+
+    /**
+     * {@code granules} full granules of {@code spans} in one project, 100 ms apart from the top of week 0's seed hour,
+     * with time-ordered trace ids and real UUIDv7 ids, so each granule is a contiguous stretch of time on both tables —
+     * the shape of a busy project. Written with one {@code INSERT ... SELECT}, so it lands as one part.
+     */
+    private void seedOneHourOfGranules(int granules) {
+        execute("""
+                INSERT INTO spans (id, workspace_id, project_id, trace_id, parent_span_id, name, created_at, last_updated_at)
+                SELECT
+                    concat(substring(ms, 1, 8), '-', substring(ms, 9, 4), '-7000-8000-', leftPad(lower(hex(number)), 12, '0')),
+                    :workspace_id,
+                    :project_id,
+                    concat(leftPad(lower(hex(number)), 8, '0'), '-0000-7000-8000-000000000000'),
+                    '',
+                    'granules',
+                    created_at,
+                    created_at
+                FROM (
+                    SELECT
+                        number,
+                        toDateTime64(:start, 9, 'UTC') + toIntervalMillisecond(number * 100) AS created_at,
+                        leftPad(lower(hex(toUnixTimestamp64Milli(created_at))), 12, '0') AS ms
+                    FROM numbers(%d)
+                )
+                """
+                .formatted(granules * INDEX_GRANULARITY),
+                statement -> statement
+                        .bind("workspace_id", UUID.randomUUID().toString())
+                        .bind("project_id", ID_GENERATOR.generateId())
+                        .bind("start", ClickHouseDateTimeFormat.formatMicros(weekInstant(0, 0))));
+    }
+
+    private String weekStart(int week) {
+        return ANCHOR_MONDAY.plusWeeks(week) + " 00:00:00";
     }
 
     // --- primitives ----------------------------------------------------------------------------------------------
@@ -3811,6 +4607,22 @@ class SpansLocalV2CutoverTest {
                     .traceId(ID_GENERATOR.generateId(createdAt))
                     .createdAt(createdAt)
                     .build());
+        }
+        return spans;
+    }
+
+    /** One span per minute of each seed week's first hour, so a slice of the hour selects a known count per week. */
+    private List<SeededSpan> mintIdsEveryMinuteOfAnHour() {
+        var spans = new ArrayList<SeededSpan>();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            for (int minute = 0; minute < 60; minute++) {
+                var createdAt = weekInstant(week, minute * 60);
+                spans.add(SeededSpan.builder()
+                        .id(ID_GENERATOR.generateId(createdAt))
+                        .traceId(ID_GENERATOR.generateId(createdAt))
+                        .createdAt(createdAt)
+                        .build());
+            }
         }
         return spans;
     }
@@ -3861,14 +4673,18 @@ class SpansLocalV2CutoverTest {
         return spans;
     }
 
-    private static Set<String> idStrings(List<SeededSpan> spans) {
+    private Set<String> idStrings(List<SeededSpan> spans) {
         return spans.stream().map(span -> span.id().toString()).collect(Collectors.toUnmodifiableSet());
     }
 
-    private static <T> Set<T> union(Set<T> a, Set<T> b) {
+    private <T> Set<T> union(Set<T> a, Set<T> b) {
         var union = new ArrayList<>(a);
         union.addAll(b);
         return Set.copyOf(union);
+    }
+
+    private static long yyyymmdd(LocalDate monday) {
+        return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     /** A within-day offset so ids/created_at in the same week are distinct but stay inside their weekly partition. */
@@ -3936,9 +4752,60 @@ class SpansLocalV2CutoverTest {
         NEW
     }
 
+    /**
+     * The stages the runbook verifies at, and the table pair it compares at each: before the swap {@code spans} vs
+     * {@code spans_local_v2}; after it the parked original vs the successor, which is a {@code Distributed} wrapper once
+     * wrapped; after a stage B rollback the restored original vs the parked successor.
+     */
+    private enum CompareStage {
+        POST_BACKFILL,
+        PRE_EXCHANGE,
+        POST_EXCHANGE,
+        WRAPPED,
+        POST_ROLLBACK;
+
+        String oldTable() {
+            return switch (this) {
+                case POST_BACKFILL, PRE_EXCHANGE -> "spans";
+                case POST_EXCHANGE, WRAPPED -> "spans_pre_cutover_backup";
+                case POST_ROLLBACK -> "spans";
+            };
+        }
+
+        String newTable() {
+            return switch (this) {
+                case POST_BACKFILL, PRE_EXCHANGE -> "spans_local_v2";
+                case POST_EXCHANGE, WRAPPED -> "spans";
+                case POST_ROLLBACK -> "spans_post_rollback_backup";
+            };
+        }
+    }
+
+    /** One seed week's spans, and the workspace and project they were written under. */
+    @Builder(toBuilder = true)
+    private record WeekSpans(String workspaceId, UUID projectId, List<SeededSpan> spans) {
+    }
+
+    /** One window's compare verdict: each side's row count and checksum. */
+    @Builder(toBuilder = true)
+    private record WeekVerdict(long srcRows, long dstRows, long srcChecksum, long dstChecksum) {
+
+        boolean ok() {
+            return srcRows == dstRows && srcChecksum == dstChecksum;
+        }
+    }
+
     /** One seeded span: the ids and the {@code created_at} the backfill slices on. */
     @Builder(toBuilder = true)
     private record SeededSpan(UUID id, UUID traceId, Instant createdAt) {
+    }
+
+    /**
+     * The columns the sentinel repair rewrites, as stored. {@code endTime} is text so {@code NULL} and the epoch stay
+     * distinct, and boxed {@code Double} equality treats NaN as equal to itself, so the sentinel compares by value.
+     */
+    @Builder(toBuilder = true)
+    private record SentinelColumns(String endTime, Double ttft, Double duration) {
     }
 
     /** The rollback sentinel repair's four verification counts. */

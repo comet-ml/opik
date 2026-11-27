@@ -20,6 +20,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetri
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
@@ -76,6 +77,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.inject.AbstractModule;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -108,12 +110,14 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -138,6 +142,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
@@ -315,9 +320,11 @@ class AutomationRuleEvaluatorsResourceTest {
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
     private TraceResourceClient traceResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, Injector injector) {
+        this.mySqlTemplate = injector.getInstance(TransactionTemplate.class);
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         ClientSupportUtils.config(client);
@@ -1614,6 +1621,193 @@ class AutomationRuleEvaluatorsResourceTest {
             return Stream.of(
                     Arguments.of(true, false, "enabled to disabled"),
                     Arguments.of(false, true, "disabled to enabled"));
+        }
+
+        private static final Map<AutomationRuleEvaluatorType, Class<? extends AutomationRuleEvaluator<?, ?>>> CREATE_CLASSES = Map
+                .of(
+                        AutomationRuleEvaluatorType.LLM_AS_JUDGE, AutomationRuleEvaluatorLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorUserDefinedMetricPython.class,
+                        AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE,
+                        AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class,
+                        AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE, AutomationRuleEvaluatorSpanLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorSpanUserDefinedMetricPython.class);
+
+        private static final Map<AutomationRuleEvaluatorType, Class<? extends AutomationRuleEvaluatorUpdate<?, ?>>> UPDATE_CLASSES = Map
+                .of(
+                        AutomationRuleEvaluatorType.LLM_AS_JUDGE, AutomationRuleEvaluatorUpdateLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class,
+                        AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE,
+                        AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class,
+                        AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE,
+                        AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class,
+                        AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                        AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.class);
+
+        Stream<Arguments> updateEvaluator__whenTypeChanges__thenConflictAndRuleUnchanged() {
+            return Arrays.stream(AutomationRuleEvaluatorType.values())
+                    .flatMap(storedType -> Arrays.stream(AutomationRuleEvaluatorType.values())
+                            .filter(requestedType -> requestedType != storedType)
+                            .map(requestedType -> arguments(
+                                    factory.manufacturePojo(CREATE_CLASSES.get(storedType)),
+                                    factory.manufacturePojo(UPDATE_CLASSES.get(requestedType)))));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateEvaluator__whenTypeChanges__thenConflictAndRuleUnchanged(
+                AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
+                AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluatorWithProject = automationRuleEvaluator.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluatorWithProject, WORKSPACE_NAME, API_KEY);
+            var update = automationRuleEvaluatorUpdate.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT,
+                    "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
+                            .formatted(evaluatorWithProject.getType().getType(), update.getType().getType()));
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_CONFLICT)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
+                    .id(id)
+                    .projectId(getPrimaryProjectId(evaluatorWithProject.getProjects()))
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator)
+                        .usingRecursiveComparison()
+                        .ignoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                        .isEqualTo(expectedAutomationRuleEvaluator);
+                assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+            }
+        }
+
+        Stream<Arguments> updateEvaluator__whenStoredCodeBelongsToAnotherType__thenReadAsStoredTypeAndFixable() {
+            return Arrays.stream(AutomationRuleEvaluatorType.values())
+                    .flatMap(storedType -> Arrays.stream(AutomationRuleEvaluatorType.values())
+                            .filter(codeType -> codeType != storedType)
+                            .map(codeType -> arguments(
+                                    factory.manufacturePojo(CREATE_CLASSES.get(storedType)),
+                                    factory.manufacturePojo(CREATE_CLASSES.get(codeType)),
+                                    factory.manufacturePojo(UPDATE_CLASSES.get(storedType)))));
+        }
+
+        /**
+         * Updates used to accept a type change while writing only the code, leaving rules whose code belongs to
+         * another type. The API can't produce them anymore, so the code is copied between rows directly.
+         */
+        @ParameterizedTest
+        @MethodSource
+        void updateEvaluator__whenStoredCodeBelongsToAnotherType__thenReadAsStoredTypeAndFixable(
+                AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
+                AutomationRuleEvaluator<Object, ?> codeSourceEvaluator,
+                AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluatorWithProject = automationRuleEvaluator.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluatorWithProject, WORKSPACE_NAME, API_KEY);
+            var codeSourceId = evaluatorsResourceClient.createEvaluator(
+                    codeSourceEvaluator.toBuilder().projectIds(Set.of(projectId)).build(), WORKSPACE_NAME, API_KEY);
+            mySqlTemplate.inTransaction(WRITE, handle -> handle
+                    .createUpdate("""
+                            UPDATE automation_rule_evaluators evaluator
+                            JOIN automation_rule_evaluators code_source ON code_source.id = :codeSourceId
+                            SET evaluator.code = code_source.code
+                            WHERE evaluator.id = :id
+                            """)
+                    .bind("codeSourceId", codeSourceId.toString())
+                    .bind("id", id.toString())
+                    .execute());
+
+            AutomationRuleEvaluator<?, ?> actualMismatchedRule;
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                actualMismatchedRule = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualMismatchedRule.getType()).isEqualTo(evaluatorWithProject.getType());
+            }
+            try (var actualResponse = evaluatorsResourceClient.findEvaluator(
+                    projectId, null, 1, 10, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualPage = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
+                assertThat(actualPage.content())
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                        .contains(actualMismatchedRule);
+            }
+
+            var update = automationRuleEvaluatorUpdate.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_NO_CONTENT)) {
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
+                    .id(id)
+                    .projectId(getPrimaryProjectId(evaluatorWithProject.getProjects()))
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .name(update.getName())
+                    .samplingRate(update.getSamplingRate())
+                    .enabled(update.isEnabled())
+                    .triggerScope(update.getTriggerScope())
+                    .filters((List) update.getFilters())
+                    .code(update.getCode())
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator)
+                        .usingRecursiveComparison()
+                        .ignoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                        .isEqualTo(expectedAutomationRuleEvaluator);
+                assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+            }
+        }
+
+        @Test
+        void updateEvaluator__whenRuleInOtherWorkspaceAndTypeChanges__thenNotFound() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceName = "workspace-" + UUID.randomUUID();
+            var otherWorkspaceId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherApiKey, otherWorkspaceName, otherWorkspaceId,
+                    USER);
+            var otherProjectId = projectResourceClient.createProject(UUID.randomUUID().toString(), otherApiKey,
+                    otherWorkspaceName);
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(otherProjectId))
+                    .build();
+
+            var expectedError = new com.comet.opik.api.error.ErrorMessage(
+                    List.of("AutomationRuleEvaluator not found"));
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, otherWorkspaceName, update, otherApiKey, HttpStatus.SC_NOT_FOUND)) {
+                assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
         }
     }
 

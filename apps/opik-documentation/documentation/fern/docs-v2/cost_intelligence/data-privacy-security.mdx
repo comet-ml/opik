@@ -12,6 +12,8 @@ Cost Intelligence sits in the path of your developers' coding agent traffic, so 
 
 The short version: **only counts, costs, and structural metadata are reported.** Prompt and response content is not collected unless someone explicitly turns it on, and an organization can prevent that from ever happening.
 
+This page describes the plugin and the macOS app, where everything is worked out on the device. The [telemetry export](/cost-intelligence/install/claude-code-telemetry) path works differently, and [its own section](#the-telemetry-export-path) below says how.
+
 ## What is collected
 
 Each section below lists the fields and includes an expandable example of the real payload, shown with content capture **off** (the default). Values are illustrative.
@@ -232,6 +234,22 @@ One setting governs whether any prompt or response text leaves the device.
   themselves in. Silence is not a veto. For an IP-sensitive fleet, set
   `CIPX_CAPTURE_CONTENT` to `false` explicitly rather than leaving it unset.
 </Warning>
+
+## The telemetry export path
+
+With the [telemetry export](/cost-intelligence/install/claude-code-telemetry), nothing runs on the device to work out the breakdown, so Claude Code sends Opik the request and the reply of every model call and Opik works it out on the server.
+
+| | Plugin and macOS app | Telemetry export |
+| --- | --- | --- |
+| **What leaves the device** | Counts and structure. Text only with content capture on | The request and reply of every call, always |
+| **What Opik keeps** | What was sent | Counts and structure. Text only with content capture on |
+| **Content capture switch** | `CIPX_CAPTURE_CONTENT` | The `Cipx-Capture-Content` header, off unless set to `true` |
+| **Who can turn capture on** | A developer, unless the organization pins it off | Whoever delivers the settings |
+| **Thinking text** | Kept with content capture on | Never sent by Claude Code |
+
+With content capture off, Opik reads each request once to measure it and stores sizes, hashes and labels. A request waits up to 30 minutes for its reply before the two are stored together, and in that time Opik holds the same sizes, hashes and labels, not the text.
+
+The fields collected are the ones listed above, with these differences: the working directory, transcript path, git branch, commit and commit statistics are not collected, and neither is the plan usage status.
 
 ## What policy sync writes on the device
 

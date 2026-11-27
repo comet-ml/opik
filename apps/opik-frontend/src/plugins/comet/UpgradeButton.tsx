@@ -44,7 +44,6 @@ const UpgradeButton: React.FC = () => {
 
   const isOrganizationAdmin =
     organization.role === ORGANIZATION_ROLE_TYPE.admin;
-  const isAcademic = organization.academic;
   const isEnterpriseCustomer =
     organization.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
 
@@ -52,7 +51,6 @@ const UpgradeButton: React.FC = () => {
     !isProduction() ||
     isOnPremise() ||
     !isOrganizationAdmin ||
-    isAcademic ||
     isEnterpriseCustomer ||
     hideUpgradeButton
   ) {

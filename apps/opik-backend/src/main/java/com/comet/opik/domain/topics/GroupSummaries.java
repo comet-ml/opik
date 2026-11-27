@@ -7,10 +7,13 @@ import lombok.experimental.UtilityClass;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
- * Per k-means group, what the author prompt shows: its size and share of the window, and its example texts, with
- * stable tie-breaks.
+ * Per k-means group, what a prompt shows. For the author prompt (the discovery run), its size and share of the window
+ * ({@link #summarize(int[], int)}) and its examples ({@link #authorExamples}). For the nightly prompts, also its
+ * tightness (mean cosine of its traces to the centre) and examples by the same rule
+ * ({@link #summarize(MergedIntents, int[], float[], int, int)}); the caller sets the shares.
  */
 @UtilityClass
 public class GroupSummaries {
@@ -40,6 +43,36 @@ public class GroupSummaries {
     }
 
     /**
+     * Per group, the nightly summary of the points k-means grouped: its size (a text counts as its weight), tightness
+     * and examples ({@code frequent} repeated, {@code examples} in all, by the rule on {@link #authorExamples}). The
+     * shares stay 0 for the caller to set.
+     *
+     * @param merged  the texts, merged as for the fit
+     * @param labels  per unique text, the group in {@code [0, k)}
+     * @param centres {@code k * dimensions}, unit length
+     */
+    static List<NightGroup> summarize(@NonNull MergedIntents merged, @NonNull int[] labels,
+            @NonNull float[] centres, int frequent, int examples) {
+        var scored = Scored.of(merged, labels, centres);
+        var counts = merged.weights();
+        return IntStream.range(0, scored.k()).mapToObj(j -> {
+            int size = 0;
+            double simSum = 0;
+            for (int m = scored.groups().start()[j]; m < scored.groups().start()[j + 1]; m++) {
+                int u = scored.groups().order()[m];
+                size += counts[u];
+                simSum += counts[u] * scored.sims()[u];
+            }
+            return NightGroup.builder()
+                    .group(j)
+                    .size(size)
+                    .tightness(size == 0 ? 0 : simSum / size)
+                    .examples(scored.pick(merged, j, counts, frequent, examples))
+                    .build();
+        }).toList();
+    }
+
+    /**
      * The author's examples per group, {@code frequent + extra} in all (fewer when the group has fewer texts): up to
      * {@code frequent} texts that repeat, most frequent first (ties by code point order), then the texts nearest to the
      * centre not already listed (ties by first trace). A group where no text repeats gets only the nearest texts. Empty
@@ -52,27 +85,37 @@ public class GroupSummaries {
      */
     public static List<List<String>> authorExamples(@NonNull MergedIntents merged, @NonNull int[] labels,
             @NonNull float[] centres, int frequent, int extra) {
-        int d = merged.dimensions();
-        Preconditions.checkArgument(labels.length == merged.size(),
-                "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
-        Preconditions.checkArgument(d > 0 && centres.length % d == 0,
-                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, d);
         Preconditions.checkArgument(frequent >= 0 && extra >= 0,
                 "frequent and extra must not be negative, frequent '%s', extra '%s'", frequent, extra);
-        int k = centres.length / d;
-        var groups = Members.of(labels, k);
-        var out = new ArrayList<List<String>>(k);
-        // One array for all groups: a group's pick reads only its own members' scores, which it writes first.
-        var sims = new double[merged.size()];
-        for (int j = 0; j < k; j++) {
-            for (int m = groups.start()[j]; m < groups.start()[j + 1]; m++) {
-                int u = groups.order()[m];
-                sims[u] = dot(merged.vectors(), u, centres, j, d);
+        var scored = Scored.of(merged, labels, centres);
+        return IntStream.range(0, scored.k())
+                .mapToObj(j -> scored.pick(merged, j, merged.weights(), frequent, frequent + extra))
+                .toList();
+    }
+
+    /** The groups' members and every text's nearness to its own group's centre, read once for all groups. */
+    private record Scored(Members groups, double[] sims, int k) {
+
+        static Scored of(MergedIntents merged, int[] labels, float[] centres) {
+            int d = merged.dimensions();
+            Preconditions.checkArgument(labels.length == merged.size(),
+                    "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(),
+                    labels.length);
+            Preconditions.checkArgument(d > 0 && centres.length % d == 0,
+                    "centres must hold whole rows, dimensions '%s', values '%s'", d, centres.length);
+            int k = centres.length / d;
+            var groups = Members.of(labels, k);
+            var sims = new double[merged.size()];
+            for (int u = 0; u < sims.length; u++) {
+                sims[u] = VectorMath.dot(merged.vectors(), u * d, centres, labels[u] * d, d);
             }
-            out.add(pick(merged, groups.order(), groups.start()[j], groups.start()[j + 1], merged.weights(), sims,
-                    frequent, frequent + extra));
+            return new Scored(groups, sims, k);
         }
-        return out;
+
+        List<String> pick(MergedIntents merged, int group, int[] counts, int frequent, int total) {
+            return GroupSummaries.pick(merged, groups.order(), groups.start()[group], groups.start()[group + 1],
+                    counts, sims, frequent, total);
+        }
     }
 
     /**
@@ -86,11 +129,16 @@ public class GroupSummaries {
      */
     static List<String> pick(MergedIntents merged, int[] members, int from, int to, int[] counts,
             double[] sims, int frequent, int total) {
+        return pick(merged.texts(), merged.firstIndex(), members, from, to, counts, sims, frequent, total);
+    }
+
+    /** {@link #pick(MergedIntents, int[], int, int, int[], double[], int, int)} on the merge's texts and first traces. */
+    static List<String> pick(String[] texts, int[] first, int[] members, int from, int to, int[] counts,
+            double[] sims, int frequent, int total) {
         int capacity = Math.max(0, Math.min(total, to - from));
         if (capacity == 0) {
             return List.of();
         }
-        var first = merged.firstIndex();
         Order byCount = (a, b) -> counts[a] > counts[b];
         Order byNearness = (a, b) -> nearer(a, b, sims, first);
         var best = new Best(capacity);
@@ -112,7 +160,6 @@ public class GroupSummaries {
                 best.offer(u, byNearness);
             }
         }
-        var texts = merged.texts();
         var out = new String[best.size];
         for (int e = 0; e < best.size; e++) {
             out[e] = texts[best.items[e]];
@@ -188,19 +235,5 @@ public class GroupSummaries {
             }
             return new Members(order, start);
         }
-    }
-
-    /**
-     * Row {@code i} of {@code a} dotted with row {@code j} of {@code b}. One sum on purpose: it runs once per text, off
-     * the fit's hot loop, and reads float rows, not the fit's double centres as {@code KMeans}' eight-sum dot does.
-     */
-    static double dot(float[] a, int i, float[] b, int j, int dimensions) {
-        double s = 0;
-        int ai = i * dimensions;
-        int bj = j * dimensions;
-        for (int t = 0; t < dimensions; t++) {
-            s += (double) a[ai + t] * b[bj + t];
-        }
-        return s;
     }
 }

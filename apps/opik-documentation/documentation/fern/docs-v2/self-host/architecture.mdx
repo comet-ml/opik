@@ -75,11 +75,16 @@ Custom Python evaluators and Optimization Studio code metrics run code written b
 </Warning>
 
 The `docker` strategy launches containers from inside the Python backend, so the Python backend container must run
-in privileged mode (Docker-in-Docker). The Helm chart and Docker Compose configurations set this by default.
+in privileged mode (Docker-in-Docker). The `process` strategy runs unprivileged. The Helm chart adds privileged mode
+when `PYTHON_CODE_EXECUTOR_STRATEGY` is `docker` in `component.python-backend.env`; set
+`component.python-backend.securityContext.privileged: true` yourself if the strategy comes from `envFrom` or
+`secretRefs`. Docker Compose sets it from `PYTHON_CODE_EXECUTOR_STRATEGY` too.
+The Helm chart also runs the Python backend container with the `RuntimeDefault` seccomp profile, which Docker Compose
+applies to every container already.
 
-For the `process` strategy, `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION=true` adds hardening: each evaluator
+For the `process` strategy, `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` (on by default) adds hardening: each evaluator
 worker runs as an unprivileged user with a minimal environment and cannot open network connections. It accepts `true`
-or `false` (empty means `false`), and any other value fails startup. The code still shares the Python backend
+or `false` (empty means `true`), and any other value fails startup. The code still shares the Python backend
 container, so this does not replace the `docker` strategy for untrusted users.
 
 See [Kubernetes deployment](/self-host/kubernetes#configure-python-code-execution) for how to change the strategy.

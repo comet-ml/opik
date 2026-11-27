@@ -25,11 +25,13 @@ This workflow will:
 ## Inputs
 
 ### Required Information (auto-extracted from PR, prompted if missing)
+
 - **Jira ticket**: Extracted from PR title (format: `[OPIK-1234]`) or prompted if not found
 - **PR link**: Automatically determined from current branch's PR or prompted if no PR found
 - **Test env link**: Extracted from PR description (Testing or Details section) or prompted if not found
 
 ### Optional Information (auto-extracted from PR, prompted if missing)
+
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
@@ -37,6 +39,7 @@ This workflow will:
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
+
 - **Slack MCP**: Required - uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`)
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
   - See `.agents/docs/SLACK_MCP_SETUP.md` for complete setup instructions
@@ -53,13 +56,13 @@ This workflow will:
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
-- **Check Slack MCP availability**: 
+- **Check Slack MCP availability**:
   - Use Slack MCP tool `channels_list` to test availability (from `ghcr.io/korotovsky/slack-mcp-server`)
   - Call with minimal parameters (for example: `limit: 1`) so that both public and private channels can be returned
   - This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
   - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
   - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
-  - If Slack MCP is not available or tool call fails: 
+  - If Slack MCP is not available or tool call fails:
     > "Slack MCP is not available. Please configure Slack MCP according to `.agents/docs/SLACK_MCP_SETUP.md` and restart Cursor IDE."
     > Stop here.
 
@@ -68,10 +71,10 @@ This workflow will:
 ### 2. Find GitHub PR for Current Branch
 
 - **Search for PR**: Use GitHub MCP to find an open PR for the current branch in `comet-ml/opik`
-- **If PR found**: 
+- **If PR found**:
   - Extract PR number, URL, title, and description
   - Store PR information for extraction steps
-- **If no PR found**: 
+- **If no PR found**:
   > "No open PR found for this branch. Please provide the PR link manually:"
   - Prompt for PR link and validate URL format
   - If provided, fetch PR details using GitHub MCP
@@ -101,6 +104,7 @@ This workflow will:
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
   - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
+
     ```bash
     # Issue comments (general PR comments, including deployment bot messages)
     gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
@@ -108,22 +112,23 @@ This workflow will:
     # Review comments (inline code comments)
     gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
     ```
+
     > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the deployment bot comment with the test environment link may end up on page 2 and get silently missed.
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
   - If multiple URLs found, prefer the first one that looks like a test environment
   - If not found, search in "## Details" section for URLs
-  - If still not found, prompt: "Test environment link not found in PR. Enter test environment link (e.g., https://pr-4743.dev.comet.com):"
+  - If still not found, prompt: "Test environment link not found in PR. Enter test environment link (e.g., <https://pr-4743.dev.comet.com>):"
   - Validate URL format and store
 
 - **Extract component summaries from PR description**:
-  - **FE summary**: 
+  - **FE summary**:
     - Look for mentions of "frontend", "FE", "React", "UI", or `[FE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip):"
   
-  - **BE summary**: 
+  - **BE summary**:
     - Look for mentions of "backend", "BE", "Java", "API", or `[BE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
@@ -157,6 +162,7 @@ This workflow will:
 - **Use PR link**: Use the PR URL extracted from Step 2 (or provided manually)
 
 - **Build message text** according to the template:
+
   ```
   Hi team,
 
@@ -187,6 +193,7 @@ This workflow will:
 
 - **Only include optional fields** that were provided (skip empty ones)
 - **Format example**:
+
   ```
   Hi team,
 
@@ -232,7 +239,7 @@ This workflow will:
 
 ### 7. Verification & Summary
 
-- **Display confirmation**: 
+- **Display confirmation**:
   > "✅ Slack message sent successfully to #code-review channel"
   
 - **Show message preview**: Display the formatted message that was sent
@@ -244,28 +251,28 @@ This workflow will:
 
 ### **Slack MCP Errors**
 
-- **Slack MCP unavailable**: 
+- **Slack MCP unavailable**:
   - Check if Slack MCP server is properly configured according to `.agents/docs/SLACK_MCP_SETUP.md`
   - Verify Docker is installed and running (`docker --version`)
   - Verify the Docker image can be pulled: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Restart Cursor IDE after configuring MCP
-- **Slack MCP tool not found**: 
+- **Slack MCP tool not found**:
   - Verify `conversations_add_message` tool is available from `ghcr.io/korotovsky/slack-mcp-server`
   - Ensure `mcp-server --transport stdio` is included in Docker args (see `.agents/docs/SLACK_MCP_SETUP.md`)
   - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.agents/docs/SLACK_MCP_SETUP.md`)
   - Check Cursor Settings > Features > MCP for error messages
   - Ensure MCP server is running and properly configured
   - Check Docker logs if the container fails to start
-- **MCP authentication errors**: 
+- **MCP authentication errors**:
   - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.agents/docs/SLACK_MCP_SETUP.md`
   - Verify token is not expired
   - Reinstall Slack app to workspace if needed
   - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.agents/docs/SLACK_MCP_SETUP.md`
-- **Docker errors**: 
+- **Docker errors**:
   - Ensure Docker is running: `docker ps`
   - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Verify Docker has network access to reach Slack API
-- **Channel access errors**: 
+- **Channel access errors**:
   - Verify channel name `#code-review` exists
   - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/docs/SLACK_MCP_SETUP.md`)
   - Check that you are a member of the channel (join it if needed)
@@ -288,7 +295,6 @@ This workflow will:
 - **Invalid Jira ticket format**: Show expected format (e.g., `OPIK-1234`) and re-prompt
 - **Invalid PR URL**: Show expected format and re-prompt
 - **Invalid test env URL**: Show expected format and re-prompt
-
 
 ---
 
@@ -347,8 +353,6 @@ The command is successful when:
 
 # 3. Run command (on a branch with an open PR)
 cursor send-code-review-slack
-```
-
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234

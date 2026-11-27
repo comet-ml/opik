@@ -18,7 +18,8 @@ import java.util.concurrent.CancellationException;
  * the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product summed in
  * double as eight partial sums over interleaved dimensions, added together in a fixed order. Java never reorders
  * double additions, so the sums run in the same order on every machine. Only an empty cluster's new point is picked
- * with the direct sum of {@code (x - c)²}, as plain Lloyd does. The bounds take {@code n * k} doubles and are
+ * with the direct sum of {@code (x - c)²}, as plain Lloyd does. The first assignment of a restart measures nothing:
+ * k-means++ already measured every point against the centres it picked. The bounds take {@code n * k} doubles and are
  * allocated once per fit, as are the other per-point buffers; only the labels are new per restart, since the best
  * restart keeps its own.
  *
@@ -29,8 +30,13 @@ import java.util.concurrent.CancellationException;
 @UtilityClass
 public class KMeans {
 
+    /** {@code count / perGroup} groups within {@code [min, max]}, and never more than {@code points}. */
+    public static int groupCount(int count, int perGroup, int min, int max, int points) {
+        return Math.min(Math.clamp(count / perGroup, min, max), points);
+    }
+
     /**
-     * @param points        {@code n * dimensions} values
+     * @param points        at least {@code n * dimensions} values; the rows past {@code n} are not read
      * @param weights       per point, positive
      * @param maxIterations the Lloyd iterations one restart may take; a fit that reaches it stops there
      * @param restarts      the k-means++ starts; the one with the lowest weighted inertia is kept
@@ -42,8 +48,8 @@ public class KMeans {
         Preconditions.checkArgument(maxIterations > 0, "maxIterations must be positive, maxIterations '%s'",
                 maxIterations);
         Preconditions.checkArgument(restarts > 0, "restarts must be positive, restarts '%s'", restarts);
-        Preconditions.checkArgument(points.length == n * dimensions,
-                "points must hold one row per weight, weights '%s', values '%s'", n, points.length);
+        Preconditions.checkArgument(points.length >= n * dimensions,
+                "points must hold a row per weight, weights '%s', values '%s'", n, points.length);
         Preconditions.checkArgument(k >= 1 && k <= n, "k must be in [1, n], k '%s', n '%s'", k, n);
         for (double weight : weights) {
             Preconditions.checkArgument(Double.isFinite(weight) && weight > 0,
@@ -54,7 +60,8 @@ public class KMeans {
         var buffers = new Buffers(n, k, dimensions);
         Fit best = null;
         for (int restart = 0; restart < restarts; restart++) {
-            var fit = lloyd(space, weights, plusPlus(space, weights, random), buffers, maxIterations);
+            var fit = lloyd(space, weights, plusPlus(space, weights, random, buffers.bounds.lower), buffers,
+                    maxIterations);
             if (best == null || fit.inertia() < best.inertia()) {
                 best = fit;
             }
@@ -67,24 +74,34 @@ public class KMeans {
                 .build();
     }
 
-    private static double[] plusPlus(Space space, double[] w, SplittableRandom random) {
+    /**
+     * The k-means++ centres. Every squared distance it measures, point {@code i} to centre {@code j}, is kept in
+     * {@code squared[i * k + j]}: the centres do not move before the first assignment, which reads them from there
+     * instead of measuring them again.
+     */
+    private static double[] plusPlus(Space space, double[] w, SplittableRandom random, double[] squared) {
         int n = space.n;
         int d = space.d;
-        var centres = new double[space.k * d];
+        int k = space.k;
+        var centres = new double[k * d];
         var minDistance = new double[n];
         int first = sample(w, random);
         copyPoint(space.x, first, centres, 0, d);
         space.prepare(centres, 0);
         for (int i = 0; i < n; i++) {
-            minDistance[i] = space.squaredDistance(i, centres, 0) * w[i];
+            double s = space.squaredDistance(i, centres, 0);
+            squared[i * k] = s;
+            minDistance[i] = s * w[i];
         }
-        for (int j = 1; j < space.k; j++) {
+        for (int j = 1; j < k; j++) {
             checkInterrupted();
             int pick = sample(minDistance, random);
             copyPoint(space.x, pick, centres, j, d);
             space.prepare(centres, j);
             for (int i = 0; i < n; i++) {
-                minDistance[i] = Math.min(minDistance[i], space.squaredDistance(i, centres, j) * w[i]);
+                double s = space.squaredDistance(i, centres, j);
+                squared[i * k + j] = s;
+                minDistance[i] = Math.min(minDistance[i], s * w[i]);
             }
         }
         return centres;
@@ -118,7 +135,7 @@ public class KMeans {
         for (; iterations < maxIterations; iterations++) {
             checkInterrupted();
             boolean changed = iterations == 0
-                    ? assignFirst(space, centres, labels, bounds)
+                    ? assignFirst(space, labels, bounds)
                     : assignBounded(space, centres, labels, bounds);
             if (!changed && iterations > 0) {
                 break;
@@ -156,16 +173,22 @@ public class KMeans {
         }
     }
 
-    /** {@link #assign} that also sets every bound exactly. True when a label changed. */
-    private static boolean assignFirst(Space space, double[] centres, int[] labels, Bounds bounds) {
+    /**
+     * {@link #assign} that also sets every bound exactly. It takes the squared distances {@link #plusPlus} left in
+     * {@code bounds.lower}, measured against these same centres, and compares them squared as {@link #assign} does,
+     * so a tie breaks the same way; each becomes its distance in place. True when a label changed.
+     */
+    private static boolean assignFirst(Space space, int[] labels, Bounds bounds) {
         int k = space.k;
+        var lower = bounds.lower;
         boolean changed = false;
         for (int i = 0; i < space.n; i++) {
             int bestJ = 0;
             double bestDistance = Double.MAX_VALUE;
+            int row = i * k;
             for (int j = 0; j < k; j++) {
-                double s = space.squaredDistance(i, centres, j);
-                bounds.lower[i * k + j] = Math.sqrt(s);
+                double s = lower[row + j];
+                lower[row + j] = Math.sqrt(s);
                 if (s < bestDistance) {
                     bestDistance = s;
                     bestJ = j;
@@ -248,9 +271,12 @@ public class KMeans {
         Arrays.fill(weightSum, 0);
         for (int i = 0; i < n; i++) {
             int j = labels[i];
-            weightSum[j] += w[i];
+            double wi = w[i];
+            int xi = i * d;
+            int sj = j * d;
+            weightSum[j] += wi;
             for (int t = 0; t < d; t++) {
-                sum[j * d + t] += w[i] * x[i * d + t];
+                sum[sj + t] += wi * x[xi + t];
             }
         }
         boolean anyEmpty = false;
@@ -379,7 +405,7 @@ public class KMeans {
 
         /** Never negative: rounding can take |x|² + |c|² - 2 x·c below 0 for a point on its centre. */
         double squaredDistance(int i, double[] centres, int j) {
-            return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * dot(i, centres, j));
+            return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * VectorMath.dot(x, i * d, centres, j * d, d));
         }
 
         /** The sum of {@code (x - c)²} over the dimensions, in scalar double: exactly 0 for a point on its centre. */
@@ -392,35 +418,6 @@ public class KMeans {
                 s += v * v;
             }
             return s;
-        }
-
-        /** Eight partial sums over interleaved dimensions, so the additions do not wait on each other; fixed order. */
-        private double dot(int i, double[] c, int j) {
-            int xi = i * d;
-            int cj = j * d;
-            double s0 = 0;
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-            double s4 = 0;
-            double s5 = 0;
-            double s6 = 0;
-            double s7 = 0;
-            int t = 0;
-            for (; t + 7 < d; t += 8) {
-                s0 += x[xi + t] * c[cj + t];
-                s1 += x[xi + t + 1] * c[cj + t + 1];
-                s2 += x[xi + t + 2] * c[cj + t + 2];
-                s3 += x[xi + t + 3] * c[cj + t + 3];
-                s4 += x[xi + t + 4] * c[cj + t + 4];
-                s5 += x[xi + t + 5] * c[cj + t + 5];
-                s6 += x[xi + t + 6] * c[cj + t + 6];
-                s7 += x[xi + t + 7] * c[cj + t + 7];
-            }
-            for (; t < d; t++) {
-                s0 += x[xi + t] * c[cj + t];
-            }
-            return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
         }
     }
 
@@ -484,8 +481,9 @@ public class KMeans {
     }
 
     /**
-     * The large per-fit buffers, shared by the restarts: each restart overwrites them before it reads them (the first
-     * assignment sets every bound, an update clears the sums).
+     * The large per-fit buffers, shared by the restarts: each restart overwrites them before it reads them (k-means++
+     * fills the lower bounds with squared distances, the first assignment sets every bound, an update clears the
+     * sums).
      */
     private static final class Buffers {
 

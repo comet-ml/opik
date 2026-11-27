@@ -12,6 +12,7 @@ import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
 import useRuleFiltersConfig from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleFiltersConfig";
+import { NATIVE_UNDO_ATTRIBUTE } from "@/v2/pages-shared/automations/RuleEditorPanel/useUndoRedoShortcuts";
 import {
   createEmptyRuleFilter,
   withEmptyRuleFilter,
@@ -83,7 +84,10 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
             : [];
 
           return (
-            <div className="flex flex-col gap-1.5 px-2.5 py-2">
+            <div
+              className="flex flex-col gap-1.5 px-2.5 py-2"
+              {...{ [NATIVE_UNDO_ATTRIBUTE]: "" }}
+            >
               <span className="comet-body-xs-accented pl-px text-muted-slate">
                 Filters
               </span>
@@ -116,7 +120,10 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
           );
         }}
       />
-      <div className="border-t border-border px-2.5 py-2">
+      <div
+        className="border-t border-border px-2.5 py-2"
+        {...{ [NATIVE_UNDO_ATTRIBUTE]: "" }}
+      >
         <FormField
           control={form.control}
           name="samplingRate"

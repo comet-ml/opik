@@ -12,6 +12,7 @@ from .experiment_item_compare_status import ExperimentItemCompareStatus
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .feedback_score_compare import FeedbackScoreCompare
 from .json_list_string_compare import JsonListStringCompare
+from .json_node import JsonNode
 
 
 class ExperimentItemCompare(UniversalBaseModel):
@@ -37,6 +38,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     execution_policy: typing.Optional[ExecutionPolicyCompare] = None
     assertion_results: typing.Optional[typing.List[AssertionResultCompare]] = None
     status: typing.Optional[ExperimentItemCompareStatus] = None
+    dataset_item_data: typing.Optional[JsonNode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

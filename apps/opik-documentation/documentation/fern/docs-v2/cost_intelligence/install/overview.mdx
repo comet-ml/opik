@@ -1,8 +1,8 @@
 ---
 headline: Installing Cost Intelligence
 og:description: Choose a rollout path for Cost Intelligence (Claude Code managed
-  settings, MDM-delivered configuration, or the macOS capture app), plus the
-  full inventory of data collected.
+  settings, MDM-delivered configuration, the macOS capture app, or Claude Code's
+  own telemetry export), plus the full inventory of data collected.
 og:site_name: Opik Documentation
 og:title: Installing Cost Intelligence - Opik
 title: Installation overview
@@ -11,6 +11,8 @@ title: Installation overview
 Cost Intelligence is delivered as a Claude Code plugin that runs a local proxy on each developer machine. Rolling it out means doing two things: getting the plugin enabled, and pointing it at your Opik workspace.
 
 Nothing needs to be installed on a server, and there is no per-developer manual step in any of the supported paths.
+
+Two other paths replace the plugin: the macOS app captures the traffic on the device without it, and the telemetry export installs nothing at all.
 
 ## Choose a rollout path
 
@@ -38,9 +40,11 @@ Nothing needs to be installed on a server, and there is no per-developer manual 
     href="/cost-intelligence/install/macos-app"
   >
     Transparent capture via a system extension. Covers every user, including
-    those on the Claude Code desktop app.
+    those working in the Code tab of the Claude desktop app.
   </Card>
 </CardGroup>
+
+When nothing can be installed on your developers' machines, Claude Code can send its own telemetry to Opik instead. That path needs settings only, and it collects less: see [Telemetry export (no install)](/cost-intelligence/install/claude-code-telemetry).
 
 Which one fits:
 
@@ -66,9 +70,9 @@ Which one fits:
   Choose **managed settings** when you have Claude for Teams or Enterprise, want
   the fastest possible path, and are happy enabling everyone at once, or when
   your developers' machines aren't centrally managed at all. The plugin
-  captures the Claude Code **CLI**, not the desktop app; reach for the
-  **macOS app** when you want to cover every user, including those on the
-  Claude Code desktop app.
+  captures the Claude Code **CLI**, not the Claude desktop app; reach for the
+  **macOS app** when you want to cover every user, including those working in
+  the Code tab of the Claude desktop app.
 </Tip>
 
 ## Try it on your own machine first

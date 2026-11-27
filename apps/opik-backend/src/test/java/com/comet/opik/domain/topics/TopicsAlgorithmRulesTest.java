@@ -1,5 +1,8 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.topics.TopicProject.RunError;
+import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -9,6 +12,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.stream.IntStream;
@@ -18,11 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-/** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
-@DisplayName("topics first build: rules")
+/** The small rules of the discovery run: number formats, text order and strip, the answer, apply and assignment. */
+@DisplayName("topics discovery run: rules")
 class TopicsAlgorithmRulesTest {
 
     private static final int MAX_ITERATIONS = 150;
+    private static final double OTHER_GATE = 0.95;
     private static final int RESTARTS = 3;
 
     @Nested
@@ -63,6 +70,95 @@ class TopicsAlgorithmRulesTest {
             assertThat(" x".strip()).isEqualTo(" x");
             assertThat(TopicText.pythonStrip("a b")).isEqualTo("a b");
             assertThat(TopicText.pythonStrip(" \t ")).isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0} is a catch-all as a whole: {1}")
+        @CsvSource({
+                "Other, true",
+                "OTHERS, true",
+                "' Miscellaneous Requests ', true",
+                "'Other  Requests', true",
+                "'Other\tRequests', true",
+                "'General\u00A0Questions', true",
+                "General Questions, true",
+                "Various Tasks, true",
+                "Mixed, true",
+                "Mixed Requests, true",
+                "Mixed Martial Arts, false",
+                "General Job Search, false",
+                "Other and System Events, false",
+                "Generalization Help, false",
+                "Weekly Sales Summaries, false"})
+        @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
+        void catchAllName(String name, boolean expected) {
+            var groups = List.of(GroupSummary.builder().group(0).size(1).build());
+            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(0))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).hasSize(expected ? 0 : 1);
+            assertThat(applied.other()).hasSize(expected ? 1 : 0);
+        }
+    }
+
+    @Nested
+    @DisplayName("the author answer")
+    class Answer {
+
+        @Test
+        @DisplayName("an object parses as is, unknown keys ignored")
+        void object() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree(
+                    "{\"topics\": [], \"assignment\": [], \"note\": 1}"));
+            assertThat(answer.topics()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("each cluster goes to the topic of its first mention; -1 and an index off the list end in Other")
+        void perCluster() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"A\", "
+                    + "\"definition\": \"a\"}, {\"name\": \"B\", \"definition\": \"b\"}], \"assignment\": ["
+                    + "{\"cluster\": 0, \"topic\": 1}, {\"cluster\": 1, \"topic\": 0}, {\"cluster\": 0, \"topic\": 0}, "
+                    + "{\"cluster\": 2, \"topic\": -1}, {\"cluster\": 3, \"topic\": 7}]}"));
+
+            assertThat(answer.topics()).extracting(AuthorTopic::name).containsExactly("A", "B");
+            assertThat(answer.topics().get(0).clusters()).containsExactly(1);
+            assertThat(answer.topics().get(1).clusters()).containsExactly(0);
+            var groups = IntStream.range(0, 4).mapToObj(j -> GroupSummary.builder().group(j).size(10).build())
+                    .toList();
+            assertThat(AuthorApplier.apply(answer, groups, 10).other()).containsExactly(2, 3);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "{\"topics\": []}",
+                "{\"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\"}], \"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1.5, \"topic\": 0}]}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1}]}",
+                "{\"topics\": [{\"name\": 3, \"definition\": \"d\"}], \"assignment\": []}",
+                "[1, 2]"})
+        @DisplayName("an answer off the schema is llm_bad_answer")
+        void bad(String json) throws IOException {
+            var node = InferenceJson.MAPPER.readTree(json);
+            assertThatThrownBy(() -> AuthorAnswer.parse(node))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER));
+        }
+
+        @Test
+        @DisplayName("a textual output is llm_bad_answer, even one holding a valid answer; the error keeps no text")
+        void textIsBad() {
+            var text = "{\"topics\": [{\"name\": \"user-secret-text\", \"definition\": \"d\"}], \"assignment\": []}";
+            assertThatThrownBy(() -> AuthorAnswer.parse(TextNode.valueOf(text)))
+                    .isInstanceOfSatisfying(TopicsRunException.class, exception -> {
+                        assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER);
+                        assertThat(exception.getCause()).isNull();
+                        assertThat(exception.getMessage()).doesNotContain("user-secret-text");
+                    });
+            assertThatThrownBy(() -> AuthorAnswer.parse(null))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER));
         }
     }
 
@@ -158,6 +254,463 @@ class TopicsAlgorithmRulesTest {
                                     new float[]{1, 0}, -1, 2)),
                     Arguments.of("a null text",
                             (ThrowingCallable) () -> IntentMerger.merge(new String[]{"a", null}, vectors, 2)));
+        }
+
+        @Test
+        @DisplayName("the prompt lists the groups largest first with a whole-percent share and the given examples")
+        void prompt() {
+            var groups = List.of(
+                    GroupSummary.builder().group(0).size(10).share(0.1).build(),
+                    GroupSummary.builder().group(1).size(40).share(0.4).build(),
+                    GroupSummary.builder().group(2).size(0).build());
+
+            var prompt = TopicPrompts.author(new TopicTasks().author(), groups, 10,
+                    List.of(List.of("zero"), List.of("one", "uno"), List.of()));
+
+            assertThat(prompt)
+                    .contains("at most 10 topics")
+                    .contains(
+                            "  cluster 1: 40% of traffic\n    - one\n    - uno\n  cluster 0: 10% of traffic\n    - zero")
+                    .contains("\"assignment\"")
+                    .doesNotContain("cluster 2:", TopicTasks.CLUSTERS_PLACEHOLDER, TopicTasks.MAX_TOPICS_PLACEHOLDER);
+        }
+    }
+
+    @Nested
+    @DisplayName("merge in place")
+    class MergeInPlace {
+
+        @Test
+        @DisplayName("gives the copy's merge and fit bit for bit, and the restore puts every row back")
+        void sameAsTheCopy() {
+            int d = 8;
+            var random = new SplittableRandom(7);
+            for (int round = 0; round < 20; round++) {
+                int n = 1 + random.nextInt(400);
+                // Repeats, in time order unrelated to the code point order of the texts.
+                var texts = IntStream.range(0, n).mapToObj(i -> "t" + random.nextInt(1 + n / 3)).toArray(String[]::new);
+                var vectors = new float[n * d];
+                for (int i = 0; i < vectors.length; i++) {
+                    vectors[i] = (float) random.nextDouble(-1, 1);
+                }
+                var original = vectors.clone();
+                var copied = IntentMerger.merge(texts, vectors, d);
+
+                var inPlace = IntentMerger.mergeInPlace(texts, vectors, d);
+                var merged = inPlace.merged();
+                assertThat(merged.vectors()).isSameAs(vectors);
+                assertThat(Arrays.copyOf(merged.vectors(), copied.size() * d)).isEqualTo(copied.vectors());
+                assertThat(merged.toBuilder().vectors(copied.vectors()).build()).usingRecursiveComparison()
+                        .isEqualTo(copied);
+                var weights = Arrays.stream(copied.weights()).asDoubleStream().toArray();
+                int k = 1 + random.nextInt(Math.min(copied.size(), 5));
+                assertThat(KMeans.fit(merged.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS))
+                        .usingRecursiveComparison()
+                        .isEqualTo(KMeans.fit(copied.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS));
+
+                inPlace.restore();
+                assertThat(vectors).isEqualTo(original);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("apply")
+    class Apply {
+
+        private final List<GroupSummary> groups = IntStream.range(0, 14)
+                .mapToObj(j -> GroupSummary.builder().group(j).size(100 - j).build())
+                .toList();
+
+        @Test
+        @DisplayName("11 topics keep the 10 largest; catch-alls are dropped before the cut")
+        void cap() {
+            var topics = new ArrayList<AuthorTopic>();
+            topics.add(new AuthorTopic("Other Stuff", "d", List.of(0)));
+            for (int j = 1; j <= 11; j++) {
+                topics.add(new AuthorTopic("Topic " + j, "d", List.of(j)));
+            }
+            var applied = AuthorApplier.apply(new AuthorAnswer(topics), groups, 10);
+            assertThat(applied.topics()).extracting(AppliedTopic::name)
+                    .containsExactly("Topic 1", "Topic 2", "Topic 3", "Topic 4", "Topic 5", "Topic 6", "Topic 7",
+                            "Topic 8", "Topic 9", "Topic 10");
+            assertThat(applied.other()).containsExactly(0, 11, 12, 13);
+        }
+
+        @Test
+        @DisplayName("a group goes to the largest topic that lists it; invalid and repeated ids are ignored")
+        void claims() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(" Small ", " d ", List.of(5, 99, -1)),
+                    new AuthorTopic("Big", "d", List.of(1, 2, 2, 5)),
+                    new AuthorTopic("Empty", "d", List.of(1))));
+            var applied = AuthorApplier.apply(answer, groups, 10);
+            assertThat(applied.topics()).hasSize(1);
+            assertThat(applied.topics().getFirst().name()).isEqualTo("Big");
+            assertThat(applied.topics().getFirst().groups()).containsExactly(1, 2, 5);
+            assertThat(applied.other()).containsExactly(0, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13);
+        }
+
+        @Test
+        @DisplayName("names and definitions are stripped as Python strips them; ties keep the answer's order")
+        void strip() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(" B ", " b ", List.of(3)),
+                    new AuthorTopic("A", "a", List.of(4, -5))));
+            var flat = IntStream.range(0, 6)
+                    .mapToObj(j -> GroupSummary.builder().group(j).size(10).build()).toList();
+            var applied = AuthorApplier.apply(answer, flat, 10);
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("B", "A");
+            assertThat(applied.topics().getFirst().definition()).isEqualTo("b");
+        }
+
+        @Test
+        @DisplayName("topics with the same name merge into the largest one, at the first one's place")
+        void sameNames() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic("Email Drafting", "small", List.of(9, 4)),
+                    new AuthorTopic("Billing", "d", List.of(2)),
+                    new AuthorTopic(" email\u00A0 drafting", "large", List.of(3, 4)),
+                    new AuthorTopic("Email Drafts", "d", List.of(10))));
+            var applied = AuthorApplier.apply(answer, groups, 10);
+            assertThat(applied.topics()).extracting(AppliedTopic::name)
+                    .containsExactly("email\u00A0 drafting", "Billing", "Email Drafts");
+            var email = applied.topics().getFirst();
+            assertThat(email.definition()).isEqualTo("large");
+            assertThat(email.groups()).containsExactly(3, 4, 9);
+        }
+
+        @Test
+        @DisplayName("a blank name is no name: its groups go to Other and it takes no slot")
+        void blankName() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(" \u00A0 ", "d", List.of(1)),
+                    new AuthorTopic("Billing", "d", List.of(2))));
+            var applied = AuthorApplier.apply(answer, groups, 1);
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("Billing");
+            assertThat(applied.other()).contains(1).doesNotContain(2);
+        }
+
+        @Test
+        @DisplayName("a name over 255 code points is cut to 255, so the save can't fail on it")
+        void longName() {
+            var name = "\uD83D\uDE00".repeat(300);
+            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(1))));
+            var stored = AuthorApplier.apply(answer, groups, 10).topics().getFirst().name();
+            assertThat(stored.codePointCount(0, stored.length())).isEqualTo(TopicText.MAX_NAME_LENGTH);
+            assertThat(TopicText.name(" Billing ")).isEqualTo("Billing");
+        }
+
+        @Test
+        @DisplayName("two names that share their first 255 code points are one stored name, so they merge")
+        void sameNameAfterTheCut() {
+            var prefix = "a".repeat(TopicText.MAX_NAME_LENGTH);
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic(prefix + " one", "d", List.of(1)),
+                    new AuthorTopic(prefix + " two", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).singleElement().satisfies(topic -> {
+                assertThat(topic.name()).isEqualTo(prefix);
+                assertThat(topic.groups()).containsExactly(1, 2);
+            });
+        }
+
+        @Test
+        @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
+        void sameNameKey() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic("\u00A0 Email \t\u2003Drafting \n", "d", List.of(1)),
+                    new AuthorTopic("email drafting", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).singleElement().satisfies(topic -> assertThat(topic.groups())
+                    .containsExactly(1, 2));
+        }
+
+        @Test
+        @DisplayName("a topic that claims no group takes no slot")
+        void emptyTopicTakesNoSlot() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic("Nothing", "d", List.of(99)),
+                    new AuthorTopic("Billing", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 1);
+
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("Billing");
+        }
+    }
+
+    @Nested
+    @DisplayName("assignment")
+    class Assignment {
+
+        @Test
+        @DisplayName("ties go to the lower prototype; below 0.75 is Other")
+        void ties() {
+            var a = new float[]{1, 0};
+            var assigner = assigner(List.of(a, a.clone()), List.of(0, 1), List.of());
+            assertThat(assigner.assign(new float[]{1, 0, 0.7f, 0.71414284f})).containsExactly(0,
+                    TopicAlgorithm.OTHER);
+        }
+
+        @Test
+        @DisplayName("the winner: ties to the earlier prototype, a gated known-Other one never wins, below 0.75 none")
+        void winners() {
+            var a = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(close, far), 2, 0.75,
+                    OTHER_GATE);
+
+            assertThat(assigner.winners(new float[]{1, 0, 0.96f, 0.28f, 0, 1, 0.6f, -0.8f}))
+                    .containsExactly(0, 0, 2, PrototypeAssigner.NO_WINNER);
+        }
+
+        @ParameterizedTest(name = "{0} dimensions, {1} prototypes")
+        @CsvSource({"384, 161", "384, 160", "13, 7", "8, 2", "5, 1"})
+        @DisplayName("two prototypes per pass: every cosine is the single dot's bit for bit, and the winners are the "
+                + "same as one prototype at a time")
+        void twoPerPass(int dimensions, int count) {
+            var random = new SplittableRandom(dimensions * 1_000L + count);
+            int n = 500;
+            var vectors = randomRows(random, n, dimensions);
+            var flat = randomRows(random, count, dimensions);
+            var prototypes = new ArrayList<float[]>();
+            for (int p = 0; p < count; p++) {
+                // Every fifth prototype repeats the one before it, so ties come up.
+                int from = p > 0 && p % 5 == 0 ? p - 1 : p;
+                prototypes.add(Arrays.copyOfRange(flat, from * dimensions, (from + 1) * dimensions));
+            }
+            // The assigner widens the rows to double once: on widened rows, dot2 and dot give the float dot bit for bit.
+            var wideVectors = widened(vectors);
+            var wideFlat = widened(flat);
+            var cosines = new double[2];
+            for (int i = 0; i < n; i++) {
+                for (int p = 0; p + 1 < count; p++) {
+                    VectorMath.dot2(wideVectors, i * dimensions, wideFlat, p * dimensions, (p + 1) * dimensions,
+                            dimensions, cosines);
+                    long single = Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions));
+                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(single);
+                    assertThat(Double.doubleToRawLongBits(VectorMath.dot(wideVectors, i * dimensions, wideFlat,
+                            p * dimensions, dimensions))).isEqualTo(single);
+                    assertThat(Double.doubleToRawLongBits(cosines[1])).isEqualTo(Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, (p + 1) * dimensions, dimensions)));
+                }
+            }
+            var owners = IntStream.range(0, count).boxed().toList();
+            var assigner = new PrototypeAssigner(prototypes, owners, List.of(), dimensions,
+                    Double.NEGATIVE_INFINITY, OTHER_GATE);
+
+            var expected = new int[n];
+            for (int i = 0; i < n; i++) {
+                int best = PrototypeAssigner.NO_WINNER;
+                double bestCosine = Double.NEGATIVE_INFINITY;
+                for (int p = 0; p < count; p++) {
+                    double cosine = VectorMath.dot(vectors, i * dimensions, prototypes.get(p), 0, dimensions);
+                    if (cosine > bestCosine) {
+                        bestCosine = cosine;
+                        best = p;
+                    }
+                }
+                expected[i] = best;
+            }
+            assertThat(assigner.winners(vectors)).containsExactly(expected);
+        }
+
+        @ParameterizedTest(name = "{0} groups, seed {1}")
+        @CsvSource({"30, 1", "31, 2", "50, 3", "1, 4", "2, 5"})
+        @DisplayName("from the cosine table to the group centres, the owners are the ones the vectors give, the gated "
+                + "known-Other centres left out alike")
+        void fromCosineTable(int groups, long seed) {
+            int d = TopicEmbedding.DIMENSIONS;
+            var random = new SplittableRandom(seed);
+            int n = 2_000;
+            // Unit vectors near the centres, so most traces clear minCosine and the gate has something to gate.
+            var centres = unitRows(randomRows(random, groups, d), d);
+            var vectors = new float[n * d];
+            for (int i = 0; i < n; i++) {
+                int g = random.nextInt(groups);
+                for (int t = 0; t < d; t++) {
+                    vectors[i * d + t] = centres[g * d + t] + (float) (random.nextDouble() * 0.04 - 0.02);
+                }
+            }
+            vectors = unitRows(vectors, d);
+            var topicGroups = new ArrayList<Integer>();
+            var owners = new ArrayList<Integer>();
+            var otherGroups = new ArrayList<Integer>();
+            for (int g = 0; g < groups; g++) {
+                int pick = random.nextInt(5);
+                if (pick < 3) {
+                    // Two groups per topic, as a topic's prototypes are its groups' centres.
+                    owners.add(topicGroups.size() / 2);
+                    topicGroups.add(g);
+                } else if (pick == 3) {
+                    otherGroups.add(g);
+                }
+            }
+            if (topicGroups.size() > 1) {
+                // A centre listed twice, as a topic prototype and as known Other: the gate leaves the Other one out.
+                otherGroups.add(topicGroups.getFirst());
+            }
+            var assigner = new PrototypeAssigner(
+                    topicGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), owners,
+                    otherGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), d, 0.75,
+                    OTHER_GATE);
+
+            var table = PrototypeAssigner.cosines(vectors, centres, groups, d);
+
+            assertThat(assigner.assign(table, groups, topicGroups.stream().mapToInt(Integer::intValue).toArray(),
+                    otherGroups.stream().mapToInt(Integer::intValue).toArray()))
+                    .containsExactly(assigner.assign(vectors));
+        }
+
+        private static float[] unitRows(float[] rows, int dimensions) {
+            var out = rows.clone();
+            for (int r = 0; r < out.length / dimensions; r++) {
+                double norm = 0;
+                for (int t = 0; t < dimensions; t++) {
+                    norm += (double) out[r * dimensions + t] * out[r * dimensions + t];
+                }
+                for (int t = 0; t < dimensions; t++) {
+                    out[r * dimensions + t] = (float) (out[r * dimensions + t] / Math.sqrt(norm));
+                }
+            }
+            return out;
+        }
+
+        private static double[] widened(float[] values) {
+            var out = new double[values.length];
+            for (int i = 0; i < values.length; i++) {
+                out[i] = values[i];
+            }
+            return out;
+        }
+
+        private static float[] randomRows(SplittableRandom random, int rows, int dimensions) {
+            var out = new float[rows * dimensions];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = (float) (random.nextDouble() * 2 - 1);
+            }
+            return out;
+        }
+
+        @Test
+        @DisplayName("a known-Other prototype at 0.95 or more to a topic prototype is left out")
+        void gate() {
+            var topic = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = assigner(List.of(topic), List.of(0), List.of(close, far));
+            assertThat(assigner.gatedOther()).isEqualTo(1);
+            assertThat(assigner.keptOther()).containsExactly(far);
+            assertThat(assigner.assign(new float[]{0.96f, 0.28f, 0, 1})).containsExactly(0, TopicAlgorithm.OTHER);
+        }
+
+        @Test
+        @DisplayName("the kept Other prototypes alone assign as all of them do, and none is within 0.95 of a topic")
+        void keptOther() {
+            var topic = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var all = assigner(List.of(topic), List.of(0), List.of(close, far));
+
+            assertThat(all.keptOther()).containsExactly(far);
+            for (var other : all.keptOther()) {
+                assertThat((double) other[0] * topic[0] + (double) other[1] * topic[1])
+                        .isLessThan(OTHER_GATE);
+            }
+            var kept = assigner(List.of(topic), List.of(0), all.keptOther());
+            assertThat(kept.gatedOther()).isZero();
+            var vectors = new float[2 * 360];
+            for (int d = 0; d < 360; d++) {
+                vectors[2 * d] = (float) Math.cos(Math.toRadians(d));
+                vectors[2 * d + 1] = (float) Math.sin(Math.toRadians(d));
+            }
+            assertThat(kept.assign(vectors)).containsExactly(all.assign(vectors));
+        }
+
+        @Test
+        @DisplayName("the thresholds come from the config: a higher minimum cosine sends a near trace to Other")
+        void thresholds() {
+            var topic = new float[]{1, 0};
+            var near = new float[]{0.8f, 0.6f};
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(), 2, 0.75, OTHER_GATE).assign(near))
+                    .containsExactly(0);
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(), 2, 0.9, OTHER_GATE).assign(near))
+                    .containsExactly(TopicAlgorithm.OTHER);
+            var other = new float[]{0.8f, 0.6f};
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(other), 2, 0.75, 0.7).gatedOther())
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the 8-sum dot labels as a plain sum does on 384 dimensions")
+        void dotOverFullVectors() {
+            var random = new SplittableRandom(7);
+            var prototypes = new ArrayList<float[]>();
+            var owners = new ArrayList<Integer>();
+            for (int p = 0; p < 20; p++) {
+                prototypes.add(unit(random, TopicEmbedding.DIMENSIONS));
+                owners.add(p);
+            }
+            int n = 500;
+            var vectors = new float[n * TopicEmbedding.DIMENSIONS];
+            for (int i = 0; i < n; i++) {
+                var base = prototypes.get(i % 20);
+                var noise = unit(random, TopicEmbedding.DIMENSIONS);
+                var mixed = new float[TopicEmbedding.DIMENSIONS];
+                for (int t = 0; t < mixed.length; t++) {
+                    mixed[t] = base[t] + 0.6f * noise[t];
+                }
+                System.arraycopy(normalized(mixed), 0, vectors, i * mixed.length, mixed.length);
+            }
+
+            var labels = new PrototypeAssigner(prototypes, owners, List.of(), TopicEmbedding.DIMENSIONS, 0.75,
+                    OTHER_GATE).assign(vectors);
+
+            for (int i = 0; i < n; i++) {
+                int best = -1;
+                double bestCosine = Double.NEGATIVE_INFINITY;
+                for (int p = 0; p < prototypes.size(); p++) {
+                    double cosine = 0;
+                    for (int t = 0; t < TopicEmbedding.DIMENSIONS; t++) {
+                        cosine += (double) vectors[i * TopicEmbedding.DIMENSIONS + t] * prototypes.get(p)[t];
+                    }
+                    if (cosine > bestCosine) {
+                        bestCosine = cosine;
+                        best = p;
+                    }
+                }
+                assertThat(labels[i]).as("trace %s", i).isEqualTo(bestCosine < 0.75 ? TopicAlgorithm.OTHER : best);
+            }
+        }
+
+        private static float[] unit(SplittableRandom random, int dimensions) {
+            var vector = new float[dimensions];
+            for (int t = 0; t < dimensions; t++) {
+                vector[t] = (float) random.nextGaussian();
+            }
+            return normalized(vector);
+        }
+
+        private static float[] normalized(float[] vector) {
+            double norm = 0;
+            for (float value : vector) {
+                norm += (double) value * value;
+            }
+            var out = new float[vector.length];
+            for (int t = 0; t < vector.length; t++) {
+                out[t] = (float) (vector[t] / Math.sqrt(norm));
+            }
+            return out;
+        }
+
+        private static PrototypeAssigner assigner(List<float[]> topics, List<Integer> owners, List<float[]> others) {
+            return new PrototypeAssigner(topics, owners, others, 2, 0.75, OTHER_GATE);
         }
     }
 
@@ -291,7 +844,7 @@ class TopicsAlgorithmRulesTest {
         }
     }
 
-    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the first build merges them. */
+    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the discovery run merges them. */
     private static List<List<String>> authorExamples(String[] texts, float[] vectors, int[] traceLabels,
             float[] centres, int frequent, int extra) {
         var merged = IntentMerger.merge(texts, vectors, 2);

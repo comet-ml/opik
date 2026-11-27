@@ -19,4 +19,40 @@ public class TopicEmbedding {
 
     /** The bytes of one vector in a MySQL vector BLOB: {@link #DIMENSIONS} little-endian float32 values. */
     public static final int BYTES = DIMENSIONS * Float.BYTES;
+
+    /**
+     * Whether a trace's vector can be labelled: the run's window and the labelling pass take the same ones. Length
+     * only: the vectors come back from a {@code BFloat16} column, whose cast truncates, so their norm is not 1.
+     */
+    public static boolean usable(float[] vector) {
+        return vector.length == DIMENSIONS;
+    }
+
+    /**
+     * The vector a window read returns for {@code vector} once it is stored: ClickHouse truncates each value to
+     * BFloat16 on insert (it keeps the top 16 bits), and the read scales the result back to unit length
+     * ({@link #toUnit}). Arrival labels this copy, so its label is the one the labelling pass gives the stored vector.
+     */
+    public static float[] stored(float[] vector) {
+        var out = new float[vector.length];
+        for (int i = 0; i < vector.length; i++) {
+            out[i] = Float.intBitsToFloat(Float.floatToRawIntBits(vector[i]) & 0xFFFF0000);
+        }
+        return toUnit(out);
+    }
+
+    /** Scales {@code vector} to unit length in place, and returns it; a zero vector stays as it is. */
+    static float[] toUnit(float[] vector) {
+        double norm = 0;
+        for (float value : vector) {
+            norm += (double) value * value;
+        }
+        if (norm > 0) {
+            float scale = (float) (1 / Math.sqrt(norm));
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] *= scale;
+            }
+        }
+        return vector;
+    }
 }

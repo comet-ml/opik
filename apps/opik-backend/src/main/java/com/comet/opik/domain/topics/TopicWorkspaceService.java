@@ -1,0 +1,107 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+
+/**
+ * Whether Topics runs for a workspace: the one place that decides it. A workspace runs Topics only when all three hold:
+ * <ul>
+ * <li>{@code topics.enabled} is on;</li>
+ * <li>it is listed in {@code topics.enabledWorkspaces} ({@code TOPICS_ENABLED_WORKSPACES});</li>
+ * <li>it is enabled in {@code ai_label_workspaces}, since Topics reads the ai-labels trace_summary.</li>
+ * </ul>
+ * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
+ * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
+ * {@link #reaches} also checks the workspace's {@link TopicsStage} from the list.
+ *
+ * <p>Also keeps the vectors tick's per-workspace watermark and long-window pass progress in
+ * {@code topic_vector_watermarks}.
+ */
+@Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+public class TopicWorkspaceService {
+
+    private final @NonNull @Config("topics") TopicsConfig config;
+    private final @NonNull TransactionTemplate template;
+
+    public List<String> enabledWorkspaceIds() {
+        var listed = config.enabledWorkspaceIds();
+        if (!config.isEnabled() || listed.isEmpty()) {
+            return List.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds())
+                .stream()
+                .filter(listed::contains)
+                .toList();
+    }
+
+    public boolean isEnabled(@NonNull String workspaceId) {
+        return config.isEnabled() && config.enabledWorkspaceIds().contains(workspaceId)
+                && template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(AiLabelWorkspaceDAO.class).enabled(workspaceId))
+                        .orElse(false);
+    }
+
+    /** The {@link #enabledWorkspaceIds} whose listed stage is {@code stage} or a later one. */
+    public List<String> enabledWorkspaceIds(@NonNull TopicsStage stage) {
+        var stages = config.enabledWorkspaceStages();
+        return enabledWorkspaceIds().stream()
+                .filter(workspaceId -> stages.get(workspaceId).includes(stage))
+                .toList();
+    }
+
+    /** True when the workspace {@link #isEnabled} and its listed stage is {@code stage} or a later one. */
+    public boolean reaches(@NonNull String workspaceId, @NonNull TopicsStage stage) {
+        var listed = config.enabledWorkspaceStages().get(workspaceId);
+        return listed != null && listed.includes(stage) && isEnabled(workspaceId);
+    }
+
+    /** The vectors tick's watermark of each workspace that has one. */
+    Map<String, Instant> vectorsWatermarks(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).watermarks(workspaceIds));
+    }
+
+    /** {@code start}: the tick's start, the first row's daily pass mark, so its first long read is an interval on. */
+    void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark, @NonNull Instant start) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark, start);
+            return null;
+        });
+    }
+
+    /** When the long-window pass last read each workspace completely, for those it has. */
+    Map<String, Instant> vectorsLongWindowReads(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).longWindowReads(workspaceIds));
+    }
+
+    void setVectorsLongWindowRead(@NonNull String workspaceId, @NonNull Instant readAt) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorWatermarkDAO.class).setLongWindowRead(workspaceId, readAt);
+            return null;
+        });
+    }
+}

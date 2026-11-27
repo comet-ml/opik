@@ -3,11 +3,13 @@ Project-related endpoints for test helper service
 """
 
 from flask import Blueprint, request, jsonify
+import logging
 import os
 import time
 from opik.rest_api.client import OpikApi
 
 projects_bp = Blueprint("projects", __name__)
+logger = logging.getLogger(__name__)
 
 
 def get_opik_api_client():
@@ -108,10 +110,9 @@ def create_project():
 
         return jsonify({"success": True, "project": {"name": name}}), 200
 
-    except Exception as e:
-        return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
-        ), 500
+    except Exception:
+        logger.exception("Failed to create project")
+        return jsonify({"success": False, "error": "Failed to create project"}), 500
 
 
 @projects_bp.route("/find", methods=["POST"])
@@ -135,10 +136,9 @@ def find_project():
 
         return jsonify({"success": True, "projects": projects}), 200
 
-    except Exception as e:
-        return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
-        ), 500
+    except Exception:
+        logger.exception("Failed to find project")
+        return jsonify({"success": False, "error": "Failed to find project"}), 500
 
 
 @projects_bp.route("/delete", methods=["DELETE"])
@@ -164,10 +164,9 @@ def delete_project():
             {"success": True, "message": f"Project {name} deleted successfully"}
         ), 200
 
-    except Exception as e:
-        return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
-        ), 500
+    except Exception:
+        logger.exception("Failed to delete project")
+        return jsonify({"success": False, "error": "Failed to delete project"}), 500
 
 
 @projects_bp.route("/update", methods=["POST"])
@@ -194,10 +193,9 @@ def update_project():
             {"success": True, "project": {"id": project_id, "name": new_name}}
         ), 200
 
-    except Exception as e:
-        return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
-        ), 500
+    except Exception:
+        logger.exception("Failed to update project")
+        return jsonify({"success": False, "error": "Failed to update project"}), 500
 
 
 @projects_bp.route("/wait-for-visible", methods=["POST"])
@@ -222,12 +220,20 @@ def wait_for_project_visible():
 
         return jsonify({"success": True, "message": f"Project {name} is visible"}), 200
 
-    except TimeoutError as e:
-        return jsonify({"success": False, "error": str(e), "type": "TimeoutError"}), 408
-
-    except Exception as e:
+    except TimeoutError:
+        logger.exception("Project did not become visible within the timeout")
         return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
+            {
+                "success": False,
+                "error": "Project did not become visible within the timeout",
+                "type": "TimeoutError",
+            }
+        ), 408
+
+    except Exception:
+        logger.exception("Failed to wait for project to be visible")
+        return jsonify(
+            {"success": False, "error": "Failed to wait for project to be visible"}
         ), 500
 
 
@@ -255,10 +261,18 @@ def wait_for_project_deleted():
             {"success": True, "message": f"Project {name} has been deleted"}
         ), 200
 
-    except TimeoutError as e:
-        return jsonify({"success": False, "error": str(e), "type": "TimeoutError"}), 408
-
-    except Exception as e:
+    except TimeoutError:
+        logger.exception("Project was not deleted within the timeout")
         return jsonify(
-            {"success": False, "error": str(e), "type": type(e).__name__}
+            {
+                "success": False,
+                "error": "Project was not deleted within the timeout",
+                "type": "TimeoutError",
+            }
+        ), 408
+
+    except Exception:
+        logger.exception("Failed to wait for project to be deleted")
+        return jsonify(
+            {"success": False, "error": "Failed to wait for project to be deleted"}
         ), 500

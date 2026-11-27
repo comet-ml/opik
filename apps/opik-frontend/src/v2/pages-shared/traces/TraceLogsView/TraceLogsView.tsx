@@ -54,6 +54,7 @@ import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths, cn } from "@/lib/utils";
 import {
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
   getVirtualizationConfig,
 } from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -863,7 +864,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Trace>(),
+      generateSelectColumDef<Trace>(undefined, PAGE_BODY_SELECT_COLUMN_SIZE),
       ...convertColumnDataToColumn<BaseTraceData, Trace>(COLUMN_DATA, {
         columnsOrder,
         selectedColumns,
@@ -1021,8 +1022,12 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
 
   const hasSelection = selectedRows.length > 0;
 
-  const selectionBar = (
+  // The bar replaces the whole toolbar row instead of nesting inside it, so it
+  // doesn't stack the row's padding on its own; py-3 matches the row's height.
+  const renderSelectionBar = (className: string, sticky = true) => (
     <SelectionActionBar
+      className={className}
+      sticky={sticky}
       selectedCount={selectedRows.length}
       onDeselectAll={() => setRowSelection({})}
     >
@@ -1080,9 +1085,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     />
   );
 
-  const toolbarRow = hasSelection ? (
-    <div className="w-full">{selectionBar}</div>
-  ) : (
+  const toolbarRow = (
     <>
       <div className="min-w-0 flex-1">{chipBar}</div>
       {controls}
@@ -1181,13 +1184,17 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
             bar takes the remaining width and wraps within itself, so the controls stay right- and
             top-aligned rather than being pushed onto a second line. The negative top margin
             cancels TabsContent's own gap, the way the sibling tabs do. */}
-        <PageBodyStickyContainer
-          className="-mt-4 flex items-start gap-2 py-4"
-          direction="bidirectional"
-          limitWidth
-        >
-          {toolbarRow}
-        </PageBodyStickyContainer>
+        {hasSelection ? (
+          renderSelectionBar("-mt-4 py-3")
+        ) : (
+          <PageBodyStickyContainer
+            className="-mt-4 flex items-start gap-2 py-4"
+            direction="bidirectional"
+            limitWidth
+          >
+            {toolbarRow}
+          </PageBodyStickyContainer>
+        )}
         {renderTable({
           TableWrapper: PageBodyStickyTableWrapper,
           stickyHeader: true,
@@ -1209,7 +1216,11 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         {metricsSummary && <div className="px-6 pt-4">{metricsSummary}</div>}
         {/* Same single row as the page layout. */}
-        <div className="flex items-start gap-2 px-6 py-4">{toolbarRow}</div>
+        {hasSelection ? (
+          renderSelectionBar("px-6 py-3", false)
+        ) : (
+          <div className="flex items-start gap-2 px-6 py-4">{toolbarRow}</div>
+        )}
         <TableScrollContainer className="border-b px-6">
           {renderTable({ TableWrapper: ScrollTableWrapper })}
         </TableScrollContainer>

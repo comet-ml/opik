@@ -5,13 +5,16 @@ import com.google.common.base.Splitter;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.ConnectionFactoryOptions;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.temporal.ChronoUnit;
@@ -23,7 +26,10 @@ import java.util.stream.Collectors;
 @Data
 public class DatabaseAnalyticsFactory {
 
-    private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%s@%s:%d/%s%s";
+    /**
+     * No credentials in the URL: they are passed as options, so reserved characters in them cannot break it.
+     */
+    private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
@@ -44,7 +50,9 @@ public class DatabaseAnalyticsFactory {
     private @NotNull Protocol protocol;
     private @NotBlank String host;
     private int port;
+    @ToString.Exclude
     private @NotBlank String username;
+    @ToString.Exclude
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
@@ -105,6 +113,18 @@ public class DatabaseAnalyticsFactory {
     private Duration clientSocketTimeout;
 
     /**
+     * Size of the v2 client's connection pool, which every JSONEachRow bulk insert and v2 query leases from for the
+     * whole request, so it caps how many of them one backend instance runs at once. Unlike {@code max_open_connections}
+     * in {@code queryParameters}, which only reaches the R2DBC driver.
+     *
+     * <p>A primitive with no initializer, like {@link #httpHeadersProgressIntervalMs}: the default lives in
+     * {@code config.yml}, a missing key fails {@link Min} at startup, and {@link Max} stops a mistyped value from
+     * opening that many connections from every instance. A factory built in code is not validated, so it must set it:
+     * httpclient5 ignores a pool size below 1 and falls back to its own default of 5.
+     */
+    private @Min(1) @Max(100) int clientMaxOpenConnections;
+
+    /**
      * Gates the {@code clickhouse-cluster} health check. Off for single-shard / non-Distributed
      * deployments; on only for the Distributed (Hyperscale) topology where the cluster definition
      * must be visible from every node.
@@ -117,11 +137,22 @@ public class DatabaseAnalyticsFactory {
      */
     private boolean coldStorageDiskHealthCheckEnabled;
 
+    /**
+     * How span and trace payloads and bulk insert bodies are written. True writes each payload and its slim copy from
+     * the node without reparsing it and streams bulk insert rows into the request body; false is the string path: payloads
+     * serialized to strings, slim copies reparsed from them, and bulk insert bodies buffered on
+     * {@code boundedElastic} before the connection is taken.
+     */
+    private boolean streamPayloads;
+
     public ConnectionFactory build() {
         var queryParametersOverrides = getQueryParametersOverrides(queryParameters, r2dbcOnlyServerSettings());
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);
-        var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
-        return ConnectionFactories.get(url);
+        var url = URL_TEMPLATE.formatted(protocol.getValue(), host, port, databaseName, options);
+        return ConnectionFactories.get(ConnectionFactoryOptions.parse(url).mutate()
+                .option(ConnectionFactoryOptions.USER, username)
+                .option(ConnectionFactoryOptions.PASSWORD, password)
+                .build());
     }
 
     /**
@@ -129,18 +160,26 @@ public class DatabaseAnalyticsFactory {
      * (see {@code ExperimentAggregatesDAO.insertExperimentItemAggregates}).
      *
      * <p>Credentials, host, port, database and {@code queryParameters} mirror {@link #build()}
-     * so the two clients share a single source of truth. Connection pool, timeouts and other
-     * driver-level behavior are intentionally left at library defaults unless explicitly set
-     * via {@code queryParameters} (e.g. {@code compress=1}, {@code health_check_interval=2000}).
-     *
-     * <p>{@code queryParameters} parsing: top-level {@code &}-separated keys are applied as
-     * driver options via {@link Client.Builder#setOption(String, String)}; the
-     * {@code custom_http_params} value is a comma-separated list of ClickHouse server settings,
-     * applied via {@link Client.Builder#serverSetting(String, String)}. This matches the
-     * R2DBC convention where the top-level holds driver flags and {@code custom_http_params}
-     * carries the server-side {@code SETTINGS ...} payload.
+     * so the two clients share a single source of truth. Only the {@code custom_http_params} server settings in
+     * {@code queryParameters} reach this client, through {@link Client.Builder#serverSetting(String, String)}; its
+     * top-level driver options (e.g. {@code compress=1}, {@code max_open_connections}) are R2DBC's and are not applied
+     * here. The connection pool and timeouts come from the dedicated fields ({@link #clientMaxOpenConnections},
+     * {@link #clientSocketTimeout}) and otherwise stay at library defaults.
      */
     public Client buildClient() {
+        return newClientBuilder().build();
+    }
+
+    /**
+     * Same as {@link #buildClient()}, and binds the client's connection pool gauges to {@code poolMetrics}.
+     */
+    public Client buildClient(@NonNull ClickHouseClientPoolMetrics poolMetrics) {
+        return newClientBuilder()
+                .registerClientMetrics(poolMetrics.getRegistry(), ClickHouseClientPoolMetrics.GROUP_NAME)
+                .build();
+    }
+
+    private Client.Builder newClientBuilder() {
         var builder = new Client.Builder()
                 .addEndpoint("%s://%s:%d/".formatted(protocol.getValue(), host, port))
                 .setUsername(username)
@@ -172,7 +211,7 @@ public class DatabaseAnalyticsFactory {
             builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
         }
 
-        return builder.build();
+        return builder.setMaxConnections(clientMaxOpenConnections);
     }
 
     /**

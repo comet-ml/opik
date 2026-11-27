@@ -371,8 +371,8 @@ component:
       # minimal template (started with an allowlisted environment) so it does not start from the backend's
       # memory or environment. Needs Linux and Python 3.14 (as in the image), python-backend running as
       # root (CAP_SETUID/CAP_SETGID, default for root), no privileged mode; works under a RuntimeDefault
-      # seccomp profile. If it can't be applied no worker starts. Off by default.
-      PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "false"
+      # seccomp profile. If it can't be applied no worker starts; set "false" where python-backend can't run as root.
+      PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "true"
       # Seconds a new process-strategy worker may take to report ready before it is stopped and left out
       # of the pool. A positive number; any other value fails startup.
       PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS: "10"
@@ -384,8 +384,8 @@ component:
       # Docker strategy only. "true" starts executor containers with no capabilities, a read-only root
       # filesystem with a small /tmp and a process limit, and, while PYTHON_CODE_EXECUTOR_ALLOW_NETWORK is
       # "false", runs the in-container Docker daemon without a bridge network or iptables rules. Metrics
-      # that write outside /tmp or start many processes fail. Off by default.
-      PYTHON_CODE_EXECUTOR_DOCKER_HARDENING: "false"
+      # that write outside /tmp or start many processes fail; set "false" for them.
+      PYTHON_CODE_EXECUTOR_DOCKER_HARDENING: "true"
       # Process limit and /tmp size per executor container when hardening is on.
       PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT: "64"
       PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE: "16m"
@@ -452,8 +452,13 @@ component:
       - configMapRef:
           name: opik-python-backend
 
+    # -- securityContext of the python-backend containers. The `RuntimeDefault` seccomp profile blocks system calls
+    # that code metrics have no use for. With `env.PYTHON_CODE_EXECUTOR_STRATEGY: "docker"` the chart adds
+    # `privileged: true`, which the Docker daemon inside the container needs; the default process strategy runs
+    # unprivileged. If the strategy comes from `envFrom` or `secretRefs` instead, set `privileged: true` here yourself.
     securityContext:
-      privileged: true
+      seccompProfile:
+        type: RuntimeDefault
     networkPolicy:
       enabled: false
       annotations: {}
@@ -854,8 +859,9 @@ databaseAnalyticsDataModel:
   spansDistributedWrapEnabled: false
   # Run the span weeks backfill job, which indexes the spans written before span_weeks_mv.
   spanWeeksBackfillEnabled: false
-  # Bound span reads by trace id with the span_weeks index. Effective only with spanColumnsNonNullable; turn true
-  # once the span weeks backfill has no pending chunk.
+  # Bound span reads by trace or project with the span_weeks index. Effective only with spanColumnsNonNullable; turn
+  # true once the span weeks backfill has planned its chunks and done them all and, in the spans cutover, only after
+  # its EXCHANGE; revert it with a rollback that restores the legacy spans table.
   spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
@@ -867,6 +873,12 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+  # Also publish opik.clickhouse.tiered_table.* gauges (cold-tier reads, read latency, failed reads, failed
+  # moves) from system.query_log and system.part_log. Reads every replica with clusterAllReplicas, so it
+  # needs the `cluster` macro and the backend user's REMOTE grant.
+  tieredStorageEnabled: false
+  # How far behind now the tiered-storage window ends, so rows still buffered for the system logs aren't skipped.
+  tieredStorageLogFlushLag: 15s
 
 # Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
 # default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
@@ -1373,7 +1385,7 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.6"
+    tag: "3.9.7"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:

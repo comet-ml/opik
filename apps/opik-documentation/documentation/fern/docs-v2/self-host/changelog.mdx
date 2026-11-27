@@ -13,6 +13,49 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+<Warning>
+  **Backward incompatible for direct SQL: the `traces` and `spans` storage cutovers.** The ClickHouse `traces` and `spans` tables each have a storage cutover. It is not tied to an Opik release: it changes a table only when your installation's operators run it, following its runbook. After it:
+
+  - `end_time`, `duration` and `ttft` store an epoch or `NaN` sentinel instead of `NULL`. `IS NULL` filters on them match nothing, and `avg`, `sum` and `count(x)` include the `NaN` values.
+  - `start_time`, `end_time` and `created_at` are stored at microsecond precision.
+  - On `spans`, `parent_span_id` is `FixedString(36)`, so `length(parent_span_id)` is 36 even for a root span, and the deduplication key no longer includes it.
+
+  Saved queries, dashboards and BI tools that query these tables directly don't fail; they return wrong results. See [Querying traces and spans in ClickHouse](/self-host/querying-traces-and-spans) for how to check each table and what to change. The REST API, the SDKs and the Opik UI are unaffected.
+</Warning>
+
+## Release 2.3.5, 2026-11-26
+
+### Security Change
+
+The Python backend container now runs in privileged mode only with the `docker` code executor strategy, whose
+in-container Docker daemon needs it. With the default `process` strategy it runs unprivileged.
+
+- **Helm:** no change needed. The chart adds `privileged: true` when `component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY`
+  is `docker`. If you set the strategy through `envFrom` or `secretRefs` instead, set
+  `component.python-backend.securityContext.privileged: true`. The Python backend container also runs with the
+  `RuntimeDefault` seccomp profile now; set `component.python-backend.securityContext.seccompProfile: null` to drop it.
+- **Docker Compose:** no change needed. `PYTHON_CODE_EXECUTOR_STRATEGY` also sets privileged mode, through the
+  `python-backend-<strategy>.yaml` file that the Python backend service extends.
+
+The Python backend also logs a warning at startup naming the strategy in use and its trade-off.
+
+## Release 2.3.0, 2026-11-23
+
+### Security Change
+
+The Python code executor that runs code metrics now sandboxes user code by default:
+
+- `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` (`process` strategy, the default) now defaults to `true`. Each worker runs as an unprivileged user with a minimal environment and no network access.
+- `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING` (`docker` strategy) now defaults to `true`. Executor containers run with no capabilities, a read-only root filesystem, a small `noexec` `/tmp` and a process limit.
+
+Docker Compose and Helm deployments that keep the default python-backend settings need no change: python-backend runs as root, which process isolation requires.
+
+Set either one back to `false` (in the Helm chart under `component.python-backend.env`, or as an environment variable for Docker Compose) when:
+
+- **python-backend runs as non-root with the `process` strategy.** Isolation can't be applied there, so no process worker starts and every code metric evaluation fails. The python-backend log names `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` and the step that failed. Set it to `false`.
+- **Code metrics open network connections or read environment variables under the `process` strategy.** Isolated workers can't create sockets and see only a minimal environment, so such a metric now fails. Set `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION` to `false`.
+- **Code metrics write outside `/tmp`, write more than 16 MB to `/tmp`, or start more than 64 processes or threads under the `docker` strategy.** Set `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING` to `false`, or raise `PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE` and `PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT`.
+
 ## Release 2.2.101, 2026-10-14
 
 ### Critical Changes

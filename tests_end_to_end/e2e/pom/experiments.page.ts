@@ -144,21 +144,29 @@ export class ExperimentsPage {
   /**
    * The same-dataset picker, raised when exactly one experiment is selected.
    *
-   * Titled "Compare experiments" — distinct from the mixed-dataset guard
-   * below, which is a different dialog with a different title, and telling the
-   * two apart is most of what this PR's branches are about.
+   * Titled "Add to compare". A selection spanning two item sources never
+   * reaches a dialog: Compare is disabled and explains why in a tooltip.
    */
   get comparePickerDialog(): Locator {
     return this.page.getByRole('dialog').filter({
-      has: this.page.getByRole('heading', { name: 'Compare experiments' }),
+      has: this.page.getByRole('heading', { name: 'Add to compare' }),
     });
   }
 
-  /** The mixed-dataset guard, raised when the selection spans two datasets. */
-  get datasetFilterDialog(): Locator {
-    return this.page.getByRole('dialog').filter({
-      has: this.page.getByRole('heading', { name: 'Select experiments to compare' }),
+  /**
+   * Hover the Compare button to raise its tooltip.
+   *
+   * Through the wrapper, not the button: a disabled button fires no pointer
+   * events, so the panel wraps it in a span that owns the tooltip trigger.
+   */
+  async hoverCompare(): Promise<void> {
+    await test.step('hover Compare', async () => {
+      await this.compareButton.locator('..').hover();
     });
+  }
+
+  get compareTooltip(): Locator {
+    return this.page.getByRole('tooltip');
   }
 
   /**

@@ -8,6 +8,7 @@ from .agent_insights.client import AgentInsightsClient, AsyncAgentInsightsClient
 from .agent_insights_enrollment.client import AgentInsightsEnrollmentClient, AsyncAgentInsightsEnrollmentClient
 from .agent_insights_jobs.client import AgentInsightsJobsClient, AsyncAgentInsightsJobsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
+from .analytics_queries.client import AnalyticsQueriesClient, AsyncAnalyticsQueriesClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
@@ -23,6 +24,7 @@ from .environment import OpikApiEnvironment
 from .environments.client import AsyncEnvironmentsClient, EnvironmentsClient
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
+from .guardrail_models.client import AsyncGuardrailModelsClient, GuardrailModelsClient
 from .guardrail_policies.client import AsyncGuardrailPoliciesClient, GuardrailPoliciesClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
 from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
@@ -47,7 +49,9 @@ from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesCli
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_analytics_queries.client import AsyncSystemAnalyticsQueriesClient, SystemAnalyticsQueriesClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
+from .topics.client import AsyncTopicsClient, TopicsClient
 from .traces.client import AsyncTracesClient, TracesClient
+from .views.client import AsyncViewsClient, ViewsClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
 from .workspace_permissions.client import AsyncWorkspacePermissionsClient, WorkspacePermissionsClient
 from .workspaces.client import AsyncWorkspacesClient, WorkspacesClient
@@ -116,11 +120,13 @@ class OpikApi:
         self.agent_insights_enrollment = AgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.dashboard_saved_queries = DashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
+        self.topics = TopicsClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AgentInsightsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
+        self.analytics_queries = AnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
@@ -132,6 +138,7 @@ class OpikApi:
         self.environments = EnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.guardrail_models = GuardrailModelsClient(client_wrapper=self._client_wrapper)
         self.guardrail_policies = GuardrailPoliciesClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.insights_views = InsightsViewsClient(client_wrapper=self._client_wrapper)
@@ -152,6 +159,7 @@ class OpikApi:
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
+        self.views = ViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = WorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
@@ -274,11 +282,13 @@ class AsyncOpikApi:
         self.agent_insights_enrollment = AsyncAgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.dashboard_saved_queries = AsyncDashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
+        self.topics = AsyncTopicsClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AsyncAgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AsyncAgentInsightsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
+        self.analytics_queries = AsyncAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
@@ -290,6 +300,7 @@ class AsyncOpikApi:
         self.environments = AsyncEnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.guardrail_models = AsyncGuardrailModelsClient(client_wrapper=self._client_wrapper)
         self.guardrail_policies = AsyncGuardrailPoliciesClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.insights_views = AsyncInsightsViewsClient(client_wrapper=self._client_wrapper)
@@ -310,6 +321,7 @@ class AsyncOpikApi:
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
+        self.views = AsyncViewsClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspace_permissions = AsyncWorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)

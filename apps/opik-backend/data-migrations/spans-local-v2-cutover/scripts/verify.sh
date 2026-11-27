@@ -23,13 +23,18 @@
 # header carries the full argument; it is repeated here because an operator reading a mismatch will look at this file
 # first.
 #
-# Feasibility at this scale: full mode reads every partition, and on spans that is measured in hours rather than
-# the tens of minutes the traces runbook quoted — the table is far larger and its rows far wider uncompressed, and the
-# reduction above adds a GROUP BY over the window's keys on the old side. --sample-mod compares a deterministic id
-# sample (same rows on both sides); --weeks-stride compares every Nth week; --from/--to-week limit the range. Comparing
-# a representative subset gives high confidence when a full pass is infeasible — but read the Go/No-Go item before
-# reaching for it: the PRE-EXCHANGE gate run must still be a full compare, because sampling can hash a single-row
-# deletion leak out and still report ok=1.
+# Cost at this scale. `spans` is unpartitioned and created_at is not in its sorting key, so a week's predicate prunes
+# only through the created_at minmax skip index, granule by granule, and a granule spanning many weeks is re-read by
+# every week it touches; under FINAL, use_skip_indexes_if_final_exact_mode also re-reads every selected granule's key
+# neighbours, which can widen one week to most of both tables. The default one-query-per-week walk, and each
+# confirm-keys re-check of a differing week, can therefore cost up to a full read of both tables. --single-pass reads
+# the range once and emits the same per-week verdicts (000005's compare-weeks block); it is exact, not a sample, but
+# its aggregation can spill the whole range's keys to the server's temporary path, which --io-budget-pct does not
+# throttle. --coverage compares a time slice of every hour; it shrinks the read only as far as the tables' granules are
+# narrow. Before the first window the driver prints the estimated bytes and an ETA, and at the end the elapsed time and
+# the rate it implies, for --throughput-mbps.
+# The PRE-EXCHANGE gate must still be a full compare — every week, full coverage — because a sample can miss a single-row
+# deletion leak and still report ok=1; it may be split across runs when they share a pinned --anchor (see --anchor).
 #
 # Usage:
 #   CLICKHOUSE_HOST=... CLICKHOUSE_PASSWORD=... ./verify.sh --database opik [options]
@@ -59,7 +64,42 @@
 #                       `--old-table spans --new-table spans_post_rollback_backup`, and expect the cutover window's
 #                       week to legitimately mismatch by the post-cutover writes the rollback discarded — stop below it,
 #                       using the offset rollback.sh prints (see README "Verifying after a rollback").
-#   --sample-mod N      compare a deterministic 1/N id sample (same ids on both sides). Default 1 (every row).
+#   --coverage PCT      compare PCT% of the rows (integer 1-100). Default 100. The sample is the first 36*PCT seconds of
+#                       every UTC hour by created_at: the same rows on both sides, every week and every hour represented,
+#                       and — unlike a hash of the id — a range the created_at minmax skip index can skip granules on.
+#                       Its bias: each project counts in proportion to its activity inside the slices, so traffic
+#                       periodic on the hour is over- or under-represented. Its limit: a granule whose created_at spans
+#                       more than an hour (a quiet project, non-time-ordered trace ids) is read whatever the coverage,
+#                       and spans_local_v2's larger granules (index_granularity_bytes 40 MiB) span hours even for busy
+#                       projects, so the read does not fall in proportion; the estimate printed before the run shows how
+#                       far it falls. Server
+#                       versions with use_skip_indexes_if_final_exact_mode get it disabled for the run, because that mode
+#                       re-reads each selected granule's key neighbours under FINAL and would undo the skip. Not valid
+#                       for the pre-EXCHANGE gate below 100.
+#   --sample-mod 1      retired: a hash of the id cannot skip a granule, so N > 1 read every row for partial coverage.
+#                       Only 1 is accepted, so existing invocations keep working; use --coverage.
+#   --single-pass       weekly mode: read the range once and report every week's verdict from it (000005's
+#                       compare-weeks), instead of one query per week. Same verdict lines, same exit status; a week that
+#                       differs is resolved on its own window exactly as in the default walk. FINAL sees more of each
+#                       key's versions in one wide read, so a superseded-version artifact the weekly walk reports as
+#                       "OK — superseded-version artifact" may simply read OK here. Past 4 GB of aggregation state, the
+#                       range's keys spill to the server's temporary path (see the README); check its free space.
+#   --batch-weeks N     with --single-pass: N selected weeks per query rather than the whole range, so an interrupted
+#                       run keeps the verdicts of the batches it finished, and each holds only its own spill. Each batch
+#                       can cost up to a full read of both tables (see "Cost at this scale"), so use as few batches as
+#                       resuming allows.
+#   --anchor DATE       pin the week grid to DATE (YYYY-MM-DD, a Monday) instead of reading toMonday(min(created_at))
+#                       from the old table at startup. Every weekly run logs the anchor it used; pass it back with
+#                       --from-week to resume, and the resumed run's offsets name exactly the windows the first run's
+#                       did. Refused when later than the data's own first Monday, which would leave earlier rows out.
+#                       A resumed run on a pinned anchor labels its verdict line RESUMED rather than PARTIAL.
+#   --io-budget-pct N   cap the compare at N% (1-100) of the volume's throughput, given by --volume-mbps. Enforced on
+#                       every query of the run as max_execution_speed_bytes, converted from disk bytes to the
+#                       uncompressed bytes ClickHouse throttles on with the two tables' own compression ratio.
+#   --volume-mbps M     the data volume's provisioned throughput in MB/s. Required by --io-budget-pct.
+#   --throughput-mbps R the rate the ETA assumes, in MB/s of the estimated on-disk read. Default 500, an assumption:
+#                       pass the rate a previous run printed at the end. Capped by --io-budget-pct when given.
+#   --estimate-only     print the plan, the estimated read and the ETA, then exit 0 without comparing.
 #   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0. An OFFSET, not a date.
 #   --to-week M         stop after week offset M (inclusive). Default: last week with data. Also an OFFSET — a YYYYMMDD
 #                       partition name is rejected rather than walked as millions of empty windows.
@@ -72,12 +112,14 @@
 #                       [from, to). 'YYYY-MM-DD HH:MM:SS[.ffffff]', with an optional ' UTC' marker so a value pasted
 #                       straight from a driver's RECORD line works; either way BOTH bounds are interpreted as UTC,
 #                       matching every other window bound in this runbook.
-#                       MUTUALLY EXCLUSIVE with --from-week / --to-week / --weeks-stride, which are 0-based offsets into
-#                       a week grid this mode does not build. No new compare SQL is involved: 000005's blocks are already
-#                       parameterised by arbitrary ${WINDOW_LO} / ${WINDOW_HI}, and only the driver was generating week
-#                       boundaries. --sample-mod, --drill-down, --receive-timeout and the confirm-keys / version-ties
-#                       resolution all work unchanged. In this mode the anchor scan is skipped (nothing needs a week
-#                       grid), so the run also does not depend on min/max(created_at) holding still.
+#                       MUTUALLY EXCLUSIVE with --from-week / --to-week / --weeks-stride / --single-pass /
+#                       --batch-weeks / --anchor, which all describe a week grid this mode does not build. No new compare
+#                       SQL is involved: 000005's blocks are already parameterised by arbitrary ${WINDOW_LO} /
+#                       ${WINDOW_HI}, and only the driver was generating week boundaries. --coverage, --drill-down,
+#                       --receive-timeout, the I/O budget and the confirm-keys / version-ties resolution all work
+#                       unchanged. A window holding no row on either side FAILS: nothing compared is not a pass, and an
+#                       arbitrary range is easy to place where no data sits. The anchor scan is skipped (nothing needs a
+#                       week grid), so the run also does not depend on min/max(created_at) holding still.
 #                       IT COMPARES SPANS *CREATED* IN THE WINDOW, not every span touched in it, and the PASSED line
 #                       says so. 000005's blocks bound on created_at and have to: the weekly mode's partitions and its
 #                       superseded-version artifact logic are created_at-based, and widening the predicate to
@@ -101,15 +143,23 @@ CH_HOST=""                # host; empty = clickhouse-client default/env. See --h
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 OLD_TABLE="spans"          # old-schema side; becomes spans_pre_cutover_backup after the EXCHANGE (see --old-table)
 NEW_TABLE="spans_local_v2" # new-schema side (the successor being built); becomes spans after the EXCHANGE
-SAMPLE_MOD=1                # 1 = every row; N compares a deterministic 1/N id sample, identical on both sides
+COVERAGE=100                # percent of rows compared: a time slice of every UTC hour. See --coverage.
 FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
+SINGLE_PASS=0               # 1 = one read per batch of weeks (compare-weeks) instead of one query per week
+BATCH_WEEKS=0               # selected weeks per single-pass query; 0 = the whole range in one query
+ANCHOR_PIN=""               # pinned week-grid Monday; empty = toMonday(min(created_at)) of the old table
+IO_BUDGET_PCT=""
+VOLUME_MBPS=""
+THROUGHPUT_MBPS=""          # empty = DEFAULT_THROUGHPUT_MBPS, reported as an assumption
+DEFAULT_THROUGHPUT_MBPS=500
+ESTIMATE_ONLY=0
 DRILL_DOWN=0
 RECEIVE_TIMEOUT=1800        # seconds tolerated between server packets, not total query time. See --receive-timeout.
 WINDOW_FROM=""              # single arbitrary created_at window, half-open [from, to). See --window-from.
 WINDOW_TO=""
-# The week bounds carry defaults, so "was it passed?" cannot be read off their values — an explicit --from-week 0 or
+# The grid flags carry defaults, so "was it passed?" cannot be read off their values — an explicit --from-week 0 or
 # --weeks-stride 1 has to conflict with --window-from just as any other value would, or the mutual exclusion would be
 # silently partial exactly where an operator is most likely to combine them by habit.
 WEEK_BOUND_FLAGS=()
@@ -128,10 +178,24 @@ while [[ $# -gt 0 ]]; do
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --old-table) OLD_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
         --new-table) NEW_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
-        --sample-mod) SAMPLE_MOD="${2:?"$1 requires a value"}"; shift 2 ;;
+        --coverage) COVERAGE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --sample-mod)
+            [[ "${2:?"$1 requires a value"}" == 1 ]] || {
+                echo "ERROR: --sample-mod is retired. A hash of the id cannot skip a granule, so a 1/N sample still read" >&2
+                echo "       every row. Use --coverage PCT, which samples a time slice the skip index can prune on." >&2
+                exit 2
+            }
+            shift 2 ;;
         --from-week) FROM_WEEK="${2:?"$1 requires a value"}"; WEEK_BOUND_FLAGS+=("$1"); shift 2 ;;
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; WEEK_BOUND_FLAGS+=("$1"); shift 2 ;;
         --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; WEEK_BOUND_FLAGS+=("$1"); shift 2 ;;
+        --single-pass) SINGLE_PASS=1; WEEK_BOUND_FLAGS+=("$1"); shift ;;
+        --batch-weeks) BATCH_WEEKS="${2:?"$1 requires a value"}"; WEEK_BOUND_FLAGS+=("$1"); shift 2 ;;
+        --anchor) ANCHOR_PIN="${2:?"$1 requires a value"}"; WEEK_BOUND_FLAGS+=("$1"); shift 2 ;;
+        --io-budget-pct) IO_BUDGET_PCT="${2:?"$1 requires a value"}"; shift 2 ;;
+        --volume-mbps) VOLUME_MBPS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --throughput-mbps) THROUGHPUT_MBPS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --estimate-only) ESTIMATE_ONLY=1; shift ;;
         --window-from) WINDOW_FROM="${2:?"$1 requires a value"}"; shift 2 ;;
         --window-to) WINDOW_TO="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
@@ -155,11 +219,36 @@ done
 # own argv element, never interpolated into SQL.
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^\[?[A-Za-z0-9._:-]+\]?$ ]] || { echo "ERROR: --host must be a hostname, IPv4, or IPv6 literal." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
-[[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
-[[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
-[[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
+[[ "$COVERAGE" =~ ^[1-9][0-9]*$ ]] && (( ${#COVERAGE} <= 3 && COVERAGE <= 100 )) \
+    || { echo "ERROR: --coverage must be an integer percentage from 1 to 100." >&2; exit 2; }
+# The week bounds are capped at nine digits, lexically and before any arithmetic: bash wraps silently past 2^63, and a
+# wrapped stride or batch span turns negative and steps the week loops below backwards forever. Nine digits still lets
+# a YYYYMMDD partition name through to the clearer --to-week error further down. No leading zeros either: bash reads
+# 08 as invalid octal.
+[[ "$FROM_WEEK" =~ ^(0|[1-9][0-9]{0,8})$ ]] \
+    || { echo "ERROR: --from-week must be a non-negative integer (a week offset)." >&2; exit 2; }
+[[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]{0,8}$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
+[[ "$BATCH_WEEKS" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
+    || { echo "ERROR: --batch-weeks must be a non-negative integer (0 = the whole range in one query)." >&2; exit 2; }
+(( BATCH_WEEKS == 0 || SINGLE_PASS == 1 )) \
+    || { echo "ERROR: --batch-weeks sizes the queries of --single-pass; pass --single-pass with it." >&2; exit 2; }
+[[ -z "$ANCHOR_PIN" || "$ANCHOR_PIN" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+    || { echo "ERROR: --anchor must be a date, YYYY-MM-DD (the Monday a previous run logged as its anchor)." >&2; exit 2; }
+# Lexical digit-count checks before any arithmetic: bash wraps silently past 2^63, and a wrapped value would pass a
+# range test and derive a nonsensical cap.
+[[ -z "$IO_BUDGET_PCT" ]] || { [[ "$IO_BUDGET_PCT" =~ ^[1-9][0-9]{0,2}$ ]] && (( IO_BUDGET_PCT <= 100 )); } \
+    || { echo "ERROR: --io-budget-pct must be an integer percentage from 1 to 100." >&2; exit 2; }
+[[ -z "$VOLUME_MBPS" || "$VOLUME_MBPS" =~ ^[1-9][0-9]{0,6}$ ]] \
+    || { echo "ERROR: --volume-mbps must be a positive integer (MB/s)." >&2; exit 2; }
+[[ -z "$THROUGHPUT_MBPS" || "$THROUGHPUT_MBPS" =~ ^[1-9][0-9]{0,6}$ ]] \
+    || { echo "ERROR: --throughput-mbps must be a positive integer (MB/s)." >&2; exit 2; }
+if [[ -n "$IO_BUDGET_PCT" && -z "$VOLUME_MBPS" ]] || [[ -z "$IO_BUDGET_PCT" && -n "$VOLUME_MBPS" ]]; then
+    echo "ERROR: --io-budget-pct and --volume-mbps go together: the budget is a share of the volume's provisioned" >&2
+    echo "       throughput, which ClickHouse cannot discover." >&2
+    exit 2
+fi
 [[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
-[[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^[0-9]+$ ]] \
+[[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^(0|[1-9][0-9]{0,8})$ ]] \
     || { echo "ERROR: --to-week must be a non-negative integer or 'last-sealed'." >&2; exit 2; }
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
@@ -171,9 +260,9 @@ if [[ -n "$WINDOW_FROM" || -n "$WINDOW_TO" ]]; then
     [[ -n "$WINDOW_FROM" && -n "$WINDOW_TO" ]] \
         || { echo "ERROR: --window-from and --window-to must be passed together (the window is half-open [from, to))." >&2; exit 2; }
     if (( ${#WEEK_BOUND_FLAGS[@]} > 0 )); then
-        echo "ERROR: --window-from/--window-to are mutually exclusive with ${WEEK_BOUND_FLAGS[*]}. Those are 0-based" >&2
-        echo "       OFFSETS into a weekly grid anchored on toMonday(min(created_at)); window mode compares one explicit" >&2
-        echo "       range and builds no grid at all, so there is nothing for an offset to mean." >&2
+        echo "ERROR: --window-from/--window-to are mutually exclusive with ${WEEK_BOUND_FLAGS[*]}. Those describe a" >&2
+        echo "       weekly grid anchored on a Monday; window mode compares one explicit range and builds no grid at" >&2
+        echo "       all, so there is nothing for them to mean." >&2
         exit 2
     fi
     # Accept the ' UTC' marker the drivers print, so a value pasted from a RECORD line works, but do not require it: the
@@ -250,7 +339,10 @@ render_block() {
     sql="${sql//'${NEW_TABLE}'/$NEW_TABLE}"
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
-    sql="${sql//'${SAMPLE_MOD}'/$SAMPLE_MOD}"
+    sql="${sql//'${ROW_FILTER}'/$ROW_FILTER}"
+    sql="${sql//'${ANCHOR}'/${ANCHOR:-}}"
+    sql="${sql//'${FROM_WEEK}'/$FROM_WEEK}"
+    sql="${sql//'${WEEKS_STRIDE}'/$WEEKS_STRIDE}"
     # A renamed, moved or split marker yields text that is empty or only the block's own comments, and clickhouse-client
     # exits 0 on either, so the caller would read "no output" as a verdict rather than as a failure to ask.
     #
@@ -285,10 +377,27 @@ render_block() {
     printf '%s' "$sql"
 }
 
+# --coverage's slice, the first COVERAGE*36 seconds of every UTC hour. Written with toMinute/toSecond because each is
+# monotonic within an hour, which is what lets the created_at minmax index evaluate it on a granule whose rows sit in
+# one hour; created_at is a 'UTC' column, so both read UTC whatever the session timezone.
+ROW_FILTER=1
+if (( COVERAGE < 100 )); then
+    SLICE_SECONDS=$(( COVERAGE * 36 ))
+    ROW_FILTER="(toMinute(created_at) < $(( SLICE_SECONDS / 60 )) OR (toMinute(created_at) = $(( SLICE_SECONDS / 60 ))"
+    ROW_FILTER+=" AND toSecond(created_at) < $(( SLICE_SECONDS % 60 ))))"
+fi
+
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
     local sql
     sql="$(render_block compare "$1" "$2")" || exit 2
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
+}
+
+# Verdict TSV rows for every week of [$1, $2) holding data: week src_rows dst_rows src_checksum dst_checksum ok
+compare_weeks() {
+    local sql
+    sql="$(render_block compare-weeks "$1" "$2")" || exit 2
     clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
 }
 
@@ -340,8 +449,30 @@ fi
 # but whose created_at is real). Same anchor math as backfill.sh. Skipped entirely in window mode: the bounds are given,
 # so there is no grid to anchor — and with it goes this scan's one liability, that both bounds are read live and can move
 # under a table still taking writes.
+#
+# --anchor pins the grid instead. Read live, the anchor moves whenever the oldest row does (retention, a late backdated
+# write), and then two runs' offsets name different windows; pinned, a resumed run is continuous with the one it
+# follows by construction. A pin later than the data's own first Monday is refused: the weeks before it would never be
+# compared. An earlier one only adds empty leading weeks.
 resolve_week_grid() {
-    ANCHOR="$(ch "SELECT toString(toMonday(min(created_at))) FROM $OLD_TABLE")"
+    DATA_ANCHOR="$(ch "SELECT toString(toMonday(min(created_at))) FROM $OLD_TABLE")"
+    if [[ -z "$ANCHOR_PIN" ]]; then
+        ANCHOR="$DATA_ANCHOR"
+        ANCHOR_SOURCE="read from toMonday(min(created_at)) of '$OLD_TABLE'"
+    else
+        if [[ "$(ch "SELECT toDayOfWeek(toDateOrNull('$ANCHOR_PIN'))")" != 1 ]]; then
+            echo "ERROR: --anchor $ANCHOR_PIN is not a valid Monday. The week grid starts on a Monday; pass the anchor a" >&2
+            echo "       previous run logged." >&2
+            exit 2
+        fi
+        if [[ "$ANCHOR_PIN" > "$DATA_ANCHOR" ]]; then
+            echo "ERROR: --anchor $ANCHOR_PIN is later than the first week holding data ($DATA_ANCHOR), so the rows" >&2
+            echo "       before it would never be compared. Pin $DATA_ANCHOR or earlier." >&2
+            exit 2
+        fi
+        ANCHOR="$ANCHOR_PIN"
+        ANCHOR_SOURCE="pinned with --anchor"
+    fi
     HORIZON="$(ch "SELECT toString(addWeeks(toMonday(max(created_at)), 1)) FROM $OLD_TABLE")"
     LAST_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate('$HORIZON')) - 1")"
     [[ -n "$TO_WEEK" ]] || TO_WEEK="$LAST_WEEK"
@@ -372,38 +503,233 @@ resolve_week_grid() {
     fi
 }
 
+# The table holding the parts: the table itself, or a Distributed wrapper's target once the estate is wrapped.
+# system.parts and EXPLAIN ESTIMATE read storage, and the wrapper has none.
+storage_table() {
+    if [[ "$(ch "SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = '$1'")" == Distributed ]]; then
+        ch "SELECT extractAll(engine_full, '\\'([^\\']*)\\'')[3] FROM system.tables
+            WHERE database = currentDatabase() AND name = '$1'"
+    else
+        echo "$1"
+    fi
+}
+OLD_STORAGE="$(storage_table "$OLD_TABLE")"
+NEW_STORAGE="$(storage_table "$NEW_TABLE")"
+
+# On-disk bytes per row of a table: what turns an estimated row count into an estimated read.
+disk_bytes_per_row() {
+    ch "SELECT if(sum(rows) = 0, 0, sum(bytes_on_disk) / sum(rows)) FROM system.parts
+        WHERE active AND database = currentDatabase() AND table = '$1'"
+}
+OLD_BYTES_PER_ROW="$(disk_bytes_per_row "$OLD_STORAGE")"
+NEW_BYTES_PER_ROW="$(disk_bytes_per_row "$NEW_STORAGE")"
+
+human_bytes() {
+    awk -v b="$1" 'BEGIN { if (b >= 1073741824) printf "%.1f GiB", b / 1073741824; else printf "%.1f MiB", b / 1048576 }'
+}
+human_duration() { awk -v s="$1" 'BEGIN { s = int(s + 0.5); printf "%dh%02dm%02ds", s / 3600, (s % 3600) / 60, s % 60 }'; }
+
+# The budget is a share of the volume's disk throughput, but ClickHouse throttles on the uncompressed bytes it reads,
+# so the cap is scaled by the two tables' compression ratio. Applied to every query of the run, the re-checks of a
+# differing window included, and checked from the first second rather than after the server's default grace period.
+EFFECTIVE_MBPS="${THROUGHPUT_MBPS:-$DEFAULT_THROUGHPUT_MBPS}"
+RATE_SOURCE="${THROUGHPUT_MBPS:+given with --throughput-mbps}"
+RATE_SOURCE="${RATE_SOURCE:-assumed; pass --throughput-mbps with the rate a previous run measured}"
+if [[ -n "$IO_BUDGET_PCT" ]]; then
+    COMPRESSION_RATIO="$(ch "SELECT greatest(1, sum(data_uncompressed_bytes) / greatest(sum(data_compressed_bytes), 1))
+        FROM system.parts WHERE active AND database = currentDatabase() AND table IN ('$OLD_STORAGE', '$NEW_STORAGE')")"
+    BUDGET_MBPS=$(( VOLUME_MBPS * IO_BUDGET_PCT / 100 ))
+    (( BUDGET_MBPS > 0 )) || BUDGET_MBPS=1
+    MAX_SPEED_BYTES="$(awk -v m="$BUDGET_MBPS" -v r="$COMPRESSION_RATIO" 'BEGIN { printf "%.0f", m * 1000000 * r }')"
+    CH_ARGS+=(--max_execution_speed_bytes="$MAX_SPEED_BYTES" --timeout_before_checking_execution_speed=0)
+    if (( BUDGET_MBPS < EFFECTIVE_MBPS )); then
+        EFFECTIVE_MBPS="$BUDGET_MBPS"
+        RATE_SOURCE="the I/O budget"
+    fi
+fi
+
+# After the budget, so the grid's min/max(created_at) scans of the old table run under the cap too.
 (( WINDOW_MODE == 1 )) || resolve_week_grid
 
-if (( WINDOW_MODE == 1 )); then
-    log "Verify: $OLD_TABLE vs $NEW_TABLE | window [$WINDOW_FROM .. $WINDOW_TO) UTC | sample 1/$SAMPLE_MOD"
-else
-    log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE | sample 1/$SAMPLE_MOD"
+# Under FINAL, servers that have use_skip_indexes_if_final_exact_mode re-read the key neighbours of every granule a skip
+# index selects. That keeps FINAL exact for a created_at window, but the coverage slices select granules scattered
+# across the whole table and the neighbours cover nearly all of it, undoing the skip. Without it a
+# slice can surface a superseded version on one side, which is the artifact confirm-keys already resolves.
+if (( COVERAGE < 100 )) \
+    && [[ "$(ch "SELECT count() FROM system.settings WHERE name = 'use_skip_indexes_if_final_exact_mode'")" == 1 ]]; then
+    CH_ARGS+=(--use_skip_indexes_if_final_exact_mode=0)
 fi
+
+# Granule-level estimate of what one compare reads over [$1, $2), both sides, in on-disk bytes. EXPLAIN ESTIMATE runs
+# the index analysis only — primary key, the created_at skip index, the coverage slice — and reads no data.
+# Returns non-zero when either EXPLAIN fails, so a client error is never read as a zero-byte estimate; a window the
+# index analysis selects nothing in returns no rows and correctly estimates 0.
+estimate_window_bytes() {
+    local old_plan new_plan old_rows new_rows
+    old_plan="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $OLD_STORAGE FINAL
+        WHERE created_at >= toDateTime64('$1', 9, 'UTC') AND created_at < toDateTime64('$2', 9, 'UTC') AND $ROW_FILTER
+        SETTINGS use_skip_indexes_if_final = 1")" || return 1
+    new_plan="$(ch "EXPLAIN ESTIMATE SELECT count() FROM $NEW_STORAGE FINAL
+        WHERE created_at >= toDateTime64('$1', 6, 'UTC') AND created_at < toDateTime64('$2', 6, 'UTC') AND $ROW_FILTER
+        SETTINGS use_skip_indexes_if_final = 1")" || return 1
+    old_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$old_plan")"
+    new_rows="$(awk -F'\t' '{ r += $4 } END { print r + 0 }' <<<"$new_plan")"
+    awk -v o="$old_rows" -v ob="$OLD_BYTES_PER_ROW" -v n="$new_rows" -v nb="$NEW_BYTES_PER_ROW" \
+        'BEGIN { printf "%.0f %.0f\n", o * ob, n * nb }'
+}
+
+eta_seconds() { awk -v b="$1" -v r="$EFFECTIVE_MBPS" 'BEGIN { printf "%.0f", b / (r * 1000000) }'; }
+
+# The queries this run issues, as half-open created_at bounds: one window, one per selected week, or one per
+# --single-pass batch. Week starts come from one query rather than two per week.
+QUERY_LO=()
+QUERY_HI=()
+QUERY_FIRST_WEEK=()
+QUERY_LAST_WEEK=()
+if (( WINDOW_MODE == 1 )); then
+    QUERY_LO=("$WINDOW_FROM")
+    QUERY_HI=("$WINDOW_TO")
+else
+    # Index i holds the Monday of week FROM_WEEK + i, through TO_WEEK + 1 (the last window's upper bound).
+    # Captured first, so a failed query aborts here under set -e rather than surfacing later as an empty array.
+    week_starts="$(ch "SELECT arrayStringConcat(arrayMap(w -> toString(addWeeks(toDate('$ANCHOR'), w)),
+        range($FROM_WEEK, greatest($FROM_WEEK, $TO_WEEK + 2))), ' ')")"
+    read -r -a WEEK_STARTS <<<"$week_starts"
+    week_start() { echo "${WEEK_STARTS[$(( $1 - FROM_WEEK ))]} 00:00:00"; }
+    if (( SINGLE_PASS == 1 )); then
+        # A batch spans BATCH_WEEKS selected weeks, so a multiple of the stride, which keeps every batch on the stride's
+        # phase (week - FROM_WEEK divisible by the stride) that compare-weeks filters on.
+        batch_span=$(( BATCH_WEEKS == 0 ? TO_WEEK - FROM_WEEK + 1 : BATCH_WEEKS * WEEKS_STRIDE ))
+        for (( first=FROM_WEEK; first<=TO_WEEK; first+=batch_span )); do
+            last=$(( first + batch_span - 1 < TO_WEEK ? first + batch_span - 1 : TO_WEEK ))
+            QUERY_FIRST_WEEK+=("$first")
+            QUERY_LAST_WEEK+=("$last")
+            QUERY_LO+=("$(week_start "$first")")
+            QUERY_HI+=("$(week_start $(( last + 1 )))")
+        done
+    else
+        for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
+            QUERY_FIRST_WEEK+=("$week")
+            QUERY_LAST_WEEK+=("$week")
+            QUERY_LO+=("$(week_start "$week")")
+            QUERY_HI+=("$(week_start $(( week + 1 )))")
+        done
+    fi
+fi
+
+if (( COVERAGE == 100 )); then
+    SAMPLE_LABEL="sample 1/1"
+else
+    SAMPLE_LABEL="coverage $COVERAGE%"
+fi
+if (( WINDOW_MODE == 1 )); then
+    log "Verify: $OLD_TABLE vs $NEW_TABLE | window [$WINDOW_FROM .. $WINDOW_TO) UTC | $SAMPLE_LABEL"
+else
+    log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE | $SAMPLE_LABEL"
+    log "Week grid: anchor $ANCHOR, $ANCHOR_SOURCE. To resume on this grid: --anchor $ANCHOR --from-week <next week>."
+fi
+if (( SINGLE_PASS == 1 )); then
+    log "Single pass: ${#QUERY_LO[@]} quer$( (( ${#QUERY_LO[@]} == 1 )) && echo y || echo ies) over the range," \
+        "each week's verdict read from it (000005 compare-weeks)."
+fi
+if (( COVERAGE < 100 )); then
+    log "Coverage: $COVERAGE% — spans created in the first $SLICE_SECONDS s of every UTC hour. Same rows on both sides;"
+    log "  every week and every hour is represented, each project in proportion to its activity inside the slices, so"
+    log "  traffic periodic on the hour is over- or under-represented. Granules spanning more than an hour, on either"
+    log "  table, are read in full whatever the coverage, so the read does not fall in proportion. NOT valid as the"
+    log "  pre-EXCHANGE gate."
+fi
+if [[ -n "$IO_BUDGET_PCT" ]]; then
+    log "I/O budget: $IO_BUDGET_PCT% of $VOLUME_MBPS MB/s = $BUDGET_MBPS MB/s of disk reads, enforced on every query as" \
+        "max_execution_speed_bytes=$MAX_SPEED_BYTES (uncompressed, at the tables' ${COMPRESSION_RATIO}:1 compression)."
+fi
+
+EST_OLD=0
+EST_NEW=0
+QUERY_EST=()
+for i in "${!QUERY_LO[@]}"; do
+    estimate="$(estimate_window_bytes "${QUERY_LO[$i]}" "${QUERY_HI[$i]}")" || {
+        log "ERROR: EXPLAIN ESTIMATE failed for [${QUERY_LO[$i]}, ${QUERY_HI[$i]}); see the client error above." >&2
+        exit 2
+    }
+    read -r est_old est_new <<<"$estimate"
+    QUERY_EST+=($(( est_old + est_new )))
+    EST_OLD=$(( EST_OLD + est_old ))
+    EST_NEW=$(( EST_NEW + est_new ))
+done
+EST_BYTES=$(( EST_OLD + EST_NEW ))
+EST_SECONDS="$(eta_seconds "$EST_BYTES")"
+log "Estimate: ~$(human_bytes "$EST_BYTES") read over ${#QUERY_LO[@]} compare quer$( (( ${#QUERY_LO[@]} == 1 )) && echo y || echo ies)" \
+    "('$OLD_TABLE' $(human_bytes "$EST_OLD"), '$NEW_TABLE' $(human_bytes "$EST_NEW")) — ETA ~$(human_duration "$EST_SECONDS")" \
+    "at $EFFECTIVE_MBPS MB/s ($RATE_SOURCE). Granule-level, from the index analysis; a differing window adds its re-checks."
+if (( ESTIMATE_ONLY == 1 )); then
+    log "Estimate only: nothing was compared."
+    exit 0
+fi
+
+# The run measured against the estimate above. The rate is the ESTIMATED bytes of the queries that completed over the
+# elapsed time — the quantity the ETA divides — so passing it back as --throughput-mbps makes the next ETA match this
+# run's pace, an aborted run included. Runs on every exit from here on and never changes the exit status.
+DONE_EST_BYTES=0
+report_actuals() {
+    local elapsed=$(( SECONDS - RUN_T0 )) rate
+    local line="Actual vs predicted: $(human_duration "$elapsed") elapsed against an ETA of"
+    line+=" ~$(human_duration "$EST_SECONDS") for ~$(human_bytes "$EST_BYTES")."
+    if (( elapsed > 0 && DONE_EST_BYTES > 0 )); then
+        rate=$(( DONE_EST_BYTES / elapsed / 1000000 ))
+        (( rate > 0 )) || rate=1
+        line+=" The queries that completed were estimated at ~$(human_bytes "$DONE_EST_BYTES"), re-checks included:"
+        line+=" ~$rate MB/s, so pass --throughput-mbps $rate next time."
+    fi
+    log "$line"
+}
+RUN_T0=$SECONDS
+trap report_actuals EXIT
 
 mismatches=0
 artifacts=0
 inconclusive=0
 uncertifiable=0
 checked=0
-# One window, verdict and all. Factored out so the week grid and the single arbitrary window share EXACTLY this logic —
-# the compare, the confirm-keys re-check, the version-ties decision, the drill-down and every verdict counter. A second
-# copy for window mode would be a second place for a fidelity verdict to be decided, which is the last thing this file
-# should hold two of. $1 labels the window in the log ("week 3", or "window"); $2/$3 are its half-open bounds.
+rows_compared=0
+empty_windows=0
+# One window, verdict and all. Factored out so the week grid, the single-pass batches and the single arbitrary window
+# share EXACTLY this logic — the confirm-keys re-check, the version-ties decision, the drill-down and every verdict
+# counter. A second copy would be a second place for a fidelity verdict to be decided, which is the last thing this file
+# should hold two of. $1 labels the window in the log ("week 3", or "window"); $2/$3 are its half-open bounds; $4, when
+# given, is the window's verdict row already read by compare-weeks, so the compare is not issued again.
 compare_one_window() {
     local label="$1" LO="$2" HI="$3"
     local compare_out src_rows dst_rows src_checksum dst_checksum ok window_certified unresolved ties_out src_ties dst_ties
+    local recheck_bytes
 
     # Capture first (not read <<< "$(...)"): a here-string command substitution is exempt from set -e, so a
     # clickhouse-client failure here would be swallowed, leaving `ok` empty and the window mislabeled as a MISMATCH. A
     # plain assignment IS caught by set -e, so an infra blip aborts with the real error instead of a false fidelity fail.
-    compare_out="$(compare_window "$LO" "$HI")"
+    if (( $# > 3 )); then
+        compare_out="$4"
+    else
+        compare_out="$(compare_window "$LO" "$HI")"
+    fi
     read -r src_rows dst_rows src_checksum dst_checksum ok <<< "$compare_out"
     checked=$((checked + 1))
+    if [[ "$src_rows" =~ ^[0-9]+$ && "$dst_rows" =~ ^[0-9]+$ ]]; then
+        rows_compared=$(( rows_compared + src_rows + dst_rows ))
+        (( src_rows + dst_rows > 0 )) || empty_windows=$(( empty_windows + 1 ))
+    fi
     if [[ "$ok" == "1" ]]; then
         log "$label ($LO .. $HI): OK (rows=$src_rows)"
         return 0
     fi
     window_certified=0   # set only by the artifact verdict, which differs but passes; gates the drill-down nudge
+    # The re-checks below are the expensive part of a differing window and the gate is slowest exactly when it finds
+    # something, so say what they cost before issuing them: confirm-keys and version-ties each re-read the window.
+    recheck_bytes="$(estimate_window_bytes "$LO" "$HI" | awk '{ printf "%.0f", 2 * ($1 + $2) }')" || recheck_bytes=""
+    if [[ "$recheck_bytes" =~ ^[0-9]+$ ]]; then
+        DONE_EST_BYTES=$(( DONE_EST_BYTES + recheck_bytes ))
+        log "  resolving $label: the re-checks read ~$(human_bytes "$recheck_bytes"), ETA" \
+            "~$(human_duration "$(eta_seconds "$recheck_bytes")") at $EFFECTIVE_MBPS MB/s." >&2
+    fi
     # A window difference is not yet a fidelity failure: windowing on created_at under FINAL can surface a
     # SUPERSEDED version on one side only. Re-check the differing keys on the sorting key, where FINAL
     # always sees every version, and let that decide. Plain assignment so set -e catches an infra blip
@@ -495,23 +821,73 @@ compare_one_window() {
 
 if (( WINDOW_MODE == 1 )); then
     compare_one_window window "$WINDOW_FROM" "$WINDOW_TO"
+    DONE_EST_BYTES=$(( DONE_EST_BYTES + QUERY_EST[0] ))
+elif (( SINGLE_PASS == 0 )); then
+    for i in "${!QUERY_LO[@]}"; do
+        compare_one_window "week ${QUERY_FIRST_WEEK[$i]}" "${QUERY_LO[$i]}" "${QUERY_HI[$i]}"
+        DONE_EST_BYTES=$(( DONE_EST_BYTES + QUERY_EST[i] ))
+    done
 else
-    for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
-        LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
-        HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
-        compare_one_window "week $week" "$LO" "$HI"
+    for i in "${!QUERY_LO[@]}"; do
+        first="${QUERY_FIRST_WEEK[$i]}"
+        last="${QUERY_LAST_WEEK[$i]}"
+        # Plain assignment, for the same set -e reason as compare_window's call site.
+        batch_out="$(compare_weeks "${QUERY_LO[$i]}" "${QUERY_HI[$i]}")"
+        DONE_EST_BYTES=$(( DONE_EST_BYTES + QUERY_EST[i] ))
+        # Every row must be a selected week of this batch, once, with six integer fields. Anything else is not a
+        # verdict, and a week dropped, misread or overwritten here would otherwise print as a wrong verdict. The loop
+        # reads a captured string, so it ends at its last line; the blank line skipped is the one an empty result
+        # leaves. The week is checked lexically before the arithmetic below, as the bounds were at startup.
+        VERDICTS=()
+        while IFS=$'\t' read -r week src_rows dst_rows src_checksum dst_checksum ok; do
+            [[ -n "$week" ]] || continue
+            if ! [[ "$week" =~ ^(0|[1-9][0-9]{0,8})$ && "$src_rows" =~ ^[0-9]+$ && "$dst_rows" =~ ^[0-9]+$ \
+                    && "$src_checksum" =~ ^[0-9]+$ && "$dst_checksum" =~ ^[0-9]+$ && "$ok" =~ ^[01]$ ]] \
+                    || (( week < first || week > last || (week - FROM_WEEK) % WEEKS_STRIDE != 0 )) \
+                    || [[ -n "${VERDICTS[week]+set}" ]]; then
+                log "ERROR: compare-weeks returned a row that is not a verdict for a selected week of [$first..$last]:" >&2
+                log "       '$week $src_rows $dst_rows $src_checksum $dst_checksum $ok'. Refusing to draw verdicts from it." >&2
+                exit 2
+            fi
+            VERDICTS[week]="$src_rows $dst_rows $src_checksum $dst_checksum $ok"
+        done <<< "$batch_out"
+        # A selected week with no row holds no data on either side, which is what compare reports as 0 0 0 0 1.
+        for (( week=first; week<=last; week+=WEEKS_STRIDE )); do
+            compare_one_window "week $week" "$(week_start "$week")" "$(week_start $(( week + 1 )))" \
+                "${VERDICTS[week]:-0 0 0 0 1}"
+        done
     done
 fi
 
+# STATING THE COVERAGE IS NOT THE SAME AS DISQUALIFYING THE RUN. The runbook's Go/No-Go requires the pre-EXCHANGE gate
+# to be a FULL weekly compare, because sampling, a stride or a narrowed week range can miss a single-row deletion leak
+# and still report ok=1 — and the verdict line is what an operator quotes into that checklist, with the coverage trailing
+# behind it. So a weekly run that is not full says so in the verdict itself, PASSED or FAILED: under live updates the
+# gate normally ends in a triaged MISMATCH, so the FAILED lines need the label as much as the PASSED one. Judged on the
+# values, not on which flags were passed: an explicit --weeks-stride 1 or a --to-week at the last week is still a full
+# compare. A run that starts past week 0 on a PINNED anchor is a resumption and says so instead, naming the weeks it
+# must be paired with.
+# Window mode is a different tool (the post-swap reconciled range) and prints its own explicit bounds, so it is not
+# labelled against a gate it was never meant to satisfy.
+PARTIAL=""
+if (( WINDOW_MODE != 1 )); then
+    if (( COVERAGE != 100 || WEEKS_STRIDE != 1 || TO_WEEK != LAST_WEEK )) \
+        || { (( FROM_WEEK > 0 )) && [[ -z "$ANCHOR_PIN" ]]; }; then
+        PARTIAL=" (PARTIAL — NOT valid as the pre-EXCHANGE gate)"
+    elif (( FROM_WEEK > 0 )); then
+        PARTIAL=" (RESUMED at week $FROM_WEEK on anchor $ANCHOR — counts toward the pre-EXCHANGE gate only together with"
+        PARTIAL+=" a run on this anchor that verified weeks [0..$(( FROM_WEEK - 1 ))])"
+    fi
+fi
 # Fidelity mismatch is the hard failure, and so is a window the re-check could not decide (both exit 1).
 if (( mismatches != 0 || inconclusive != 0 || uncertifiable != 0 )); then
-    (( mismatches == 0 )) || log "FAILED: $mismatches of $checked windows mismatched." >&2
+    (( mismatches == 0 )) || log "FAILED$PARTIAL: $mismatches of $checked windows mismatched." >&2
     if (( uncertifiable != 0 )); then
-        log "FAILED: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
+        log "FAILED$PARTIAL: $uncertifiable of $checked windows could not be read to completion — the tie check did not return" >&2
         log "        counts, so those windows are neither certified nor shown to differ. Re-run them." >&2
     fi
     if (( inconclusive != 0 )); then
-        log "FAILED: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
+        log "FAILED$PARTIAL: $inconclusive of $checked windows could not be certified — a version tie left FINAL's choice" >&2
         log "        arbitrary on at least one side, so the re-check's 'no genuine difference' cannot be relied on." >&2
         log "        Triage those windows per the runbook. This is neither a mismatch nor a pass." >&2
     fi
@@ -526,28 +902,28 @@ if [[ "$checked" == "0" ]]; then
     log "        Nothing was verified, so this is NOT a pass. Widen the range (--from-week/--to-week)." >&2
     exit 1
 fi
+if (( rows_compared == 0 )); then
+    # Windows were compared, but every one was empty on both sides — "all windows match" would again be vacuous. The
+    # realistic way here is window mode over a range where no span was created.
+    log "FAILED: every compared window was empty on both sides, so nothing was verified and this is NOT a pass." >&2
+    log "        Check the range against where the data sits: min/max(created_at) of '$OLD_TABLE'." >&2
+    log "        If the range is genuinely empty, record that, not a PASS." >&2
+    exit 1
+fi
 # The PASSED line states the range it covered, so a pass can never be read as broader than it was — the same reason the
 # weekly form prints its bounds and stride. In window mode that is the explicit window, which is the whole point of the
 # mode: a reconciliation compare has to be quotable as "this exact range was checked".
-#
-# STATING THE COVERAGE IS NOT THE SAME AS DISQUALIFYING THE RUN. The runbook's Go/No-Go requires the pre-EXCHANGE gate
-# to be a FULL weekly compare, because sampling, a stride or a narrowed week range can hash a single-row deletion leak
-# out and still report ok=1 — and "PASSED" is the word an operator quotes into that checklist, with the coverage
-# trailing behind it. So a weekly run carrying any of those says so in the verdict itself. Window mode is a different
-# tool (the post-swap reconciled range) and prints its own explicit bounds, so it is not labelled against a gate it was
-# never meant to satisfy.
-PARTIAL=""
-if (( WINDOW_MODE != 1 )) && { (( SAMPLE_MOD != 1 )) || (( ${#WEEK_BOUND_FLAGS[@]} > 0 )); }; then
-    PARTIAL=" (PARTIAL — NOT valid as the pre-EXCHANGE gate)"
-fi
 if (( WINDOW_MODE == 1 )); then
     # "created in" rather than just the range: 000005 bounds on created_at, so a span created earlier and merely
     # updated inside the window is not in this compare (see --window-from's doc). Saying so on the PASSED line is what
     # stops the pass being quoted as broader than it is — reconcile.sh's stale_keys / payload_mismatch_keys are what
     # cover the updated ones.
-    COVERED="spans CREATED in window [$WINDOW_FROM .. $WINDOW_TO) UTC, sample 1/$SAMPLE_MOD"
+    COVERED="spans CREATED in window [$WINDOW_FROM .. $WINDOW_TO) UTC, $SAMPLE_LABEL"
 else
-    COVERED="weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD"
+    COVERED="weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, $SAMPLE_LABEL"
+fi
+if (( COVERAGE < 100 && empty_windows > 0 )); then
+    log "Coverage: $empty_windows of $checked windows held no row inside the coverage slices on either side."
 fi
 if [[ "$artifacts" != "0" ]]; then
     log "PASSED$PARTIAL: all $checked windows match ($COVERED); $artifacts window(s) held a superseded-version"

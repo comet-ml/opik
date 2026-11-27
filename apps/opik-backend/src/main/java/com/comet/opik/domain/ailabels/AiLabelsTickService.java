@@ -3,7 +3,11 @@ package com.comet.opik.domain.ailabels;
 import com.comet.opik.domain.ailabels.AiLabelItemPlan.JobKey;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.Candidate;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.InferenceConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.inference.BatchSubmitResponse;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceErrorCode;
@@ -51,7 +55,9 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -88,6 +94,8 @@ public class AiLabelsTickService {
     private static final Duration DEFAULT_THROTTLE_BACKOFF = Duration.ofSeconds(30);
     private static final Duration LOADED_JOB_RETENTION = Duration.ofDays(7);
     private static final Duration HOUSEKEEPING_INTERVAL = Duration.ofDays(1);
+    /** The user the deletes of {@link #dropDeleted} log as. */
+    private static final String DELETE_USER = "ai-labels";
     // Headroom for the request envelope around the items when filling a job up to maxJobBytes.
     private static final long JOB_ENVELOPE_BYTES = 4_096;
 
@@ -96,6 +104,7 @@ public class AiLabelsTickService {
     private static final Lock HOUSEKEEPING_LOCK = new Lock("ai_labels:housekeeping");
 
     private final AiLabelsConfig config;
+    private final InferenceConfig inference;
     private final TransactionTemplate template;
     private final InferenceClient client;
     private final LockService lockService;
@@ -106,6 +115,8 @@ public class AiLabelsTickService {
     private final AiLabelResultMapper resultMapper;
     private final AiLabelStatusDAO statusDAO;
     private final AiLabelsDAO labelsDAO;
+    private final TopicVectorsDAO topicVectorsDAO;
+    private final TraceTopicsDAO traceTopicsDAO;
 
     // Only the throttle reads the clock: the tick's deadlines are measured from its own start.
     private final Clock clock;
@@ -170,22 +181,27 @@ public class AiLabelsTickService {
 
     @Inject
     public AiLabelsTickService(@NonNull @Config("aiLabels") AiLabelsConfig config,
+            @NonNull @Config("inference") InferenceConfig inference,
             @NonNull TransactionTemplate template, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelSweepService sweepService,
             @NonNull AiLabelTaskRegistry registry, @NonNull AiLabelRenderer renderer,
             @NonNull AiLabelItemBuilder itemBuilder, @NonNull AiLabelResultMapper resultMapper,
-            @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO) {
-        this(config, template, client, lockService, sweepService, registry, renderer, itemBuilder, resultMapper,
-                statusDAO, labelsDAO, Clock.systemUTC());
+            @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO,
+            @NonNull TopicVectorsDAO topicVectorsDAO, @NonNull TraceTopicsDAO traceTopicsDAO) {
+        this(config, inference, template, client, lockService, sweepService, registry, renderer, itemBuilder,
+                resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO, Clock.systemUTC());
     }
 
-    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull TransactionTemplate template,
+    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull InferenceConfig inference,
+            @NonNull TransactionTemplate template,
             @NonNull InferenceClient client, @NonNull LockService lockService,
             @NonNull AiLabelSweepService sweepService, @NonNull AiLabelTaskRegistry registry,
             @NonNull AiLabelRenderer renderer, @NonNull AiLabelItemBuilder itemBuilder,
             @NonNull AiLabelResultMapper resultMapper, @NonNull AiLabelStatusDAO statusDAO,
-            @NonNull AiLabelsDAO labelsDAO, @NonNull Clock clock) {
+            @NonNull AiLabelsDAO labelsDAO, @NonNull TopicVectorsDAO topicVectorsDAO,
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull Clock clock) {
         this.config = config;
+        this.inference = inference;
         this.template = template;
         this.client = client;
         this.lockService = lockService;
@@ -196,6 +212,8 @@ public class AiLabelsTickService {
         this.resultMapper = resultMapper;
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
+        this.topicVectorsDAO = topicVectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.clock = clock;
 
         var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
@@ -274,7 +292,7 @@ public class AiLabelsTickService {
      */
     public Duration leaderLease() {
         var sweep = config.getSweep().getMaxExecutionTime().toJavaDuration();
-        var send = config.getInference().getReadTimeout().toJavaDuration();
+        var send = inference.getReadTimeout().toJavaDuration();
         return config.getTickBudget().toJavaDuration()
                 .plus(sweep.compareTo(send) >= 0 ? sweep : send)
                 .plusSeconds(5);
@@ -282,7 +300,7 @@ public class AiLabelsTickService {
 
     public void tick(@NonNull Instant start) {
         var budget = config.getTickBudget().toJavaDuration();
-        timed("load", () -> pollAndLoad(start.plus(share(budget, LOAD_SHARE))));
+        timed("load", () -> pollAndLoad(start.plus(share(budget, LOAD_SHARE)), start.plus(budget)));
 
         var tasks = registry.tasks();
         if (tasks.isEmpty()) {
@@ -334,9 +352,14 @@ public class AiLabelsTickService {
     /**
      * Polls every submitted job in groups of up to 1,000 per call, then loads the finished ones and the lost ones (left
      * out of the response) until {@code deadline} or {@code loadMaxRows}. Their rows are written as one insert per
-     * table, and only then are the jobs marked loaded, so a crash in between means they load again.
+     * table, and only then are the jobs marked loaded, so a crash in between means they load again. The check of the
+     * written rows for deleted traces starts no query after {@code tickEnd}, and caps each query's time limit at the
+     * time left. It is bounded by the tick's end and not by the sweep's share, so on a slow ClickHouse it can take the
+     * time this tick's sweep and submit would use. That is accepted: a job the check did not reach stays submitted,
+     * keeps its bytes in flight and loads again next tick, which costs the next tick more than a sweep that starts one
+     * tick late.
      */
-    void pollAndLoad(Instant deadline) {
+    void pollAndLoad(Instant deadline, Instant tickEnd) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());
         // Before loading, so a status call that fails still reports them; write() publishes what is left after.
         lastJobs = JobsObservation.of(jobs);
@@ -346,7 +369,7 @@ public class AiLabelsTickService {
         var views = new HashMap<String, JobView>();
         try {
             for (var group : Lists.partition(jobs.stream().map(AiLabelJob::jobId).toList(),
-                    InferenceClient.MAX_STATUS_JOB_IDS)) {
+                    inference.getLimits().getMaxStatusJobIds())) {
                 client.getJobs(group, deadline).block().forEach(view -> views.put(view.jobId(), view));
             }
         } catch (InferenceException exception) {
@@ -380,17 +403,27 @@ public class AiLabelsTickService {
                         }), config.getLoadConcurrency())
                 .collectList()
                 .block());
-        write(jobs, loaded);
+        write(jobs, loaded, tickEnd);
     }
 
     private record LoadedJob(AiLabelJob job, List<AiLabel> labels, List<AiLabelStatus> statuses) {
     }
 
+    private record WrittenTrace(String workspaceId, UUID projectId, UUID traceId) {
+
+        WrittenProject project() {
+            return new WrittenProject(workspaceId, projectId);
+        }
+    }
+
+    private record WrittenProject(String workspaceId, UUID projectId) {
+    }
+
     /**
-     * Writes the loaded jobs' rows and marks them loaded, then publishes the jobs still open: {@code polled}, every job
-     * the poll found, less the ones marked.
+     * Writes the loaded jobs' rows and marks loaded the ones {@link #dropDeleted} checked, then publishes the jobs
+     * still open: {@code polled}, every job the poll found, less the ones marked.
      */
-    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded) {
+    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded, Instant tickEnd) {
         if (loaded.isEmpty()) {
             return;
         }
@@ -403,7 +436,11 @@ public class AiLabelsTickService {
                     exception);
             return;
         }
-        var jobIds = loaded.stream().map(result -> result.job().jobId()).toList();
+        var checkedJobs = dropDeleted(loaded, tickEnd);
+        if (checkedJobs.isEmpty()) {
+            return;
+        }
+        var jobIds = checkedJobs.stream().map(result -> result.job().jobId()).toList();
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AiLabelJobDAO.class);
@@ -413,12 +450,92 @@ public class AiLabelsTickService {
         });
         var loadedIds = Set.copyOf(jobIds);
         lastJobs = JobsObservation.of(polled.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
-        for (var result : loaded) {
+        for (var result : checkedJobs) {
             countOutcomes(result.job().endpoint(), result.statuses());
             inFlightBytes.addAndGet(-result.job().bytes());
             jobAge.record(Duration.between(result.job().submittedAt(), now).toMillis() / 1_000.0,
                     Attributes.of(stringKey("endpoint"), result.job().endpoint().getValue()));
         }
+    }
+
+    /**
+     * Deletes the rows just written for traces deleted while their jobs were in flight, which the trace-delete cascade
+     * ran too early to find. A trace's row goes before its cascade starts, so a cascade that missed these rows shows
+     * here as a trace with no row. The trace's topic vectors and topics go too, in the cascade's order: the vectors
+     * tick may have embedded the done status in between, its own check trusts that status, and a topic may have been
+     * assigned to that vector. Returns the jobs whose rows were all checked. That is fewer than {@code loaded} when the
+     * check or a delete fails, or when {@code tickEnd} passes before the last check query starts, so the queries stay
+     * within the leader lease: the other jobs stay submitted, and the next tick writes and checks them again.
+     */
+    private List<LoadedJob> dropDeleted(List<LoadedJob> loaded, Instant tickEnd) {
+        var traceIdsByProject = loaded.stream().flatMap(AiLabelsTickService::written)
+                .collect(Collectors.groupingBy(WrittenTrace::project,
+                        Collectors.mapping(WrittenTrace::traceId, Collectors.toSet())));
+        var checkedProjects = new HashSet<WrittenProject>();
+        try {
+            for (var project : traceIdsByProject.entrySet()) {
+                if (!dropDeletedOf(project.getKey(), project.getValue(), tickEnd)) {
+                    var checkedJobs = checkedJobs(loaded, checkedProjects);
+                    log.info("ai-labels reached the tick's budget before the deleted-trace check finished; loading "
+                            + "the unchecked jobs again next tick, jobs '{}'", loaded.size() - checkedJobs.size());
+                    return checkedJobs;
+                }
+                checkedProjects.add(project.getKey());
+            }
+        } catch (RuntimeException exception) {
+            var checkedJobs = checkedJobs(loaded, checkedProjects);
+            log.error("ai-labels failed to check the loaded jobs for deleted traces; loading the unchecked ones again "
+                    + "next tick, jobs '{}'", loaded.size() - checkedJobs.size(), exception);
+            return checkedJobs;
+        }
+        return loaded;
+    }
+
+    /**
+     * Checks one project's traces. False when {@code tickEnd} passes before its last check query starts. Each check
+     * query's time limit is the smaller of {@code renderMaxExecutionTime} and the time left until {@code tickEnd}.
+     */
+    private boolean dropDeletedOf(WrittenProject project, Set<UUID> traceIds, Instant tickEnd) {
+        var gone = new HashSet<>(traceIds);
+        for (var batch : Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE)) {
+            var timeLeft = Duration.between(Instant.now(), tickEnd);
+            if (!timeLeft.isPositive()) {
+                return false;
+            }
+            // ClickHouse takes whole seconds and reads 0 as no limit, so the time left is rounded up.
+            var maxExecutionSeconds = Math.min(config.getRenderMaxExecutionTime().toSeconds(),
+                    Math.max(1, Math.ceilDiv(timeLeft.toMillis(), 1_000)));
+            gone.removeAll(labelsDAO.findLiveTraceIds(project.workspaceId(), project.projectId(), batch,
+                    maxExecutionSeconds).block());
+        }
+        if (!gone.isEmpty()) {
+            labelsDAO.deleteByTraceIds(gone, project.projectId())
+                    .then(statusDAO.deleteByTraceIds(gone, project.projectId()))
+                    .then(topicVectorsDAO.deleteByTraceIds(gone, project.projectId()))
+                    .then(traceTopicsDAO.deleteByTraceIds(gone, project.projectId()))
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, project.workspaceId())
+                            .put(RequestContext.USER_NAME, DELETE_USER))
+                    .block();
+            log.info("ai-labels dropped the rows of traces deleted while in flight, workspace '{}', project "
+                    + "'{}', traces '{}'", project.workspaceId(), project.projectId(), gone.size());
+        }
+        return true;
+    }
+
+    /** The traces a loaded job wrote rows for. */
+    private static Stream<WrittenTrace> written(LoadedJob loaded) {
+        return Stream.concat(
+                loaded.labels().stream()
+                        .map(label -> new WrittenTrace(label.workspaceId(), label.projectId(), label.traceId())),
+                loaded.statuses().stream()
+                        .map(status -> new WrittenTrace(status.workspaceId(), status.projectId(), status.traceId())));
+    }
+
+    /** The jobs whose rows are all in {@code checkedProjects}. */
+    private static List<LoadedJob> checkedJobs(List<LoadedJob> loaded, Set<WrittenProject> checkedProjects) {
+        return loaded.stream()
+                .filter(job -> written(job).map(WrittenTrace::project).allMatch(checkedProjects::contains))
+                .toList();
     }
 
     /** Pages through a finished job's results and maps them; an item it never reports is retryable. */
@@ -599,7 +716,7 @@ public class AiLabelsTickService {
                         .add(candidate));
         var ready = new HashMap<String, Deque<Admissible>>();
         // Turns stop at the deadline, and the jobs they filled are sent after it, so sends get one read timeout more.
-        var jobs = new Jobs(start, deadline, deadline.plus(config.getInference().getReadTimeout().toJavaDuration()));
+        var jobs = new Jobs(start, deadline, deadline.plus(inference.getReadTimeout().toJavaDuration()));
 
         var active = new ArrayList<>(queues.keySet());
         Collections.shuffle(active);
@@ -830,7 +947,7 @@ public class AiLabelsTickService {
                 var buffers = open.computeIfAbsent(workspaceId, key -> new LinkedHashMap<>());
                 var buffer = buffers.computeIfAbsent(entry.getKey(), key -> new JobBuffer());
                 if (!buffer.items.isEmpty()
-                        && (buffer.items.size() + entry.getValue().size() > InferenceClient.MAX_BATCH_ITEMS
+                        && (buffer.items.size() + entry.getValue().size() > inference.getLimits().getMaxBatchItems()
                                 || buffer.requestBytes + bytes > config.getMaxJobBytes())) {
                     buffers.remove(entry.getKey());
                     if (!send(workspaceId, entry.getKey(), buffer)) {
@@ -1046,7 +1163,7 @@ public class AiLabelsTickService {
      * The level without its parameter ({@code output_truncated:4096} → {@code output_truncated}), to keep the metric
      * bounded.
      */
-    private static String levelOf(String compactionLevel) {
+    static String levelOf(String compactionLevel) {
         int colon = compactionLevel.indexOf(':');
         return colon < 0 ? compactionLevel : compactionLevel.substring(0, colon);
     }

@@ -34,11 +34,14 @@ client. Most problems end there.
     - Sessions expire; when that happens the client asks you to sign in again.
   </Accordion>
   <Accordion title="`404 Not Found` from `/opik/api/v1/mcp`">
-    Your deployment doesn't run the hosted server. That is the default on
-    dedicated and self-hosted Comet deployments, such as
-    `https://<company>.comet-hosted.com`.
+    Your deployment doesn't run the hosted server, or the URL is wrong. Opik
+    Cloud runs it, and so can a dedicated or self-hosted Comet deployment, such
+    as `https://<company>.comet-hosted.com`.
 
-    - Use the local server instead:
+    - Check the URL: the address you open Comet at, followed by
+      `/opik/api/v1/mcp`. Before sign-in the hosted server answers `401`, not
+      `404`.
+    - If your deployment doesn't run it, use the local server instead:
       [Self-hosted and dedicated deployments](/mcp-server/advanced-setup#self-hosted-and-dedicated-deployments)
       has the config for Claude Code and Cursor.
     - Adding `Authorization` or `Comet-Workspace` headers doesn't help. The
@@ -49,9 +52,11 @@ client. Most problems end there.
     Leave both empty. Cursor shows these optional OAuth fields for every remote
     server, and you don't need them for Opik.
 
-    - On Opik Cloud, install and complete the browser sign-in when Cursor asks.
-    - If you are not on Opik Cloud, or you only have an API key, use the
-      [local server](/mcp-server/advanced-setup#local-server) instead.
+    - On the hosted server, install and complete the browser sign-in when Cursor
+      asks.
+    - If your deployment doesn't run the hosted server, or you only have an API
+      key, use the [local server](/mcp-server/advanced-setup#local-server)
+      instead.
   </Accordion>
   <Accordion title="Only `authenticate` and `complete_authentication` are listed">
     You are connected but not signed in — those two tools are how you sign in.
@@ -71,15 +76,16 @@ client. Most problems end there.
     - `✗ OUT OF SYNC` in `uvx opik mcp status` means the client config is older
       than your Opik configuration. The same re-run fixes it.
   </Accordion>
-  <Accordion title='Status shows "Local (stdio)" when you are on Opik Cloud'>
-    To choose a server, the CLI checks a discovery endpoint on your deployment.
-    If a proxy, VPN or TLS error blocks that check, it falls back to the local
-    server and stores your API key in the client config.
+  <Accordion title='Status shows "Local (stdio)" where you expected the hosted server'>
+    To choose a server, the CLI checks a discovery endpoint on your deployment,
+    and that `/opik/api/v1/mcp` exists there. If a proxy, VPN or TLS error blocks
+    the discovery check, it falls back to the local server and stores your API
+    key in the client config.
 
     - Re-run `uvx opik mcp configure` from a network that can reach the
       deployment.
-    - On self-hosted Opik without a hosted server, pass `--local-server` — that
-      is the intended path.
+    - If your deployment doesn't run the hosted server, the local server is the
+      intended result.
   </Accordion>
   <Accordion title='"uvx: command not found"'>
     `uv` is not installed, or the terminal was opened before the install
@@ -111,8 +117,9 @@ client. Most problems end there.
     your project does not matter.
   </Accordion>
   <Accordion title="Hosted or local server — which do I get, and where do credentials live?">
-    On Opik Cloud, and any deployment that advertises it, you get the hosted
-    server: your client signs in through the browser and nothing is stored in its
+    On Opik Cloud, and on a dedicated or self-hosted Comet deployment that runs
+    it, you get the hosted server: your client signs in through the browser and
+    nothing is stored in its
     config. Everywhere else, or with `--local-server`, you get the local server:
     `uvx opik-mcp` runs on your machine with `OPIK_API_KEY` and `OPIK_WORKSPACE`
     in the client's `env` block. `uvx opik mcp status` shows which one each client
@@ -132,15 +139,18 @@ client. Most problems end there.
   </Accordion>
   <Accordion title="My client is not in the list. Can I still use it?">
     Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode.
-    For any other client on Opik Cloud, run
+    For any other client, run
     `npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp`, or point
-    the client at that URL yourself with the Streamable HTTP transport. Skills for
+    the client at that URL yourself with the Streamable HTTP transport. On a
+    dedicated or self-hosted Comet deployment, use
+    [its own URL](/mcp-server/advanced-setup#hosted-server). Skills for
     other clients: `npx skills add comet-ml/opik-skills`. See
     [Advanced setup](/mcp-server/advanced-setup#set-it-up-by-hand).
   </Accordion>
   <Accordion title="Can I use Opik from Claude.ai, Claude Desktop or Cowork?">
     Yes, as a custom connector pointed at
-    `https://www.comet.com/opik/api/v1/mcp`. This gives you the MCP server; the
+    `https://www.comet.com/opik/api/v1/mcp`, or at your Comet deployment's own
+    URL when it runs the hosted server. This gives you the MCP server; the
     skill pack is for coding agents only.
     [Advanced setup](/mcp-server/advanced-setup#hosted-server) has the steps and
     the self-hosted caveat.

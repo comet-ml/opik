@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Dict
 
@@ -24,14 +25,33 @@ EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
 
 evaluator = Blueprint('evaluator', __name__, url_prefix='/v1/private/evaluators')
 
+logger = logging.getLogger(__name__)
+
+DOCKER_STRATEGY_WARNING = (
+    "PYTHON_CODE_EXECUTOR_STRATEGY=docker: code metrics run in separate executor containers started by a Docker "
+    "daemon inside python-backend, so the python-backend container must run privileged."
+)
+PROCESS_STRATEGY_WARNING = (
+    "PYTHON_CODE_EXECUTOR_STRATEGY=process: code metrics run in worker processes inside the python-backend container, "
+    "cut off from its network and environment but not in a container of their own. Use the docker strategy if users "
+    "you do not fully trust can create code metrics."
+)
+UNISOLATED_PROCESS_STRATEGY_WARNING = (
+    "PYTHON_CODE_EXECUTOR_STRATEGY=process with PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION=false: code metrics run "
+    "unsandboxed, with python-backend's user, network access and environment. Use it only where everyone who can "
+    "create code metrics is trusted, or use the docker strategy."
+)
+
 def init_executor(app):
     """Initialize the code executor when the Flask app starts."""
     if EXECUTION_STRATEGY == "docker":
         from opik_backend.executor_docker import DockerExecutor
+        logger.warning(DOCKER_STRATEGY_WARNING)
         app.executor = DockerExecutor()
     elif EXECUTION_STRATEGY == "process":
         from opik_backend.executor_process import ProcessExecutor
         process_executor = ProcessExecutor()
+        logger.warning(PROCESS_STRATEGY_WARNING if process_executor.isolate else UNISOLATED_PROCESS_STRATEGY_WARNING)
         # start services only in the following case to avoid double initialization in debug mode
         if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
             process_executor.start_services()
