@@ -133,14 +133,13 @@ class RetentionPolicyServiceTest {
     private AiLabelStatusDAO aiLabelStatusDAO;
     private TopicVectorsDAO topicVectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
-    private TransactionTemplate mysqlTemplate;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit AiLabelsDAO aiLabelsDAO,
             @Jit AiLabelStatusDAO aiLabelStatusDAO, @Jit TopicVectorsDAO topicVectorsDAO,
-            @Jit TraceTopicsDAO traceTopicsDAO, TransactionTemplate mysqlTemplate) {
+            @Jit TraceTopicsDAO traceTopicsDAO) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -153,7 +152,6 @@ class RetentionPolicyServiceTest {
         this.aiLabelStatusDAO = aiLabelStatusDAO;
         this.topicVectorsDAO = topicVectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
-        this.mysqlTemplate = mysqlTemplate;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -722,31 +720,6 @@ class RetentionPolicyServiceTest {
             assertAiLabelRows(otherWsId, oldTraceId, 1);
         }
 
-        @Test
-        @DisplayName("A retention cycle runs no Topics delete for a workspace without Topics data")
-        void retentionCycleSkipsTopicsDeletesOfWorkspaceWithoutTopicsData() {
-            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var wsId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
-            retentionClient.createAndGet(retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build(),
-                    API_KEY, wsName);
-
-            Instant now = Instant.now();
-            var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
-            createTestTrace(oldTraceId, API_KEY, wsName);
-            waitForRows("traces", wsId, 1);
-            // Topics rows with no topic_projects row, which a workspace never has: here they show no delete ran.
-            insertAiLabels(wsId, oldTraceId, false);
-
-            var fraction = Math.min((int) (Long.parseLong(wsId.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
-            retentionPolicyService.executeRetentionCycle(fraction, now).block();
-
-            assertThat(countRowsById("traces", oldTraceId)).isZero();
-            assertThat(countRowsByTrace("ai_labels", wsId, oldTraceId)).isZero();
-            assertThat(countRowsByTrace("topic_vectors", wsId, oldTraceId)).isEqualTo(1);
-            assertThat(countRowsByTrace("trace_topics", wsId, oldTraceId)).isEqualTo(1);
-        }
-
         /**
          * applyToPast=false: each workspace deletes only from its rule's creation up to the cutoff. The API stamps a
          * rule's creation as now, so the rules are backdated in MySQL to put their floors before the cutoff.
@@ -893,23 +866,7 @@ class RetentionPolicyServiceTest {
     }
 
     private void insertAiLabels(String workspaceId, UUID traceId) {
-        insertAiLabels(workspaceId, traceId, true);
-    }
-
-    /**
-     * @param topicsProject whether the project gets its {@code topic_projects} row, as every project with Topics rows
-     *        has; without it, retention takes the workspace for one with no Topics data
-     */
-    private void insertAiLabels(String workspaceId, UUID traceId, boolean topicsProject) {
         var projectId = UUID.randomUUID();
-        if (topicsProject) {
-            mysqlTemplate.inTransaction(WRITE, handle -> handle
-                    .createUpdate("INSERT INTO topic_projects (workspace_id, project_id) VALUES (:workspace_id, "
-                            + ":project_id)")
-                    .bind("workspace_id", workspaceId)
-                    .bind("project_id", projectId.toString())
-                    .execute());
-        }
         aiLabelStatusDAO.insert(List.of(AiLabelStatus.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
@@ -976,21 +933,17 @@ class RetentionPolicyServiceTest {
     private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
         for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "topic_vector_status",
                 "trace_topics")) {
-            assertThat(countRowsByTrace(table, workspaceId, traceId)).as("rows in %s for trace %s", table, traceId)
-                    .isEqualTo(expected);
+            var actual = templateAsync.nonTransaction(connection -> Mono
+                    .from(connection.createStatement(
+                            "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"
+                                    .formatted(table))
+                            .bind("workspace_id", workspaceId)
+                            .bind("trace_id", traceId.toString())
+                            .execute())
+                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get("cnt", Long.class)))))
+                    .block();
+            assertThat(actual).as("rows in %s for trace %s", table, traceId).isEqualTo(expected);
         }
-    }
-
-    private long countRowsByTrace(String table, String workspaceId, UUID traceId) {
-        return templateAsync.nonTransaction(connection -> Mono
-                .from(connection.createStatement(
-                        "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"
-                                .formatted(table))
-                        .bind("workspace_id", workspaceId)
-                        .bind("trace_id", traceId.toString())
-                        .execute())
-                .flatMap(result -> Mono.from(result.map((row, _) -> row.get("cnt", Long.class)))))
-                .block();
     }
 
     // -- ClickHouse read helpers for verification --
