@@ -44,7 +44,7 @@ final class GroupVectorSums {
         this.byRanking = new HashMap<>();
     }
 
-    private record Ranking(List<List<Integer>> tieSets) {
+    private record Ranking(@NonNull List<List<Integer>> tieSets) {
     }
 
     private static final class Sum {
