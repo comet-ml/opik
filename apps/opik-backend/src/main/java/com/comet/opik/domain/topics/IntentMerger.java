@@ -107,16 +107,15 @@ public class IntentMerger {
             }
             System.arraycopy(x, start * dimensions, held, 0, dimensions);
             int to = start;
-            while (true) {
-                done.set(to);
-                int from = order[to];
-                if (from == start) {
-                    System.arraycopy(held, 0, x, to * dimensions, dimensions);
-                    break;
-                }
+            done.set(to);
+            // Each step marks a row not marked before, so the cycle ends within order.length steps.
+            for (int from = order[to]; from != start; from = order[to]) {
+                Preconditions.checkState(!done.get(from), "order must be a permutation, row '%s' comes twice", from);
                 System.arraycopy(x, from * dimensions, x, to * dimensions, dimensions);
                 to = from;
+                done.set(to);
             }
+            System.arraycopy(held, 0, x, to * dimensions, dimensions);
         }
     }
 
