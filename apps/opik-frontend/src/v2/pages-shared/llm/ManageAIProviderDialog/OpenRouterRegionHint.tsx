@@ -6,8 +6,8 @@ import { getOpenRouterRegionName } from "@/lib/openRouterRegion";
 
 const OpenRouterRegionHint: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: region } = useOpenRouterRegion({ workspaceName });
-  const regionName = getOpenRouterRegionName(region);
+  const { data } = useOpenRouterRegion({ workspaceName });
+  const regionName = getOpenRouterRegionName(data?.region);
 
   if (!regionName) return null;
 

@@ -16,6 +16,16 @@ export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
 export type OpenRouterRegion = "global" | "eu" | "us" | "unknown";
 
+export type UnavailableDecisionModel = {
+  model: string;
+  region: OpenRouterRegion;
+};
+
+export type OpenRouterRegionInfo = {
+  region: OpenRouterRegion;
+  unavailable_decision_models?: UnavailableDecisionModel[];
+};
+
 export interface ProviderGridOption {
   value: COMPOSED_PROVIDER_TYPE;
   label: string;

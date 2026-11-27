@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * OpenRouter models served by the Decisions API ({@code POST /api/alpha/decisions}) instead of chat
@@ -22,6 +24,7 @@ public enum OpenRouterDecisionModel {
     TYPESAFE_JEV_LATEST("~typesafe/jev-latest", Set.of(OpenRouterRegion.GLOBAL)),
     TYPESAFE_JEV_1_13("typesafe/jev-1.13", Set.of(OpenRouterRegion.GLOBAL));
 
+    @Getter
     private final String value;
     private final Set<OpenRouterRegion> servedIn;
 
@@ -31,6 +34,19 @@ public enum OpenRouterDecisionModel {
 
     public static boolean isServedIn(String model, OpenRouterRegion region) {
         return find(model).filter(decisionModel -> decisionModel.servedIn.contains(region)).isPresent();
+    }
+
+    /**
+     * Both regions count. The request goes to the decisions URL, so a model that region doesn't serve can't answer.
+     * The workspace's chat region is where its OpenRouter traffic is meant to stay, so a decisions URL left on
+     * openrouter.ai must not take the trace out of it.
+     */
+    public static Optional<OpenRouterRegion> findUnservedRegion(String model, OpenRouterRegion decisionsRegion,
+            OpenRouterRegion chatRegion) {
+        return Stream.of(decisionsRegion, chatRegion)
+                .filter(OpenRouterRegion::isRegional)
+                .filter(region -> !isServedIn(model, region))
+                .findFirst();
     }
 
     private static Optional<OpenRouterDecisionModel> find(String model) {

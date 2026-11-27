@@ -23,27 +23,33 @@ describe("getOpenRouterRegionName", () => {
 });
 
 describe("getDecisionModelUnavailableReason", () => {
-  it.each(JEV_MODELS)("refuses %s in the EU and US regions", (model) => {
-    expect(getDecisionModelUnavailableReason(model, "eu")).toBe(
-      "Not available in OpenRouter's EU region",
-    );
-    expect(getDecisionModelUnavailableReason(model, "us")).toBe(
-      "Not available in OpenRouter's US region",
-    );
+  const JEV_UNAVAILABLE_IN = (region: "eu" | "us") =>
+    JEV_MODELS.map((model) => ({ model, region }));
+
+  it.each(JEV_MODELS)("names the region the server lists for %s", (model) => {
+    expect(
+      getDecisionModelUnavailableReason(model, JEV_UNAVAILABLE_IN("eu")),
+    ).toBe("Not available in OpenRouter's EU region");
+    expect(
+      getDecisionModelUnavailableReason(model, JEV_UNAVAILABLE_IN("us")),
+    ).toBe("Not available in OpenRouter's US region");
   });
 
-  it.each(["global", "unknown", undefined] as const)(
-    "keeps Jev available for %s",
-    (region) => {
+  it.each([[], undefined])(
+    "keeps Jev available when the server lists nothing (%j)",
+    (unavailable) => {
       expect(
-        getDecisionModelUnavailableReason(JEV_MODELS[0], region),
+        getDecisionModelUnavailableReason(JEV_MODELS[0], unavailable),
       ).toBeUndefined();
     },
   );
 
-  it("keeps GPT 6 Luna available in a regional OpenRouter setup", () => {
+  it("keeps GPT 6 Luna available while Jev is listed", () => {
     expect(
-      getDecisionModelUnavailableReason(PROVIDER_MODEL_TYPE.GPT_6_LUNA, "eu"),
+      getDecisionModelUnavailableReason(
+        PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+        JEV_UNAVAILABLE_IN("eu"),
+      ),
     ).toBeUndefined();
   });
 });

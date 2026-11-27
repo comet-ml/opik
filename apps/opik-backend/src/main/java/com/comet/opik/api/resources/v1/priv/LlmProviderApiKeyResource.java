@@ -122,10 +122,10 @@ public class LlmProviderApiKeyResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Getting OpenRouter region on workspace_id '{}'", workspaceId);
-        var region = llmProviderApiKeyService.getOpenRouterRegion(workspaceId);
-        log.info("Got OpenRouter region on workspace_id '{}', region '{}'", workspaceId, region);
+        var response = llmProviderApiKeyService.getOpenRouterRegion(workspaceId);
+        log.info("Got OpenRouter region on workspace_id '{}', region '{}'", workspaceId, response.region());
 
-        return Response.ok(OpenRouterRegionResponse.builder().region(region).build()).build();
+        return Response.ok(response).build();
     }
 
     @POST

@@ -21,6 +21,10 @@ public enum OpenRouterRegion {
     private final String value;
     private final String host;
 
+    public boolean isRegional() {
+        return this == EU || this == US;
+    }
+
     public static OpenRouterRegion fromUrl(String url) {
         return hostOf(url)
                 .flatMap(host -> Arrays.stream(values())

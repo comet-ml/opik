@@ -1,8 +1,4 @@
-import { OpenRouterRegion } from "@/types/providers";
-import {
-  DECISION_MODELS,
-  DECISION_MODELS_OPENROUTER_REGIONS,
-} from "@/constants/decisionModels";
+import { OpenRouterRegion, UnavailableDecisionModel } from "@/types/providers";
 
 const OPENROUTER_REGION_NAMES: Partial<Record<OpenRouterRegion, string>> = {
   global: "Global",
@@ -22,21 +18,15 @@ export const getOpenRouterRegionName = (region?: OpenRouterRegion) =>
 
 export const getDecisionModelUnavailableReason = (
   model: string,
-  region?: OpenRouterRegion,
+  unavailableDecisionModels?: UnavailableDecisionModel[],
 ): string | undefined => {
-  if (!region) return undefined;
-
-  const regional = REGIONAL_OPENROUTER_REGIONS[region];
-  const isOpenRouterDecisionModel = DECISION_MODELS.some(
-    (decisionModel) => decisionModel.value === model,
+  const unavailable = unavailableDecisionModels?.find(
+    (decisionModel) => decisionModel.model === model,
   );
-  if (
-    !regional ||
-    !isOpenRouterDecisionModel ||
-    DECISION_MODELS_OPENROUTER_REGIONS.includes(region)
-  ) {
-    return undefined;
-  }
+  const regional =
+    unavailable && REGIONAL_OPENROUTER_REGIONS[unavailable.region];
 
-  return `Not available in OpenRouter's ${regional.shortName} region`;
+  return regional
+    ? `Not available in OpenRouter's ${regional.shortName} region`
+    : undefined;
 };

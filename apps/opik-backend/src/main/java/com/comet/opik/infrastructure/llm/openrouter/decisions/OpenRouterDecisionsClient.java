@@ -28,7 +28,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Client for the OpenRouter Decisions API ({@code POST /api/alpha/decisions}), which serves decisions models
@@ -113,19 +112,11 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         return client.executePostWithRetry(httpRequest);
     }
 
-    /**
-     * Both regions count. The request goes to the decisions URL, so a model that region doesn't serve can't answer.
-     * The workspace's chat region is where its OpenRouter traffic is meant to stay, so a decisions URL left on
-     * openrouter.ai must not take the trace out of it.
-     */
     private Optional<ProviderRequestRefusedException.Reason> findRegionRefusal(String model,
             LlmProviderClientApiConfig config) {
-        return Stream.of(
+        return OpenRouterDecisionModel.findUnservedRegion(model,
                 OpenRouterRegion.fromUrl(llmProviderClientConfig.getOpenRouterDecisionsUrl()),
                 OpenRouterRegion.effective(config.baseUrl(), llmProviderClientConfig.getOpenRouterUrl()))
-                .filter(REGION_REFUSALS::containsKey)
-                .filter(region -> !OpenRouterDecisionModel.isServedIn(model, region))
-                .findFirst()
                 .map(REGION_REFUSALS::get);
     }
 

@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.OpenRouterRegionResponse;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.ProviderAuthCheck;
@@ -14,6 +15,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterRegion;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.inject.ImplementedBy;
@@ -33,6 +35,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,7 +66,7 @@ public interface LlmProviderApiKeyService {
 
     ProviderAuthCheck.Result testAuthConfig(ProviderAuthCheck request, String workspaceId);
 
-    OpenRouterRegion getOpenRouterRegion(String workspaceId);
+    OpenRouterRegionResponse getOpenRouterRegion(String workspaceId);
 }
 
 @Slf4j
@@ -106,12 +109,25 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
     /** The key the OpenRouter client would pick: the same lookup as {@code LlmProviderFactoryImpl}. */
     @Override
-    public OpenRouterRegion getOpenRouterRegion(@NonNull String workspaceId) {
+    public OpenRouterRegionResponse getOpenRouterRegion(@NonNull String workspaceId) {
         var workspaceBaseUrl = findByProviders(workspaceId, Set.of(LlmProvider.OPEN_ROUTER)).stream()
                 .findFirst()
                 .map(ProviderApiKey::baseUrl)
                 .orElse(null);
-        return OpenRouterRegion.effective(workspaceBaseUrl, configuration.getLlmProviderClient().getOpenRouterUrl());
+        var clientConfig = configuration.getLlmProviderClient();
+        var region = OpenRouterRegion.effective(workspaceBaseUrl, clientConfig.getOpenRouterUrl());
+        var decisionsRegion = OpenRouterRegion.fromUrl(clientConfig.getOpenRouterDecisionsUrl());
+        var unavailableDecisionModels = Arrays.stream(OpenRouterDecisionModel.values())
+                .flatMap(model -> OpenRouterDecisionModel
+                        .findUnservedRegion(model.getValue(), decisionsRegion, region)
+                        .map(unservedRegion -> new OpenRouterRegionResponse.UnavailableDecisionModel(
+                                model.getValue(), unservedRegion))
+                        .stream())
+                .toList();
+        return OpenRouterRegionResponse.builder()
+                .region(region)
+                .unavailableDecisionModels(unavailableDecisionModels)
+                .build();
     }
 
     @Override

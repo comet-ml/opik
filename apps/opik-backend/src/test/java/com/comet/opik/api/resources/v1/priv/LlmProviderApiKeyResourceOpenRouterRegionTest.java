@@ -42,8 +42,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
- * Runs with the server's default OpenRouter URL on the EU host, as on a deployment that keeps OpenRouter traffic in
- * the EU through {@code LLM_PROVIDER_OPENROUTER_URL}.
+ * Runs with the server's default OpenRouter URLs on the EU host, as on a deployment that keeps OpenRouter traffic in
+ * the EU through {@code LLM_PROVIDER_OPENROUTER_URL} and {@code LLM_PROVIDER_OPENROUTER_DECISIONS_URL}.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -51,6 +51,10 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String SERVER_OPENROUTER_URL = "https://eu.openrouter.ai/api/v1";
+    private static final String SERVER_OPENROUTER_DECISIONS_URL = "https://eu.openrouter.ai/api/alpha/decisions";
+    private static final List<OpenRouterRegionResponse.UnavailableDecisionModel> JEV_UNAVAILABLE_IN_EU = List.of(
+            new OpenRouterRegionResponse.UnavailableDecisionModel("~typesafe/jev-latest", OpenRouterRegion.EU),
+            new OpenRouterRegionResponse.UnavailableDecisionModel("typesafe/jev-1.13", OpenRouterRegion.EU));
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -81,7 +85,9 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
-                                new CustomConfig("llmProviderClient.openRouterUrl", SERVER_OPENROUTER_URL)))
+                                new CustomConfig("llmProviderClient.openRouterUrl", SERVER_OPENROUTER_URL),
+                                new CustomConfig("llmProviderClient.openRouterDecisionsUrl",
+                                        SERVER_OPENROUTER_DECISIONS_URL)))
                         .build());
     }
 
@@ -118,6 +124,13 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
                 201);
     }
 
+    private OpenRouterRegionResponse expectedResponse(OpenRouterRegion region) {
+        return OpenRouterRegionResponse.builder()
+                .region(region)
+                .unavailableDecisionModels(JEV_UNAVAILABLE_IN_EU)
+                .build();
+    }
+
     @Test
     void usesTheServerDefaultWhenTheWorkspaceHasNoOpenRouterKey() {
         var workspace = newWorkspace();
@@ -127,7 +140,13 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(JsonUtils.getJsonNodeFromString(response.readEntity(String.class)))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("""
-                            {"region": "eu"}"""));
+                            {
+                              "region": "eu",
+                              "unavailable_decision_models": [
+                                {"model": "~typesafe/jev-latest", "region": "eu"},
+                                {"model": "typesafe/jev-1.13", "region": "eu"}
+                              ]
+                            }"""));
         }
     }
 
@@ -138,7 +157,7 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
 
         var actual = llmProviderApiKeyResourceClient.getOpenRouterRegion(workspace.apiKey(), workspace.name());
 
-        assertThat(actual).isEqualTo(OpenRouterRegionResponse.builder().region(OpenRouterRegion.EU).build());
+        assertThat(actual).isEqualTo(expectedResponse(OpenRouterRegion.EU));
     }
 
     static Stream<Arguments> workspaceBaseUrls() {
@@ -156,7 +175,18 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
 
         var actual = llmProviderApiKeyResourceClient.getOpenRouterRegion(workspace.apiKey(), workspace.name());
 
-        assertThat(actual).isEqualTo(OpenRouterRegionResponse.builder().region(expected).build());
+        assertThat(actual).isEqualTo(expectedResponse(expected));
+    }
+
+    @Test
+    void listsJevAsUnavailableWhenOnlyTheDecisionsUrlIsRegional() {
+        var workspace = newWorkspace();
+        createOpenRouterKey(workspace, "https://openrouter.ai/api/v1");
+
+        var actual = llmProviderApiKeyResourceClient.getOpenRouterRegion(workspace.apiKey(), workspace.name());
+
+        assertThat(actual.region()).isEqualTo(OpenRouterRegion.GLOBAL);
+        assertThat(actual.unavailableDecisionModels()).isEqualTo(JEV_UNAVAILABLE_IN_EU);
     }
 
     @Test
@@ -166,6 +196,6 @@ class LlmProviderApiKeyResourceOpenRouterRegionTest {
 
         var actual = llmProviderApiKeyResourceClient.getOpenRouterRegion(workspace.apiKey(), workspace.name());
 
-        assertThat(actual).isEqualTo(OpenRouterRegionResponse.builder().region(OpenRouterRegion.EU).build());
+        assertThat(actual).isEqualTo(expectedResponse(OpenRouterRegion.EU));
     }
 }

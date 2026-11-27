@@ -14,7 +14,9 @@ vi.mock("@/api/provider-keys/useOpenRouterRegion", () => ({
 }));
 
 const renderHint = (region?: OpenRouterRegion) => {
-  useOpenRouterRegion.mockReturnValue({ data: region });
+  useOpenRouterRegion.mockReturnValue({
+    data: region ? { region } : undefined,
+  });
   render(<OpenRouterRegionHint />);
 };
 

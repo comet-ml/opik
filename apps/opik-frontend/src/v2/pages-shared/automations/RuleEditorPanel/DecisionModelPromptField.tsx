@@ -52,7 +52,11 @@ export const DecisionModelSelect: React.FC<{
 }> = ({ form }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data, isPending } = useProviderKeys({ workspaceName });
-  const { data: openRouterRegion } = useOpenRouterRegion({ workspaceName });
+  const { data: openRouterRegionInfo } = useOpenRouterRegion({
+    workspaceName,
+  });
+  const unavailableDecisionModels =
+    openRouterRegionInfo?.unavailable_decision_models;
   const {
     permissions: { canUpdateAIProviders },
   } = usePermissions();
@@ -69,13 +73,13 @@ export const DecisionModelSelect: React.FC<{
   );
   const unavailableReason = getDecisionModelUnavailableReason(
     model,
-    openRouterRegion,
+    unavailableDecisionModels,
   );
   const options = [
     ...DECISION_MODELS.map((decisionModel) => {
       const reason = getDecisionModelUnavailableReason(
         decisionModel.value,
-        openRouterRegion,
+        unavailableDecisionModels,
       );
       return reason
         ? { ...decisionModel, disabled: true, description: reason }

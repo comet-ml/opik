@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,6 +110,25 @@ class OpenRouterRegionTest {
         @Test
         void aModelThatIsNotADecisionModelIsServedNowhere() {
             assertThat(OpenRouterDecisionModel.isServedIn("openai/gpt-4o", OpenRouterRegion.GLOBAL)).isFalse();
+        }
+
+        static Stream<Arguments> requestRegions() {
+            return Stream.of(
+                    arguments(OpenRouterRegion.GLOBAL, OpenRouterRegion.GLOBAL, null),
+                    arguments(OpenRouterRegion.GLOBAL, OpenRouterRegion.UNKNOWN, null),
+                    arguments(OpenRouterRegion.UNKNOWN, OpenRouterRegion.UNKNOWN, null),
+                    arguments(OpenRouterRegion.GLOBAL, OpenRouterRegion.EU, OpenRouterRegion.EU),
+                    arguments(OpenRouterRegion.EU, OpenRouterRegion.GLOBAL, OpenRouterRegion.EU),
+                    arguments(OpenRouterRegion.US, OpenRouterRegion.UNKNOWN, OpenRouterRegion.US),
+                    arguments(OpenRouterRegion.EU, OpenRouterRegion.US, OpenRouterRegion.EU));
+        }
+
+        @ParameterizedTest(name = "decisions {0}, chat {1} -> {2}")
+        @MethodSource("requestRegions")
+        void findsTheFirstRegionalHostThatDoesNotServeJev(OpenRouterRegion decisionsRegion,
+                OpenRouterRegion chatRegion, OpenRouterRegion expected) {
+            assertThat(OpenRouterDecisionModel.findUnservedRegion("typesafe/jev-1.13", decisionsRegion, chatRegion))
+                    .isEqualTo(Optional.ofNullable(expected));
         }
     }
 }
