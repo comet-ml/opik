@@ -22,7 +22,8 @@ import java.util.UUID;
  * saved list labels it with, by the {@link TopicAlgorithm#labeller} of its prototypes, the rule the run's own labels
  * follow. A list with no topic labels every trace Other, as its run did. It writes a row only where a trace's topic
  * changes or is stale (none yet, or one written before the trace's vector), with {@code source = 'run'} and the run's
- * id: a trace whose topic is already right keeps its row.
+ * id: a trace whose topic is already right keeps its row. A row is stamped with its page's read time, so a vector
+ * written between the read and the insert leaves its trace stale.
  *
  * <p>Two sweeps of the window, slice by slice. The relabel sweep reads every trace with its vector and its current
  * topic, and writes the ones whose topic changes. The stale sweep reads only stale traces, picked before their vectors
@@ -362,8 +363,12 @@ public class TopicWindowLabelService {
                             topics.add(labels[i]);
                         }
                     }
+                    // Stamped with the page's read time, not the insert's: a vector written in between stays newer
+                    // than its trace's row, so the trace stays stale, and its arrival row, if any, stays the latest.
                     var written = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces,
-                            topics.toArray(UUID[]::new));
+                            topics.toArray(UUID[]::new)).stream()
+                            .map(row -> row.toBuilder().lastUpdatedAt(rows.getFirst().readAt()).build())
+                            .toList();
                     long other = written.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
                     var totals = new Totals(null, rows.size(), written.size(), other, skipped, capped, false);
                     return store.insertTraceTopics(workspace, written).thenReturn(totals);

@@ -187,6 +187,8 @@ public class TopicWindowDAO {
      * <p>With {@code stale_only}, the page holds only stale traces, chosen before the vectors are read, so a pass that
      * finds few reads few vectors; their current topic is not returned. {@code join_use_nulls} makes a trace with no
      * {@code trace_topics} row join as nulls, not as default values.
+     *
+     * <p>{@code read_at} is the query's start: a vector stamped later is not on the page.
      */
     private static final String READ_PAGE = """
             WITH keys AS (
@@ -230,6 +232,7 @@ public class TopicWindowDAO {
                 LIMIT :limit
             )
             SELECT v.trace_id AS trace_id, v.trace_created_at AS trace_created_at, v.vector AS vector,
+                now64(6, 'UTC') AS read_at,
                 <if(stale_only)>
                 CAST(NULL AS Nullable(String)) AS topic_id, 1 AS stale
                 <else>
@@ -400,6 +403,7 @@ public class TopicWindowDAO {
                             .vector(toVector(row))
                             .topicId(topicId == null ? null : UUID.fromString(topicId))
                             .stale(stale == null || ((Number) stale).intValue() != 0)
+                            .readAt(row.get("read_at", Instant.class))
                             .build();
                 }));
     }
@@ -457,10 +461,11 @@ public class TopicWindowDAO {
 
     /**
      * One trace of a labelling page: its id, creation time, the vector of its highest live task version, its current
-     * topic (null when it has none, or the page did not read it) and whether that topic is stale ({@link #READ_PAGE}).
+     * topic (null when it has none, or the page did not read it), whether that topic is stale and when the page was
+     * read ({@link #READ_PAGE}).
      */
     @Builder(toBuilder = true)
     record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector,
-            @Nullable UUID topicId, boolean stale) {
+            @Nullable UUID topicId, boolean stale, @NonNull Instant readAt) {
     }
 }

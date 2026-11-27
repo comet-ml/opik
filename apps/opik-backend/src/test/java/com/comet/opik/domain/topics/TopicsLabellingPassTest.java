@@ -57,6 +57,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -478,6 +479,37 @@ class TopicsLabellingPassTest {
     }
 
     @Test
+    @DisplayName("a trace re-vectored between a page's read and its insert stays stale: the pass's row is stamped with "
+            + "the read time, so its stale sweep relabels the trace by the new vector")
+    void vectorRewrittenBeforeTheInsertIsRelabelled() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var topicId = id();
+        saveList(workspaceId, projectId, id(), topicId);
+        var rewritten = new AtomicReference<UUID>();
+        var inserts = spy(traceTopicsDAO);
+        // Before the relabel sweep's first insert, one of its traces gets the vector of a trace of the other label:
+        // trace 0 is a prototype of the topic, trace 1 the known-Other vector.
+        doAnswer(invocation -> {
+            var insert = (Mono<?>) invocation.callRealMethod();
+            List<TraceTopic> rows = invocation.getArgument(0);
+            if (rows.isEmpty() || !rewritten.compareAndSet(null, rows.getFirst().traceId())) {
+                return insert;
+            }
+            var source = TRACES.traceIds().get(TraceTopic.OTHER.equals(rows.getFirst().topicId()) ? 0 : 1);
+            return revectorLater(workspaceId, projectId, rows.getFirst().traceId(), source).then(insert);
+        }).when(inserts).insert(any());
+
+        assertThat(label(service(windowDAO, inserts), workspaceId, projectId,
+                Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(LabelPassOutcome.COMPLETE);
+
+        var expected = expectedTopics(workspaceId, projectId, List.of(topic(topicId, 0, 2)), 1);
+        assertThat(latest(workspaceId, projectId)).containsEntry(rewritten.get(), expected.get(rewritten.get()))
+                .isEqualTo(expected);
+    }
+
+    @Test
     @DisplayName("a pass past its deadline is cut before it reads; one whose deadline comes mid-pass, or whose caller "
             + "cancels it, is cut too: the pages inserted stay, and nothing is marked complete")
     void cutPasses() {
@@ -543,7 +575,7 @@ class TopicsLabellingPassTest {
         doAnswer(invocation -> Flux.range(0, invocation.<Integer>getArgument(4))
                 .map(i -> new TopicWindowDAO.WindowVector(new UUID(0x7000_0000_0000_7000L
                         + (next.incrementAndGet() << 16), 0x8000_0000_0000_0000L), invocation.getArgument(1),
-                        TopicsTestData.unit(0), null, true)))
+                        TopicsTestData.unit(0), null, true, Instant.now())))
                 .when(endless).readPage(any(), any(), any(), any(), anyInt(), anyBoolean(), anyLong());
 
         assertThat(
@@ -1098,6 +1130,26 @@ class TopicsLabellingPassTest {
     /** A new trace {@code traceId} with the vector row of {@code source}: same time, text and vector. */
     private void copyVector(String workspaceId, UUID projectId, UUID source, UUID traceId) {
         copyVectorLater(workspaceId, projectId, source, traceId).block();
+    }
+
+    /** A newer vector row for trace {@code traceId}, with the vector of {@code source}: same time, new vector. */
+    private Mono<Long> revectorLater(String workspaceId, UUID projectId, UUID traceId, UUID source) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
+                    embed_model, embed_dimensions, text, vector)
+                SELECT workspace_id, project_id, task, :trace_id, parseDateTime64BestEffort(:created_at, 6, 'UTC'),
+                    task_version, embed_model, embed_dimensions, text, vector
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :source
+                SETTINGS log_comment = 'topics_test:revector'
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("source", source.toString())
+                .bind("trace_id", traceId.toString())
+                .bind("created_at", createdAt(traceId).toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())));
     }
 
     private Mono<Long> copyVectorLater(String workspaceId, UUID projectId, UUID source, UUID traceId) {
