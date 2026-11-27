@@ -51,7 +51,14 @@ const CellWrapper = <TData,>({
       style={rowHeightStyle}
       data-cell-wrapper={dataCellWrapper}
       {...(stopClickPropagation && {
-        onClick: (event) => event.stopPropagation(),
+        // Only clicks on the cell itself: a dialog or menu the cell opens is portaled elsewhere but its clicks
+        // still pass through here, and stopping them keeps them from the document, where popovers inside that
+        // dialog listen for outside clicks to close.
+        onClick: (event) => {
+          if (event.currentTarget.contains(event.target as Node)) {
+            event.stopPropagation();
+          }
+        },
       })}
     >
       {children}

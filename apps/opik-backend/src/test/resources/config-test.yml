@@ -1680,6 +1680,9 @@ annotationQueueRouting:
   # Description: Maximum number of buffer members read per page when flushing, and therefore the most entities one
   #   stream message can carry (100-5000)
   jobBatchSize: 1000
+  # Default: 4
+  # Description: Automation filter searches one routing message runs at once (1-16)
+  searchConcurrency: 4
   # Default: 1s
   # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
   #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about

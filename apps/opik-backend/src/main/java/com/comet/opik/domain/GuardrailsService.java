@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.events.GuardrailsCreated;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.AlertEventType.TRACE_GUARDRAILS_TRIGGERED;
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(GuardrailsServiceImpl.class)
 public interface GuardrailsService {
@@ -93,6 +95,9 @@ class GuardrailsServiceImpl implements GuardrailsService {
                             String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
                             String userName = ctx.get(RequestContext.USER_NAME);
                             raiseAlertEventIfApplicable(projectDto.getValue(), workspaceId, workspaceName, userName);
+                            eventBus.post(new GuardrailsCreated(
+                                    projectDto.getValue().stream().map(Guardrail::entityId).collect(toSet()),
+                                    workspaceId, userName, projectDto.getKey().id()));
                         }))
                 .reduce(0L, Long::sum));
     }

@@ -107,6 +107,12 @@ const feedbackScoresDef: ChipDefinition = {
   defaultOperator: ">=",
 };
 
+// A chip offering only inclusive bounds, which is what the strict-to-inclusive demotion is for.
+const inclusiveScoresDef: ChipDefinition = {
+  ...feedbackScoresDef,
+  operators: FEEDBACK_SCORE_OPERATORS.filter((op) => op !== ">" && op !== "<"),
+};
+
 const DEFS: ChipDefinition[] = [
   booleanDef,
   singleSelectDef,
@@ -447,7 +453,7 @@ describe("sanitizeFilters — query-builder", () => {
           value: "0.5",
         }),
       ],
-      DEFS,
+      [inclusiveScoresDef],
     );
     const rows = (res.values.feedback_scores as { rows: Filter[] }).rows;
     expect(rows).toHaveLength(1);
@@ -466,7 +472,7 @@ describe("sanitizeFilters — query-builder", () => {
           value: "0.5",
         }),
       ],
-      DEFS,
+      [inclusiveScoresDef],
     );
     const rows = (res.values.feedback_scores as { rows: Filter[] }).rows;
     expect(rows).toHaveLength(1);
