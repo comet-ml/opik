@@ -1057,6 +1057,7 @@ def export_single_project(
         - ``traces_had_errors`` (bool): True if any page fetch or write error occurred;
           the manifest is left incomplete so the next run resumes from where it left off.
     """
+    manifest: Optional[ExportManifest] = None
     try:
         # Trace files are written directly into the project directory.
         project_traces_dir = project_dir
@@ -1209,6 +1210,19 @@ def export_single_project(
     except Exception as e:
         console.print(f"[red]Error exporting project {project_name}: {e}[/red]")
         return (0, 0, 0, True)
+    finally:
+        # A sqlite3 connection is only freed by the cyclic garbage collector, so
+        # close the manifest here; otherwise export_manifest.db stays open after
+        # the export, which on Windows also locks the project directory.
+        if manifest is not None:
+            try:
+                manifest.close()
+            except Exception:
+                LOGGER.warning(
+                    "Failed to close the export manifest in %s",
+                    project_dir,
+                    exc_info=True,
+                )
 
 
 @click.command(name="traces")
