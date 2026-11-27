@@ -31,6 +31,12 @@ public class ProviderRequestRefusedException extends NonRetriableException {
         BEDROCK_CONVERSE_URL("""
                 the provider URL doesn't serve the Bedrock Converse API: use the bedrock-runtime endpoint with no \
                 path, such as https://bedrock-runtime.us-east-1.amazonaws.com"""),
+        JEV_NOT_IN_OPEN_ROUTER_EU("""
+                TypeSafe Jev is not available in OpenRouter's EU region, which this workspace's OpenRouter requests \
+                are set to use: OpenRouter serves it only on openrouter.ai"""),
+        JEV_NOT_IN_OPEN_ROUTER_US("""
+                TypeSafe Jev is not available in OpenRouter's US region, which this workspace's OpenRouter requests \
+                are set to use: OpenRouter serves it only on openrouter.ai"""),
         ;
 
         private final String message;

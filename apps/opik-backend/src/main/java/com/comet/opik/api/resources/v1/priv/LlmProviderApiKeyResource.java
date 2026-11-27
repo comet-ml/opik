@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.EncryptedAuthConfig;
+import com.comet.opik.api.OpenRouterRegionResponse;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.ProviderAuthCheck;
@@ -111,6 +112,20 @@ public class LlmProviderApiKeyResource {
                         ? EncryptedAuthConfig.of(providerApiKey.authConfig().value().mask())
                         : null)
                 .build()).build();
+    }
+
+    @GET
+    @Path("/openrouter/region")
+    @Operation(operationId = "getOpenRouterRegion", summary = "Get the workspace's OpenRouter region", description = "Get the OpenRouter region the workspace's OpenRouter requests go to, from its OpenRouter provider's base_url or the server's default OpenRouter URL", responses = {
+            @ApiResponse(responseCode = "200", description = "OpenRouter region", content = @Content(schema = @Schema(implementation = OpenRouterRegionResponse.class)))})
+    public Response getOpenRouterRegion() {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting OpenRouter region on workspace_id '{}'", workspaceId);
+        var response = llmProviderApiKeyService.getOpenRouterRegion(workspaceId);
+        log.info("Got OpenRouter region on workspace_id '{}', region '{}'", workspaceId, response.region());
+
+        return Response.ok(response).build();
     }
 
     @POST

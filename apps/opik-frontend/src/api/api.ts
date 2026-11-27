@@ -89,6 +89,7 @@ export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
 export const THREADS_KEY = "threads";
 export const PROVIDERS_KEYS_KEY = "provider-keys";
+export const OPENROUTER_REGION_KEY = "openrouter-region";
 export const ALERTS_KEY = "alerts";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";

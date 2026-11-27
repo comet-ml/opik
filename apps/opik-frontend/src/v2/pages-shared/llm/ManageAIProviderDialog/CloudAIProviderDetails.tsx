@@ -12,6 +12,7 @@ import {
   supportsProviderHeaders,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import CustomHeadersField from "@/v2/pages-shared/llm/ManageAIProviderDialog/CustomHeadersField";
+import OpenRouterRegionHint from "@/v2/pages-shared/llm/ManageAIProviderDialog/OpenRouterRegionHint";
 import { DropdownOption } from "@/types/shared";
 import get from "lodash/get";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
@@ -77,6 +78,7 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           .
         </span>
       )}
+      {provider === PROVIDER_TYPE.OPEN_ROUTER && <OpenRouterRegionHint />}
       {isOpenAi && (
         <FormField
           control={form.control}

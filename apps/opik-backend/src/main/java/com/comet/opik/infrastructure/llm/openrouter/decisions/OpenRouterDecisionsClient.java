@@ -4,9 +4,12 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterRegion;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -64,6 +67,14 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
      */
     private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 529);
 
+    /**
+     * Regions a request is refused for when the model isn't served there. No entry for {@code UNKNOWN}: a host we
+     * don't recognise may be a proxy in front of openrouter.ai, so that request is sent and its answer decides.
+     */
+    private static final Map<OpenRouterRegion, ProviderRequestRefusedException.Reason> REGION_REFUSALS = Map.of(
+            OpenRouterRegion.EU, ProviderRequestRefusedException.Reason.JEV_NOT_IN_OPEN_ROUTER_EU,
+            OpenRouterRegion.US, ProviderRequestRefusedException.Reason.JEV_NOT_IN_OPEN_ROUTER_US);
+
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
@@ -75,6 +86,12 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
+        var refusal = findRegionRefusal(request.model(), config);
+        if (refusal.isPresent()) {
+            log.warn("Refused OpenRouter decisions request, the model isn't served in the region, model '{}',"
+                    + " reason '{}'", request.model(), refusal.get());
+            return Mono.error(new ProviderRequestRefusedException(refusal.get()));
+        }
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(llmProviderClientConfig.getOpenRouterDecisionsUrl()))
                 .requestCustomizer(builder -> {
@@ -93,6 +110,14 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .responseFunction(this::processResponse)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    private Optional<ProviderRequestRefusedException.Reason> findRegionRefusal(String model,
+            LlmProviderClientApiConfig config) {
+        return OpenRouterDecisionModel.findUnservedRegion(model,
+                OpenRouterRegion.fromUrl(llmProviderClientConfig.getOpenRouterDecisionsUrl()),
+                OpenRouterRegion.effective(config.baseUrl(), llmProviderClientConfig.getOpenRouterUrl()))
+                .map(REGION_REFUSALS::get);
     }
 
     private DecisionsResponse processResponse(Response response) {

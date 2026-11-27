@@ -32,6 +32,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
@@ -39,6 +40,7 @@ import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -51,6 +53,7 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -133,13 +136,15 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private OpenAiDecisionsClient openAiDecisionsClient;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
+    private Logger userFacingLogger;
     private OnlineScoringLlmAsJudgeScorer scorer;
 
     @BeforeEach
     void setUp() {
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
+        userFacingLogger = mock(Logger.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(org.slf4j.Logger.class));
+                .thenReturn(userFacingLogger);
 
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
         streamConfig.setScorer("llm_as_judge");
@@ -1079,6 +1084,22 @@ class OnlineScoringLlmAsJudgeScorerTest {
             when(decisionsClient.decide(any(), any())).thenReturn(Mono.error(failure));
 
             assertThatThrownBy(() -> scorer.score(message).block()).isSameAs(failure);
+        }
+
+        @Test
+        void regionRefusalIsDroppedAsPermanentAndLogsItsOwnReason() {
+            var message = buildJevMessage("question", "answer");
+            var refusal = new ProviderRequestRefusedException(
+                    ProviderRequestRefusedException.Reason.JEV_NOT_IN_OPEN_ROUTER_EU);
+            when(decisionsClient.decide(any(), any())).thenReturn(Mono.error(refusal));
+
+            assertThatThrownBy(() -> scorer.score(message).block())
+                    .isInstanceOfSatisfying(BadRequestException.class, error -> assertThat(
+                            HttpStatusRetryability.isPermanent(error.getResponse().getStatus())).isTrue())
+                    .hasMessage(refusal.getMessage());
+            verify(userFacingLogger).error("Scoring request refused, {} '{}', rule '{}', reason '{}'",
+                    "traceId", message.trace().id(), message.ruleName(), refusal.getMessage());
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
 
         @ParameterizedTest(name = "templateHasSpans={0} → fetch={1}")

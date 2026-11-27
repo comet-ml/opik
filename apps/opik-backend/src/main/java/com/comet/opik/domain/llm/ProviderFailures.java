@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -7,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * LLM provider failures as they may be logged. A provider exception's message, and those of its causes, is often what
@@ -37,6 +39,17 @@ public class ProviderFailures {
             case RedactedThrowable redacted -> redacted.simpleName;
             case Throwable root -> root.getClass().getSimpleName();
         };
+    }
+
+    /**
+     * The message of a refusal in the failure's chain. Unlike a provider's message it can be logged: a refusal's is
+     * always one of Opik's own fixed texts, see {@link ProviderRequestRefusedException}.
+     */
+    public static Optional<String> refusalMessage(@NonNull Throwable throwable) {
+        return chain(throwable).stream()
+                .filter(ProviderRequestRefusedException.class::isInstance)
+                .map(Throwable::getMessage)
+                .findFirst();
     }
 
     /**

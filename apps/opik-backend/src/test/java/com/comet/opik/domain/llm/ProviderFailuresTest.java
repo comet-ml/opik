@@ -1,5 +1,7 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -65,6 +67,23 @@ class ProviderFailuresTest {
         var actual = ProviderFailures.redacted(failure);
 
         assertRedacted(actual.getCause().getCause(), root);
+    }
+
+    @Test
+    void refusalMessageIsTheRefusalsOwnTextNotItsWrappers() {
+        var refusal = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.JEV_NOT_IN_OPEN_ROUTER_EU);
+        var failure = new BadRequestException(RandomStringUtils.secure().nextAlphanumeric(20),
+                new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(20), refusal));
+
+        assertThat(ProviderFailures.refusalMessage(failure)).contains(refusal.getMessage());
+    }
+
+    @Test
+    void refusalMessageIsEmptyForAProviderFailure() {
+        var failure = new UncheckedIOException(new IOException(RandomStringUtils.secure().nextAlphanumeric(20)));
+
+        assertThat(ProviderFailures.refusalMessage(failure)).isEmpty();
     }
 
     private static void assertRedacted(Throwable actual, Throwable expected) {

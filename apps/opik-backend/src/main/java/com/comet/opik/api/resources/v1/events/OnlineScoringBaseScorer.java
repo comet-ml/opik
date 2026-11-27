@@ -13,6 +13,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -149,6 +150,19 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
             }
         }
         return preload.spans();
+    }
+
+    /**
+     * Logs a failed evaluation to the rule's logs. Only a refusal's message is shown: any other message in the chain
+     * can be what the provider answered, so for those only the type is.
+     */
+    protected static void logScoringFailure(@NonNull Logger userFacingLogger, String idName, Object id,
+            String ruleName, @NonNull Throwable error) {
+        ProviderFailures.refusalMessage(error).ifPresentOrElse(
+                reason -> userFacingLogger.error("Scoring request refused, {} '{}', rule '{}', reason '{}'",
+                        idName, id, ruleName, reason),
+                () -> userFacingLogger.error("Unexpected error while scoring {} '{}' with rule '{}', error type '{}'",
+                        idName, id, ruleName, ProviderFailures.rootType(error)));
     }
 
     /**

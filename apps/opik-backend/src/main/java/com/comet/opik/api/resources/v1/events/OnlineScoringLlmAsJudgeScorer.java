@@ -24,7 +24,6 @@ import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -290,11 +289,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
-                .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring traceId '{}' with rule '{}', error type '{}'",
-                                trace.id(), message.ruleName(),
-                                // the type only: a provider's text can be in any message of the chain
-                                ProviderFailures.rootType(error))))
+                .doOnError(withMdc(mdc,
+                        error -> logScoringFailure(userFacingLogger, "traceId", trace.id(), message.ruleName(), error)))
                 .then();
     }
 

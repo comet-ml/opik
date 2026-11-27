@@ -1,8 +1,12 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * OpenRouter models served by the Decisions API ({@code POST /api/alpha/decisions}) instead of chat
@@ -15,13 +19,38 @@ import java.util.Arrays;
  */
 @RequiredArgsConstructor
 public enum OpenRouterDecisionModel {
-    TYPESAFE_JEV_LATEST("~typesafe/jev-latest"),
-    TYPESAFE_JEV_1_13("typesafe/jev-1.13");
+    // OpenRouter lists no endpoints for Jev on eu.openrouter.ai or us.openrouter.ai
+    // (GET /api/v1/models/typesafe/jev-1.13/endpoints, checked November 2026), only on openrouter.ai.
+    TYPESAFE_JEV_LATEST("~typesafe/jev-latest", Set.of(OpenRouterRegion.GLOBAL)),
+    TYPESAFE_JEV_1_13("typesafe/jev-1.13", Set.of(OpenRouterRegion.GLOBAL));
 
+    @Getter
     private final String value;
+    private final Set<OpenRouterRegion> servedIn;
 
     public static boolean isDecisionModel(String model) {
-        return Arrays.stream(values()).anyMatch(decisionModel -> decisionModel.value.equals(model));
+        return find(model).isPresent();
+    }
+
+    public static boolean isServedIn(String model, OpenRouterRegion region) {
+        return find(model).filter(decisionModel -> decisionModel.servedIn.contains(region)).isPresent();
+    }
+
+    /**
+     * Both regions count. The request goes to the decisions URL, so a model that region doesn't serve can't answer.
+     * The workspace's chat region is where its OpenRouter traffic is meant to stay, so a decisions URL left on
+     * openrouter.ai must not take the trace out of it.
+     */
+    public static Optional<OpenRouterRegion> findUnservedRegion(String model, OpenRouterRegion decisionsRegion,
+            OpenRouterRegion chatRegion) {
+        return Stream.of(decisionsRegion, chatRegion)
+                .filter(OpenRouterRegion::isRegional)
+                .filter(region -> !isServedIn(model, region))
+                .findFirst();
+    }
+
+    private static Optional<OpenRouterDecisionModel> find(String model) {
+        return Arrays.stream(values()).filter(decisionModel -> decisionModel.value.equals(model)).findFirst();
     }
 
     @Override

@@ -3,8 +3,9 @@ import { AxiosError } from "axios";
 import get from "lodash/get";
 
 import api, {
-  PROVIDER_KEYS_REST_ENDPOINT,
+  OPENROUTER_REGION_KEY,
   PROVIDERS_KEYS_KEY,
+  PROVIDER_KEYS_REST_ENDPOINT,
 } from "@/api/api";
 import { useToast } from "@/ui/use-toast";
 import { PartialProviderKeyUpdate } from "@/types/providers";
@@ -57,9 +58,10 @@ const useProviderKeysUpdateMutation = () => {
       });
     },
     onSettled: () => {
-      return queryClient.invalidateQueries({
-        queryKey: [PROVIDERS_KEYS_KEY],
-      });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [PROVIDERS_KEYS_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [OPENROUTER_REGION_KEY] }),
+      ]);
     },
   });
 };
