@@ -4,7 +4,7 @@
 # ai-labels task format requires it, so leave it as it is.
 name: author
 endpoint: generate
-version: 2
+version: 3
 applies_from: 2026-11-19T00:00:00Z
 prompt:
   user: |
@@ -16,7 +16,7 @@ prompt:
     1. Define at most {{max_topics}} topics. For each topic give
        - "name": 2-5 words, Title Case, naming the kind of request. Never "Other", "General", "Miscellaneous", "Various", "Mixed" or a name built on such a word: name what the request is for, not how vague it is.
        - "definition": one sentence, at most 25 words, saying which requests belong to it; precise enough that a reader can decide for a new request.
-    2. Assign every cluster: list each cluster id exactly once, in the order shown, with the number of its topic (0 for the first topic, 1 for the second, and so on), or -1 when it is not a real kind of request (retries, greetings, empty input, health checks, test pings) or a mix with no dominant kind. -1 is not a topic.
+    2. Assign every cluster: list each cluster id exactly once, in the order shown, with the exact "name" of its topic, or "-1" when it is not a real kind of request (retries, greetings, empty input, health checks, test pings) or a mix with no dominant kind. "-1" is not a topic.
 
     Rules:
     - Group by what the request is meant to get done, not by wording or by the product/person named in the request.
@@ -31,7 +31,7 @@ prompt:
     {{clusters}}
 
     Output JSON only, no prose:
-    {"topics": [{"name": "...", "definition": "..."}], "assignment": [{"cluster": id, "topic": number or -1}]}
+    {"topics": [{"name": "...", "definition": "..."}], "assignment": [{"cluster": id, "topic": "exact topic name or -1"}]}
 schema:
   type: object
   properties:
@@ -49,7 +49,7 @@ schema:
         type: object
         properties:
           cluster: {type: integer}
-          topic: {type: integer}
+          topic: {type: string}
         required: [cluster, topic]
   required: [topics, assignment]
 max_tokens: 2500

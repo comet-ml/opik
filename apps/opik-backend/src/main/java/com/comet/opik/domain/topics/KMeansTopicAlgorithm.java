@@ -61,6 +61,15 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                         + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) is above the limit, "
                         + "limit '%s', max_tokens '%s'",
                 BatchGenerateItem.MAX_MAX_TOKENS, verifyMaxTokens);
+        // The author answer lists every topic and names a topic for every group: a cut-off answer cannot be read, so
+        // every discovery run would end llm_bad_answer.
+        int authorAnswerTokens = config.getMaxTopics() * config.getAuthorTokensPerTopic()
+                + config.getMaxGroups() * config.getAuthorTokensPerGroup();
+        Preconditions.checkState(authorAnswerTokens <= tasks.author().effectiveMaxTokens(),
+                "the author answer's estimate (topics.algorithm.maxTopics x authorTokensPerTopic + maxGroups x "
+                        + "authorTokensPerGroup) is above the max_tokens of topics/tasks/author.yaml, max_tokens '%s', "
+                        + "estimate '%s'",
+                tasks.author().effectiveMaxTokens(), authorAnswerTokens);
     }
 
     @Override
@@ -226,6 +235,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             var finishStats = JsonUtils.createObjectNode();
             finishStats.put("merged", merges.size());
             finishStats.put("other_groups", applied.other().size());
+            finishStats.put("author_unmatched", answer.unmatched());
             if (merges.isEmpty()) {
                 return NightStep.done(discovered(topics, topicGroups, otherPrototypes, applied.other(), finishStats));
             }

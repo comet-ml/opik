@@ -163,6 +163,12 @@ public class TopicsConfig {
         @Min(1) @Max(10_000) private int nightlyVerifyTokensPerPair;
 
         @JsonProperty
+        @Min(1) @Max(1_000) private int authorTokensPerTopic;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int authorTokensPerGroup;
+
+        @JsonProperty
         @Min(1) @Max(100) private int nightlyTopicExamples;
 
         @JsonProperty

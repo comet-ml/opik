@@ -543,7 +543,7 @@ class TopicsRunServiceTest {
         for (int group = 0; group <= groupTexts.size(); group++) {
             var output = InferenceJson.MAPPER.createObjectNode();
             output.putArray("topics").addObject().put("name", "Alpha Requests").put("definition", "d");
-            output.putArray("assignment").addObject().put("cluster", group).put("topic", 0);
+            output.putArray("assignment").addObject().put("cluster", group).put("topic", "Alpha Requests");
             wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH))
                     .withRequestBody(matching("(?s).*cluster " + group
                             + ": \\d+% of traffic\\\\n    - alpha request.*"))

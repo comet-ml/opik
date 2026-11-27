@@ -2816,7 +2816,8 @@ topics:
     #  Description: Fewest k-means groups a discovery run makes (never more than its unique texts)
     minGroups: ${TOPICS_ALGORITHM_MIN_GROUPS:-30}
     #  Default: 50
-    #  Description: Most k-means groups a discovery run makes; the author prompt lists every group. At least minGroups
+    #  Description: Most k-means groups a discovery run makes; the author prompt lists every group. At least minGroups.
+    #  The author answer names a topic per group: see authorTokensPerTopic and authorTokensPerGroup
     maxGroups: ${TOPICS_ALGORITHM_MAX_GROUPS:-50}
     #  Default: 30
     #  Description: Unique texts per group: k = unique texts / textsPerGroup, within minGroups and maxGroups
@@ -2904,6 +2905,15 @@ topics:
     #  topics/tasks/verify.yaml. That max_tokens + this x nightlyMaxGroups must be at most 4096, the inference
     #  service's limit: checked at startup
     nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
+    #  Default: 60
+    #  Description: Upper estimate of the author answer's tokens per topic (its name and definition).
+    #  maxTopics x this + maxGroups x authorTokensPerGroup must be at most the max_tokens of
+    #  topics/tasks/author.yaml (2500): checked at startup, as a cut-off answer cannot be read
+    authorTokensPerTopic: ${TOPICS_ALGORITHM_AUTHOR_TOKENS_PER_TOPIC:-60}
+    #  Default: 20
+    #  Description: Upper estimate of the author answer's tokens per group (its cluster id and topic name). See
+    #  authorTokensPerTopic
+    authorTokensPerGroup: ${TOPICS_ALGORITHM_AUTHOR_TOKENS_PER_GROUP:-20}
     #  Default: 4
     #  Description: Member texts a topic shows in a prompt: a live topic in the nightly naming prompt, a merged topic in
     #  the rename prompt of a first build or a night

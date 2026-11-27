@@ -12,6 +12,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
@@ -61,7 +62,13 @@ class TopicsRunReconciler {
                     : republishIfStale(run, night, now);
             case RUNNING -> {
                 if (run.heartbeatAt() == null || run.heartbeatAt().isBefore(stale)) {
-                    yield store.abandon(run, stale).map(abandoned -> !abandoned);
+                    yield store.abandon(run, stale)
+                            .doOnNext(abandoned -> {
+                                if (abandoned) {
+                                    logAbandoned(run, now);
+                                }
+                            })
+                            .map(abandoned -> !abandoned);
                 }
                 var cancel = reason.or(() -> run.deadlineAt() != null && run.deadlineAt().isBefore(now)
                         ? Optional.of(CancelReason.DEADLINE)
@@ -81,6 +88,14 @@ class TopicsRunReconciler {
                     : Mono.just(true);
             case SAVED, FAILED -> Mono.just(false);
         };
+    }
+
+    private void logAbandoned(InFlightRun run, Instant now) {
+        log.warn("Topics run '{}' abandoned, workspace '{}', project '{}', mode '{}', silent for '{}' (last heartbeat "
+                + "'{}', topics.runs.abandonGrace '{}')", run.runId(), run.workspaceId(), run.projectId(),
+                run.runMode().getValue(),
+                run.heartbeatAt() == null ? "unknown" : Duration.between(run.heartbeatAt(), now),
+                run.heartbeatAt(), config.getRuns().getAbandonGrace());
     }
 
     private static Optional<CancelReason> leftReason(InFlightRun run, Set<String> enabled) {
