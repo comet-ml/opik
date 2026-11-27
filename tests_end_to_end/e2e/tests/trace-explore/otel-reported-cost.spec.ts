@@ -367,6 +367,17 @@ test.describe(
           await logs.goto(project.id);
           const panel = await logs.openTraceById(otelReportedCostSpans.traceId);
           await panel.waitForFullyLoaded();
+
+          // Wait for the tree to list every span BEFORE selecting any of them.
+          // The panel fills the tree from one `GET /v1/private/spans`, which is
+          // rate limited per workspace; when parallel specs have spent the
+          // budget that call is shed with a 429, the empty answer is cached and
+          // nothing refetches, so the tree renders `Spans (0)` permanently and
+          // a click on a node can never succeed however long it waits.
+          // `waitForSpanTreeNodes` supplies the retry the browser has not got.
+          // Added during the 2.3.7 release pass, where this test flaked exactly
+          // this way under a whole-branch run while passing on its own.
+          await panel.waitForSpanTreeNodes(otelReportedCostSpans.spans.map((s) => s.name));
           return panel;
         });
 

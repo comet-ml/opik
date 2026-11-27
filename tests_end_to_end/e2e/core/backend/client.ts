@@ -7025,9 +7025,34 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }): Promise<boolean> {
       const query = new URLSearchParams({ project_id: args.projectId });
       if (args.source !== undefined) query.set('source', args.source);
-      const { status, message, json } = await rawFetch('GET', '/v1/private/spans/exists', {
-        query,
-      });
+
+      // `withRateLimitRetry`, for the reason `listSpanCosts` and `listLogsPage`
+      // take it: `/spans/exists` is limited per workspace alongside the rest of
+      // the spans surface (`getSpans:{workspaceId}`), and the specs on this
+      // probe necessarily issue a burst — one call per project per source, four
+      // or more per test. Observed on staging during the 2.3.7 release pass:
+      // this method answering 429 on every attempt, which surfaced as the probe
+      // reporting the wrong answer about an empty project rather than as a
+      // budget problem.
+      //
+      // A longer ladder than the default because callers read this inside an
+      // `expect.poll`, which does not swallow a throw: a 429 outlasting the
+      // ladder escapes and fails the test instead of being polled again.
+      const { status, message, json } = await withRateLimitRetry(
+        async () => {
+          const result = await rawFetch('GET', '/v1/private/spans/exists', { query });
+          // Thrown so `withRateLimitRetry` can see the 429; every other status
+          // is re-reported below, unretried, exactly as before.
+          if (result.status === 429) {
+            throw new Error(
+              `GET /v1/private/spans/exists (project ${args.projectId}` +
+                `${args.source ? `, source ${args.source}` : ', any source'}) -> 429: ${result.message}`,
+            );
+          }
+          return result;
+        },
+        [2_000, 5_000, 10_000, 20_000, 30_000, 30_000, 30_000],
+      );
       if (status !== 200) {
         throw new Error(
           `GET /v1/private/spans/exists (project ${args.projectId}` +

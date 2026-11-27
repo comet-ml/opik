@@ -261,6 +261,17 @@ test.describe(
           await logs.goto(project.id);
           const opened = await logs.openTraceById(openRouterCacheRateSpans.traceId);
           await opened.waitForFullyLoaded();
+
+          // Wait for the tree to list all six spans BEFORE selecting any of
+          // them. The panel fills the tree from one `GET /v1/private/spans`,
+          // which is rate limited per workspace; when parallel specs have spent
+          // the budget that call is shed with a 429, the empty answer is cached
+          // and nothing refetches, so the tree renders `Spans (0)` permanently
+          // and a click on a node can never succeed however long it waits.
+          // `waitForSpanTreeNodes` supplies the retry the browser has not got.
+          // Observed here: this test flaked exactly this way at 4 workers
+          // against staging, while passing 4x in a row on its own.
+          await opened.waitForSpanTreeNodes(openRouterCacheRateSpans.spans.map((s) => s.name));
           return opened;
         });
 
