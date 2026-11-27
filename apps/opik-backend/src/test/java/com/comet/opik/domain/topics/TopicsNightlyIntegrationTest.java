@@ -963,6 +963,7 @@ class TopicsNightlyIntegrationTest {
     void tracesDeletedDuringTheNight() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
+        var row = data.topicProject(projectId);
         plant(workspaceId, projectId);
         // Traces of the night's window, which starts windowDays before today.
         var windowFrom = todayStart().minus(opikConfig.getTopics().getRun().getWindowDays(), ChronoUnit.DAYS);
@@ -984,15 +985,16 @@ class TopicsNightlyIntegrationTest {
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, "test"))
                 .block();
-        // The delete ran before the night's insert.
+        // The delete ran before the night's labelling pass.
         assertThat(labels(workspaceId, projectId, queued.get(projectId))).isEmpty();
         awaitEnded(projectId, queued.get(projectId));
 
         var update = nightlyRun(projectId);
         assertThat(update.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         int windowTraces = update.stats().path("window_traces").asInt();
+        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
         assertThat(data.traceTopics(workspaceId, projectId)).noneMatch(label -> deleted.contains(label.traceId()));
-        assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces - deleted.size());
+        assertThat(windowLabels(workspaceId, projectId)).hasSize(windowTraces - deleted.size());
     }
 
     @Test
