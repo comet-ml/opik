@@ -711,6 +711,39 @@ so it counts under Other. The next plan, or the run endpoint above, builds the l
 | `204` | The list is forgotten and the project's topics are deleted. |
 | `409` | The workspace is not opted in at stage `build` or later (or topics are off), or the project has no `topic_projects` row or a run in flight. Nothing changed. The body's message says which. |
 
+### Recovering a bad list
+
+A first build can save a bad list, for example with topic names on the wrong groups. To build it again, reset the list.
+The next discovery run, planned or by hand, builds a new one.
+
+- **One project:** the project reset above.
+- **Many projects:** the workspace reset below.
+
+The workspace reset forgets the lists of every project of the workspace that has one, `topics.storage.deleteBatchSize`
+projects per transaction:
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/reset?workspace_id=<workspace_id>"
+```
+
+A project with a run in flight keeps its list. The answer lists it, so reset it again after its run ends. The same
+opt-in and stage rules apply as for the project reset.
+
+| Answer | Meaning |
+|---|---|
+| `200` | The body is `{"reset": <lists reset>, "skipped_in_flight": <projects skipped>, "in_flight_project_ids": [...]}`. |
+| `409` | The workspace is not opted in at stage `build` or later, or topics are off. Nothing changed. |
+
+What stays after a reset:
+
+- The row's run state and its `backfill_*` columns.
+- The project's `trace_topics` rows. The new run writes a newer row for each trace in its window. A trace outside the
+  new window keeps its old row, whose topic is gone, so it counts under Other.
+
+After a deploy that fixes the author prompt, call the workspace reset for each opted-in workspace, and again for the
+projects the answer lists as in flight, once their runs end. The fixed prompt is a new prompt, so opik-inference's
+cache does not answer it with the old list.
+
 ### Discovery runs and the vectors backfill
 
 When a workspace is opted in, the topic vectors tick embeds the traces it already has in a backfill, project by

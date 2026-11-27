@@ -46,6 +46,7 @@ class TopicRunStore {
             .toList();
 
     private final TopicsConfig.RunConfig runConfig;
+    private final TopicsConfig.StorageConfig storageConfig;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final ProjectService projectService;
@@ -59,6 +60,7 @@ class TopicRunStore {
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics,
             @NonNull WorkspaceNameService workspaceNames) {
         this.runConfig = config.getRun();
+        this.storageConfig = config.getStorage();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
@@ -547,6 +549,60 @@ class TopicRunStore {
                 return true;
             }));
         });
+    }
+
+    /**
+     * Forgets the saved lists of the workspace's projects, {@code topics.storage.deleteBatchSize} projects per
+     * transaction: each row as {@link #resetList}, then the topics of the rows that moved. A row that did not move and
+     * is still there after its batch commits has a run in flight: that project keeps its list and is returned as
+     * skipped.
+     */
+    Mono<WorkspaceReset> resetLists(@NonNull String workspaceId) {
+        int limit = storageConfig.getDeleteBatchSize();
+        return resetBatch(workspaceId, "", limit)
+                .expand(batch -> batch.next() == null ? Mono.empty() : resetBatch(workspaceId, batch.next(), limit))
+                .map(ResetBatch::reset)
+                .reduce(new WorkspaceReset(List.of(), List.of()),
+                        (total, batch) -> new WorkspaceReset(
+                                Stream.concat(total.reset().stream(), batch.reset().stream()).toList(),
+                                Stream.concat(total.inFlight().stream(), batch.inFlight().stream()).toList()));
+    }
+
+    /** A batch of the workspace reset, and the project id the next batch starts after; null after the last. */
+    private record ResetBatch(WorkspaceReset reset, String next) {
+    }
+
+    /** The rows a batch reset, those it did not, and the project id the next batch starts after. */
+    private record Moved(List<UUID> reset, List<UUID> unmoved, String next) {
+    }
+
+    private Mono<ResetBatch> resetBatch(String workspaceId, String after, int limit) {
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            var keys = projectDAO.findLists(workspaceId, after, limit);
+            var lists = keys.stream()
+                    .map(TopicProjectKey::projectId)
+                    .collect(Collectors.partitioningBy(
+                            projectId -> projectDAO.resetList(workspaceId, projectId, ENDED) == 1));
+            var reset = lists.get(true);
+            if (!reset.isEmpty()) {
+                handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, reset);
+            }
+            var next = keys.size() < limit ? null : keys.getLast().projectId().toString();
+            return new Moved(reset, lists.get(false), next);
+        })).flatMap(moved -> stillListed(workspaceId, moved.unmoved())
+                .map(inFlight -> new ResetBatch(new WorkspaceReset(moved.reset(), inFlight), moved.next())));
+    }
+
+    /** Those of {@code projectIds} whose row is still there after the batch committed: their run is in flight. */
+    private Mono<List<UUID>> stillListed(String workspaceId, List<UUID> projectIds) {
+        if (projectIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findProjects(workspaceId, projectIds).stream()
+                .map(TopicProject::projectId)
+                .toList()));
     }
 
     /**

@@ -162,6 +162,18 @@ public class TopicsRunPlanner {
     }
 
     /**
+     * Forgets the saved lists of the workspace's projects by hand, as {@link #resetByHand} does one project's. A project
+     * with a run in flight keeps its list and is returned as skipped.
+     *
+     * @throws ConflictException when the workspace is not opted in at stage {@code build} or later
+     */
+    public Mono<WorkspaceReset> resetWorkspaceByHand(@NonNull String workspaceId) {
+        return optedIn(workspaceId, TopicsStage.BUILD, () -> store.resetLists(workspaceId))
+                .doOnNext(reset -> log.info("Topics lists reset by hand, workspace '{}', reset '{}', skipped in "
+                        + "flight '{}'", workspaceId, reset.reset().size(), reset.inFlight().size()));
+    }
+
+    /**
      * {@code then} once the workspace reaches {@code stage}, checked on a bounded-elastic thread (a config and MySQL
      * read); a {@link ConflictException} otherwise.
      */

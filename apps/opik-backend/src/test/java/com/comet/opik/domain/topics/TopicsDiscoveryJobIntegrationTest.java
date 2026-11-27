@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.lock.LockService.Lock;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
@@ -54,9 +55,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -315,6 +320,71 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
+    @DisplayName("the internal workspace reset forgets every saved list of the workspace and deletes its topics, skips "
+            + "and lists the projects with a run in flight, and keeps another workspace's lists; a workspace not opted "
+            + "in is refused (409)")
+    void resetWorkspaceByHand() {
+        var workspaceId = enabledWorkspace();
+        var first = TopicsTestData.newId();
+        var second = TopicsTestData.newId();
+        var inFlight = TopicsTestData.newId();
+        for (var projectId : List.of(first, second, inFlight)) {
+            data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
+        }
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).queue(workspaceId, inFlight,
+                TopicsTestData.newId(), TopicProject.RunMode.UPDATE, Instant.now()));
+        var otherWorkspace = enabledWorkspace();
+        var otherProject = TopicsTestData.newId();
+        data.savedList(otherWorkspace, otherProject, tomorrowStart(), FIXTURE.size());
+
+        try (var response = resetWorkspace(workspaceId)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(JsonNode.class)).isEqualTo(resetAnswer(2, List.of(inFlight)));
+        }
+        for (var projectId : List.of(first, second)) {
+            assertThat(data.topics(projectId)).isEmpty();
+            assertThat(data.topicProject(projectId).listRunId()).isNull();
+        }
+        for (var projectId : List.of(inFlight, otherProject)) {
+            assertThat(data.topics(projectId)).hasSize(1);
+            assertThat(data.topicProject(projectId).listRunId()).isNotNull();
+        }
+
+        try (var response = resetWorkspace(aiLabelsOnlyWorkspace())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("not opted in");
+        }
+    }
+
+    @Test
+    @DisplayName("a project whose row a delete removes while the workspace reset runs is neither reset nor reported in "
+            + "flight: the reset waits for the delete")
+    void resetWorkspaceWaitsForADelete() throws Exception {
+        var workspaceId = enabledWorkspace();
+        var deleted = TopicsTestData.newId();
+        data.savedList(workspaceId, deleted, tomorrowStart(), FIXTURE.size());
+        var deleting = new CountDownLatch(1);
+        // Deletes the row and holds its lock for a while before the commit, as a project delete can.
+        var delete = CompletableFuture.runAsync(() -> template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicProjectDAO.class).deleteByProjects(workspaceId, List.of(deleted));
+            deleting.countDown();
+            try {
+                Thread.sleep(Duration.ofSeconds(2));
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }));
+        assertThat(deleting.await(30, TimeUnit.SECONDS)).isTrue();
+
+        try (var response = resetWorkspace(workspaceId)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(JsonNode.class)).isEqualTo(resetAnswer(0, List.of()));
+        }
+        delete.get(30, TimeUnit.SECONDS);
+    }
+
+    @Test
     @DisplayName("deleting projects deletes their topics, with their prototype vectors, in batches, and keeps another "
             + "project's")
     void projectDeleteDeletesItsTopics() {
@@ -410,6 +480,18 @@ class TopicsDiscoveryJobIntegrationTest {
                 .queryParam("workspace_id", workspaceId)
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));
+    }
+
+    private Response resetWorkspace(String workspaceId) {
+        return client.target("%s/v1/internal/topics/reset".formatted(baseUrl))
+                .queryParam("workspace_id", workspaceId)
+                .request(MediaType.APPLICATION_JSON_TYPE)
+                .post(Entity.json(""));
+    }
+
+    private static JsonNode resetAnswer(int reset, List<UUID> inFlight) {
+        return JsonUtils.valueToTree(Map.of("reset", reset, "skipped_in_flight", inFlight.size(),
+                "in_flight_project_ids", inFlight));
     }
 
     /** The planner's window end: tomorrow (UTC). */
