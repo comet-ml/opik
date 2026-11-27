@@ -101,7 +101,7 @@ const COMPLETION_TOKENS = 1_000_000;
  *   openrouter/poolside/laguna-s-2.1                     no row            -> nothing
  *   openrouter/nousresearch/hermes-3-llama-3.1-405b      no row            -> nothing
  *   openrouter/meta-llama/llama-3.1-70b-instruct         $0.72/M in + out  -> $1.44
- *   openrouter/qwen/qwen3.8-27b                        $0.035/M + $1.50/M -> $1.535
+ *   openrouter/qwen/qwen3.8-27b                        $0.06/M + $1.96/M  -> $2.02
  *
  * **These amounts track a GENERATED artifact and are expected to need
  * updating.** `model_prices_openrouter.json` is regenerated from OpenRouter's
@@ -191,13 +191,13 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRemovedRowSeed, 'name'>> = [
     key: 'qwen-priced',
     model: 'openrouter/qwen/qwen3.8-27b',
     catalogId: 'qwen/qwen3.8-27b',
-    expectedCost: 1.535,
+    expectedCost: 2.02,
     catalogLabelled: true,
     workings:
-      '1.0M x $0.035/M in + 1.0M x $1.50/M out — re-priced AGAIN by opik#9697 for 2.2.154 ' +
-      '($0.06/M + $2.20/M for 2.2.146 through 2.2.153, which is what this pin held before). ' +
-      'Fifth move; llama above was NOT touched by that regen, which is why only this one ' +
-      'changed. Check model_prices_openrouter.json before calling a changed amount a defect',
+      '1.0M x $0.06/M in + 1.0M x $1.96/M out — re-priced AGAIN by opik#9834 for 2.3.7 ' +
+      '($0.035/M + $1.50/M for 2.2.154 onwards, which is what this pin held before). ' +
+      'Sixth move; llama above was NOT touched by this regen either, which is why only this ' +
+      'one changed. Check model_prices_openrouter.json before calling a changed amount a defect',
   },
 ];
 

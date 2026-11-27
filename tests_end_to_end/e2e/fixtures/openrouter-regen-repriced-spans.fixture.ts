@@ -85,23 +85,27 @@ const COMPLETION_TOKENS = 1_000_000;
  * The three rows opik#9733's regen moved for 2.3.1, at the rates the release
  * under test actually ships.
  *
- *   openrouter/deepseek/deepseek-v4-pro-0813   $0.111/M in,
- *                                              $4.44/M out             -> $4.551
+ *   openrouter/deepseek/deepseek-v4-pro-0813   $0.25/M in,
+ *                                              $5.00/M out             -> $5.25
  *   openrouter/z-ai/glm-5.1                    $1.19/M -> $1.40/M in,
  *                                              $3.74/M -> $4.40/M out  -> $5.80
  *   openrouter/xiaomi/mimo-v2.5-pro            row REMOVED              -> nothing
  *
- * The deepseek figure was re-pinned during the 2.3.4 release pass, and the
- * reason is the one the "generated artifact" note below gives. 9733 moved that
- * row to $0.19/M in and $8.00/M out ($8.19), which is what this fixture was
- * harvested against and proven on. The very next regen — opik#9773, merged
- * 2026-11-25 and shipped IN 2.3.4 — moved it again to $0.111/M and $4.44/M, so
- * the old pin described a table no release holds any more. Verified against
- * `model_prices_openrouter.json` at the 2.3.4 version bump and at `main` (both
- * `1.11e-07` / `4.44e-06`) before the amount was changed, and the backend on
- * staging bills exactly $4.551 — so the server's lookup is right and the pin was
- * stale. glm-5.1 ($5.80) and the absent mimo row were re-checked in the same
- * pass and still hold.
+ * The deepseek figure has now been re-pinned TWICE, and the reason is the one
+ * the "generated artifact" note below gives. 9733 moved that row to $0.19/M in
+ * and $8.00/M out ($8.19), which is what this fixture was harvested against.
+ * opik#9773, shipped in 2.3.4, moved it again to $0.111/M and $4.44/M ($4.551).
+ * opik#9834's regen, shipped in 2.3.7, moved it a third time to $0.25/M and
+ * $5.00/M — so each previous pin described a table no release holds any more.
+ * Verified against `model_prices_openrouter.json` at `main` (`2.5e-07` /
+ * `5e-06`) before the amount was changed, and the backend on staging bills
+ * exactly $5.25 — so the server's lookup is right and the pin was stale.
+ * glm-5.1 ($5.80) and the absent mimo row were re-checked in the same pass and
+ * still hold.
+ *
+ * The row also lost two thirds of its `maxOutputTokens` ceiling in the same
+ * release (943718 -> 393216, opik#9835), which is a different claim and not
+ * this fixture's.
  *
  * ## Why these three, and why they are not vectors on an existing fixture
  *
@@ -112,15 +116,15 @@ const COMPLETION_TOKENS = 1_000_000;
  * to either trace would make its own assertions wrong. Neither names any id
  * here, so neither can fail when one of these rows moves.
  *
- * The deepseek row is still the discriminating one, for a reason the re-pin
- * does not take away: its two rates are two orders of magnitude apart
- * ($0.111/M in against $4.44/M out), and every wrong lookup available lands
- * somewhere else — 9733's rates give $8.19, the release before them $5.28, and
- * a fall-through to the undated `deepseek/deepseek-v4-pro` row ($1.28/M +
- * $2.56/M) gives $3.84. So a build shipping a stale copy of the file, reading a
- * previous release's rates, or resolving the wrong key cannot reproduce this
- * amount. A row re-priced in one direction (glm-5.1, both rates up) cannot say
- * that on its own.
+ * The deepseek row is still the discriminating one, for a reason the re-pins
+ * do not take away: its two rates are an order of magnitude apart ($0.25/M in
+ * against $5.00/M out), and every wrong lookup available lands somewhere
+ * else — 9773's rates give $4.551, 9733's give $8.19, the release before them
+ * $5.28, and a fall-through to the undated `deepseek/deepseek-v4-pro` row
+ * ($1.28/M + $2.56/M) gives $3.84. So a build shipping a stale copy of the
+ * file, reading a previous release's rates, or resolving the wrong key cannot
+ * reproduce this amount. A row re-priced in one direction (glm-5.1, both rates
+ * up) cannot say that on its own.
  *
  * The mimo row is the money-to-zero case, and it is the stronger version of it:
  * the same regen that dropped its price row also dropped its catalog `label`
@@ -149,13 +153,13 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRegenRepricedSeed, 'name'>> = [
     key: 'deepseek-repriced-both-ways',
     model: 'openrouter/deepseek/deepseek-v4-pro-0813',
     catalogId: 'deepseek/deepseek-v4-pro-0813',
-    expectedCost: 4.551,
+    expectedCost: 5.25,
     catalogLabelled: true,
     workings:
-      '1.0M x $0.111/M in + 1.0M x $4.44/M out, the rates 2.3.4 ships (opik#9773 re-priced this ' +
-      'row again, after 9733). No stale copy of the file reproduces this amount — 9733 gives ' +
-      '$8.19 and the release before it $5.28 — and a fall-through to the undated ' +
-      '`deepseek/deepseek-v4-pro` row gives $3.84',
+      '1.0M x $0.25/M in + 1.0M x $5.00/M out, the rates 2.3.7 ships (opik#9834 re-priced this ' +
+      'row a THIRD time, after 9733 and 9773). No stale copy of the file reproduces this ' +
+      'amount — 9773 gives $4.551, 9733 gives $8.19 and the release before it $5.28 — and a ' +
+      'fall-through to the undated `deepseek/deepseek-v4-pro` row gives $3.84',
   },
   {
     key: 'glm-repriced-upward',

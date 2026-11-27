@@ -14,7 +14,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * customer with no opt-in and no announcement. The three vectors are the three
  * things a regen can do to a row, and the seed carries one of each:
  *
- *   openrouter/deepseek/deepseek-v4-pro-0813   re-priced, twice over         $4.551
+ *   openrouter/deepseek/deepseek-v4-pro-0813   re-priced, three times over   $5.25
  *   openrouter/z-ai/glm-5.1                    re-priced upward              $5.80
  *   openrouter/xiaomi/mimo-v2.5-pro            row removed, label removed    nothing
  *
@@ -35,19 +35,20 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * the server's own lookup against the shipped price file rather than something
  * the seed asserted back to itself.
  *
- * The deepseek row is the load-bearing vector. Its two rates are two orders of
- * magnitude apart in the table 2.3.4 ships ($0.111/M in, $4.44/M out), and every
- * wrong lookup available lands on a different figure: 9733's own rates give
- * $8.19, the release before them $5.28, and a fall-through to the undated
- * `deepseek/deepseek-v4-pro` row gives $3.84. A row re-priced in one direction
- * alone — which glm-5.1 is — cannot discriminate that, which is why both are
- * here.
+ * The deepseek row is the load-bearing vector. Its two rates are an order of
+ * magnitude apart in the table 2.3.7 ships ($0.25/M in, $5.00/M out), and every
+ * wrong lookup available lands on a different figure: 9773's rates give $4.551,
+ * 9733's give $8.19, the release before them $5.28, and a fall-through to the
+ * undated `deepseek/deepseek-v4-pro` row gives $3.84. A row re-priced in one
+ * direction alone — which glm-5.1 is — cannot discriminate that, which is why
+ * both are here.
  *
- * That it has now moved TWICE is itself the point the fixture header makes: the
- * amount was re-pinned from $8.19 to $4.551 during the 2.3.4 release pass,
- * because opik#9773's regen shipped inside this release. The figures were
- * checked against the price file at the version bump before the pin changed, and
- * the backend was found right rather than regressed.
+ * That it has now moved THREE times is itself the point the fixture header
+ * makes: $8.19 -> $4.551 during the 2.3.4 release pass (opik#9773), and
+ * $4.551 -> $5.25 during the 2.3.6 -> 2.3.7 pass, because opik#9834's regen
+ * shipped inside this release. Each time the figures were checked against the
+ * shipped price file before the pin changed, and each time the backend was
+ * found right rather than regressed.
  *
  * The de-listed row is the mirror of it, and its two assertions pull in opposite
  * directions on purpose: it must be attributed NO cost, and it must still be

@@ -38,7 +38,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *   poolside/laguna-s-2.1                   no      no
  *   nousresearch/hermes-3-llama-3.1-405b    no      no
  *   meta-llama/llama-3.1-70b-instruct       YES     YES  ($1.44)
- *   qwen/qwen3.8-27b                        YES     YES  ($1.535)
+ *   qwen/qwen3.8-27b                        YES     YES  ($2.02)
  *
  * Both amounts come from the fixture's pins, which track a generated file and
  * move between releases — opik#9585's 2.2.146 regen re-priced BOTH the third and
