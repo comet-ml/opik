@@ -64,7 +64,7 @@ class TopicsDiscoveryCandidates {
         var from = windowFrom(night);
         var to = windowTo(night);
         if (workspaceIds.isEmpty()) {
-            return Mono.just(new Due(List.of(), 0, Map.of(), deadline));
+            return Mono.just(Due.builder().turns(List.of()).at(0).counts(Map.of()).deadline(deadline).build());
         }
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicProjectDAO.class).findListless(workspaceIds, from)))
@@ -73,6 +73,7 @@ class TopicsDiscoveryCandidates {
     }
 
     /** A workspace's {@code round}-th candidate, the most vectors first. */
+    @Builder(toBuilder = true)
     record Turn(@NonNull String workspaceId, int round) {
     }
 
@@ -80,6 +81,7 @@ class TopicsDiscoveryCandidates {
      * One plan's candidates from the turn at {@code at} on, taken one at a time. Each workspace's count is a deferred,
      * cached {@code Mono}: it runs once, when the workspace's first turn is taken.
      */
+    @Builder(toBuilder = true)
     record Due(@NonNull List<Turn> turns, int at, @NonNull Map<String, Mono<List<Candidate>>> counts,
             @NonNull PlanDeadline deadline) {
 
@@ -91,14 +93,15 @@ class TopicsDiscoveryCandidates {
                         var turn = turns.get(index);
                         return counts.get(turn.workspaceId())
                                 .filter(found -> turn.round() < found.size())
-                                .map(found -> new Next(found.get(turn.round()),
-                                        new Due(turns, index + 1, counts, deadline)));
+                                .map(found -> Next.builder().candidate(found.get(turn.round()))
+                                        .rest(toBuilder().at(index + 1).build()).build());
                     }, 0)
                     .next();
         }
     }
 
     /** A candidate, and the plan's candidates after it. */
+    @Builder(toBuilder = true)
     record Next(@NonNull Candidate candidate, @NonNull Due rest) {
     }
 
@@ -109,12 +112,12 @@ class TopicsDiscoveryCandidates {
         int rounds = open.values().stream().mapToInt(List::size).max().orElse(0);
         var turns = IntStream.range(0, rounds).boxed()
                 .flatMap(round -> workspaces.stream().filter(workspaceId -> round < open.get(workspaceId).size())
-                        .map(workspaceId -> new Turn(workspaceId, round)))
+                        .map(workspaceId -> Turn.builder().workspaceId(workspaceId).round(round).build()))
                 .toList();
         var counts = open.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
                 entry -> deadline.cut(Mono.defer(() -> count(entry.getKey(), entry.getValue(), from, to)))
                         .cache()));
-        return new Due(turns, 0, counts, deadline);
+        return Due.builder().turns(turns).at(0).counts(counts).deadline(deadline).build();
     }
 
     /** The project's traces with a vector in the window that ends at {@code night}'s start; 0 for none. */

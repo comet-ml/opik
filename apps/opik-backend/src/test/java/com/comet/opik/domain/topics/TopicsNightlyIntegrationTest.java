@@ -514,9 +514,8 @@ class TopicsNightlyIntegrationTest {
                 .when(failing).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
         var config = opikConfig.getTopics();
         var reader = InMemoryMetricReader.create();
-        var pass = new TopicsNightPass(config, template, workspaceService,
-                new TopicsDiscoveryCandidates(config, template, failing, new TopicsBackfillGate(config)),
-                TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
+        var pass = pass(new TopicsDiscoveryCandidates(config, template, failing, new TopicsBackfillGate(config)),
+                reader);
         var queued = new ArrayList<PlannedRun>();
 
         assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, capture(queued)).block()).isZero();
@@ -546,9 +545,7 @@ class TopicsNightlyIntegrationTest {
                 .when(slow).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
         var config = opikConfig.getTopics();
         var slowCandidates = new TopicsDiscoveryCandidates(config, template, slow, new TopicsBackfillGate(config));
-        var slowPass = new TopicsNightPass(config, template, workspaceService, slowCandidates,
-                TopicsMetricsReader.metrics(InMemoryMetricReader.create()), workspaceNames, projectService,
-                lockService);
+        var slowPass = pass(slowCandidates, InMemoryMetricReader.create());
         var slowPlanner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, slowCandidates,
                 publisher, new TopicsBackfillGate(config), slowPass, lockService);
         var budget = config.getRuns().getPlanBudget();
@@ -1157,6 +1154,10 @@ class TopicsNightlyIntegrationTest {
 
     /** A pass of its own, to read its metrics; its queue is the caller's, the night's end key in Redis the app's. */
     private TopicsNightPass pass(InMemoryMetricReader reader) {
+        return pass(candidates, reader);
+    }
+
+    private TopicsNightPass pass(TopicsDiscoveryCandidates candidates, InMemoryMetricReader reader) {
         return new TopicsNightPass(opikConfig.getTopics(), template, workspaceService, candidates,
                 TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
     }
@@ -1178,8 +1179,7 @@ class TopicsNightlyIntegrationTest {
     private UUID seededList(String workspaceId, int traces, int nightsAgo) {
         var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, traces, todayStart());
-        data.savedList(workspaceId, projectId, todayStart().minusSeconds(86_400L * nightsAgo), FIXTURE.size());
-        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
+        listed(workspaceId, projectId, nightsAgo);
         return projectId;
     }
 
@@ -1234,7 +1234,12 @@ class TopicsNightlyIntegrationTest {
 
     /** A saved list with its window until yesterday's start, its labels complete: no run of its own is due. */
     private void listedYesterday(String workspaceId, UUID projectId) {
-        data.savedList(workspaceId, projectId, yesterdayStart(), FIXTURE.size());
+        listed(workspaceId, projectId, 1);
+    }
+
+    /** A saved list with its window until {@code nightsAgo} nights before tonight's start, its labels complete. */
+    private void listed(String workspaceId, UUID projectId, int nightsAgo) {
+        data.savedList(workspaceId, projectId, todayStart().minusSeconds(86_400L * nightsAgo), FIXTURE.size());
         store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
     }
 
