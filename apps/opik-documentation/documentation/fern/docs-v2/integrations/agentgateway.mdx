@@ -1,0 +1,429 @@
+---
+description: Export agentgateway LLM traces to Opik over OpenTelemetry, and route each caller's traces to its own project and thread.
+headline: agentgateway
+og:description: Learn to export agentgateway LLM traces to Opik over OTLP, capture prompts and responses, and route traces to projects, threads, and application traces.
+og:site_name: Opik Documentation
+og:title: Integrate agentgateway with Opik
+title: Observability for agentgateway with Opik
+---
+
+[agentgateway](https://agentgateway.dev) is an open-source proxy for LLM, MCP, and agent-to-agent traffic. It runs as a standalone binary or on Kubernetes, and it can export an OpenTelemetry trace for each request that it serves.
+
+Opik ingests these traces at its native OTLP endpoint, without a plugin or a collector. Each LLM call becomes an Opik trace with an `llm` span that shows the model, the provider, the token usage, the cost, and the latency. A child span shows the request that the gateway sent to the LLM provider. You can also capture the prompt and the response, and send the traces of each caller to its own project and thread.
+
+<Note>
+  This guide needs Opik 2.3.2 or later.
+</Note>
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=agentgateway&utm_campaign=opik) provides a hosted version of the Opik platform. [Simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=agentgateway&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](/self-host/overview) for more information.
+
+You need three values for the export:
+
+- **API key**: copy it from your Opik account settings. A self-hosted open-source deployment does not need one: remove the `Authorization` and `Comet-Workspace` headers from the configurations below.
+- **Workspace**: the name of your Opik workspace.
+- **Project**: the Opik project for traces that do not name one. Opik creates the project on the first trace.
+
+## Trace Endpoint
+
+agentgateway exports traces over OTLP/HTTP. Use the host and the path for your deployment.
+
+| Deployment | Host | Path |
+| --- | --- | --- |
+| Opik Cloud | `www.comet.com:443` | `/opik/api/v1/private/otel/v1/traces` |
+| Enterprise deployment | `<your-comet-host>:443` | `/opik/api/v1/private/otel/v1/traces` |
+| Self-hosted open source | `<your-opik-host>:5173` (default port) | `/api/v1/private/otel/v1/traces` |
+
+<Warning>
+  Opik accepts OTLP over HTTP only. Set the protocol to `http`, not `grpc`.
+</Warning>
+
+## Export Traces to Opik
+
+<Tabs>
+  <Tab value="Standalone" title="Standalone">
+    Set your Opik credentials in the shell that starts agentgateway:
+
+    ```bash
+    export OPIK_API_KEY="<your-api-key>"
+    export OPIK_WORKSPACE="<your-workspace>"
+    export OPIK_PROJECT="agentgateway"
+    ```
+
+    Then add a tracing policy to your agentgateway configuration. agentgateway replaces the `${...}` variables with the values from the environment when it loads the file.
+
+    ```yaml title="config.yaml"
+    frontendPolicies:
+      tracing:
+        host: www.comet.com:443
+        protocol: http
+        path: /opik/api/v1/private/otel/v1/traces
+        randomSampling: true
+        policies:
+          backendTLS: {}
+          requestHeaderModifier:
+            set:
+              Authorization: "${OPIK_API_KEY}"
+              Comet-Workspace: "${OPIK_WORKSPACE}"
+              projectName: "${OPIK_PROJECT}"
+    ```
+
+    For a self-hosted deployment, replace `host` and `path` with the values from the [trace endpoint](#trace-endpoint) table. Remove `backendTLS` if your endpoint uses plain HTTP.
+
+  </Tab>
+  <Tab value="Kubernetes" title="Kubernetes">
+    Store your Opik credentials in a Secret in the namespace of the backend that you create in the next step:
+
+    ```bash
+    kubectl create secret generic opik-credentials \
+      -n agentgateway-system \
+      --from-literal=api-key="<your-api-key>" \
+      --from-literal=workspace="<your-workspace>" \
+      --from-literal=project="agentgateway"
+    ```
+
+    Then create a backend for the Opik endpoint, and attach a tracing policy to the Gateway that serves your LLM routes:
+
+    ```yaml title="opik-tracing.yaml"
+    apiVersion: agentgateway.dev/v1alpha1
+    kind: AgentgatewayBackend
+    metadata:
+      name: opik-otlp
+      namespace: agentgateway-system
+    spec:
+      static:
+        host: www.comet.com
+        port: 443
+      policies:
+        tls: {}
+        auth:
+          credentials:
+          - location:
+              header:
+                name: Authorization
+            secretRef:
+              name: opik-credentials
+              key: api-key
+          - location:
+              header:
+                name: Comet-Workspace
+            secretRef:
+              name: opik-credentials
+              key: workspace
+          - location:
+              header:
+                name: projectName
+            secretRef:
+              name: opik-credentials
+              key: project
+    ---
+    apiVersion: agentgateway.dev/v1alpha1
+    kind: AgentgatewayPolicy
+    metadata:
+      name: opik-tracing
+      namespace: agentgateway-system
+    spec:
+      targetRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: agentgateway-proxy
+      frontend:
+        tracing:
+          backendRef:
+            group: agentgateway.dev
+            kind: AgentgatewayBackend
+            name: opik-otlp
+            port: 443
+          protocol: HTTP
+          path: /opik/api/v1/private/otel/v1/traces
+          randomSampling: "true"
+    ```
+
+    ```bash
+    kubectl apply -f opik-tracing.yaml
+    ```
+
+    For a self-hosted deployment, replace `spec.static.host`, `spec.static.port`, and `path` with the values from the [trace endpoint](#trace-endpoint) table. Remove `tls` if your endpoint uses plain HTTP.
+
+  </Tab>
+</Tabs>
+
+<Warning>
+  The `Authorization` header value is the raw Opik API key. Do not add the `Bearer ` prefix.
+</Warning>
+
+Send a request through the gateway, then open your project in Opik. After a few seconds, you see a trace for the call. Its root span is an `llm` span, and its child span shows the request to the LLM provider. Opik reads the model, the provider, and the token usage from the standard `gen_ai.*` attributes, and calculates the cost. The other gateway attributes, such as the route and the HTTP status, are in the span metadata.
+
+## Capture Prompts and Responses
+
+agentgateway does not export message content by default. To show the prompt in the trace input and the response in the trace output, add these two attributes to the tracing policy:
+
+<Tabs>
+  <Tab value="Standalone" title="Standalone">
+    ```yaml
+    frontendPolicies:
+      tracing:
+        # ...host, protocol, path, and policies as above
+        attributes:
+          gen_ai.prompt: 'toJson(llm.prompt)'
+          gen_ai.completion: 'toJson(llm.completion)'
+    ```
+  </Tab>
+  <Tab value="Kubernetes" title="Kubernetes">
+    ```yaml
+    spec:
+      frontend:
+        tracing:
+          # ...backendRef, protocol, path, and randomSampling as above
+          attributes:
+            add:
+            - name: gen_ai.prompt
+              expression: 'toJson(llm.prompt)'
+            - name: gen_ai.completion
+              expression: 'toJson(llm.completion)'
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Prompts and responses can contain sensitive data. Add these attributes only when your data policy allows Opik to
+  store message content. agentgateway reads the request and response bodies to evaluate them, which adds some overhead
+  for large messages.
+</Note>
+
+## Route Traces to Projects and Threads
+
+One gateway usually serves many applications. Opik reads two span attributes that send each caller's traces to the right place:
+
+| Attribute | Opik field | Typical source |
+| --- | --- | --- |
+| `opik.project_name` | Project | The caller's API key metadata, or a request header |
+| `gen_ai.conversation.id` | Thread | A conversation ID that the application sends in a request header |
+
+Traces without `opik.project_name` go to the project in the `projectName` header. The child spans of the gateway go to the project of their request span. Opik can do this only when the child span and its request span arrive in the same export. agentgateway usually exports them together, but under heavy load a child span can arrive alone and go to the `projectName` header project.
+
+<Tabs>
+  <Tab value="Standalone" title="Standalone">
+    ```yaml
+    frontendPolicies:
+      tracing:
+        # ...host, protocol, path, and policies as above
+        attributes:
+          opik.project_name: 'default(request.headers["x-opik-project"], apiKey.opik_project)'
+          gen_ai.conversation.id: 'request.headers["x-conversation-id"]'
+
+    llm:
+      policies:
+        apiKey:
+          mode: strict
+          location:
+            header:
+              name: Authorization
+              prefix: "Bearer "
+          keys:
+          - key: "${RETAIL_TEAM_KEY}"
+            metadata:
+              opik_project: retail-assistant
+          - key: "${CARDS_TEAM_KEY}"
+            metadata:
+              opik_project: cards-assistant
+    ```
+  </Tab>
+  <Tab value="Kubernetes" title="Kubernetes">
+    ```yaml
+    spec:
+      frontend:
+        tracing:
+          # ...backendRef, protocol, path, and randomSampling as above
+          attributes:
+            add:
+            - name: opik.project_name
+              expression: 'default(request.headers["x-opik-project"], apiKey.opik_project)'
+            - name: gen_ai.conversation.id
+              expression: 'request.headers["x-conversation-id"]'
+    ```
+
+    Add the `opik_project` field to the metadata of each key in your [API key authentication](https://agentgateway.dev/docs/kubernetes/latest/security/apikey/) Secret.
+
+  </Tab>
+</Tabs>
+
+With this configuration, a caller can choose a project with the `x-opik-project` header. Without the header, the project comes from the metadata of the caller's API key. If your callers authenticate with JWTs, use a claim such as `jwt.team` in place of `apiKey.opik_project`.
+
+To group the calls of one conversation into an Opik thread, send the same `x-conversation-id` header with each call:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="https://<your-agentgateway-host>/v1", api_key="<your-team-key>")
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "What is my balance?"}],
+    extra_headers={"x-conversation-id": "conversation-1234"},
+)
+```
+
+## Nest Gateway Calls in Application Traces
+
+If your application already logs its own steps with the Opik SDK, the gateway's LLM span can appear inside the application's trace, not as a separate trace. This also works for the traces that `evaluate()` creates in an experiment.
+
+Add two attributes to the tracing policy:
+
+<Tabs>
+  <Tab value="Standalone" title="Standalone">
+    ```yaml
+    frontendPolicies:
+      tracing:
+        attributes:
+          opik.trace_id: 'request.headers["x-opik-trace-id"]'
+          opik.parent_span_id: 'request.headers["x-opik-parent-span-id"]'
+    ```
+  </Tab>
+  <Tab value="Kubernetes" title="Kubernetes">
+    ```yaml
+    spec:
+      frontend:
+        tracing:
+          attributes:
+            add:
+            - name: opik.trace_id
+              expression: 'request.headers["x-opik-trace-id"]'
+            - name: opik.parent_span_id
+              expression: 'request.headers["x-opik-parent-span-id"]'
+    ```
+  </Tab>
+</Tabs>
+
+Then send the current trace context with each call:
+
+```python
+from openai import OpenAI
+from opik import opik_context, track
+
+client = OpenAI(base_url="https://<your-agentgateway-host>/v1", api_key="<your-team-key>")
+
+
+@track(project_name="retail-assistant")
+def answer(question: str) -> str:
+    context = opik_context.get_distributed_trace_headers()
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": question}],
+        extra_headers={
+            "x-opik-trace-id": context["opik_trace_id"],
+            "x-opik-parent-span-id": context["opik_parent_span_id"],
+            "x-opik-project": "retail-assistant",
+        },
+    )
+    return response.choices[0].message.content
+```
+
+<Warning>
+  The gateway span and the application trace must be in the same Opik workspace and project. Send the project of the
+  application trace in the `x-opik-project` header. In an `evaluate()` run, this is the project of the dataset. A
+  nested `@track(project_name=...)` does not change the project of an existing trace.
+</Warning>
+
+## Send Traces to More Than One Workspace
+
+Opik reads the workspace from the `Comet-Workspace` header of the export request, so one tracing policy writes to one workspace. To send callers to different workspaces, export the traces to an [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) and split them there:
+
+1. Point the tracing policy at the OTLP/HTTP receiver of the collector (for example `host: <collector-host>:4318` and `path: /v1/traces`), and add an `opik.workspace` attribute, for example from `apiKey.opik_workspace`.
+2. In the collector, drop the child spans of agentgateway. agentgateway adds custom attributes to the request span only, so a child span has no `opik.workspace` and cannot be routed with its trace.
+3. Use the [routing connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/routingconnector) to send spans to one pipeline for each workspace.
+4. Give each pipeline its own `otlphttp` exporter, with the `Comet-Workspace` header and an API key for that workspace.
+
+```yaml title="otel-collector.yaml"
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  filter/drop_child_spans:
+    error_mode: ignore
+    trace_conditions:
+      - span.attributes["agentgateway.outbound.kind"] != nil
+
+connectors:
+  routing:
+    default_pipelines: [traces/platform]
+    table:
+      - condition: span.attributes["opik.workspace"] == "retail"
+        pipelines: [traces/retail]
+      # ...one entry for each workspace
+
+exporters:
+  otlphttp/retail:
+    traces_endpoint: https://www.comet.com/opik/api/v1/private/otel/v1/traces
+    headers:
+      Authorization: ${env:OPIK_RETAIL_API_KEY}
+      Comet-Workspace: retail
+      projectName: agentgateway
+  # ...one exporter for each workspace, plus one for traces without a workspace
+
+service:
+  pipelines:
+    traces/in:
+      receivers: [otlp]
+      processors: [filter/drop_child_spans]
+      exporters: [routing]
+    traces/retail:
+      receivers: [routing]
+      exporters: [otlphttp/retail]
+    # ...one pipeline for each workspace
+```
+
+<Tip>
+  Send traces without an `opik.workspace` attribute to a workspace that only your platform team can read. These traces
+  come from keys that have no Opik metadata, so they can contain prompts from any team.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No traces appear in Opik">
+    Check the host and the path for your deployment in the [trace endpoint](#trace-endpoint) table. Opik Cloud and
+    enterprise paths start with `/opik/api`, and the open-source path starts with `/api`. Check also that the protocol
+    is `http`, and that `randomSampling` is `true`. Without `randomSampling`, agentgateway does not start a trace for a
+    request that has no incoming trace context.
+  </Accordion>
+  <Accordion title="The export fails with a 401 or 403 error">
+    The `Authorization` header takes the raw Opik API key, without the `Bearer ` prefix. Check also that the key has
+    access to the workspace in the `Comet-Workspace` header.
+  </Accordion>
+  <Accordion title="Traces land in the wrong project">
+    Traces without an `opik.project_name` attribute go to the project in the `projectName` header, or to `Default
+    Project` when the header is absent. Check that the caller's API key has an `opik_project` metadata field, or that
+    the request has an `x-opik-project` header.
+  </Accordion>
+  <Accordion title="Gateway calls from an OpenTelemetry-instrumented application do not appear">
+    When an application sends a `traceparent` header, the gateway span joins the application's OpenTelemetry trace as
+    a child span. Opik then shows the span inside that trace. Export the application's own spans to the same Opik
+    project, so that Opik receives the full trace.
+  </Accordion>
+  <Accordion title="Rejected requests appear as traces">
+    agentgateway also traces requests that it rejects, for example a request with an invalid API key. These traces
+    have no key metadata, so they go to the `projectName` header project, unless the request has an `x-opik-project`
+    header. To export only successful calls, add `filter: 'response.code == 200'` to the tracing policy. This filter
+    also drops the calls that the LLM provider rejected.
+  </Accordion>
+</AccordionGroup>
+
+## agentgateway Documentation
+
+- [LLM observability](https://agentgateway.dev/docs/standalone/latest/integrations/llm-observability/): the tracing options of agentgateway and the other observability integrations.
+- [CEL reference](https://agentgateway.dev/docs/standalone/latest/reference/cel/): the variables, such as `llm.prompt` and `apiKey`, that the tracing attributes can use.
+- [API key authentication](https://agentgateway.dev/docs/kubernetes/latest/security/apikey/): how to define keys and their metadata.
+
+## Next steps
+
+- [OpenTelemetry integration](/integrations/opentelemetry): the Opik OTLP endpoint, its headers, and the attributes that Opik maps.
+- [Log distributed traces](/tracing/advanced/log_distributed_traces): how the Opik SDK passes trace context between services.
+- [Evaluate your LLM application](/evaluation/overview): build datasets from gateway traffic and score them.
+- [Gateway integrations](/production/gateway-guardrails/gateway): the other LLM gateways that Opik supports.
