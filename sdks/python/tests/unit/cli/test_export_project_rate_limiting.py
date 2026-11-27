@@ -26,6 +26,7 @@ Covers the changes introduced to handle server-side 429 throttling:
 
   export_single_project (manifest lifecycle)
     - the export manifest is closed before returning, whatever the outcome
+    - no export_manifest.db-wal / -shm files are left after the export
 """
 
 import sqlite3
@@ -829,6 +830,42 @@ class TestExportSingleProjectClosesManifest:
         manifest = mock_export.call_args.kwargs["manifest"]
         with pytest.raises(sqlite3.ProgrammingError):
             manifest.get_format()
+
+    def test_export_single_project__export_ends__no_wal_or_shm_left(self, tmp_path):
+        from opik.cli.exports.project import export_single_project
+
+        manifest_files = []
+        side_files_during_export = []
+
+        def fake_export_traces(*args, **kwargs):
+            manifest_file = kwargs["manifest"].manifest_file
+            manifest_files.append(manifest_file)
+            side_files_during_export.extend(
+                p.name for p in manifest_file.parent.glob(manifest_file.name + "-*")
+            )
+            return (3, 0, False)
+
+        with patch(f"{_MODULE}.export_traces", side_effect=fake_export_traces):
+            export_single_project(
+                client=MagicMock(),
+                project_name="test-proj",
+                project_dir=tmp_path / "projects",
+                filter_string=None,
+                max_results=None,
+                force=False,
+                debug=False,
+                format="json",
+            )
+
+        (manifest_file,) = manifest_files
+        # The manifest runs in WAL mode, so both side files exist while it is open;
+        # closing the last connection checkpoints the WAL and deletes them.
+        assert sorted(side_files_during_export) == [
+            manifest_file.name + "-shm",
+            manifest_file.name + "-wal",
+        ]
+        assert list(manifest_file.parent.glob(manifest_file.name + "-*")) == []
+        assert manifest_file.exists()
 
     def test_export_single_project__close_fails__still_returns_result(self, tmp_path):
         from opik.cli.exports.project import export_single_project
