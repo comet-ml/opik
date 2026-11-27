@@ -128,8 +128,8 @@ class TraceDAOImplTest {
                     .add("has_legacy_scores", true)
                     .render();
 
-            var traceFs = sql.substring(sql.indexOf("trace_fs AS ("), sql.indexOf("trace_fs_per_name AS ("));
-            assertThat(traceFs)
+            var scoreRows = sql.substring(sql.indexOf("score_rows AS ("), sql.indexOf("FROM span_scores sc"));
+            assertThat(scoreRows)
                     .contains("AND source_queue_id = :annotation_queue_id")
                     .doesNotContain("FROM feedback_scores FINAL");
         }

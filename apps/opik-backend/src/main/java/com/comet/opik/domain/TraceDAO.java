@@ -3200,7 +3200,11 @@ class TraceDAOImpl implements TraceDAO {
 
     // Split-B: per-project feedback-score and span-feedback-score aggregates.
     //
-    // scored_span_ids carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
+    // trace_final is read once: score_rows (trace scores, plus span scores keyed by their span's trace) is joined to
+    // it, so the hash side is the scores and no id set of trace_final is built. scored_trace_ids narrows trace_final
+    // to scored traces first, which is what keeps a search from scanning every trace in range.
+    //
+    // scored_spans carries the spans partition key as an IN over the weeks of the scored span ids themselves, so
     // it prunes without assuming anything about where a span sits relative to its trace. The ids exist only inside
     // ClickHouse here, so the set is a subquery rather than WeeklyPartitions.weeksOf. Each scored id is cast exactly as
     // spans_local_v2 materialises id_at (DateTime64(0), saturating past 2300), so the set holds the row's own partition
@@ -3209,8 +3213,64 @@ class TraceDAOImpl implements TraceDAO {
     // them).
     @VisibleForTesting
     static final String SELECT_FEEDBACK_SCORES_STATS = """
+            WITH span_scores AS (
+                <if(has_legacy_scores)>
+                SELECT project_id, entity_id, name, value
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                UNION ALL
+                <endif>
+                SELECT project_id, entity_id, name, value
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+            ), scored_spans AS (
+                SELECT DISTINCT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                AND id IN (SELECT entity_id FROM span_scores)
+                <if(spans_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(scored_id_at) - toIntervalDay(toDayOfWeek(scored_id_at, 1)))
+                    FROM (
+                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS scored_id_at
+                        FROM span_scores
+                    )
+                )
+                <endif>
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+            ), score_rows AS (
+                <if(has_legacy_scores && !annotation_queue_id)>
+                SELECT 'trace' AS kind, entity_id AS trace_id, project_id, entity_id, name, value
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                UNION ALL
+                <endif>
+                SELECT 'trace' AS kind, entity_id AS trace_id, project_id, entity_id, name, value
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(annotation_queue_id)> AND source_queue_id = :annotation_queue_id <endif>
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                UNION ALL
+                SELECT 'span' AS kind, ss.trace_id AS trace_id, sc.project_id AS project_id, sc.entity_id AS entity_id,
+                       sc.name AS name, sc.value AS value
+                FROM span_scores sc
+                INNER JOIN scored_spans ss ON sc.entity_id = ss.id
+            ),
             <if(filters_present)>
-            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+            <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
                 SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
                 FROM annotation_queue_items
                 WHERE workspace_id = :workspace_id
@@ -3485,6 +3545,29 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
+            , scored_trace_ids AS (
+                <if(has_legacy_scores && !annotation_queue_id)>
+                SELECT entity_id AS id
+                FROM feedback_scores
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                UNION ALL
+                <endif>
+                SELECT entity_id AS id
+                FROM authored_feedback_scores
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  <if(annotation_queue_id)> AND source_queue_id = :annotation_queue_id <endif>
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                UNION ALL
+                SELECT trace_id AS id
+                FROM scored_spans
+            )
             , trace_final AS (
                 SELECT id, project_id
                 FROM traces <if(!dedup_by_argmax)>final<endif>
@@ -3499,6 +3582,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                AND id IN (SELECT id FROM scored_trace_ids)
                 <if(uuid_from_time)>AND id >= :uuid_from_time
                 AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
@@ -3581,101 +3665,31 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <endif>
             ),
-            <else>
-            WITH
             <endif>
-            span_scores AS (
-                <if(has_legacy_scores)>
-                SELECT project_id, entity_id, name, value,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                UNION ALL
+            scores AS (
+                SELECT r.kind AS kind, r.project_id AS project_id, r.entity_id AS entity_id, r.name AS name,
+                       r.value AS value
+                <if(filters_present)>
+                FROM trace_final t
+                INNER JOIN score_rows r ON t.id = r.trace_id
+                <else>
+                FROM score_rows r
                 <endif>
-                SELECT project_id, entity_id, name, value, author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-            ), scored_span_ids AS (
-                SELECT id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                AND id IN (SELECT entity_id FROM span_scores)
-                <if(spans_partitioned)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                    SELECT toYYYYMMDD(toDate32(scored_id_at) - toIntervalDay(toDayOfWeek(scored_id_at, 1)))
-                    FROM (
-                        SELECT CAST(UUIDv7ToDateTime(toUUID(entity_id)) AS DateTime64(0, 'UTC')) AS scored_id_at
-                        FROM span_scores
-                    )
-                )
-                <endif>
-                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
-            ), trace_fs AS (
-                <if(has_legacy_scores && !annotation_queue_id)>
-                SELECT project_id, entity_id, name, value,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                  <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
-                UNION ALL
-                <endif>
-                SELECT project_id, entity_id, name, value, author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  <if(annotation_queue_id)> AND source_queue_id = :annotation_queue_id <endif>
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                  <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
-            ), trace_fs_per_name AS (
-                SELECT project_id, entity_id, name, avg(value) AS value
-                FROM trace_fs
-                GROUP BY project_id, entity_id, name
-            ), trace_fs_per_project AS (
-                SELECT project_id, name, avg(value) AS value
-                FROM trace_fs_per_name
-                GROUP BY project_id, name
-            ), trace_feedback_scores AS (
-                SELECT project_id,
-                       mapFromArrays(groupArray(name), groupArray(value)) AS feedback_scores
-                FROM trace_fs_per_project
-                GROUP BY project_id
-            ), span_fs AS (
-                SELECT project_id, entity_id, name, value, author
-                FROM span_scores
-                WHERE entity_id IN (SELECT id FROM scored_span_ids)
-            ), span_fs_per_name AS (
-                SELECT project_id, entity_id, name, avg(value) AS value
-                FROM span_fs
-                GROUP BY project_id, entity_id, name
-            ), span_fs_per_project AS (
-                SELECT project_id, name, avg(value) AS value
-                FROM span_fs_per_name
-                GROUP BY project_id, name
-            ), span_feedback_scores AS (
-                SELECT project_id,
-                       mapFromArrays(groupArray(name), groupArray(value)) AS span_feedback_scores
-                FROM span_fs_per_project
-                GROUP BY project_id
+            ), scores_per_name AS (
+                SELECT kind, project_id, entity_id, name, avg(value) AS value
+                FROM scores
+                GROUP BY kind, project_id, entity_id, name
+            ), scores_per_project AS (
+                SELECT kind, project_id, name, avg(value) AS value
+                FROM scores_per_name
+                GROUP BY kind, project_id, name
             )
             SELECT
-                coalesce(t.project_id, s.project_id) AS project_id,
-                t.feedback_scores AS feedback_scores,
-                s.span_feedback_scores AS span_feedback_scores
-            FROM trace_feedback_scores t
-            FULL OUTER JOIN span_feedback_scores s ON t.project_id = s.project_id
+                project_id,
+                mapFromArrays(groupArrayIf(name, kind = 'trace'), groupArrayIf(value, kind = 'trace')) AS feedback_scores,
+                mapFromArrays(groupArrayIf(name, kind = 'span'), groupArrayIf(value, kind = 'span')) AS span_feedback_scores
+            FROM scores_per_project
+            GROUP BY project_id
             SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>
             ;
             """;
@@ -5220,7 +5234,7 @@ class TraceDAOImpl implements TraceDAO {
      * from the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes.
      *
      * <p>Scoped to this template on purpose. It projects only group keys, so its aggregate state is small and peak
-     * memory improves, and it re-evaluates the CTE from three scopes, which is where the saving comes from.
+     * memory improves.
      * {@code SELECT_TRACES_SPANS_STATS} projects seven per-version columns and regresses on memory, so it keeps
      * {@code FINAL}. Numbers in OPIK-7636; re-measure before extending this to a wider projection.
      *
@@ -5304,7 +5318,7 @@ class TraceDAOImpl implements TraceDAO {
         // all-time semantics of the public getProjectStats API. The window is on TRACE time: only the traces
         // scan carries the parallel Date32 week-start predicate, so only it prunes by partition once traces is
         // partitioned; the spans scan is bounded by trace_id (correct — a span id may predate its trace) and
-        // will still read all partitions. Span feedback scores follow the trace window via scored_span_ids.
+        // will still read all partitions. Span feedback scores follow the trace window via scored_spans.
         String uuidFromTime = Objects.toString(instantToUUIDMapper.toLowerBound(fromTime), null);
         String uuidToTime = Objects.toString(instantToUUIDMapper.toUpperBound(toTime), null);
 
