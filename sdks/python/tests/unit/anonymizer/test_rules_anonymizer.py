@@ -316,3 +316,95 @@ class TestRulesAnonymizer:
         SSN: [SSN_REDACTED]
         """
         )
+
+
+class TestRulesAnonymizerDictKeys:
+    """String dictionary keys can carry personal data too, e.g. a mapping from
+    user e-mail to score. With anonymize_dict_keys=True the rules apply to keys."""
+
+    EMAIL = rules.RegexRule(r"[\w.+-]+@[\w-]+\.[\w.]+", "[EMAIL]")
+
+    def test_anonymize__email_dict_key_keys_enabled__redacted(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize({"jane.doe@example.com": 0.9, "plain": 1})
+
+        assert result == {"[EMAIL]": 0.9, "plain": 1}
+
+    def test_anonymize__nested_email_dict_keys_keys_enabled__redacted(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize(
+            {
+                "scores": {
+                    "jane@example.com": {"bob@example.com": "contact bob@example.com"}
+                }
+            }
+        )
+
+        assert result == {"scores": {"[EMAIL]": {"[EMAIL]": "contact [EMAIL]"}}}
+
+    def test_anonymize__keys_redacting_to_same_text__kept_distinct_with_suffix(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize(
+            {"a@example.com": 1, "b@example.com": 2, "c@example.com": 3}
+        )
+
+        assert result == {"[EMAIL]": 1, "[EMAIL] (2)": 2, "[EMAIL] (3)": 3}
+
+    def test_anonymize__redacted_key_matches_existing_key__existing_value_kept(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize({"[EMAIL]": "kept", "a@example.com": "also kept"})
+
+        assert result == {"[EMAIL]": "kept", "[EMAIL] (2)": "also kept"}
+
+    def test_anonymize__keys_at_max_depth_boundary__keys_and_values_unchanged(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], max_depth=1, anonymize_dict_keys=True
+        )
+
+        data = {"jane@example.com": "contact jane@example.com"}
+
+        assert anonymizer.anonymize(data) == data
+
+    def test_anonymize__nested_keys_past_max_depth__only_outer_keys_redacted(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], max_depth=2, anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize(
+            {"a@example.com": {"b@example.com": "c@example.com"}}
+        )
+
+        assert result == {"[EMAIL]": {"b@example.com": "c@example.com"}}
+
+    def test_anonymize__email_dict_key_keys_disabled__key_unchanged(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer([self.EMAIL])
+
+        assert anonymizer.anonymize({"a@example.com": "a@example.com"}) == {
+            "a@example.com": "[EMAIL]"
+        }
+
+    def test_anonymize__non_string_keys_keys_enabled__left_unchanged(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [rules.RegexRule(r"\d+", "#")], anonymize_dict_keys=True
+        )
+
+        assert anonymizer.anonymize({1: "id 42", "k1": "v"}) == {1: "id #", "k#": "v"}
+
+    def test_anonymize__tuple_data__items_redacted_and_tuple_kept(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer([self.EMAIL])
+
+        result = anonymizer.anonymize(("jane@example.com", ["bob@example.com"]))
+
+        assert result == ("[EMAIL]", ["[EMAIL]"])
