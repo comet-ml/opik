@@ -90,6 +90,37 @@ class TestSearchFiles:
         files = [m["file"] for m in result["matches"]]
         assert all("src/" in f for f in files)
 
+    @pytest.mark.parametrize(
+        "text",
+        ["caf\u00e9 \u2014 na\u00efve", "\U0001f419 octopus", "\u0410\u0411\u0412"],
+    )
+    def test_search_files__non_ascii_text__returned_as_utf8(
+        self, tmp_path: Path, text: str
+    ) -> None:
+        _git_init(tmp_path)
+        (tmp_path / "notes.md").write_bytes(f"TARGET {text}\n".encode("utf-8"))
+        _git_add_commit(tmp_path)
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        assert [m["content"] for m in result["matches"]] == [f"TARGET {text}"]
+
+    def test_search_files__file_not_valid_utf8__still_returns_matches(
+        self, tmp_path: Path
+    ) -> None:
+        _git_init(tmp_path)
+        (tmp_path / "latin1.txt").write_bytes(b"TARGET caf\xe9\n")
+        (tmp_path / "plain.txt").write_text("TARGET plain\n")
+        _git_add_commit(tmp_path)
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        by_file = {m["file"]: m["content"] for m in result["matches"]}
+        assert by_file["plain.txt"] == "TARGET plain"
+        assert by_file["latin1.txt"] == "TARGET caf\ufffd"
+
     def test_search_files__path_traversal__raises_error(self, tmp_path: Path) -> None:
         _git_init(tmp_path)
         handler = self._handler(tmp_path)

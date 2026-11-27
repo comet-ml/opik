@@ -67,12 +67,16 @@ class SearchFilesHandler(BaseHandler):
         elif sub_path:
             cmd.extend(["--", sub_path])
 
+        # git grep prints file contents as stored on disk. Decode them as UTF-8,
+        # not the locale code page. A file that is not valid UTF-8 gets U+FFFD
+        # for the bad bytes, so one such file does not fail the whole search.
         try:
             result = subprocess.run(
                 cmd,
                 cwd=str(self._repo_root),
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=min(timeout, 30.0),
             )
         except subprocess.TimeoutExpired:
