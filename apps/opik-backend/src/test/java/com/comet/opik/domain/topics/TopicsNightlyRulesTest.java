@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.within;
 @DisplayName("topics nightly update: rules")
 class TopicsNightlyRulesTest {
 
-    private static final AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
+    private static final AlgorithmConfig CONFIG = rulesConfig();
     private static final TopicTasks TASKS = new TopicTasks();
 
     private static final LocalDate DISCOVERY = LocalDate.parse("2026-10-01");
@@ -1234,6 +1234,14 @@ class TopicsNightlyRulesTest {
                 .definition(RandomStringUtils.secure().nextAlphanumeric(30))
                 .born(discoveredOn)
                 .prototypes(List.of());
+    }
+
+    // The fixtures put loose groups at tightness 0.79 and small ones at 1% of the window, just under these bars.
+    private static AlgorithmConfig rulesConfig() {
+        var config = TopicsTestAlgorithm.config();
+        config.setNightlyMinTightness(0.80);
+        config.setNightlyBigShare(0.02);
+        return config;
     }
 
     private static NightState state(int rebuilds, NightTopic... topics) {

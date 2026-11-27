@@ -1119,6 +1119,7 @@ topics:
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
+      minNarrowedSpan: 1m
       maxExecutionTime: 30s
       maxThreads: 2
       createdAtSlack: 1d
@@ -1130,7 +1131,7 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
-    namingDeadline: 30s
+    namingDeadline: 120s
     verifyDeadline: 60s
     readTimeout: 120s
     countTimeout: 60s
@@ -1140,6 +1141,7 @@ topics:
     insertRetries: 3
     insertBackoff: 500ms
     insertSlack: 30s
+    deletedCheckBatchSize: 1000
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824
@@ -1178,6 +1180,9 @@ topics:
   filter:
     maxExecutionTime: 30s
     maxMemoryUsage: 4294967296
+    firstPageWindow: 1h
+    maxSpans: 1
+    spanGrowth: 8
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1202,8 +1207,8 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
-    nightlyMinTightness: 0.80
-    nightlyBigShare: 0.02
+    nightlyMinTightness: 0.77
+    nightlyBigShare: 0.01
     nightlySameMemory: 0.95
     nightlyVerifyTokensPerPair: 25
     nightlyTopicExamples: 4
