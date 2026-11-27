@@ -30,5 +30,7 @@ public record TraceSearchCriteria(
         String searchText,
         UUID annotationQueueId,
         /** Set by {@code TraceService} for a search with a {@code topic_id} filter and a scope; else null. */
-        @Nullable TopicFilterScope topicScope) {
+        @Nullable TopicFilterScope topicScope,
+        Set<UUID> traceIds,
+        Set<String> threadIds) {
 }

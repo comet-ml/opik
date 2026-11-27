@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
+import uniq from "lodash/uniq";
 
 import { cn } from "@/lib/utils";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -26,16 +27,14 @@ import FeedbackDefinitionsSelectBox from "@/v2/pages-shared/annotation-queues/Fe
 import FeedbackDefinitionChips from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionChips";
 import AutomationZapIcon from "@/v2/pages-shared/annotation-queues/AutomationZapIcon";
 import StepperField from "@/v2/pages-shared/annotation-queues/StepperField";
-import FeedbackScoreConditions, {
-  DEFAULT_UNWINDOWED_CONDITION,
-} from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
+import AutomationFilterBlocks from "@/v2/pages-shared/annotation-queues/AutomationFilterBlocks";
+import useAutomationChipDefinitions from "@/v2/pages-shared/annotation-queues/useAutomationChipDefinitions";
 import {
-  ALL_OPERATOR_VALUES,
-  OPERATOR_VALUES,
-  AUTOMATION_MAX_CONDITIONS_PER_GROUP,
-  AUTOMATION_MAX_GROUPS,
-} from "@/v2/pages-shared/feedback-score-conditions/constants";
-import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
+  fromAutomationFilters,
+  splitAutomationFilters,
+  incompleteAutomationBlocks,
+  toAutomationFilters,
+} from "@/v2/pages-shared/annotation-queues/automationFilters";
 import { Switch } from "@/ui/switch";
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import AnnotatorViewCard from "./AnnotatorView/AnnotatorViewCard";
@@ -44,6 +43,7 @@ import useAnnotatorViewEditor from "./AnnotatorView/useAnnotatorViewEditor";
 
 import {
   AnnotationQueueAutomation,
+  AnnotationQueueAutomationFilter,
   ANNOTATION_QUEUE_SCOPE,
   AnnotationQueue,
 } from "@/types/annotation-queues";
@@ -103,32 +103,18 @@ export const formSchema = z
     automation_cap_enabled: z.boolean(),
     // A string like the thresholds: a number field's raw text is what validation needs to see.
     automation_max_items: z.string(),
-    // Held in the shared condition shape (name/operator/threshold) so the builder can be reused as-is,
-    // then mapped to the API's score_name/operator/value on submit. Only validated when the toggle is on:
-    // conditions left half-filled while automation is off must not block saving the queue.
-    automation_groups: z
-      .array(
-        z.object({
-          // Both limits mirror the API's @Size(max = 5); without them the form would happily build a
-          // payload the backend rejects with a 422 after everything has been filled in.
-          conditions: z
-            .array(
-              z.object({
-                name: z.string(),
-                operator: z.enum(ALL_OPERATOR_VALUES),
-                threshold: z.string(),
-              }),
-            )
-            .max(
-              AUTOMATION_MAX_CONDITIONS_PER_GROUP,
-              `Cannot exceed ${AUTOMATION_MAX_CONDITIONS_PER_GROUP} conditions per group`,
-            ),
-        }),
-      )
-      .max(
-        AUTOMATION_MAX_GROUPS,
-        `Cannot exceed ${AUTOMATION_MAX_GROUPS} groups`,
-      ),
+    // One block per filter field, in the order they were added; values are the Logs chip values, mapped
+    // to the API's filters on submit. Only validated when the toggle is on: blocks left empty while
+    // automation is off must not block saving the queue.
+    automation_filters: z.object({
+      ids: z.array(z.string()),
+      values: z.record(z.string(), z.any()),
+    }),
+    // Groups after the first, which the dialog does not edit: only the API can create more than one. They
+    // are sent back unchanged so editing such a queue here does not drop its other groups.
+    automation_other_filter_groups: z.array(z.array(z.any())),
+    // Filters of the first group on a field the dialog has no block for. Sent back with the group unchanged.
+    automation_hidden_filters: z.array(z.any()),
   })
   .superRefine((data, ctx) => {
     if (!data.automation_enabled) {
@@ -150,44 +136,18 @@ export const formSchema = z
       }
     }
 
-    const groups = data.automation_groups;
-    if (!groups.length || groups.every((g) => !g.conditions.length)) {
+    // A block only holds a value once it is a complete filter, so no values means nothing to match on.
+    if (
+      Object.keys(data.automation_filters.values).length === 0 &&
+      data.automation_hidden_filters.length === 0 &&
+      data.automation_other_filter_groups.length === 0
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "At least one condition is required",
-        path: ["automation_groups"],
+        message: "At least one filter is required",
+        path: ["automation_filters"],
       });
-      return;
     }
-
-    groups.forEach((group, groupIndex) => {
-      group.conditions.forEach((condition, conditionIndex) => {
-        const base = [
-          "automation_groups",
-          groupIndex,
-          "conditions",
-          conditionIndex,
-        ];
-        if (!condition.name) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Select a score",
-            path: [...base, "name"],
-          });
-        }
-        // isFinite, not isNaN: "1e999" parses to Infinity, which the backend rejects after submit.
-        if (
-          condition.threshold === "" ||
-          !Number.isFinite(Number(condition.threshold))
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Enter a number",
-            path: [...base, "threshold"],
-          });
-        }
-      });
-    });
   });
 
 type FormData = z.output<typeof formSchema>;
@@ -206,8 +166,8 @@ type AddEditAnnotationQueueDialogProps = {
  * The automation field of a queue payload, or nothing at all.
  *
  * Three states, because the API reads three: an absent automation leaves what is stored alone, a
- * present one without conditions reuses the stored conditions, and reusing them fails when there are
- * none stored. So a queue that never had automation has to send nothing rather than a disabled
+ * present one without filters reuses the stored filters, and reusing them fails when there are none
+ * stored. So a queue that never had automation has to send nothing rather than a disabled
  * automation — otherwise creating a queue, or editing one the SDK made, is rejected. With the feature
  * off nothing is sent either, whatever the queue already holds.
  *
@@ -220,14 +180,14 @@ export const buildAutomationPayload = ({
   enabled,
   capEnabled,
   maxItems,
-  groups,
+  filterGroups,
 }: {
   isFeatureEnabled: boolean;
   hasStoredAutomation: boolean;
   enabled: boolean;
   capEnabled: boolean;
   maxItems: string;
-  groups: FormData["automation_groups"];
+  filterGroups: AnnotationQueueAutomationFilter[][];
 }): AnnotationQueueAutomation | undefined => {
   if (!isFeatureEnabled) return undefined;
 
@@ -247,15 +207,7 @@ export const buildAutomationPayload = ({
     ...(capEnabled
       ? { max_items_in_queue: Number(maxItems) }
       : { clear_max_items_in_queue: true }),
-    conditions: {
-      groups: groups.map((group) => ({
-        conditions: group.conditions.map((condition) => ({
-          score_name: condition.name,
-          operator: condition.operator,
-          value: Number(condition.threshold),
-        })),
-      })),
-    },
+    filter_groups: filterGroups.filter((group) => group.length > 0),
   };
 };
 
@@ -275,9 +227,23 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
   const [page, setPage] = useState<"form" | "preview">("form");
+  // Set by the first save attempt, so blocks are only flagged once the user has tried to save them.
+  const [isCheckingBlocks, setIsCheckingBlocks] = useState(false);
 
   const isAutomationEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
+  );
+
+  const initialScope =
+    defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE;
+  const initialProjectId = defaultQueue?.project_id || projectId || "";
+  const initialDefinitions = useAutomationChipDefinitions(
+    initialProjectId,
+    initialScope,
+  );
+  const storedFirstGroup = splitAutomationFilters(
+    initialDefinitions,
+    defaultQueue?.automation?.filter_groups?.[0],
   );
 
   const form = useForm<FormInput, unknown, FormData>({
@@ -285,8 +251,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     defaultValues: {
       name: defaultQueue?.name || "",
       instructions: defaultQueue?.instructions || "",
-      project_id: defaultQueue?.project_id || projectId || "",
-      scope: defaultQueue?.scope || scope || ANNOTATION_QUEUE_SCOPE.TRACE,
+      project_id: initialProjectId,
+      scope: initialScope,
       feedback_definition_names: defaultQueue?.feedback_definition_names || [],
       comments_enabled: defaultQueue?.comments_enabled ?? true,
       annotators_per_item: defaultQueue?.annotators_per_item || 1,
@@ -299,23 +265,29 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       automation_enabled: isAutomationEnabled
         ? (defaultQueue?.automation?.enabled ?? false)
         : false,
-      // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
-      // queue can still arrive with automation and no conditions.
       automation_cap_enabled:
         defaultQueue?.automation?.max_items_in_queue != null,
       automation_max_items: String(
         defaultQueue?.automation?.max_items_in_queue ??
           DEFAULT_AUTOMATION_MAX_ITEMS,
       ),
-      automation_groups: defaultQueue?.automation?.conditions?.groups?.map(
-        (group) => ({
-          conditions: group.conditions.map((condition) => ({
-            name: condition.score_name,
-            operator: condition.operator,
-            threshold: String(condition.value),
-          })),
-        }),
-      ) ?? [{ conditions: [{ ...DEFAULT_UNWINDOWED_CONDITION }] }],
+      automation_filters: (() => {
+        const stored = storedFirstGroup.shown;
+        const values = fromAutomationFilters(initialDefinitions, stored);
+        // Blocks reopen in the order their filters were saved, which is the order they were added in.
+        const firstStored = (field: string) =>
+          stored.findIndex((filter) => filter.field === field);
+        return {
+          ids: initialDefinitions
+            .filter((def) => def.id in values)
+            .sort((a, b) => firstStored(a.field) - firstStored(b.field))
+            .map((def) => def.id),
+          values,
+        };
+      })(),
+      automation_other_filter_groups:
+        defaultQueue?.automation?.filter_groups?.slice(1) ?? [],
+      automation_hidden_filters: storedFirstGroup.kept,
     },
   });
 
@@ -338,9 +310,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     ["automation_max_items", "message"],
     undefined,
   ) as string | undefined;
-  // Automation matches on the scores of whatever the queue collects, so the score options and the copy
-  // follow the scope: thread scores are a different set of names from trace scores.
+  // Automation filters whatever the queue collects, so the filter fields and the copy follow the scope:
+  // threads are filtered on a different set of fields from traces.
   const isThreadScope = form.watch("scope") === ANNOTATION_QUEUE_SCOPE.THREAD;
+  const automationDefinitions = useAutomationChipDefinitions(
+    form.watch("project_id"),
+    form.watch("scope"),
+  );
   const annotatorViewEditor = useAnnotatorViewEditor({
     open,
     view: fullQueue?.annotator_view,
@@ -356,9 +332,27 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     setPage("preview");
     annotatorViewEditor.startOllie();
   };
-  const automationGroupsError = get(
+  // Set once from the stored automation and never edited here; the dialog remounts for every queue.
+  const otherFilterGroupsCount = form.getValues(
+    "automation_other_filter_groups",
+  ).length;
+  const hiddenFilters: AnnotationQueueAutomationFilter[] = form.getValues(
+    "automation_hidden_filters",
+  );
+  const hiddenFiltersCount = hiddenFilters.length;
+  // A field with a kept filter is not offered again: a second block for it would make the field's filters
+  // unrepresentable as a whole, and all of them would be kept on the next open, the new one included.
+  const hiddenFields = new Set(hiddenFilters.map((filter) => filter.field));
+  const hiddenFieldLabels = uniq(
+    hiddenFilters.map(
+      (filter) =>
+        initialDefinitions.find((def) => def.field === filter.field)?.label ??
+        filter.field,
+    ),
+  ).join(", ");
+  const automationFiltersError = get(
     form.formState.errors,
-    ["automation_groups", "message"],
+    ["automation_filters", "message"],
     undefined,
   ) as string | undefined;
 
@@ -371,7 +365,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       const {
         lock_timeout_minutes,
         automation_enabled,
-        automation_groups,
+        automation_filters,
+        automation_other_filter_groups,
+        automation_hidden_filters,
         automation_cap_enabled,
         automation_max_items,
         ...rest
@@ -388,7 +384,16 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           enabled: automation_enabled,
           capEnabled: automation_cap_enabled,
           maxItems: automation_max_items,
-          groups: automation_groups,
+          filterGroups: [
+            [
+              ...toAutomationFilters(
+                automationDefinitions,
+                automation_filters.values,
+              ),
+              ...automation_hidden_filters,
+            ],
+            ...automation_other_filter_groups,
+          ],
         }),
         ...(annotatorViewEditor.isUnsaved
           ? { annotator_view: annotatorView }
@@ -398,6 +403,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     [
       defaultQueue,
       isAutomationEnabled,
+      automationDefinitions,
       annotatorView,
       annotatorViewEditor.isUnsaved,
     ],
@@ -450,12 +456,27 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   );
 
   const onSubmit = useCallback(
-    (formData: FormData) =>
-      isEdit ? editQueue(formData) : createQueue(formData),
-    [isEdit, editQueue, createQueue],
+    (formData: FormData) => {
+      if (
+        formData.automation_enabled &&
+        incompleteAutomationBlocks(
+          automationDefinitions,
+          formData.automation_filters,
+        ).length > 0
+      ) {
+        setIsCheckingBlocks(true);
+        setPage("form");
+        return;
+      }
+      return isEdit ? editQueue(formData) : createQueue(formData);
+    },
+    [isEdit, editQueue, createQueue, automationDefinitions],
   );
 
-  const handleSubmit = form.handleSubmit(onSubmit, () => setPage("form"));
+  const handleSubmit = form.handleSubmit(onSubmit, () => {
+    setIsCheckingBlocks(true);
+    setPage("form");
+  });
 
   return (
     <Sheet
@@ -560,9 +581,15 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         type="single"
                         variant="ghost"
                         value={field.value}
-                        onValueChange={(value) =>
-                          value && field.onChange(value)
-                        }
+                        onValueChange={(value) => {
+                          if (!value) return;
+                          field.onChange(value);
+                          // Trace and thread filters are different fields, so the blocks start over.
+                          form.setValue("automation_filters", {
+                            ids: [],
+                            values: {},
+                          });
+                        }}
                         disabled={isEdit || Boolean(scope)}
                         className="w-full"
                       >
@@ -705,18 +732,15 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         automationEnabled && "border-b border-border",
                       )}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
-                          <AutomationZapIcon className="text-black" />
-                        </span>
-                        <span className="comet-body-s-accented">
-                          Automation
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="comet-body-s min-w-0 flex-1">
-                          Set conditions to automatically add matching{" "}
-                          {isThreadScope ? "threads" : "traces"} to this queue
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
+                            <AutomationZapIcon className="text-black" />
+                          </span>
+                          <span className="comet-body-s-accented">
+                            Add {isThreadScope ? "threads" : "traces"}{" "}
+                            automatically
+                          </span>
                         </div>
                         <FormField
                           control={form.control}
@@ -738,36 +762,61 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           )}
                         />
                       </div>
+                      <div className="comet-body-xs">
+                        {isThreadScope ? "Threads" : "Traces"} will be
+                        automatically added to the queue when they match every
+                        filter.
+                      </div>
                     </div>
                     {automationEnabled && (
-                      <div className="p-3 pl-[13px]">
-                        <FeedbackScoreConditions
-                          form={form}
-                          groupsPath="automation_groups"
-                          scoreSource={
-                            isThreadScope
-                              ? ScoreSource.THREADS
-                              : ScoreSource.TRACES
-                          }
-                          projectId={projectId}
-                          // The design offers > and < only. The schema still accepts "=", which the API
-                          // supports, so a condition saved through the API keeps validating.
-                          operators={[...OPERATOR_VALUES]}
-                          // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
-                          // them for now.
-                          singleGroup
-                          addConditionLabel="Add score"
-                          maxConditionsPerGroup={
-                            AUTOMATION_MAX_CONDITIONS_PER_GROUP
-                          }
-                          groupIconClassName="bg-lime-400"
-                          minimumMessage="Can't remove — automation needs at least one condition."
+                      <div className="p-2">
+                        <FormField
+                          control={form.control}
+                          name="automation_filters"
+                          render={({ field }) => (
+                            <AutomationFilterBlocks
+                              definitions={automationDefinitions.filter(
+                                (def) => !hiddenFields.has(def.field),
+                              )}
+                              value={field.value}
+                              onChange={field.onChange}
+                              incompleteIds={
+                                isCheckingBlocks
+                                  ? incompleteAutomationBlocks(
+                                      automationDefinitions,
+                                      field.value,
+                                    )
+                                  : []
+                              }
+                            />
+                          )}
                         />
-                        {automationGroupsError && (
+                        {automationFiltersError && (
                           <p className="comet-body-s mt-1.5 px-0.5 text-destructive">
-                            {automationGroupsError}
+                            {automationFiltersError}
                           </p>
                         )}
+                        {hiddenFiltersCount > 0 && (
+                          <p className="comet-body-xs mt-2 px-0.5 text-muted-slate">
+                            {hiddenFiltersCount === 1
+                              ? `1 more filter set through the API (${hiddenFieldLabels}) also applies and can't be edited here. It is kept as it is.`
+                              : `${hiddenFiltersCount} more filters set through the API (${hiddenFieldLabels}) also apply and can't be edited here. They are kept as they are.`}
+                          </p>
+                        )}
+                        {otherFilterGroupsCount > 0 && (
+                          <p className="comet-body-xs mt-2 px-0.5 text-muted-slate">
+                            {isThreadScope ? "Threads" : "Traces"} matching{" "}
+                            {otherFilterGroupsCount} other filter{" "}
+                            {otherFilterGroupsCount === 1 ? "group" : "groups"}{" "}
+                            set through the API are added too. They are kept as
+                            they are.
+                          </p>
+                        )}
+                        <p className="comet-body-xs mt-2 px-0.5 text-light-slate">
+                          {isThreadScope ? "Threads" : "Traces"} from
+                          experiments, the playground and optimizations are
+                          never added.
+                        </p>
                         <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
                           <div className="flex items-center gap-1.5">
                             <FormField

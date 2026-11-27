@@ -27,6 +27,7 @@ interface QueryBuilderChipPopoverContentProps {
   value: QueryBuilderChipValue | undefined;
   onApply: (value: QueryBuilderChipValue) => void;
   onClear: () => void;
+  inline?: boolean;
 }
 
 type FocusedField = { rowId: string; kind: "key" | "value" } | null;
@@ -34,7 +35,7 @@ type FocusedField = { rowId: string; kind: "key" | "value" } | null;
 const KEY_INPUT_TEST_ID = "filter-chip-key-input";
 const VALUE_INPUT_TEST_ID = "filter-chip-value-input";
 
-const isRowApplied =
+export const isRowApplied =
   (
     hasKey: boolean,
     keyValidate?: (v: string) => string | undefined,
@@ -54,7 +55,7 @@ const isRowApplied =
 
 const QueryBuilderChipPopoverContent: React.FC<
   QueryBuilderChipPopoverContentProps
-> = ({ definition, value, onApply, onClear }) => {
+> = ({ definition, value, onApply, onClear, inline = false }) => {
   const keyConfig = definition.key;
   const valueConfig = definition.value;
 
@@ -170,6 +171,11 @@ const QueryBuilderChipPopoverContent: React.FC<
             updateRow(row.id, patch);
           }}
           ariaLabel="Operator"
+          className={
+            inline && !keyConfig && !showValue
+              ? "flex-1 justify-between"
+              : undefined
+          }
         />
         {showValue &&
           (isNumericValue ? (
@@ -220,9 +226,12 @@ const QueryBuilderChipPopoverContent: React.FC<
 
   return (
     <div
-      className={cn("flex flex-col gap-2 p-3", "min-w-[360px] max-w-[800px]")}
+      className={cn(
+        "flex flex-col",
+        inline ? "w-full gap-1.5" : "min-w-[360px] max-w-[800px] gap-2 p-3",
+      )}
     >
-      <ul className="mb-2 flex flex-col gap-2">
+      <ul className={cn("flex flex-col", inline ? "gap-1.5" : "mb-2 gap-2")}>
         {rows.map((row, index) => (
           <li key={row.id}>
             <FilterRow onRemove={() => handleRemove(index)}>
@@ -233,6 +242,7 @@ const QueryBuilderChipPopoverContent: React.FC<
       </ul>
 
       <Button
+        type="button"
         variant="ghost"
         size="2xs"
         onClick={handleAddEmpty}
@@ -242,22 +252,24 @@ const QueryBuilderChipPopoverContent: React.FC<
         {addLabel}
       </Button>
 
-      <div className="flex flex-col">
-        <div className="border-t border-border" />
-        <div className="flex items-center pt-2">
-          <PopoverClose asChild>
-            <Button
-              variant="ghost"
-              size="2xs"
-              onClick={handleClearAll}
-              disabled={appliedCount === 0}
-              className="px-0 text-foreground hover:text-primary"
-            >
-              Clear{appliedCount > 0 ? ` (${appliedCount})` : ""}
-            </Button>
-          </PopoverClose>
+      {!inline && (
+        <div className="flex flex-col">
+          <div className="border-t border-border" />
+          <div className="flex items-center pt-2">
+            <PopoverClose asChild>
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={handleClearAll}
+                disabled={appliedCount === 0}
+                className="px-0 text-foreground hover:text-primary"
+              >
+                Clear{appliedCount > 0 ? ` (${appliedCount})` : ""}
+              </Button>
+            </PopoverClose>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

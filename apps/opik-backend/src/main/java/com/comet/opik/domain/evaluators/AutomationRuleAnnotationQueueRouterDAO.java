@@ -29,20 +29,23 @@ import java.util.stream.Stream;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface AutomationRuleAnnotationQueueRouterDAO {
 
+    /**
+     * Filters live in the rule's shared filters column. Conditions, which they replaced, get no condition groups on
+     * insert, so the previous release reads the row, and matches nothing on it, if it is rolled back to; an update
+     * leaves them alone. Dropped with the column.
+     */
     @SqlUpdate("""
             INSERT INTO automation_rule_annotation_queue_routers
                 (id, queue_id, scope, conditions, max_items_in_queue, created_by, last_updated_by)
-            VALUES (:id, :queueId, :scope, :conditions, :maxItemsInQueue, :userName, :userName)
+            VALUES (:id, :queueId, :scope, '{"groups": []}', :maxItemsInQueue, :userName, :userName)
             ON DUPLICATE KEY UPDATE
                 scope = :scope,
-                conditions = :conditions,
                 max_items_in_queue = :maxItemsInQueue,
                 last_updated_by = :userName
             """)
     void save(@Bind("id") UUID id,
             @Bind("queueId") UUID queueId,
             @Bind("scope") String scope,
-            @Bind("conditions") String conditions,
             @Bind("maxItemsInQueue") Integer maxItemsInQueue,
             @Bind("userName") String userName);
 
@@ -54,7 +57,7 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
     @SqlQuery("""
             SELECT rule.id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
                    rule.trigger_scope, rule.filters,
-                   router.queue_id, router.scope, router.conditions, router.max_items_in_queue,
+                   router.queue_id, router.scope, router.max_items_in_queue,
                    router.created_at, router.created_by, router.last_updated_at, router.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_annotation_queue_routers router ON rule.id = router.id
@@ -82,7 +85,7 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
     @SqlQuery("""
             SELECT rule.id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
                    rule.trigger_scope, rule.filters,
-                   router.queue_id, router.scope, router.conditions, router.max_items_in_queue,
+                   router.queue_id, router.scope, router.max_items_in_queue,
                    router.created_at, router.created_by, router.last_updated_at, router.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_annotation_queue_routers router ON rule.id = router.id

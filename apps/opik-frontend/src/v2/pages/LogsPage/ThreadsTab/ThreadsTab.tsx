@@ -16,8 +16,6 @@ import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
-import keyBy from "lodash/keyBy";
-import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
   DATE_RANGE_PRESET_ALLTIME,
@@ -99,19 +97,8 @@ import {
 } from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
-import {
-  ChipDefinition,
-  chipOptions,
-  chipOptionsValue,
-} from "@/shared/filter-chips/types";
-import {
-  TAGS_OPERATORS,
-  FEEDBACK_SCORE_OPERATORS,
-  STRING_OPERATORS,
-  LIST_OPERATORS,
-  COMMENTS_OPERATORS,
-} from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
-import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { buildThreadChipDefinitions } from "@/v2/pages-shared/traces/threadChipDefinitions";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import ResourceListCell from "@/shared/DataTableCells/ResourceListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -310,102 +297,6 @@ const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
   "created_by",
 ];
 
-const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
-  {
-    id: "start_time",
-    field: "start_time",
-    label: "Start time",
-    kind: "time",
-    columnType: COLUMN_TYPE.time,
-  },
-  {
-    id: "end_time",
-    field: "end_time",
-    label: "End time",
-    kind: "time",
-    columnType: COLUMN_TYPE.time,
-  },
-  {
-    id: "duration",
-    field: "duration",
-    label: "Duration",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.duration,
-    format: "duration",
-  },
-  {
-    id: "number_of_messages",
-    field: "number_of_messages",
-    label: "Message count",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.number,
-    format: "integer",
-  },
-  {
-    id: "first_message",
-    field: "first_message",
-    label: "First message",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Search first message" },
-  },
-  {
-    id: "last_message",
-    field: "last_message",
-    label: "Last message",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Search last message" },
-  },
-  {
-    id: "id",
-    field: "id",
-    label: "Thread ID",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Enter thread ID" },
-  },
-  {
-    id: "annotation_queue_ids",
-    field: "annotation_queue_ids",
-    label: "Annotation queue ID",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.list,
-    operators: LIST_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Enter annotation queue ID" },
-  },
-  {
-    id: "comments",
-    field: "comments",
-    label: "Comments",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.list,
-    operators: COMMENTS_OPERATORS,
-    defaultOperator: "is_not_empty",
-  },
-];
-
-const THREAD_CHIP_ORDER: string[] = [
-  "start_time",
-  "end_time",
-  "duration",
-  "number_of_messages",
-  "first_message",
-  "last_message",
-  "tags",
-  "id",
-  "annotation_queue_ids",
-  "comments",
-  "feedback_scores",
-];
-
 const THREAD_DEFAULT_PINNED_CHIPS = ["tags", "duration", "start_time"];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -508,46 +399,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     [feedbackScoresNames, isFeedbackScoresNamesPending],
   );
 
-  const threadChipDefinitions = useMemo<ChipDefinition[]>(() => {
-    const dynamicChips: Record<string, ChipDefinition> = {
-      tags: {
-        id: "tags",
-        field: "tags",
-        label: "Tags",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.list,
-        operators: TAGS_OPERATORS,
-        defaultOperator: "contains",
-        value: {
-          placeholder: "Type a tag…",
-          options: chipOptions(useTagsOptions, {
-            projectId,
-            entityType: "threads",
-          }),
-        },
-        addLabel: "Add tag",
-      },
-      feedback_scores: {
-        id: "feedback_scores",
-        field: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.numberDictionary,
-        operators: FEEDBACK_SCORE_OPERATORS,
-        defaultOperator: ">=",
-        key: {
-          placeholder: "Select score",
-          options: chipOptionsValue(threadScoreOptions),
-        },
-        value: { type: "numeric", decimals: 2, placeholder: "0" },
-      },
-    };
-    const byId: Record<string, ChipDefinition> = {
-      ...keyBy(THREAD_CHIP_DEFINITIONS, "id"),
-      ...dynamicChips,
-    };
-    return compact(THREAD_CHIP_ORDER.map((id) => byId[id]));
-  }, [projectId, threadScoreOptions]);
+  const threadChipDefinitions = useMemo<ChipDefinition[]>(
+    () => buildThreadChipDefinitions({ projectId, threadScoreOptions }),
+    [projectId, threadScoreOptions],
+  );
 
   const {
     chipsPinned: threadChipsPinned,

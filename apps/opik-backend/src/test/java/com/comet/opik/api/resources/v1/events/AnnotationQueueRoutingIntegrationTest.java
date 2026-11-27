@@ -9,7 +9,10 @@ import com.comet.opik.domain.AnnotationQueueRoutingMessage;
 import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.redis.testcontainers.RedisContainer;
@@ -121,7 +124,8 @@ class AnnotationQueueRoutingIntegrationTest {
         bufferService = new AnnotationQueueRoutingBufferService(redissonClient, publisher, config);
         featureFlags = mock(FeatureFlags.class);
         when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags,
+                mock(SpanDAO.class), mock(TraceDAO.class), mock(TraceThreadService.class));
     }
 
     static Stream<Arguments> scopes() {

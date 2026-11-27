@@ -709,6 +709,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: TRACE_DATA_TYPE.spans,
         scoreOptions: spanScoreOptions,
         feedbackScoresLabel: "Feedback scores",
+        feedbackScoresAddLabel: "Add feedback score",
         isGuardrailsEnabled,
         logsSource: LOGS_SOURCE.sdk,
       }),

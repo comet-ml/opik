@@ -22,11 +22,24 @@ const form = (overrides: Record<string, unknown> = {}) => ({
   automation_enabled: true,
   automation_cap_enabled: false,
   automation_max_items: "1000",
-  automation_groups: [
-    {
-      conditions: [{ name: "Hallucination", operator: ">", threshold: "0.5" }],
+  automation_filters: {
+    ids: ["tags"],
+    values: {
+      tags: {
+        rows: [
+          {
+            id: "row-1",
+            field: "tags",
+            type: "list",
+            operator: "contains",
+            value: "production",
+          },
+        ],
+      },
     },
-  ],
+  },
+  automation_other_filter_groups: [],
+  automation_hidden_filters: [],
   ...overrides,
 });
 
@@ -68,7 +81,7 @@ describe("AddEditAnnotationQueueDialog form schema", () => {
       ).toHaveLength(0);
     });
 
-    // Conditions and the cap are only the automation's business: a queue saved with automation off
+    // Filters and the cap are only the automation's business: a queue saved with automation off
     // must not be blocked by controls its author never opened.
     it("ignores the value when automation itself is off", () => {
       expect(
@@ -82,12 +95,66 @@ describe("AddEditAnnotationQueueDialog form schema", () => {
   });
 });
 
+describe("the automation filters", () => {
+  const filterIssues = (overrides: Record<string, unknown>) => {
+    const result = formSchema.safeParse(form(overrides));
+    return result.success
+      ? []
+      : result.error.issues.filter((issue) =>
+          issue.path.includes("automation_filters"),
+        );
+  };
+
+  it("requires at least one filter while automation is on", () => {
+    // A block that was added but never filled in holds no value, so it does not count.
+    expect(
+      filterIssues({ automation_filters: { ids: ["tags"], values: {} } }),
+    ).toHaveLength(1);
+  });
+
+  it("accepts a filled-in block", () => {
+    expect(filterIssues({})).toHaveLength(0);
+  });
+
+  it("accepts no blocks when the automation keeps groups set through the API", () => {
+    expect(
+      filterIssues({
+        automation_filters: { ids: [], values: {} },
+        automation_other_filter_groups: [
+          [{ field: "tags", operator: "contains", value: "prod" }],
+        ],
+      }),
+    ).toHaveLength(0);
+  });
+
+  it("accepts no blocks when the first group keeps filters the dialog cannot show", () => {
+    expect(
+      filterIssues({
+        automation_filters: { ids: [], values: {} },
+        automation_hidden_filters: [
+          { field: "guardrails", operator: "=", value: "failed" },
+        ],
+      }),
+    ).toHaveLength(0);
+  });
+
+  it("ignores empty blocks while automation is off", () => {
+    expect(
+      filterIssues({
+        automation_enabled: false,
+        automation_filters: { ids: [], values: {} },
+      }),
+    ).toHaveLength(0);
+  });
+});
+
 describe("the automation payload", () => {
-  const groups = [
+  const filters = [
     {
-      conditions: [
-        { name: "accuracy", operator: "<" as const, threshold: "0.5" },
-      ],
+      field: "feedback_scores",
+      operator: "<=" as const,
+      key: "accuracy",
+      value: "0.5",
     },
   ];
 
@@ -98,7 +165,7 @@ describe("the automation payload", () => {
       enabled: false,
       capEnabled: false,
       maxItems: "100",
-      groups,
+      filterGroups: [filters],
       ...overrides,
     } as Parameters<typeof buildAutomationPayload>[0]);
 
@@ -114,12 +181,12 @@ describe("the automation payload", () => {
   });
 
   it("sends nothing for a queue that never had automation", () => {
-    // The API rejects a disabled automation whose stored conditions it cannot find, which would turn
+    // The API rejects a disabled automation whose stored filters it cannot find, which would turn
     // creating a queue, or renaming one the SDK made, into a 400.
     expect(build()).toBeUndefined();
   });
 
-  it("turns a stored automation off without touching its conditions or ceiling", () => {
+  it("turns a stored automation off without touching its filters or ceiling", () => {
     expect(build({ hasStoredAutomation: true, capEnabled: true })).toEqual({
       enabled: false,
     });
@@ -139,14 +206,17 @@ describe("the automation payload", () => {
     expect(build({ enabled: true })).toEqual({
       enabled: true,
       clear_max_items_in_queue: true,
-      conditions: {
-        groups: [
-          {
-            conditions: [{ score_name: "accuracy", operator: "<", value: 0.5 }],
-          },
-        ],
-      },
+      filter_groups: [filters],
     });
+  });
+
+  it("sends every group, dropping one left empty", () => {
+    const other = [
+      { field: "tags", operator: "contains" as const, value: "prod" },
+    ];
+    expect(
+      build({ enabled: true, filterGroups: [[], other] })?.filter_groups,
+    ).toEqual([other]);
   });
 
   it("sends the ceiling as a number when the cap is ticked", () => {

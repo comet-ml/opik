@@ -1,6 +1,9 @@
 import React, { useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { FormErrorSkeleton } from "@/ui/form";
+import { OperatorCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/OperatorCell";
+import { InlineFilterRow } from "@/shared/filter-chips/chips/QueryBuilderChip/FilterRow";
 import { PopoverClearFooter } from "@/shared/filter-chips/chips/PopoverClearFooter";
 import FilterOperatorSelect, {
   FilterOperatorOption,
@@ -28,6 +31,7 @@ interface TimeChipPopoverContentProps {
   value: TimeChipValue | undefined;
   onApply: (value: TimeChipValue) => void;
   onClear: () => void;
+  inline?: boolean;
 }
 
 const OPERATOR_OPTIONS: FilterOperatorOption<TimeChipMode>[] = [
@@ -100,6 +104,7 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
   value,
   onApply,
   onClear,
+  inline = false,
 }) => {
   const [mode, setMode] = useState<TimeChipMode>(
     value?.mode ?? TIME_DEFAULT_MODE,
@@ -186,6 +191,51 @@ const TimeChipPopoverContent: React.FC<TimeChipPopoverContentProps> = ({
     return null;
   })();
 
+  if (inline) {
+    return (
+      <div className="flex flex-col gap-1">
+        <InlineFilterRow>
+          <OperatorCell
+            value={mode}
+            options={OPERATOR_OPTIONS}
+            onSelect={handleModeChange}
+            ariaLabel="Operator"
+          />
+          <SlotRow
+            compact
+            slot={slotA}
+            dateInputRef={dateInputARef}
+            calendarDefaultTime={calendarDefaultTime(mode, "A")}
+            onChange={patchSlotA}
+          />
+          {mode === "between" && (
+            <>
+              <span className="comet-body-xs shrink-0 px-2 text-muted-slate">
+                and
+              </span>
+              <SlotRow
+                compact
+                slot={slotB}
+                invalid={isRangeInverted}
+                dateInputRef={dateInputBRef}
+                calendarDefaultTime={calendarDefaultTime(mode, "B")}
+                onChange={patchSlotB}
+              />
+            </>
+          )}
+        </InlineFilterRow>
+        {isRangeInverted && (
+          <FormErrorSkeleton className="comet-body-xs">
+            End must be after start
+          </FormErrorSkeleton>
+        )}
+        {draftHint && (
+          <p className="comet-body-xs text-muted-slate">{draftHint}</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-[320px] flex-col gap-4 p-3">
       <FilterOperatorSelect
@@ -252,6 +302,7 @@ interface SlotRowProps {
   dateInputRef: React.RefObject<HTMLInputElement | null>;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
+  compact?: boolean;
 }
 
 const SlotRow: React.FC<SlotRowProps> = ({
@@ -262,17 +313,20 @@ const SlotRow: React.FC<SlotRowProps> = ({
   dateInputRef,
   calendarDefaultTime,
   onChange,
+  compact = false,
 }) => {
   const timeInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="flex w-full items-start gap-2">
+    <div className={cn("flex w-full items-start", !compact && "gap-2")}>
       {label && (
         <span className="comet-body-xs mt-2 w-[31px] shrink-0 text-muted-slate">
           {label}
         </span>
       )}
-      <div className="flex min-w-0 flex-1 items-start gap-1">
+      <div
+        className={cn("flex min-w-0 flex-1 items-start", !compact && "gap-1")}
+      >
         <TimeChipDateInput
           slot={slot}
           invalid={invalid}
@@ -281,12 +335,14 @@ const SlotRow: React.FC<SlotRowProps> = ({
           calendarDefaultTime={calendarDefaultTime}
           onChange={onChange}
           onPicked={() => timeInputRef.current?.focus()}
+          compact={compact}
         />
         <TimeChipTimeInput
           slot={slot}
           invalid={invalid}
           inputRef={timeInputRef}
           onChange={onChange}
+          compact={compact}
         />
       </div>
     </div>

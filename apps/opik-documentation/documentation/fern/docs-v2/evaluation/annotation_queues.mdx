@@ -42,8 +42,8 @@ Then set:
 - **Lock timeout**: how long an annotator's review slot stays reserved. When it expires, another annotator can
   take that slot. If the queue requires multiple annotators per item, they can review the same item at once using
   separate slots. Raise the timeout when items take longer to review.
-- **Automation**: add traces or threads to the queue when their scores match conditions, for example
-  `policy_judge < 0.5`. See [Add items to the queue](#add-items-to-the-queue).
+- **Automation**: add traces or threads to the queue when they match filters, for example a `policy_judge` score
+  below 0.5 on traces tagged `production`. See [Add items to the queue](#add-items-to-the-queue).
 
 <Note>
   You can also ask your coding agent to create the queue through the [Opik MCP server](/mcp-server).
@@ -110,19 +110,20 @@ and dark themes. If it fails on an item, Opik shows the default view for that it
 ## Add items to the queue
 
 There are two main ways to add traces or threads to an annotation queue: select them from the logs, or set up
-automation to add them as new feedback scores arrive.
+automation to add them as they match your filters.
 
 On your project's **Logs** page, select the traces or threads you want reviewed and click
 **Add to > Annotation queue**. You can also add an individual item while viewing it.
 
-To keep the queue filled as your agent runs, turn on **Automation** when creating or editing the queue. Set
-conditions on feedback scores, such as `policy_judge < 0.5`, to route low-scoring items to your experts. Opik checks
-for matches when new scores arrive, including from [online evaluation rules](/production/online-evaluation/rules),
-and adds items that meet all conditions. Set **Cap automatically added items at** to limit how much work enters
-the queue.
+To keep the queue filled as your agent runs, turn on **Automation** when creating or editing the queue and add
+filters: the same ones the **Logs** page offers for traces or threads, such as feedback scores, tags, metadata,
+cost or errors. For example, a `policy_judge` score below 0.5 routes low-scoring items to your experts. Opik checks
+an item again whenever something its filters read changes, such as a new score from
+[online evaluation rules](/production/online-evaluation/rules), and adds it once it matches every filter. Set
+**Cap automatically added items at** to limit how much work enters the queue.
 
-Automation starts with new scores on traces and threads logged by your application. It does not backfill older
-scores or re-add items that were previously in the queue; add those manually when needed.
+Automation only considers traces and threads logged by your application, from the moment it is turned on. It does
+not backfill older items or re-add items that were previously in the queue; add those manually when needed.
 
 You can also [add items with the SDK](#manage-queues-with-the-sdk). In the queue's items table, the **Source** column
 shows how each item was added.

@@ -102,6 +102,12 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(100) @Max(5000) private int jobBatchSize;
 
+    // Automation searches one message runs at once. Each is a ClickHouse query, and up to consumerBatchSize
+    // messages are processed at once per replica, so the ceiling on concurrent searches per replica is the
+    // product of the two.
+    @Valid @JsonProperty
+    @Min(1) @Max(16) private int searchConcurrency;
+
     // These three set the consumer's throughput ceiling together, and it is easy to under-provision by
     // accident: new messages per second per replica is roughly
     //     (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio)
