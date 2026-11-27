@@ -6,18 +6,16 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import {
-  LLM_JUDGE,
-  LLM_MESSAGE_ROLE,
-  LLM_SCHEMA_TYPE,
-  LLMJudgeSchema,
-} from "@/types/llm";
+import { LLM_JUDGE, LLM_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/llm";
 import {
   JudgeTemplateOption,
   TASK_COMPLETION_DISPLAY,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
+import {
+  createRulePrompt,
+  DECISION_MODEL_DEFAULT_PROMPT,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
-const INPUT_AND_OUTPUT = "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}";
 const OUTPUT_ONLY = "OUTPUT:\n{{output}}";
 
 const question = (description: string, name = ""): LLMJudgeSchema => ({
@@ -37,16 +35,14 @@ const createOption = (
   template: {
     value: LLM_JUDGE.custom,
     label: display.label,
-    messages: [
-      { id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content: text },
-    ],
+    messages: createRulePrompt(text),
     variables: {},
     schema: questions,
   },
 });
 
 export const DECISION_MODEL_TEMPLATE_OPTIONS: JudgeTemplateOption[] = [
-  createOption(TASK_COMPLETION_DISPLAY, INPUT_AND_OUTPUT, [
+  createOption(TASK_COMPLETION_DISPLAY, DECISION_MODEL_DEFAULT_PROMPT, [
     question(
       "Does the output complete the task the user asked for in the input?",
     ),
@@ -59,7 +55,7 @@ export const DECISION_MODEL_TEMPLATE_OPTIONS: JudgeTemplateOption[] = [
       icon: TriangleAlert,
       iconClassName: "bg-[var(--judge-template-hallucination)]",
     },
-    INPUT_AND_OUTPUT,
+    DECISION_MODEL_DEFAULT_PROMPT,
     [question("Does the output make claims that the input does not support?")],
   ),
   createOption(
@@ -69,7 +65,7 @@ export const DECISION_MODEL_TEMPLATE_OPTIONS: JudgeTemplateOption[] = [
       icon: Target,
       iconClassName: "bg-[var(--judge-template-answer-relevance)]",
     },
-    INPUT_AND_OUTPUT,
+    DECISION_MODEL_DEFAULT_PROMPT,
     [question("Does the output directly answer the question in the input?")],
   ),
   createOption(
@@ -105,7 +101,7 @@ export const DECISION_MODEL_TEMPLATE_OPTIONS: JudgeTemplateOption[] = [
       icon: Headset,
       iconClassName: "bg-sky-300",
     },
-    INPUT_AND_OUTPUT,
+    DECISION_MODEL_DEFAULT_PROMPT,
     [
       question("Does the output solve the problem the user describes?"),
       question(

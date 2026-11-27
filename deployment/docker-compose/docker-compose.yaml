@@ -199,6 +199,7 @@ services:
       # read-only user (provision_agent_insights_readonly_user.sh, after migrations) and connects as it.
       TOGGLE_OLLIE_ENABLED: ${TOGGLE_OLLIE_ENABLED:-"false"}
       TOGGLE_CUSTOM_CHARTS_ENABLED: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-"false"}
+      TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED: ${TOGGLE_CUSTOM_CHARTS_PUBLIC_ENDPOINTS_ENABLED:-"false"}
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-"relaxed"}
@@ -236,7 +237,8 @@ services:
       ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
       # Runs the span weeks backfill job, which indexes the spans written before span_weeks_mv.
       ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
-      # Bounds span reads by trace id with span_weeks; only with SPAN_COLUMNS_NON_NULLABLE, once the backfill completes.
+      # Bounds span reads by trace or project with span_weeks; only with SPAN_COLUMNS_NON_NULLABLE, once the backfill
+      # has planned its chunks and done them all. See config.yml for its timing in the spans cutover.
       ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
       # Readiness probes for the Hyperscale topology, both off for the single-node Compose stack: the cluster probe
       # checks the Distributed cluster definition is visible, the cold-storage probe checks the cold_s3 tiered disk.
@@ -319,7 +321,9 @@ services:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
     hostname: python-backend
-    privileged: true # Required for Docker-in-Docker, so it can launch containers
+    extends: # privileged mode, which only the docker strategy needs, follows PYTHON_CODE_EXECUTOR_STRATEGY
+      file: python-backend-${PYTHON_CODE_EXECUTOR_STRATEGY:-process}.yaml
+      service: python-backend
     environment:
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317

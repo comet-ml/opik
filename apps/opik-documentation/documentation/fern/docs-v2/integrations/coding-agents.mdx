@@ -23,7 +23,7 @@ that does most of the work; the linked page has the full setup, endpoint modes a
 
 | Agent | Path into Opik | Quick start | Content captured | Cost Intelligence |
 | --- | --- | --- | --- | --- |
-| [Claude Code](/integrations/claude-code) | Opik plugin (recommended), or native OTel export (beta) | `/plugin install opik` inside Claude Code | Plugin: yes. OTel: redacted unless enabled | Supported |
+| [Claude Code](/integrations/claude-code) | Native OTel export (beta) | `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` plus the Opik endpoint | Redacted unless enabled | Supported |
 | [GitHub Copilot](/integrations/github-copilot) (VS Code, CLI) | Native OTel export | `github.copilot.chat.otel.enabled: true` plus the Opik endpoint | Off unless `captureContent` is enabled | Ask your account team |
 | [Cursor](/integrations/cursor) | Opik Cursor extension | Install the `Opik` extension and paste your API key | Yes | Supported |
 | [OpenAI Codex](/integrations/openai-codex) | Native OTel export (internal spans and `codex.*` events only) | An `[otel.trace_exporter.otlp-http]` table in `~/.codex/config.toml` | No. Prompt text and tokens go to the logs signal, which Opik does not ingest | Supported |
@@ -31,7 +31,7 @@ that does most of the work; the linked page has the full setup, endpoint modes a
 
 <CardGroup cols={2}>
   <Card title="Claude Code" href="/integrations/claude-code" icon="fa-regular fa-terminal">
-    Opik plugin (recommended) captures every turn with full content. Native OpenTelemetry export is available as a beta alternative.
+    Native OpenTelemetry export (beta) sends each prompt, model call and tool call to Opik as spans. The Opik plugin adds the Opik skills and MCP tools.
   </Card>
   <Card title="GitHub Copilot" href="/integrations/github-copilot" icon="fa-brands fa-github">
     Native OpenTelemetry export from Copilot Chat in VS Code and from Copilot CLI. Enterprise managed settings can mandate it fleet-wide.

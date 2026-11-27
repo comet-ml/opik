@@ -309,7 +309,7 @@ opik configure
 | BeeAI (Python) | BeeAI Python エージェントフレームワークの呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/beeai?utm_source=opik&utm_medium=github&utm_content=beeai_link&utm_campaign=opik) |
 | BeeAI (TypeScript) | BeeAI TypeScript エージェントフレームワークの呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/beeai-typescript?utm_source=opik&utm_medium=github&utm_content=beeai_typescript_link&utm_campaign=opik) |
 | BytePlus | BytePlus の LLM 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/byteplus?utm_source=opik&utm_medium=github&utm_content=byteplus_link&utm_campaign=opik) |
-| Claude Code | Opik プラグイン経由で Claude Code のセッションのトレースを記録 | [GitHub](https://github.com/comet-ml/opik-claude-code-plugin) |
+| Claude Code | Opik プラグイン経由で Opik のスキルと MCP サーバーを Claude Code に追加 | [GitHub](https://github.com/comet-ml/opik-mcp) |
 | Cloudflare Workers AI | Cloudflare Workers AI の呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/cloudflare-workers-ai?utm_source=opik&utm_medium=github&utm_content=cloudflare_workers_ai_link&utm_campaign=opik) |
 | Cohere | Cohere の LLM 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/cohere?utm_source=opik&utm_medium=github&utm_content=cohere_link&utm_campaign=opik) |
 | CrewAI | CrewAI の呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/crewai?utm_source=opik&utm_medium=github&utm_content=crewai_link&utm_campaign=opik) |

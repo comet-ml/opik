@@ -269,10 +269,9 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 #   query's system.query_log entries and plan that every table it read was read under a row policy.
 freeFormSqlPostRunCheck:
   #  Default: audit
-  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
-  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
-  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
-  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  #  Description: off skips the post-run check. audit reports outcomes without withholding results.
+  #   enforce withholds results unless the check passes, which adds at least logReadDelay to every response.
+  #   Scalar subqueries that read tables are rejected before the main query in every mode.
   # Quoted: YAML reads a bare off as the boolean false.
   mode: audit
   #  Default: 10s
@@ -472,8 +471,9 @@ authentication:
   requestRetryMaxBackoff: 1s
   # Default: 10m
   # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
-  #   Used for organization settings such as custom model prices. A workspace moved to another organization picks
-  #   up the new one within this time. Between 1m and 60m.
+  #   Used for organization settings such as custom model prices. After this time, requests still get the old
+  #   answer at once while Comet is asked again in the background, so a workspace moved to another organization
+  #   picks up the new one shortly after this time. Between 1m and 60m.
   organizationCacheTTL: 10m
   # Default: 60m
   # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
@@ -482,8 +482,10 @@ authentication:
   organizationCacheStaleTTL: 60m
   # Default: 30s
   # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
-  #   Each attempt already retries per requestMaxRetries with backoff, so this is the pause between those rounds:
-  #   shorter notices recovery sooner but sends more calls to a failing Comet. Between 1s and 5m.
+  #   When Comet itself fails (a 5xx, or no answer in time), a workspace with no known organization gets none for
+  #   this time, without asking Comet. Each attempt already retries per requestMaxRetries with backoff, so this is
+  #   the pause between those rounds: shorter notices recovery sooner but sends more calls to a failing Comet.
+  #   Between 1s and 5m; a value above organizationCacheStaleTTL is capped at it.
   organizationCacheRetryAfterFailure: 30s
 
 sharedHttpClientHealthCheck:
@@ -822,6 +824,10 @@ llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: 2
+  # Default: 0
+  # Description: Retries an online-evaluation judge's provider client makes on its own, on top of the attempts above
+  # and the scoring stream's redeliveries. At most 3
+  judgeMaxRetries: 0
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -1075,6 +1081,7 @@ inference:
   limits:
     maxEmbedInputs: 256
     maxEmbedDeadline: 60s
+    maxDecideRealtimeDeadline: 5s
     maxGenerateRealtimeDeadline: 60s
     maxGenerateBatchDeadline: 300s
     maxBatchItems: 10000
@@ -1083,9 +1090,15 @@ inference:
     maxRetries: 2
     baseBackoff: 100ms
     submitBytesPerSecond: 1048576
+  realtime:
+    decideDeadline: 5s
+    decideMargin: 1s
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
+  arrival:
+    timeout: 5s
+    minStepTime: 1s
   vectors:
     tickInterval: 1m
     tickBudget: 50s
@@ -1099,6 +1112,10 @@ topics:
     embedConcurrency: 1
     embedTimeout: 10s
     leaseSlack: 5s
+    maxExcludedProjects: 2000
+    maxDiscoveriesPerTick: 5
+    discoveryMinShare: 0.5
+    oneSliceMaxTraces: 250000
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
@@ -1113,16 +1130,54 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     readTimeout: 120s
+    countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
+    insertSlack: 30s
     read:
       maxRowsToRead: 300000000
       maxMemoryUsage: 1073741824
       maxThreads: 2
       priority: 100
-      maxBlockSize: 8192
+      maxBlockSize: 1024
       countSlice: 1d
+  discovery:
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: 1h,6h,1d
+  nightly:
+    schedule: "0 0 2 * * ?"
+    budget: 2h
+    pauseFailures: 3
+    pauseNights: 7
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 2
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
+    planInterval: 5m
+    leaseSlack: 1m
+    requeueWait: 5s
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1146,6 +1201,13 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
+    nightlyMinTightness: 0.80
+    nightlyBigShare: 0.02
+    nightlySameMemory: 0.95
+    nightlyVerifyTokensPerPair: 25
+    nightlyTopicExamples: 4
+    verifyTopicExamples: 3
+    verifyGroupExamples: 5
   read:
     maxRowsToRead: 30000000
     maxMemoryUsage: 1073741824
@@ -1156,6 +1218,8 @@ topics:
   # Small, so the tests delete over more than one batch.
   storage:
     deleteBatchSize: 2
+    sweepInterval: 24h
+    sweepTimeout: 1m
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -124,7 +124,8 @@ class RemoteWorkspaceFeaturesServiceTest {
 
         assertThatThrownBy(() -> service(redis, Duration.ofSeconds(5))
                 .isEnabled(caller(), request("key-1", null), WorkspaceFeature.GUARDRAILS))
-                .isInstanceOf(ServiceUnavailableException.class);
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasCauseInstanceOf(IllegalStateException.class);
         verify(entry, never()).set(any(), any(Duration.class));
     }
 

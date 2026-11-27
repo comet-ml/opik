@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.jdbi.v3.core.Handle;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.io.IOException;
@@ -28,10 +30,12 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The seeds and reads that the topics container tests share: vectors seeded into {@code topic_vectors}, the per-table
@@ -119,6 +123,12 @@ final class TopicsTestData {
                 INSERT INTO projects (id, name, workspace_id, last_updated_trace_at) VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE last_updated_trace_at = GREATEST(IFNULL(last_updated_trace_at, ?), ?)
                 """, projectId.toString(), "topics-" + projectId, workspaceId, lastTrace, lastTrace, lastTrace));
+        seedVectors(workspaceId, projectId, from, count, night);
+    }
+
+    /** As {@link #seed(String, UUID, int, int, Instant)}, the vectors only: the project row is left as it is. */
+    void seedVectors(String workspaceId, UUID projectId, int from, int count, Instant night) {
+        var shift = Duration.between(traces.night(), night);
         int dimensions = TopicEmbedding.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
@@ -157,7 +167,7 @@ final class TopicsTestData {
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            projectDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
+            startRun(projectDAO, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY,
                     savedAt.minus(Duration.ofMinutes(1)));
             projectDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
@@ -176,7 +186,30 @@ final class TopicsTestData {
         });
     }
 
+    /**
+     * Puts {@code runId} on the project's row, running since {@code at} with a deadline an hour later, as the
+     * planner's queue and a pod's claim do. The project must have no run in flight.
+     */
+    static void startRun(TopicProjectDAO projectDAO, String workspaceId, UUID projectId, UUID runId,
+            TopicProject.RunMode mode, Instant at) {
+        projectDAO.ensureRow(workspaceId, projectId);
+        if (projectDAO.queue(workspaceId, projectId, runId, mode, at) != 1
+                || projectDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
+    }
+
     /** An Opik id: UUID v7. */
+    /** The Reactor context a run's subscriber gives its work, for code that reads the workspace from it. */
+    static Context context(TopicsMetrics.Workspace workspace) {
+        return Context.of(RequestContext.WORKSPACE_ID, workspace.id(), RequestContext.WORKSPACE_NAME, workspace.name(),
+                RequestContext.USER_NAME, "test");
+    }
+
+    static Context context(String workspaceId) {
+        return context(new TopicsMetrics.Workspace(workspaceId, workspaceId));
+    }
+
     static UUID newId() {
         return Generators.timeBasedEpochGenerator().generate();
     }
@@ -215,6 +248,32 @@ final class TopicsTestData {
                 .bind("projectId", projectId.toString())
                 .mapTo(String.class)
                 .list();
+    }
+
+    /**
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
+     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
+     * {@code trace_topics}. {@code night} is the end of the run's window.
+     */
+    void assertArrivalEqualsTheRun(TopicWindowDAO windowDAO, TopicAlgorithm algorithm, String workspaceId,
+            UUID projectId, UUID runId, Instant night) {
+        var labels = traceTopics(workspaceId, projectId).stream()
+                .filter(row -> runId.equals(row.runId()))
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        // Wider than the test's window: only the run's traces are compared.
+        var window = windowDAO.readWindow(projectId, night.minus(Duration.ofDays(90)), night.plus(Duration.ofDays(1)),
+                100_000, 120)
+                .contextWrite(context(workspaceId))
+                .collectList().block()
+                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
+        assertThat(window).hasSize(labels.size()).isNotEmpty();
+
+        var arrived = algorithm.labeller(topics(projectId), topicProject(projectId).otherVectors())
+                .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
+        for (int i = 0; i < window.size(); i++) {
+            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
+                    .isEqualTo(labels.get(window.get(i).traceId()));
+        }
     }
 
     /**

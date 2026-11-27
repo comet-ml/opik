@@ -19,7 +19,6 @@ export interface GetTeams {
 }
 
 export interface Team {
-  academic: boolean;
   admin: boolean;
   default_team: boolean;
   organizationId: string;
@@ -52,7 +51,6 @@ export interface Organization {
   id: string;
   name: string;
   paymentPlan: string;
-  academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
   onlyAdminsInviteByEmail: boolean;
   workspaceRolesEnabled: boolean;

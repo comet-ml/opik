@@ -452,8 +452,13 @@ component:
       - configMapRef:
           name: opik-python-backend
 
+    # -- securityContext of the python-backend containers. The `RuntimeDefault` seccomp profile blocks system calls
+    # that code metrics have no use for. With `env.PYTHON_CODE_EXECUTOR_STRATEGY: "docker"` the chart adds
+    # `privileged: true`, which the Docker daemon inside the container needs; the default process strategy runs
+    # unprivileged. If the strategy comes from `envFrom` or `secretRefs` instead, set `privileged: true` here yourself.
     securityContext:
-      privileged: true
+      seccompProfile:
+        type: RuntimeDefault
     networkPolicy:
       enabled: false
       annotations: {}
@@ -854,8 +859,9 @@ databaseAnalyticsDataModel:
   spansDistributedWrapEnabled: false
   # Run the span weeks backfill job, which indexes the spans written before span_weeks_mv.
   spanWeeksBackfillEnabled: false
-  # Bound span reads by trace id with the span_weeks index. Effective only with spanColumnsNonNullable; turn true
-  # once the span weeks backfill has no pending chunk.
+  # Bound span reads by trace or project with the span_weeks index. Effective only with spanColumnsNonNullable; turn
+  # true once the span weeks backfill has planned its chunks and done them all and, in the spans cutover, only after
+  # its EXCHANGE; revert it with a rollback that restores the legacy spans table.
   spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the

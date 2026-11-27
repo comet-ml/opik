@@ -185,21 +185,16 @@ class GuardrailsValidationsResourceTest {
     }
 
     @Test
-    @DisplayName("inference outage fails open: every check passes with its error")
-    void validate__whenInferenceIsDown__thenFailOpen() {
+    @DisplayName("inference outage fails closed: 503 and no verdict")
+    void validate__whenInferenceIsDown__thenServiceUnavailable() {
         wireMock.server().stubFor(post(urlPathEqualTo(DECIDE_PATH)).willReturn(aResponse().withStatus(503)));
         var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
 
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            var actual = response.readEntity(GuardrailsValidationResponse.class);
-
-            assertThat(actual.validationPassed()).isTrue();
-            assertThat(actual.validations()).hasSize(1);
-            assertThat(actual.validations().get(0).validationPassed()).isTrue();
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVICE_UNAVAILABLE);
             // The cause stays in the backend log: the caller gets a stable message, not the upstream status or host.
-            assertThat(actual.validations().get(0).error())
-                    .isEqualTo("Guardrail check unavailable; it passed without running");
+            assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                    .isEqualTo("Guardrail checks are unavailable, retry later");
         }
     }
 

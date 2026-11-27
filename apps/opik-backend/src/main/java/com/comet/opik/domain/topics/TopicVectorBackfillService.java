@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -25,8 +26,19 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(TopicVectorBackfillServiceImpl.class)
 public interface TopicVectorBackfillService {
 
+    /**
+     * A workspace the tick has not discovered for this long is stale: the tick stopped for it, so its backfills restart
+     * and its drained marks say nothing about the traces since. Twice {@code topics.vectors.longWindowInterval}.
+     */
+    static Duration staleAfter(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getLongWindowInterval().toJavaDuration().multipliedBy(2);
+    }
+
     /** The started backfills not drained yet, by workspace. */
     Map<String, List<TopicBackfill>> findUndrained(Collection<String> workspaceIds);
+
+    /** When each workspace's projects were last discovered; a workspace never discovered has no entry. */
+    Map<String, Instant> findChecked(Collection<String> workspaceIds);
 
     /** The started backfills of {@code projectIds}, by project. */
     Map<UUID, TopicBackfill> findByKeys(String workspaceId, Collection<UUID> projectIds);
@@ -63,6 +75,15 @@ class TopicVectorBackfillServiceImpl implements TopicVectorBackfillService {
                 handle -> handle.attach(TopicProjectDAO.class).findUndrainedBackfills(workspaceIds))
                 .stream()
                 .collect(Collectors.groupingBy(TopicBackfill::workspaceId));
+    }
+
+    @Override
+    public Map<String, Instant> findChecked(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorBackfillDAO.class).findChecked(workspaceIds));
     }
 
     @Override

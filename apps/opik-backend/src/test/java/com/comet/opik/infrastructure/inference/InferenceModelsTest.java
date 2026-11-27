@@ -171,6 +171,8 @@ class InferenceModelsTest {
         assertThat(limits.getMaxEmbedInputs()).isEqualTo(maxItems(endpoints.path(EMBED), "inputs"));
         assertThat(limits.getMaxEmbedDeadline().toMilliseconds())
                 .isEqualTo(CONTRACT.path("limits").path("embed_max_deadline_ms").path("value").asLong());
+        assertThat(limits.getMaxDecideRealtimeDeadline().toMilliseconds())
+                .isEqualTo(CONTRACT.path("limits").path("decide_realtime_max_deadline_ms").path("value").asLong());
         assertThat(limits.getMaxBatchItems()).isEqualTo(maxItems(endpoints.path(BATCH_DECIDE), "items"))
                 .isEqualTo(maxItems(endpoints.path(BATCH_GENERATE), "items"));
         assertThat(limits.getMaxStatusJobIds()).isEqualTo(maxItems(endpoints.path(JOBS_STATUS), "job_ids"));

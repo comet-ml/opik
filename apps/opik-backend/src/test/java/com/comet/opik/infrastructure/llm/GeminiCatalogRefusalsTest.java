@@ -141,6 +141,33 @@ class GeminiCatalogRefusalsTest {
     }
 
     @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"gemini-3.1-flash-lite", "vertex_ai/gemini-3.1-flash-lite"})
+    void chatRequestsKeepTheTemperatureAModelTakesWithoutTheRestOfSampling(String model) {
+        var request = request(model);
+
+        chatCompletionService.create(request, "workspace-id");
+
+        assertThat(sentRequests).containsExactly(ChatCompletionRequest.builder()
+                .from(MessageContentNormalizer.normalizeRequest(request))
+                .topP(null)
+                .frequencyPenalty(null)
+                .presencePenalty(null)
+                .build());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"gemini-3.1-flash-lite", "vertex_ai/gemini-3.1-flash-lite"})
+    void judgesKeepTheTemperatureAModelTakesWithoutTheRestOfSampling(String model) {
+        var parameters = LlmAsJudgeModelParameters.builder().name(model).temperature(0.3).build();
+
+        chatCompletionService.scoreTrace(ChatRequest.builder()
+                .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                .build(), parameters, "workspace-id");
+
+        assertThat(judgeParameters).containsExactly(parameters);
+    }
+
+    @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"gemini-5-pro", "vertex_ai/gemini-3.8-flash-cyber"})
     void theChangeListNamesEachRefusedSettingForAModelWithoutACuratedRow(String model) {
         assertThat(paramResolver.resolve(request(model), null).changes()).isEqualTo(REFUSALS);

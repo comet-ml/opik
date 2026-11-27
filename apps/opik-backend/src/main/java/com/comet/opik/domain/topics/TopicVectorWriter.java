@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -30,13 +32,20 @@ class TopicVectorWriter {
     private final @NonNull TopicVectorsDAO dao;
     private final @NonNull TopicEmbedder embedder;
     private final @NonNull TopicVectorsMetrics metrics;
+    private final @NonNull TopicsArrivalService arrival;
 
     /**
+     * Embeds the candidates and writes each chunk, then gives the live vectors of all its chunks their topic on
+     * arrival: the saved lists of their projects are read, and the vectors labelled and inserted, back to back. A read
+     * that ends early (a cut budget, a failed chunk) still labels the vectors written before.
+     *
      * @param missedBefore with the long-window pass, the short window's start: the vectors written for statuses before it
      *        are rows the fresh reads missed, and are counted as such
+     * @param steps the workspace's topic on arrival so far this tick; the result carries it on
      */
     Mono<ChunkWrite> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
-            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore) {
+            @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
+            @NonNull ArrivalSteps steps) {
         var missed = missedBefore == null
                 ? Set.<VectorKey>of()
                 : candidates.stream().filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
@@ -44,14 +53,26 @@ class TopicVectorWriter {
                         .collect(Collectors.toUnmodifiableSet());
         return embedder.embed(workspace, candidates, budget)
                 .concatMap(outcome -> write(workspace, outcome, missed))
-                .reduce(ChunkWrite.EMPTY, ChunkWrite::plus);
+                // The error ends the fold as a value, so the chunks written before it still get labelled.
+                .onErrorResume(error -> Mono.just(Written.failed(error)))
+                .reduce(Written.EMPTY, Written::plus)
+                .flatMap(written -> {
+                    var projectIds = written.live().stream().map(TopicVector::projectId)
+                            .collect(Collectors.toUnmodifiableSet());
+                    return arrival.loadLabellers(workspace, projectIds, budget, steps)
+                            .flatMap(read -> arrival.label(workspace, written.live(), budget, read))
+                            .flatMap(next -> written.error() == null
+                                    ? Mono.just(new ChunkWrite(written.result(), written.settled(), next))
+                                    : Mono.error(written.error()));
+                });
     }
 
     /**
      * Writes the chunk's vectors and the status rows of its traces no later tick would embed. A key is settled once its
-     * row is in and {@link #dropDeleted} has checked it; a failed insert or check leaves its keys for a later tick.
+     * row is in and {@link #dropDeleted} has checked it; a failed insert or check leaves its keys for a later tick. Only
+     * the vectors of traces the check saw live are kept for arrival.
      */
-    private Mono<ChunkWrite> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
+    private Mono<Written> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
             Set<VectorKey> missed) {
         return Mono.defer(() -> {
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
@@ -63,22 +84,33 @@ class TopicVectorWriter {
                         if (vectorsIn) {
                             vectors.forEach(vector -> settled.add(VectorKey.of(vector)));
                         }
-                        return dropDeleted(workspace, settled).map(checked -> {
-                            // Not in, or in and then deleted unchecked: embedded again by a later tick.
-                            int lost = vectorsIn && checked ? 0 : vectors.size();
-                            metrics.skipped(workspace, SkipReason.INSERT_FAILED, lost);
-                            var result = skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, lost));
-                            if (!checked) {
-                                return new ChunkWrite(result, Set.of());
-                            }
-                            if (vectorsIn) {
-                                metrics.written(workspace, vectors.size());
-                                metrics.longWindowMissed(workspace, (int) vectors.stream()
-                                        .filter(vector -> missed.contains(VectorKey.of(vector))).count());
-                                result = result.plus(TickResult.written(vectors.size()));
-                            }
-                            return new ChunkWrite(result, settled);
-                        });
+                        return dropDeleted(workspace, settled)
+                                .flatMap(live -> {
+                                    if (!vectorsIn) {
+                                        // Not in: embedded again by a later tick.
+                                        metrics.skipped(workspace, SkipReason.INSERT_FAILED, vectors.size());
+                                        return Mono.just(Written.builder()
+                                                .result(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED,
+                                                        vectors.size())))
+                                                .settled(settled).live(List.of()).build());
+                                    }
+                                    metrics.written(workspace, vectors.size());
+                                    metrics.longWindowMissed(workspace, (int) vectors.stream()
+                                            .filter(vector -> missed.contains(VectorKey.of(vector))).count());
+                                    var result = skipped.plus(TickResult.written(vectors.size()));
+                                    var liveVectors = vectors.stream()
+                                            .filter(vector -> live.contains(VectorKey.of(vector))).toList();
+                                    return Mono.just(Written.builder().result(result).settled(settled)
+                                            .live(liveVectors).build());
+                                })
+                                // In and then deleted unchecked: embedded again by a later tick.
+                                .switchIfEmpty(Mono.fromSupplier(() -> {
+                                    metrics.skipped(workspace, SkipReason.INSERT_FAILED, vectors.size());
+                                    return Written.builder()
+                                            .result(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED,
+                                                    vectors.size())))
+                                            .settled(Set.of()).live(List.of()).build();
+                                }));
                     }));
         });
     }
@@ -100,23 +132,26 @@ class TopicVectorWriter {
     /**
      * Deletes the rows just written for traces deleted since the read, which no later read or cascade would find. The
      * trace-delete cascade deletes {@code ai_label_status} before {@code topic_vectors}: a cascade before this check
-     * shows here as a trace without a status, and one after it finds the rows. False when the check fails: the rows are
-     * then deleted and their keys left unsettled, so a later tick embeds a live trace again and never reads a deleted
-     * one. Only when that delete fails too can a deleted trace's rows stay, until retention.
+     * shows here as a trace without a status, and one after it finds the rows. Emits the written keys of live traces.
+     * Empty when the check fails: the rows are then deleted and their keys left unsettled, so a later tick embeds a live
+     * trace again and never reads a deleted one. Only when that delete fails too can a deleted trace's rows stay, until
+     * retention.
      */
-    private Mono<Boolean> dropDeleted(TopicVectorsMetrics.Workspace workspace, Set<VectorKey> written) {
+    private Mono<Set<VectorKey>> dropDeleted(TopicVectorsMetrics.Workspace workspace, Set<VectorKey> written) {
         if (written.isEmpty()) {
-            return Mono.just(true);
+            return Mono.just(Set.of());
         }
-        return dao.findLiveTraceIds(workspace.id(), TopicEmbedding.SUMMARY_TASK, written)
+        return dao.findLiveTraces(workspace.id(), TopicEmbedding.SUMMARY_TASK, written)
                 .flatMap(live -> {
-                    var gone = written.stream().filter(key -> !live.contains(key.traceId())).toList();
+                    var kept = written.stream().filter(key -> live.contains(TopicVectorsDAO.ProjectTrace.of(key)))
+                            .collect(Collectors.toUnmodifiableSet());
+                    var gone = written.stream().filter(key -> !kept.contains(key)).toList();
                     if (gone.isEmpty()) {
-                        return Mono.just(true);
+                        return Mono.just(kept);
                     }
                     log.info("Deleting the topic vectors of traces deleted during their embed, workspace '{}', "
                             + "traces '{}'", workspace.id(), gone.size());
-                    return delete(workspace, gone).thenReturn(true);
+                    return delete(workspace, gone).thenReturn(kept);
                 })
                 .onErrorResume(exception -> {
                     log.warn("Topic vectors deleted-trace check failed, deleting the chunk's rows to embed them again "
@@ -127,7 +162,7 @@ class TopicVectorWriter {
                                         + "'{}'", workspace.id(), written.size(), deleteException);
                                 return Mono.empty();
                             })
-                            .thenReturn(false);
+                            .then(Mono.<Set<VectorKey>>empty());
                 });
     }
 
@@ -155,10 +190,11 @@ class TopicVectorWriter {
                 });
     }
 
-    /** What writing one read's chunks produced: its counts, and the keys of its traces the watermark may pass. */
-    record ChunkWrite(@NonNull TickResult result, @NonNull Set<VectorKey> settled) {
-
-        static final ChunkWrite EMPTY = new ChunkWrite(TickResult.EMPTY, Set.of());
+    /**
+     * What writing one read's chunks produced: its counts, the keys of its traces the watermark may pass, and the
+     * workspace's topic on arrival after them.
+     */
+    record ChunkWrite(@NonNull TickResult result, @NonNull Set<VectorKey> settled, @NonNull ArrivalSteps arrival) {
 
         /**
          * Whether some of {@code candidates} were left for a later tick: neither written nor given a status row, for
@@ -167,11 +203,29 @@ class TopicVectorWriter {
         boolean leftForLater(@NonNull List<Candidate> candidates) {
             return candidates.stream().map(VectorKey::of).anyMatch(key -> !settled.contains(key));
         }
+    }
 
-        ChunkWrite plus(@NonNull ChunkWrite other) {
+    /**
+     * The chunks of one read written so far: their counts, settled keys and the vectors kept for arrival, and the error
+     * that ended the read early, if one did.
+     */
+    @Builder(toBuilder = true)
+    private record Written(@NonNull TickResult result, @NonNull Set<VectorKey> settled,
+            @NonNull List<TopicVector> live, @Nullable Throwable error) {
+
+        static final Written EMPTY = Written.builder().result(TickResult.EMPTY).settled(Set.of()).live(List.of())
+                .build();
+
+        static Written failed(@NonNull Throwable error) {
+            return EMPTY.toBuilder().error(error).build();
+        }
+
+        Written plus(@NonNull Written other) {
             var union = new HashSet<>(settled);
             union.addAll(other.settled);
-            return new ChunkWrite(result.plus(other.result), union);
+            var allLive = new ArrayList<>(live);
+            allLive.addAll(other.live);
+            return new Written(result.plus(other.result), union, allLive, error != null ? error : other.error);
         }
     }
 }

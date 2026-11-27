@@ -26,6 +26,22 @@ class TestEditFileExact:
         assert f.read_text() == "hello earth\n"
         assert "-world" in result["diff"] or "-hello world" in result["diff"]
 
+    def test_edit_file__nested_file__diff_headers_use_forward_slashes(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src" / "pkg").mkdir(parents=True)
+        (tmp_path / "src" / "pkg" / "code.py").write_text("hello world\n")
+        handler = self._handler(tmp_path)
+        result = handler.execute(
+            {
+                "path": "src/pkg/code.py",
+                "edits": [{"old_string": "world", "new_string": "earth"}],
+            },
+            timeout=30.0,
+        )
+        assert result["diff"].startswith("--- a/src/pkg/code.py\n")
+        assert "+++ b/src/pkg/code.py\n" in result["diff"]
+
     def test_edit_file__multiple_edits__applies_all(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("aaa bbb ccc\n")

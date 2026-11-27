@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -21,7 +22,9 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,8 +38,6 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -47,7 +48,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -67,6 +67,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
+import static org.mockito.Mockito.mock;
 
 /**
  * The run service end to end: the window read from ClickHouse, the save to MySQL, the {@code trace_topics} insert
@@ -129,8 +131,6 @@ class TopicsRunServiceTest {
     private TopicsMetrics metrics;
     private TopicRunStore store;
     private TopicsRunService service;
-    /** The scheduler the entry point would hand in. */
-    private final Scheduler compute = Schedulers.newBoundedElastic(2, 16, "topics-test-compute");
     private InMemoryMetricReader metricReader;
 
     private String workspaceId;
@@ -155,7 +155,6 @@ class TopicsRunServiceTest {
 
     @AfterAll
     void afterAll() {
-        compute.dispose();
         wireMock.server().stop();
         clickHouse.stop();
         zookeeper.stop();
@@ -169,7 +168,8 @@ class TopicsRunServiceTest {
         // The app's beans with a meter of the test's own, so each test reads only what its run recorded.
         metricReader = InMemoryMetricReader.create();
         metrics = metrics(metricReader);
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                mock(WorkspaceNameService.class));
         service = serviceWith(FIXTURE_ALGORITHM);
         workspaceId = idGenerator.generateId().toString();
         projectId = idGenerator.generateId();
@@ -183,7 +183,8 @@ class TopicsRunServiceTest {
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, 250_000, compute).block();
+        var outcome = service.discover(runId, projectId, NIGHT, 250_000)
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(250_000);
@@ -199,7 +200,7 @@ class TopicsRunServiceTest {
             assertThat(project.windowUntil()).isEqualTo(FIXTURE.night);
         });
         var idByName = topics.stream().collect(Collectors.toMap(Topic::name, Topic::id));
-        assertThat(data.traceTopics(workspaceId, projectId)).usingRecursiveFieldByFieldElementComparator()
+        assertThat(data.traceTopics(workspaceId, projectId))
                 .containsExactlyInAnyOrderElementsOf(expectedTraceTopics(runId, want, idByName));
 
         assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(1);
@@ -217,7 +218,8 @@ class TopicsRunServiceTest {
         stubAnswer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_BAD_ANSWER);
@@ -237,7 +239,8 @@ class TopicsRunServiceTest {
                 .withBody("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"over quota\",\"retryable\":true}}")));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
@@ -254,7 +257,8 @@ class TopicsRunServiceTest {
         try {
             var runId = start();
 
-            var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
+            var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                    .contextWrite(TopicsTestData.context(workspace())).block();
 
             assertThat(outcome.errorCode()).isEqualTo("window_read");
             assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
@@ -267,14 +271,19 @@ class TopicsRunServiceTest {
     }
 
     @Test
-    @DisplayName("a first save of a project that has a list fails with save and leaves the list as it was")
+    @DisplayName("a discovery run whose project got a list while it ran fails its save with save, and leaves the "
+            + "list as it was")
     void secondSaveIsConflict() {
-        data.savedList(workspaceId, projectId, FIXTURE.night, 5);
-        var before = data.topics(projectId);
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
+        // The queue refuses a discovery run on a project with a list: here the list came after the claim.
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).saveList(workspaceId, projectId,
+                null, TopicsTestData.newId(), Instant.now(), FIXTURE.night,
+                new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL));
+        var before = data.topics(projectId);
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(data.topics(projectId)).usingRecursiveFieldByFieldElementComparator()
@@ -295,32 +304,13 @@ class TopicsRunServiceTest {
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM projects WHERE id = ?",
                 projectId.toString()));
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
         assertThat(sum(metricReader, "topics.trace_topics.inserts", "result", "success")).isZero();
-    }
-
-    @Test
-    @DisplayName("a start that finds an attempt left running past the lease records it abandoned and counts it once")
-    void startRecordsAnAbandonedAttempt() {
-        var first = start();
-
-        var second = store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY,
-                Instant.now().plusSeconds(1)).block();
-
-        assertThat(second).isNotEqualTo(first);
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.runId()).isEqualTo(second);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
-        });
-        assertThat(points(metricReader, "topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(1);
-            assertThat(point.get("status")).isEqualTo("failed");
-            assertThat(point.get("error_code")).isEqualTo("abandoned");
-        });
     }
 
     @Test
@@ -333,6 +323,83 @@ class TopicsRunServiceTest {
 
         assertThat(data.topicProject(projectId).runErrorCode()).isEqualTo(TopicProject.RunError.TIMEOUT);
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a saved nightly update records the Other share it logged in its stats, and its live topics and churn, "
+            + "with the workspace")
+    void nightlyUpdateIsCounted() {
+        var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
+        discovered(workspace);
+        double discoveryShare = sum(metricReader, "topics.run.other_share");
+
+        var outcome = service.nightlyUpdate(start(TopicProject.RunMode.UPDATE), projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace)).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var stats = outcome.stats();
+        assertThat(stats.path("mode").asText()).isEqualTo("update");
+        assertThat(stats.get("window_traces").asLong()).isEqualTo(FIXTURE.size());
+        assertThat(stats.get("sample_traces").asLong()).isEqualTo(FIXTURE.size());
+        // The discovery run's share, then the nightly update's: the value it logged, not computed again.
+        assertThat(sum(metricReader, "topics.run.other_share"))
+                .isCloseTo(discoveryShare + stats.get("other_share").asDouble(), within(1e-9));
+        var attributes = workspaceAttributes(workspace);
+        assertThat(points(metricReader, "topics.topics.live"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("topics").asDouble(), attributes));
+        assertThat(points(metricReader, "topics.run.churn"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("churn").asDouble(), attributes));
+        assertThat(points(metricReader, "topics.run.churn_any"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("churn_any").asDouble(), attributes));
+        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
+    void lifecycleMetricsHaveTheWorkspace() {
+        var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
+        var attributes = workspaceAttributes(workspace);
+
+        metrics.topics(workspace, 7, 2);
+        metrics.topics(workspace, 7, 0);
+        metrics.retired(workspace, NightState.RetiredReason.LOW_SHARE);
+        metrics.churn(workspace, new TopicChurn.Churn(0.04, 0.1));
+
+        assertThat(points(metricReader, "topics.topics.born"))
+                .containsExactly(new TopicsMetricsReader.Point(2, attributes));
+        assertThat(points(metricReader, "topics.topics.live"))
+                .containsExactly(new TopicsMetricsReader.Point(14, attributes));
+        assertThat(points(metricReader, "topics.topics.retired")).containsExactly(new TopicsMetricsReader.Point(1,
+                attributes.toBuilder().put("reason", "low_share").build()));
+        assertThat(points(metricReader, "topics.run.churn"))
+                .containsExactly(new TopicsMetricsReader.Point(0.04, attributes));
+        assertThat(points(metricReader, "topics.run.churn_any"))
+                .containsExactly(new TopicsMetricsReader.Point(0.1, attributes));
+    }
+
+    /** The project's discovery run, saved; then every naming answer changes nothing. Returns its run id. */
+    private UUID discovered(TopicsMetrics.Workspace workspace) {
+        stubAnswer(FIXTURE.discoveryAnswer);
+        var runId = start();
+        assertThat(service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace)).block().status())
+                .isEqualTo(TopicProject.RunStatus.SAVED);
+        stubAnswer(emptyNaming());
+        return runId;
+    }
+
+    private static Attributes workspaceAttributes(TopicsMetrics.Workspace workspace) {
+        return Attributes.builder().put("workspace_id", workspace.id()).put("workspace_name", workspace.name())
+                .build();
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     /**
@@ -349,7 +416,7 @@ class TopicsRunServiceTest {
                 unit(d, 0, 0.96, 2, Math.sqrt(1 - 0.96 * 0.96)));
         var delta = unit(d, 3, 1, 0, 0);
         var groupTexts = List.of("alpha request", "beta request", "gamma request", "delta request");
-        var groupVectors = List.of(alpha, gated.get(0), gated.get(1), delta);
+        var groupVectors = List.of(alpha, gated.getFirst(), gated.get(1), delta);
         int count = 12;
         var traceIds = new ArrayList<UUID>(count);
         var createdAt = new ArrayList<Instant>(count);
@@ -379,7 +446,7 @@ class TopicsRunServiceTest {
         var runId = start();
 
         var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
-                .discover(runId, workspace(), projectId, NIGHT, count, compute).block();
+                .discover(runId, projectId, NIGHT, count).contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -459,14 +526,20 @@ class TopicsRunServiceTest {
             }
 
             @Override
-            public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
-                return Optional.empty();
+            public NightStep<TopicUpdate> update(NightState state, NightWindow window, int maxTopics) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+                return vectors -> new UUID[vectors.size()];
             }
         };
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = serviceWith(stub).discover(runId, workspace(), projectId, NIGHT, FIXTURE.size(), compute)
+        var outcome = serviceWith(stub).discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace()))
                 .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
@@ -476,7 +549,7 @@ class TopicsRunServiceTest {
         assertThat(data.topicProject(projectId).otherVectors()).isEqualTo(new PrototypeVectors(List.of(other)));
         var idByName = saved.stream().collect(Collectors.toMap(Topic::name, Topic::id));
         var topicIds = List.of(idByName.get("First"), idByName.get("Second"), TraceTopic.OTHER);
-        assertThat(data.traceTopics(workspaceId, projectId)).usingRecursiveFieldByFieldElementComparator()
+        assertThat(data.traceTopics(workspaceId, projectId))
                 .containsExactlyInAnyOrderElementsOf(IntStream.range(0, FIXTURE.size())
                         .mapToObj(i -> TraceTopic.builder()
                                 .workspaceId(workspaceId)
@@ -532,8 +605,17 @@ class TopicsRunServiceTest {
         return s;
     }
 
+    /** Queues and claims a discovery run, as the planner and a pod's subscriber do. */
     private UUID start() {
-        return store.startRun(workspace(), projectId, TopicProject.RunMode.DISCOVERY, Instant.EPOCH).block();
+        return start(TopicProject.RunMode.DISCOVERY);
+    }
+
+    private UUID start(TopicProject.RunMode mode) {
+        var runId = store.queue(workspaceId, projectId, mode).block();
+        var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(mode).night(NIGHT).windowTraces(FIXTURE.size()).build();
+        assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
+        return runId;
     }
 
     /** The workspace as the entry point hands it in; the test names it by its id. */

@@ -17,6 +17,8 @@ import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.SpanWeeksBackfillJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
+import com.comet.opik.api.resources.v1.jobs.TopicsDiscoveryJob;
+import com.comet.opik.api.resources.v1.jobs.TopicsSweepJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -35,6 +37,7 @@ import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.CronScheduleBuilder;
+import org.quartz.InterruptableJob;
 import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -74,6 +77,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setAnnotationQueueRoutingFlushJob();
                 setAiLabelsJob();
                 setTopicVectorsJob();
+                setTopicsDiscoveryJob();
+                setTopicsSweepJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setOptimizationStalledReaperJob();
@@ -202,6 +207,30 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(TopicVectorsJob.class, topicsConfig.getVectors().getTickInterval().toJavaDuration(),
+                null);
+    }
+
+    private void setTopicsDiscoveryJob() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+
+        if (!topicsConfig.isEnabled()) {
+            log.info("Topics discovery job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(TopicsDiscoveryJob.class, topicsConfig.getRuns().getPlanInterval().toJavaDuration(),
+                null);
+    }
+
+    private void setTopicsSweepJob() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+
+        if (!topicsConfig.isEnabled()) {
+            log.info("Topics sweep job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(TopicsSweepJob.class, topicsConfig.getStorage().getSweepInterval().toJavaDuration(),
                 null);
     }
 
@@ -412,17 +441,23 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     /**
      * A topics job runs detached from its Quartz fire, so the scheduler's shutdown never reaches it: interrupt it here,
-     * which cancels its run in flight and frees its lock. The checks match {@link #setTopicVectorsJob()}, so a disabled
-     * job is never created at shutdown. Each job has its own try: a failure is logged, and the next job and the rest of
-     * the shutdown still run.
+     * which cancels its run in flight and frees its lock. The checks match {@link #setTopicVectorsJob()},
+     * {@link #setTopicsDiscoveryJob()} and {@link #setTopicsSweepJob()}, so a disabled job is never created at
+     * shutdown. Each job has its own try: a failure is logged, and the next job and the rest of the shutdown still run.
      */
     private void interruptTopicsJobs() {
+        if (injector.get().getInstance(OpikConfiguration.class).getTopics().isEnabled()) {
+            interruptJob(TopicVectorsJob.class);
+            interruptJob(TopicsDiscoveryJob.class);
+            interruptJob(TopicsSweepJob.class);
+        }
+    }
+
+    private void interruptJob(Class<? extends InterruptableJob> jobClass) {
         try {
-            if (injector.get().getInstance(OpikConfiguration.class).getTopics().isEnabled()) {
-                injector.get().getInstance(TopicVectorsJob.class).interrupt();
-            }
+            injector.get().getInstance(jobClass).interrupt();
         } catch (Exception exception) {
-            log.warn("Error interrupting TopicVectorsJob during scheduler shutdown", exception);
+            log.warn("Error interrupting {} during scheduler shutdown", jobClass.getSimpleName(), exception);
         }
     }
 

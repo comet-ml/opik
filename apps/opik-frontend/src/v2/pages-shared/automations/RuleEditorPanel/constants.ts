@@ -6,7 +6,11 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EVALUATORS_RULE_SCOPE, PythonCodeObject } from "@/types/automations";
+import {
+  EVALUATORS_RULE_SCOPE,
+  PythonCodeObject,
+  UI_EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -60,12 +64,26 @@ const EMPTY_JUDGE_DATA = {
   maxCostUsd: null,
 };
 
+export const createRulePrompt = (content = ""): LLMMessage[] => [
+  { id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content },
+];
+
+export const DECISION_MODEL_DEFAULT_PROMPT =
+  "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}";
+
+export const createInitialRulePrompt = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+  createRulePrompt(
+    uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+      ? DECISION_MODEL_DEFAULT_PROMPT
+      : "",
+  );
+
 const getTaskCompletionData = (
   content: string,
   variables: Record<string, string>,
 ) => ({
   ...EMPTY_JUDGE_DATA,
-  messages: [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content }],
+  messages: createRulePrompt(content),
   variables,
 });
 
@@ -129,7 +147,7 @@ export const TASK_COMPLETION_DATA = {
   ),
 };
 
-export const DEFAULT_LLM_AS_JUDGE_DATA = {
+const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: EMPTY_JUDGE_DATA,
   [EVALUATORS_RULE_SCOPE.thread]: EMPTY_JUDGE_DATA,
   [EVALUATORS_RULE_SCOPE.span]: EMPTY_JUDGE_DATA,
@@ -141,11 +159,28 @@ const DECISION_MODEL_DEFAULT_DATA = {
   api: "decisions" as const,
 };
 
-export const DEFAULT_DECISION_MODEL_DATA = {
+const DEFAULT_DECISION_MODEL_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: DECISION_MODEL_DEFAULT_DATA,
   [EVALUATORS_RULE_SCOPE.thread]: DECISION_MODEL_DEFAULT_DATA,
   [EVALUATORS_RULE_SCOPE.span]: DECISION_MODEL_DEFAULT_DATA,
 };
+
+export const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+  uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+    ? DEFAULT_DECISION_MODEL_DATA
+    : DEFAULT_LLM_AS_JUDGE_DATA;
+
+export const DERIVED_FIELDS = [
+  "llmJudgeDetails.variables",
+  "llmJudgeDetails.parsingVariablesError",
+  "pythonCodeDetails.arguments",
+  "pythonCodeDetails.parsingArgumentsError",
+];
+
+export const isDerivedField = (name: string) =>
+  DERIVED_FIELDS.some(
+    (field) => name === field || name.startsWith(`${field}.`),
+  );
 
 export const DEFAULT_PYTHON_CODE_DATA: Record<
   EVALUATORS_RULE_SCOPE,

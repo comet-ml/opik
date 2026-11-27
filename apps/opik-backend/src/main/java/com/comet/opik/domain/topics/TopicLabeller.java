@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import java.util.List;
 import java.util.UUID;
 
 /** Labels vectors by one saved list. Local and fast: no network call. */
@@ -7,9 +8,8 @@ import java.util.UUID;
 public interface TopicLabeller {
 
     /**
-     * The topic of each vector: a topic's id, or {@link TraceTopic#OTHER}.
-     *
-     * @param vectors {@value TopicEmbedding#DIMENSIONS} values per vector, one after another
+     * The topic of each vector: a topic's id, {@link TraceTopic#OTHER}, or null for a vector that is not
+     * {@link TopicEmbedding#usable}, which gets no label.
      */
-    UUID[] label(float[] vectors);
+    UUID[] label(List<float[]> vectors);
 }

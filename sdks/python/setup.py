@@ -2,7 +2,7 @@ import os
 
 from setuptools import find_packages, setup
 
-project_urls = {"Source code": "https://github.com/comet-ml/opik"}
+project_urls = {"Repository": "https://github.com/comet-ml/opik"}
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 version = os.environ.get("VERSION")
@@ -90,7 +90,7 @@ setup(
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
         "litellm<=1.110.2",
         "openai",
-        "openai<=3.57.0",
+        "openai<=3.58.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic-settings<=2.16.3",
         "pydantic>=2.0.0,<3.0.0",
@@ -100,7 +100,7 @@ setup(
         "rich",
         "rich<=15.0.0",
         "sentry_sdk>=2.0.0",
-        "sentry_sdk<=2.75.0",
+        "sentry_sdk<=3.0.0",
         "tenacity",
         "tenacity<=9.2.1",
         "tqdm",
@@ -140,7 +140,7 @@ setup(
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
-        "tree-sitter<=0.26.1; platform_machine != 'aarch64' or sys_platform != 'linux'",
+        "tree-sitter<=0.27.0; platform_machine != 'aarch64' or sys_platform != 'linux'",
         (
             "tree-sitter-javascript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"

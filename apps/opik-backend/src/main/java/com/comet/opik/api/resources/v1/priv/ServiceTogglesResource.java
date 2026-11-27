@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -45,9 +46,9 @@ public class ServiceTogglesResource {
     }
 
     /**
-     * The same rule as the topics read API: topics on, and the caller's workspace eligible. Otherwise the API answers
-     * 501 or status disabled. The eligibility check reads MySQL only for a workspace in the Helm list. A failed read
-     * turns topics off for this response, so the other toggles still load.
+     * The same rule as the topics read API: topics on, and the caller's workspace eligible at the {@code ui} stage.
+     * Otherwise the API answers 501 or status disabled. The eligibility check reads MySQL only for a workspace the Helm
+     * list has at that stage. A failed read turns topics off for this response, so the other toggles still load.
      */
     private boolean isTopicsEnabled() {
         if (!config.getTopics().isEnabled()) {
@@ -55,7 +56,7 @@ public class ServiceTogglesResource {
         }
         var workspaceId = requestContext.get().getWorkspaceId();
         try {
-            return topicWorkspaces.isEnabled(workspaceId);
+            return topicWorkspaces.reaches(workspaceId, TopicsStage.UI);
         } catch (RuntimeException exception) {
             // No stack trace: during an outage every toggles request lands here.
             log.warn("Failed to read topics eligibility for workspace '{}', topics_enabled is false: {}", workspaceId,
