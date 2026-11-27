@@ -7,9 +7,11 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
@@ -19,29 +21,33 @@ import java.util.stream.Collectors;
  * steps that stop as soon as the two fit:
  * <ol>
  *   <li>{@code full}: nothing removed.</li>
- *   <li>{@code arrays_capped:<N>}: every array in the trace's input and output over N elements keeps its first 2 and
- *       its last N - 2 around a {@code …[K items truncated]…} element; N is the largest that fits, never below 3. Long
- *       lists are the cheapest content to lose (embeddings are already gone, see {@link AiLabelRenderer}), and the
- *       tail is kept because the newest entries of a list (a chat's last turns) carry the most intent. Only when that
- *       alone fits: otherwise the bulk is text, and the arrays are left whole until it's cut.</li>
  *   <li>{@code spans_pruned:<d>}: the spans at depth {@code d} and below are gone (top-level spans are depth 1), and
  *       {@code spans_summary} counts the whole tree; {@code spans_summarized} once every span is gone.</li>
  *   <li>{@code history_outputs_dropped:<n>}: the outputs of the {@code n} oldest earlier turns are gone.</li>
  *   <li>{@code history_turns:<n>}: only the {@code n} newest earlier turns are left.</li>
+ *   <li>{@code arrays_capped:<N>}: every array in the larger of the trace's input and output over N elements keeps its
+ *       first 2 and its last N - 2 around a {@code …[K items truncated]…} element; N is the largest that fits, never
+ *       below 3. The smaller field's arrays are capped too only when that alone doesn't fit. Long lists are the
+ *       cheapest content to lose (embeddings are already gone, see {@link AiLabelRenderer}), and the tail is kept
+ *       because the newest entries of a list (a chat's last turns) carry the most intent. Only when that alone fits:
+ *       otherwise the bulk is text, and the arrays are left whole until it's cut.</li>
  *   <li>{@code output_truncated:<L>}: every string in the output keeps its first L code points, followed by a
  *       {@code …[N chars truncated]…} marker; L is the largest that fits, never below 64.</li>
  *   <li>{@code input_truncated:<L>}: the output at 64, and the input's strings cut the same way.</li>
  *   <li>{@code output_arrays_capped:<N>} or {@code input_arrays_capped:<N>}: the smaller of the two fields (by its
- *       uncut size) back whole, and the larger one's arrays capped as in step 2, its strings still at 64. A short
- *       request or answer is the part a summary needs most, so it isn't cut to make room for the bulk.</li>
+ *       uncut size) back whole if it takes at most half the room, and the larger one's arrays capped as in step 5,
+ *       its strings still at 64. A short request or answer is the part a summary needs most, so it isn't cut to make
+ *       room for the bulk.</li>
  *   <li>{@code output_as_text} or {@code input_as_text}: the smaller field still whole, and the larger one its
  *       canonical JSON as one string, cut in the middle to fit.</li>
- *   <li>{@code truncated_arrays_capped:<N>}: both at 64, and the arrays capped as in step 2.</li>
+ *   <li>{@code truncated_arrays_capped:<N>}: both at 64, and the arrays capped as in step 5.</li>
  *   <li>{@code truncated_output_as_text} or {@code truncated_input_as_text}: the larger field as text beside the
- *       smaller one cut; {@code fields_as_text} when the smaller one must become text too.</li>
+ *       smaller one cut, if that takes at most half the room; {@code fields_as_text}: both as text, cut to one shared
+ *       size.</li>
  * </ol>
- * Without history, steps 4 and 5 are skipped. A step with nothing to remove is passed through. A state still over
- * budget after the last step (its name alone too big) is {@link OverBudget}.
+ * The trace being labeled is cut only once its spans and every earlier turn are gone. Without history, steps 3 and 4
+ * are skipped. A step with nothing to remove is passed through. A state still over budget after the last step (its
+ * name alone too big) is {@link OverBudget}.
  *
  * <p>Every step is deterministic: the same state always fits to the same bytes. The size is the state's canonical
  * UTF-8 bytes plus the history's. It is computed rather than serialized, and the span levels are measured in one
@@ -90,15 +96,6 @@ final class AiLabelStateFitter {
             return new Fitted(state, history, stateBytes + historyBytes, "full");
         }
 
-        var uncapped = new LinkedHashMap<String, JsonNode>();
-        FIELDS.stream().filter(state::has).forEach(key -> uncapped.put(key, state.get(key)));
-        var capped = capArrays(state, FIELDS, stateBytes, budget - historyBytes);
-        if (capped.fits()) {
-            return new Fitted(state, history, capped.stateBytes() + historyBytes, "arrays_capped:" + capped.cap());
-        }
-        // Arrays alone aren't the bulk, so the text goes first, and they're capped only once it's cut.
-        state.setAll(uncapped);
-
         if (state.has(SPANS)) {
             state.set(SPANS_SUMMARY, spansSummary);
             var levels = new ArrayList<long[]>();
@@ -138,6 +135,18 @@ final class AiLabelStateFitter {
         }
 
         long room = budget - historyBytes;
+        var uncut = fields(state);
+        // The larger field goes first, so a short answer isn't lost to a huge input, or the other way round.
+        var bySize = sizeOf(uncut.get(INPUT)) > sizeOf(uncut.get(OUTPUT)) ? List.of(INPUT, OUTPUT) : FIELDS;
+        String largerKey = bySize.getFirst();
+        String smallerKey = bySize.getLast();
+        var capped = capLargerFirst(state, bySize, stateBytes, room);
+        if (capped.fits()) {
+            return new Fitted(state, history, capped.stateBytes() + historyBytes, "arrays_capped:" + capped.cap());
+        }
+        // Arrays alone aren't the bulk, so the text goes first, and they're capped only once it's cut.
+        state.setAll(uncut);
+
         var output = truncate(state, OUTPUT, stateBytes, room);
         if (output.fits()) {
             return new Fitted(state, history, output.stateBytes() + historyBytes, "output_truncated:" + output.cap());
@@ -146,43 +155,50 @@ final class AiLabelStateFitter {
         if (input.fits()) {
             return new Fitted(state, history, input.stateBytes() + historyBytes, "input_truncated:" + input.cap());
         }
-        // The larger field goes first, so a short answer isn't lost to a huge input, or the other way round.
-        var bySize = sizeOf(uncapped.get(INPUT)) > sizeOf(uncapped.get(OUTPUT)) ? List.of(INPUT, OUTPUT) : FIELDS;
-        String largerKey = bySize.getFirst();
-        String smallerKey = bySize.getLast();
-        if (uncapped.containsKey(smallerKey)) {
-            var cutFields = new LinkedHashMap<String, JsonNode>();
-            FIELDS.stream().filter(state::has).forEach(key -> cutFields.put(key, state.get(key)));
-            state.set(smallerKey, uncapped.get(smallerKey));
-            stateBytes = input.stateBytes() - sizeOf(cutFields.get(smallerKey)) + sizeOf(uncapped.get(smallerKey));
-            var largerCapped = capArrays(state, List.of(largerKey), stateBytes, room);
+        stateBytes = input.stateBytes();
+        var cutFields = fields(state);
+        // Only a small field goes back whole: the larger one must keep at least half the room.
+        if (uncut.containsKey(smallerKey) && sizeOf(uncut.get(smallerKey)) <= room / 2) {
+            state.set(smallerKey, uncut.get(smallerKey));
+            long restoredBytes = stateBytes - sizeOf(cutFields.get(smallerKey)) + sizeOf(uncut.get(smallerKey));
+            var largerCapped = capArrays(state, List.of(largerKey), restoredBytes, room);
             if (largerCapped.fits()) {
                 return new Fitted(state, history, largerCapped.stateBytes() + historyBytes,
                         largerKey + "_arrays_capped:" + largerCapped.cap());
             }
-            var largerText = asText(state, largerKey, largerCapped.stateBytes(), room);
+            var largerText = asText(state, List.of(largerKey), largerCapped.stateBytes(), room);
             if (largerText.fits()) {
                 return new Fitted(state, history, largerText.stateBytes() + historyBytes, largerKey + "_as_text");
             }
             state.setAll(cutFields);
         }
 
-        var both = capArrays(state, FIELDS, input.stateBytes(), room);
+        var both = capLargerFirst(state, bySize, stateBytes, room);
         if (both.fits()) {
             return new Fitted(state, history, both.stateBytes() + historyBytes,
                     "truncated_arrays_capped:" + both.cap());
         }
         stateBytes = both.stateBytes();
-        var larger = asText(state, largerKey, stateBytes, room);
-        if (larger.fits()) {
-            return new Fitted(state, history, larger.stateBytes() + historyBytes,
-                    "truncated_" + largerKey + "_as_text");
+        if (sizeOf(state.get(smallerKey)) <= room / 2) {
+            var cappedFields = fields(state);
+            var larger = asText(state, List.of(largerKey), stateBytes, room);
+            if (larger.fits()) {
+                return new Fitted(state, history, larger.stateBytes() + historyBytes,
+                        "truncated_" + largerKey + "_as_text");
+            }
+            state.setAll(cappedFields);
         }
-        var smaller = asText(state, smallerKey, larger.stateBytes(), room);
-        if (smaller.fits()) {
-            return new Fitted(state, history, smaller.stateBytes() + historyBytes, "fields_as_text");
+        var all = asText(state, FIELDS, stateBytes, room);
+        if (all.fits()) {
+            return new Fitted(state, history, all.stateBytes() + historyBytes, "fields_as_text");
         }
-        return new OverBudget(smaller.stateBytes() + historyBytes);
+        return new OverBudget(all.stateBytes() + historyBytes);
+    }
+
+    private static Map<String, JsonNode> fields(ObjectNode state) {
+        var fields = new LinkedHashMap<String, JsonNode>();
+        FIELDS.stream().filter(state::has).forEach(key -> fields.put(key, state.get(key)));
+        return fields;
     }
 
     /**
@@ -231,6 +247,20 @@ final class AiLabelStateFitter {
     }
 
     private record Cut(boolean fits, int cap, long stateBytes) {
+    }
+
+    /**
+     * Caps the larger field's arrays, {@code bySize} first, and both fields' only when that alone doesn't fit, so a
+     * short request keeps its items beside a long answer.
+     */
+    private static Cut capLargerFirst(ObjectNode state, List<String> bySize, long stateBytes, long budget) {
+        var larger = state.get(bySize.getFirst());
+        var alone = capArrays(state, bySize.subList(0, 1), stateBytes, budget);
+        if (alone.fits() || larger == null) {
+            return alone;
+        }
+        state.set(bySize.getFirst(), larger);
+        return capArrays(state, bySize, stateBytes, budget);
     }
 
     /** Caps every array under {@code keys} at the largest element count that fits, or at {@link #MIN_ITEMS}. */
@@ -285,20 +315,20 @@ final class AiLabelStateFitter {
     }
 
     /**
-     * The last resort: {@code key} as one string, its canonical JSON cut in the middle like an outsized history field.
-     * Unlike a skeleton of keys, it fits any budget past the marker's, and it keeps real values from the start and the
-     * end rather than only names, which a wide object of short values (the one shape the steps before can't shrink)
-     * would still overflow.
+     * The last resort: each of {@code keys} as one string, its canonical JSON (or its text, for a string) cut in the
+     * middle to one shared byte cap, like an outsized history field. Unlike a skeleton of keys, it fits any budget past
+     * the markers', and it keeps real values from the start and the end rather than only names, which a wide object of
+     * short values (the one shape the steps before can't shrink) would still overflow.
      */
-    private static Cut asText(ObjectNode state, String key, long stateBytes, long budget) {
-        var field = state.get(key);
-        if (field == null) {
-            return new Cut(false, 0, stateBytes);
-        }
-        String json = AiLabelJson.toCanonicalString(field);
+    private static Cut asText(ObjectNode state, List<String> keys, long stateBytes, long budget) {
+        var texts = new IdentityHashMap<JsonNode, String>();
+        keys.stream().map(state::get).filter(Objects::nonNull).forEach(field -> texts.put(field,
+                field.isTextual() ? field.textValue() : AiLabelJson.toCanonicalString(field)));
+        int longest = texts.values().stream().mapToInt(String::length).max().orElse(0);
         // A UTF-16 char is at most 3 UTF-8 bytes, so this bounds the text's size without encoding it.
-        return search(state, List.of(key), stateBytes, budget, 0, json.length() * 3,
-                (ignored, maxBytes) -> AiLabelJson.NODE_FACTORY.textNode(AiLabelRenderer.capMiddle(json, maxBytes)));
+        return search(state, keys, stateBytes, budget, 0, longest * 3,
+                (field, maxBytes) -> AiLabelJson.NODE_FACTORY.textNode(
+                        AiLabelRenderer.capMiddle(texts.get(field), maxBytes)));
     }
 
     private static long sizeOf(JsonNode field) {

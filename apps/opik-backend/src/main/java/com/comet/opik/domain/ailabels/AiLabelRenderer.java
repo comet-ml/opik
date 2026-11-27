@@ -47,8 +47,9 @@ import java.util.stream.Collectors;
  *
  * <p>The state is {@code {name, input, output, spans}}, with {@code spans} the {@link AiLabelSpan} tree, every object's
  * keys sorted, and absent fields left out. A span's {@code input} or {@code output} equal to its parent's (the
- * trace's, for a top-level span) is left out too: wrapper spans repeat it. Every array of more than 16 numbers (an
- * embedding, typically) is a {@code …[N numbers omitted]…} string: it means nothing to a summary, only costs tokens. For tasks with {@code {{history}}}, the
+ * trace's, for a top-level span) is left out too: wrapper spans repeat it. Every embedding-like array (64 or more numbers or
+ * nulls, at least one of them fractional) is a {@code …[N numbers omitted]…} string: it means nothing to a summary,
+ * only costs tokens. For tasks with {@code {{history}}}, the
  * state is fitted together with the history: the trace's earlier turns in its thread, oldest first, each
  * {@code {input, output}} as stored text. The same trace content always renders to the same bytes, so
  * {@link #RENDERER_VERSION} must be bumped with any change to the output; the golden-file test enforces it.
@@ -73,7 +74,7 @@ public class AiLabelRenderer {
 
     private static final String INPUT = "input";
     private static final String OUTPUT = "output";
-    private static final int MAX_VECTOR_LENGTH = 16;
+    private static final int MIN_VECTOR_LENGTH = 64;
     private static final String NUMBERS_MARKER_CLOSE = " numbers omitted]…";
 
     // About 0.5 MB of keys in the read's query text.
@@ -310,15 +311,21 @@ public class AiLabelRenderer {
         return state;
     }
 
-    /** A copy of {@code node} with every array of more than {@link #MAX_VECTOR_LENGTH} numbers replaced by a marker. */
+    /**
+     * A copy of {@code node} with every embedding-like array replaced by a marker: at least
+     * {@link #MIN_VECTOR_LENGTH} numbers, one of them fractional, so a list of counts or ids stays readable.
+     */
     private static JsonNode elideVectors(JsonNode node) {
         if (node instanceof ArrayNode array) {
             // Null counts as a number: serializers write NaN in an embedding as null.
-            boolean vector = array.size() > MAX_VECTOR_LENGTH;
+            boolean vector = array.size() >= MIN_VECTOR_LENGTH;
+            boolean fractional = false;
             for (int i = 0; vector && i < array.size(); i++) {
-                vector = array.get(i).isNumber() || array.get(i).isNull();
+                var element = array.get(i);
+                vector = element.isNumber() || element.isNull();
+                fractional |= element.isFloatingPointNumber();
             }
-            if (vector) {
+            if (vector && fractional) {
                 return AiLabelJson.NODE_FACTORY.textNode(
                         AiLabelStateFitter.MARKER_OPEN + array.size() + NUMBERS_MARKER_CLOSE);
             }

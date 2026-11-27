@@ -115,7 +115,7 @@ class AiLabelStateFitterTest {
         assertThat(bothCut.state().get("input").get("short").textValue()).isEqualTo("keep");
     }
 
-    /** The trace is cut only once every earlier turn is gone; without history, steps 2 and 3 never run. */
+    /** The trace is cut only once every earlier turn is gone; without history, steps 3 and 4 never run. */
     @Test
     void fitCutsTheTraceOnlyOnceTheHistoryIsGone() {
         var fixtures = new AiLabelRenderFixtures(7, false);
@@ -149,10 +149,14 @@ class AiLabelStateFitterTest {
         var answer = new AiLabelRenderFixtures(11, false).text(500);
         var output = NODE_FACTORY.objectNode().put("answer", answer);
         output.set("embedding", floats(new Random(11), 1_536));
-        var vectorWithNaN = floats(new Random(12), 20).add(NODE_FACTORY.nullNode());
+        var vectorWithNull = floats(new Random(12), 64).add(NODE_FACTORY.nullNode());
+        var ids = NODE_FACTORY.arrayNode();
+        for (int i = 0; i < 100; i++) {
+            ids.add(i);
+        }
         var trace = trace("{\"q\":\"question\"}", output.toString());
         var embed = span(trace, "embed", null, 0, "general").toBuilder()
-                .output("{\"vector\":" + vectorWithNaN + ",\"bbox\":[1,2,3,4]}").build();
+                .output("{\"vector\":" + vectorWithNull + ",\"bbox\":[1,2,3,4],\"ids\":" + ids + "}").build();
 
         var fitted = (Fitted) fit(trace, List.of(embed), null, BUDGET);
 
@@ -160,8 +164,9 @@ class AiLabelStateFitterTest {
         assertThat(fitted.state().get("output").get("embedding").textValue()).isEqualTo("…[1536 numbers omitted]…");
         assertThat(fitted.state().get("output").get("answer").textValue()).isEqualTo(answer);
         var spanOutput = fitted.state().get("spans").get(0).get("output");
-        assertThat(spanOutput.get("vector").textValue()).isEqualTo("…[21 numbers omitted]…");
+        assertThat(spanOutput.get("vector").textValue()).isEqualTo("…[65 numbers omitted]…");
         assertThat(spanOutput.get("bbox")).hasSize(4);
+        assertThat(spanOutput.get("ids")).isEqualTo(ids);
     }
 
     /** A knowledge graph: nodes carrying embeddings, text chunks, and edges; bulk that strings at 64 don't remove. */
@@ -324,6 +329,67 @@ class AiLabelStateFitterTest {
         assertThat(fitted.state().get("input")).isEqualTo(state(trace, List.of()).get("input"));
         assertThat(fitted.state().get("output")).hasSize(items + 1);
         assertThat(fitted.state().get("output").get(items).get("id").intValue()).isEqualTo(399);
+    }
+
+    /** A thread's earlier turns go before the lists of the trace being labeled are capped. */
+    @Test
+    void fitDropsTheHistoryBeforeCappingTheTraceArrays() {
+        var fixtures = new AiLabelRenderFixtures(17, false);
+        var input = NODE_FACTORY.objectNode();
+        var messages = input.putArray("messages");
+        for (int i = 0; i < 20; i++) {
+            messages.addObject().put("role", i % 2 == 0 ? "user" : "assistant").put("content", fixtures.text(400));
+        }
+        var trace = trace(input.toString(), "\"" + fixtures.text(200) + "\"");
+        var turns = new ArrayList<ThreadTurnRow>();
+        for (int i = 0; i < 6; i++) {
+            turns.add(turn(fixtures.text(1_000), fixtures.text(1_000)));
+        }
+
+        var fitted = (Fitted) fit(trace, List.of(), AiLabelRenderer.toHistory(turns), 16_000);
+
+        assertThat(fitted.compactionLevel()).startsWith("history_outputs_dropped:");
+        assertThat(fitted.state().get("input")).isEqualTo(input);
+    }
+
+    /** A short request keeps its items while a long answer is capped. */
+    @Test
+    void fitCapsTheLargerFieldsArraysAlone() {
+        var input = NODE_FACTORY.objectNode();
+        var messages = input.putArray("messages");
+        for (int i = 0; i < 5; i++) {
+            messages.addObject().put("role", "user").put("content", "message " + i);
+        }
+        var fixtures = new AiLabelRenderFixtures(18, false);
+        var output = NODE_FACTORY.arrayNode();
+        for (int i = 0; i < 200; i++) {
+            output.addObject().put("id", i).put("text", fixtures.text(4_000));
+        }
+        var trace = trace(input.toString(), output.toString());
+
+        var fitted = fitTwice(trace, 16_000);
+
+        assertThat(capOf(fitted, "arrays_capped:", MIN_ITEMS)).isLessThan(5);
+        assertThat(fitted.state().get("input")).isEqualTo(input);
+    }
+
+    /** Two wide fields of about the same size: both become text with one shared cap, so neither is lost. */
+    @Test
+    void fitSharesTheRoomWhenNeitherFieldIsSmall() {
+        var input = NODE_FACTORY.objectNode();
+        var output = NODE_FACTORY.objectNode();
+        for (int i = 0; i < 5_000; i++) {
+            input.put("in_%05d".formatted(i), i);
+            output.put("out_%05d".formatted(i), i);
+        }
+        var trace = trace(input.toString(), output.toString());
+
+        var fitted = fitTwice(trace, BUDGET);
+
+        assertThat(fitted.compactionLevel()).isEqualTo("fields_as_text");
+        assertThat(fitted.state().get("input").textValue()).startsWith("{\"in_00000\":0,");
+        assertThat(fitted.state().get("output").textValue()).startsWith("{\"out_00000\":0,");
+        assertThat(canonicalBytes(fitted.state().get("output"))).isGreaterThan(BUDGET / 3);
     }
 
     /** The larger field becomes text first, so a short answer beside a huge input is kept. */
