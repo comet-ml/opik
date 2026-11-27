@@ -269,6 +269,7 @@ public class TopicVectorsTickService {
     }
 
     /** A window read and the find it read, whose upper bound the watermark takes. */
+    @Builder(toBuilder = true)
     private record FoundRead(@NonNull TopicVectorsFind find, @NonNull WindowRead read) {
     }
 
@@ -283,7 +284,7 @@ public class TopicVectorsTickService {
         var vectors = config.getVectors();
         return WindowRead.read(dao, find, longWindow ? vectors.getFind().getSliceSize().toJavaDuration() : null,
                 budget, vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
-                .map(read -> new FoundRead(find, read))
+                .map(read -> FoundRead.builder().find(find).read(read).build())
                 .onErrorResume(exception -> {
                     var narrowed = longWindow ? null : narrowed(find);
                     if (narrowed == null || !TopicsReadErrors.isTooLarge(exception)) {
