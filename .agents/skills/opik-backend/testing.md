@@ -386,8 +386,10 @@ together, or a wildcard that matches both) makes the second migration fail with
 `REPLICA_ALREADY_EXISTS` (the replicated table from migration `000017` already exists) — a confusing
 failure that looks like a product bug but is purely a test-harness collision.
 
-When a change spans both spans and traces (the usual case for shared query SQL), run each class in a
-**separate** `mvn` invocation:
+Set `TESTCONTAINERS_REUSE_ENABLE=true`, as CI does, and the classes of one invocation share one
+ClickHouse instead, so they can run together and the classes after the first skip container start.
+Otherwise, when a change spans both spans and traces (the usual case for shared query SQL), run each
+class in a **separate** `mvn` invocation:
 
 ```bash
 # ✅ GOOD - separate invocations
