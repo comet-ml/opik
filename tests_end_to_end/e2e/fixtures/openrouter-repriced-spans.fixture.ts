@@ -58,29 +58,35 @@ const COMPLETION_TOKENS = 1_000_000;
  * is about the AMOUNTS: whether the rows this release moved are billed at the
  * rates it shipped.
  *
- *   openrouter/qwen/qwen3.8-27b                           $0.039/M in + $1.25/M out -> $1.289
+ *   openrouter/qwen/qwen3.8-27b                           $0.06/M in + $1.96/M out  -> $2.02
  *   openrouter/mistralai/mistral-small-3.2-24b-instruct    $0.075/M in + $0.20/M out -> $0.275
- *   openrouter/minimax/minimax-m3.1-flash                  $0.15/M in + $0.60/M out -> $0.75
+ *   openrouter/minimax/minimax-m3.1-flash                  $0.075/M in + $0.30/M out -> $0.375
  *   openrouter/minimax/minimax-m3.1-flash:free             removed by 9180        -> nothing
  *
  * **These amounts track a GENERATED artifact and are expected to need updating.**
  * `model_prices_openrouter.json` is regenerated from OpenRouter's own model list
  * by `scripts/update_openrouter_model_prices.py`, so a row's rates can move in
- * any release — and they have: `qwen3.8-27b` was $0.20/M + $2.50/M when this
- * fixture was written for 2.2.120 and is $0.039/M + $1.25/M as 2.2.130 ships
- * it, which is what the 2.2.130 release pass found on staging. That is not a
- * defect and it is not flake; it is the cost of pinning absolute amounts, which
- * is also the only thing that pins the lookup to the shipped table rather than
- * to itself. When this fails, read the row out of
+ * any release — and they keep doing so. `qwen3.8-27b` has now moved three
+ * times: $0.20/M + $2.50/M when this fixture was written for 2.2.120,
+ * $0.039/M + $1.25/M as 2.2.130 shipped it, and $0.06/M + $1.96/M as 2.3.7
+ * ships it (opik#9834) — $1.289 -> $2.02 at the counts below. `minimax-m3.1-flash`
+ * moved in the same release, $0.15/M + $0.60/M -> $0.075/M + $0.30/M, halving
+ * $0.75 -> $0.375. Both were re-derived from the shipped file during the
+ * 2.3.6 -> 2.3.7 release pass and confirmed against what the server actually
+ * charged. `mistral-small-3.2-24b-instruct` did NOT move.
+ *
+ * That is not a defect and it is not flake; it is the cost of pinning absolute
+ * amounts, which is also the only thing that pins the lookup to the shipped
+ * table rather than to itself. When this fails, read the row out of
  * `apps/opik-backend/src/main/resources/model_prices_openrouter.json` and check
  * the published rates against it BEFORE treating a changed amount as a finding.
  *
  * Why these three and not any three:
  *
- *  - **qwen3.8-27b's rates have moved twice**, once in 9180 and again before
- *    2.2.130, and its output rate is 32x its input rate — so a build reading
- *    any other copy of the file prices it at a perfectly ordinary-looking
- *    figure rather than at nothing.
+ *  - **qwen3.8-27b's rates have moved three times**, in 9180, again before
+ *    2.2.130, and again in 9834 for 2.3.7; its output rate is ~33x its input
+ *    rate — so a build reading any other copy of the file prices it at a
+ *    perfectly ordinary-looking figure rather than at nothing.
  *  - **mistral-small-3.2-24b-instruct went DOWN in 9180.** Three rows that all
  *    rose could be satisfied by an across-the-board multiplier; one that fell
  *    cannot.
@@ -88,7 +94,7 @@ const COMPLETION_TOKENS = 1_000_000;
  *    that replaced a `:free` one, so it and the control are the same vendor and
  *    the same model differing only by the `:free` suffix.
  *  - **The three amounts are distinct and render as three distinct strings**
- *    ($1.28, $0.27, $0.75 — `displayedCost` floors to cents), so no single
+ *    ($2.02, $0.27, $0.37 — `displayedCost` floors to cents), so no single
  *    constant satisfies them and the panel half is discriminating per span.
  *
  * The `:free` id is the control, and a stronger one than a nonsense name:
@@ -102,9 +108,9 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRepricedSpanSeed, 'name'>> = [
   {
     key: 'qwen-repriced',
     model: 'openrouter/qwen/qwen3.8-27b',
-    expectedCost: 1.289,
+    expectedCost: 2.02,
     workings:
-      '1.0M x $0.039/M in + 1.0M x $1.25/M out (re-priced again between 2.2.120 and 2.2.130; ' +
+      '1.0M x $0.06/M in + 1.0M x $1.96/M out (re-priced a THIRD time for 2.3.7, by opik#9834; ' +
       'check model_prices_openrouter.json before calling a changed amount a defect)',
   },
   {
@@ -116,8 +122,10 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRepricedSpanSeed, 'name'>> = [
   {
     key: 'minimax-paid',
     model: 'openrouter/minimax/minimax-m3.1-flash',
-    expectedCost: 0.75,
-    workings: '1.0M x $0.15/M in + 1.0M x $0.60/M out (the paid row 9180 added)',
+    expectedCost: 0.375,
+    workings:
+      '1.0M x $0.075/M in + 1.0M x $0.30/M out (the paid row 9180 added, halved again by ' +
+      'opik#9834 for 2.3.7)',
   },
   {
     key: 'minimax-free-removed',

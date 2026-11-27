@@ -1,4 +1,4 @@
-export { test, expect } from './prompt-mixed-source-experiments.fixture';
+export { test, expect } from './dashboard-row-actions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -876,3 +876,13 @@ export type {
   PromptMixedSourceExperimentsRef,
   PromptMixedSourceExperimentsFixtures,
 } from './prompt-mixed-source-experiments.fixture';
+export type {
+  OpenRouterCacheRateSpanSeed,
+  OpenRouterCacheRateSpansRef,
+  OpenRouterCacheRateSpansFixtures,
+} from './openrouter-cache-rate-spans.fixture';
+export { NO_CACHE_RATE_PAIRS } from './openrouter-cache-rate-spans.fixture';
+export type {
+  DashboardRowActionsRef,
+  DashboardRowActionsFixtures,
+} from './dashboard-row-actions.fixture';

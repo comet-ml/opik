@@ -73,6 +73,76 @@ export class ConfigurationPage {
     await this.page.getByTestId('ai-providers-tabpanel').waitFor({ state: 'visible' });
   }
 
+  /** The AI Providers tab's own panel — the scope for everything below. */
+  get aiProvidersPanel(): Locator {
+    return this.page.getByTestId('ai-providers-tabpanel');
+  }
+
+  /**
+   * Every `h2` the AI Providers panel renders.
+   *
+   * A collection rather than a single locator on purpose: opik#9832 gave this
+   * tab a title row it did not have, and the claim worth holding is that it
+   * renders the heading EXACTLY once. A `getByRole('heading')` that took
+   * `.first()` would pass just as well against a panel that had grown a second
+   * one, or lost its own and was matching a heading from the page chrome.
+   */
+  get aiProvidersHeadings(): Locator {
+    return this.aiProvidersPanel.locator('h2');
+  }
+
+  /**
+   * The "Add configuration" button in the tab's TITLE row, as opposed to the
+   * one the empty state renders inside the table.
+   *
+   * opik#9832 moved this control out of the search row into a new title row
+   * beside the `h2` and shrank it to `size="xs"` with a `+` icon. Scoped
+   * through the heading's own parent element, which is the title row: there is
+   * no `data-testid` here, and the panel-wide lookup the rest of this page
+   * object uses (`getByRole('button', { name: 'Add configuration' }).first()`)
+   * cannot tell the title row's button from the empty state's — so it would
+   * keep passing against a tab that had lost the title row altogether, which
+   * is precisely the regression this release makes possible.
+   *
+   * Structural only in its last hop, and anchored on identity rather than
+   * position: the `h2`'s text is the anchor, and `..` is the row that holds
+   * both. Asserting the button is INSIDE the heading's row is the claim; a
+   * `data-testid` on the row would express it better and should be added when
+   * the FE is next touched for this tab.
+   */
+  get addConfigurationInTitleRow(): Locator {
+    return this.aiProvidersPanel
+      .locator('h2', { hasText: 'AI Providers' })
+      .locator('..')
+      .getByRole('button', { name: 'Add configuration' });
+  }
+
+  /** The search box in the row below the title row. */
+  get aiProvidersSearchInput(): Locator {
+    return this.aiProvidersPanel.getByPlaceholder('Search by name');
+  }
+
+  /**
+   * Opens the add-provider dialog from the title row's button and returns it.
+   *
+   * Deliberately stops at "the dialog is open": a spec about the button having
+   * survived its move must not submit anything, because a provider key on this
+   * tab is workspace-global and would change what every other spec's model
+   * picker sees.
+   */
+  async openAddProviderDialogFromTitleRow(): Promise<Locator> {
+    return test.step('open the add-provider dialog from the AI Providers title row', async () => {
+      await expect(
+        this.addConfigurationInTitleRow,
+        'exactly one "Add configuration" button in the AI Providers title row',
+      ).toHaveCount(1);
+      await this.addConfigurationInTitleRow.click();
+      const dialog = this.page.getByTestId('add-provider-dialog');
+      await dialog.waitFor({ state: 'visible' });
+      return dialog;
+    });
+  }
+
   /**
    * Read the configured providers by inspecting `data-provider` attributes on
    * row cells. The tabpanel arrives visible before its row list resolves; if

@@ -30,6 +30,27 @@ export class DashboardsPage {
     });
   }
 
+  /**
+   * Opens the list already narrowed to the dashboards whose name contains
+   * `nameQuery`.
+   *
+   * Through the `search` query param, which `DashboardsPage` binds with
+   * `useQueryParam` and passes to the list request as `search`, rather than
+   * through the Filters popover: the param is a one-shot navigation with no
+   * debounce and no popover to dismiss, and the narrowing is a PRECONDITION
+   * here, not the subject. The workspace this runs against is shared and holds
+   * other runs' dashboards, so an unfiltered list cannot promise the two
+   * seeded rows are even on the first page.
+   */
+  async gotoSearchedByName(nameQuery: string): Promise<void> {
+    return test.step(`Open the Dashboards page searched for "${nameQuery}"`, async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/dashboards?search=${encodeURIComponent(nameQuery)}`,
+      );
+    });
+  }
+
   async waitForReady(): Promise<void> {
     return test.step('Wait for the Dashboards page to be ready', async () => {
       await this.page
@@ -769,6 +790,87 @@ export class DashboardsPage {
     return this.page
       .getByRole('row')
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+  }
+
+  /**
+   * A row in the dashboards list, addressed by the dashboard's **id**.
+   *
+   * `DataTable` stamps `data-row-id` from the page's `getRowId`, which for
+   * dashboards is the entity id. Preferred over {@link row} wherever the test
+   * knows the id: a name cell is matched by rendered text, and this page's
+   * column order is user-configurable and persisted, so nothing about a name
+   * lookup is anchored to the row's identity. It also makes "exactly this
+   * dashboard went" expressible, which is the whole verdict of a delete.
+   */
+  rowById(dashboardId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${dashboardId}"]`);
+  }
+
+  /**
+   * Opens one row's actions menu and returns the open menu.
+   *
+   * The trigger carries no `data-testid`; it is an icon-only button whose only
+   * handle is the `sr-only` accessible name "Actions menu" that
+   * `DashboardRowActionsCell` renders inside it. Scoped to the row so the
+   * lookup cannot drift to a sibling row's trigger, and asserted to resolve to
+   * exactly one element rather than taking `.first()`, so an ambiguous match
+   * fails loudly instead of silently operating on the wrong row.
+   *
+   * Does NOT assert anything about navigation — opik#9832 rewrapped this cell
+   * so a click here stops propagating to the row's own `onRowClick`, and
+   * whether the URL stayed put is the caller's claim to make.
+   */
+  async openRowActionsMenu(dashboardId: string): Promise<Locator> {
+    return test.step(`open the actions menu on dashboard ${dashboardId}`, async () => {
+      const trigger = this.rowById(dashboardId).getByRole('button', { name: 'Actions menu' });
+      await expect(
+        trigger,
+        `exactly one Actions menu trigger in the row for dashboard ${dashboardId}`,
+      ).toHaveCount(1);
+      await trigger.click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      return menu;
+    });
+  }
+
+  /**
+   * Completes a delete from a row's actions menu: open the menu, choose
+   * Delete, confirm in the dialog.
+   *
+   * Waits for the delete request to be answered rather than for the row to go,
+   * and leaves every assertion to the caller. The list invalidates its query
+   * optimistically, so a row can leave the table before — or without — the
+   * server having deleted anything; returning once the response has landed is
+   * what lets the caller's UI and server-side assertions mean two different
+   * things.
+   *
+   * The request is a `POST .../dashboards/delete-batch` carrying an `ids`
+   * array, not a `DELETE` — `useDashboardBatchDeleteMutation` is the same
+   * mutation the multi-select toolbar uses, which is exactly why a bystander
+   * matters.
+   */
+  async deleteFromRowActionsMenu(dashboardId: string): Promise<void> {
+    return test.step(`delete dashboard ${dashboardId} from its row-actions menu`, async () => {
+      const menu = await this.openRowActionsMenu(dashboardId);
+
+      await menu.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+
+      // `ConfirmDialog`'s confirm button is labelled "Delete dashboard", which
+      // is also the label of the list header's create button — hence the scope
+      // to the dialog rather than to the page.
+      const dialog = this.page.getByRole('dialog').filter({ hasText: 'Delete dashboard' });
+      await dialog.waitFor({ state: 'visible' });
+
+      const deleted = this.page.waitForResponse(
+        (res) =>
+          res.url().includes('/v1/private/dashboards/delete-batch') &&
+          res.request().method() === 'POST',
+      );
+      await dialog.getByRole('button', { name: 'Delete dashboard', exact: true }).click();
+      await deleted;
+      await dialog.waitFor({ state: 'hidden' });
+    });
   }
 
   /**
