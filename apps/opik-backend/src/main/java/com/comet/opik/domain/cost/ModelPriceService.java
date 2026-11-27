@@ -113,7 +113,7 @@ class ModelPriceServiceImpl implements ModelPriceService {
                 .flatMap(organizationId -> findOrganizationList(organizationId).map(ModelPriceList::toLayers))
                 .defaultIfEmpty(PriceLayers.BUILT_IN_ONLY)
                 .onErrorResume(error -> {
-                    log.warn("Failed to load model prices, workspace '{}', pricing with built-in prices", workspaceId,
+                    log.warn("Failed to load model prices, pricing with built-in prices, workspace '{}'", workspaceId,
                             error);
                     return Mono.just(PriceLayers.BUILT_IN_ONLY);
                 });
