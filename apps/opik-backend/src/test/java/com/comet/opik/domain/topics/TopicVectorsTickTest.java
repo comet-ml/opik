@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -12,7 +13,9 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
@@ -125,6 +128,7 @@ import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -210,6 +214,7 @@ class TopicVectorsTickTest {
     private TopicVectorBackfiller backfiller;
     private TopicVectorsMetrics vectorsMetrics;
     private LongReadRetry longReadRetry;
+    private TraceTopicsDAO traceTopicsDAO;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
@@ -219,8 +224,10 @@ class TopicVectorsTickTest {
             @Jit TopicVectorBackfillService backfillService, GuiceJobManager jobManager, EventBus eventBus,
             @Jit TopicRunStore store, @Jit TopicAlgorithm algorithm, @Jit AiLabelTaskRegistry taskRegistry,
             @Jit TopicVectorWriter writer, @Jit TopicVectorBackfiller backfiller,
-            @Jit TopicVectorsMetrics vectorsMetrics, @Jit LongReadRetry longReadRetry, @Jit TopicEmbedder embedder) {
+            @Jit TopicVectorsMetrics vectorsMetrics, @Jit LongReadRetry longReadRetry, @Jit TopicEmbedder embedder,
+            @Jit TraceTopicsDAO traceTopicsDAO) {
         this.store = store;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.embedder = embedder;
         this.algorithm = algorithm;
         this.taskRegistry = taskRegistry;
@@ -728,6 +735,43 @@ class TopicVectorsTickTest {
         assertThat(countRows(workspaceId)).isZero();
 
         assertThat(tick()).isEqualTo(TickResult.written(3));
+    }
+
+    @Test
+    @DisplayName("a fresh read over its memory guard is read again over the first half of its status span: the "
+            + "watermark moves on each tick and a later tick writes the traces")
+    void freshReadOverItsGuardNarrows() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        markDrained(workspaceId, projectId);
+        var traceIds = labelTraces(workspaceId, projectId, 3, 1);
+        // As a memory guard trips on a workspace with many statuses: a read whose status span is over 6 hours fails.
+        var guardedDAO = spy(vectorsDAO);
+        var spans = new ArrayList<Duration>();
+        doAnswer(invocation -> {
+            TopicVectorsFind find = invocation.getArgument(0);
+            var span = Duration.between(find.lowerBound(), find.upperBound());
+            spans.add(span);
+            return span.compareTo(Duration.ofHours(6)) > 0
+                    ? Flux.error(new RuntimeException(new ClickHouseException(241, "Memory limit exceeded", null)))
+                    : invocation.callRealMethod();
+        }).when(guardedDAO).findUnvectored(any());
+        var tick = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
+                guardedDAO, taskRegistry, writer,
+                new TopicVectorDiscovery(opikConfig.getTopics(), vectorsDAO, backfillService, vectorsMetrics),
+                backfiller, vectorsMetrics, longReadRetry);
+
+        // The 24-hour read trips, then 12 hours, then 6 hours reads nothing: the statuses are newer.
+        assertThat(tick.tick(Instant.now()).block()).isEqualTo(TickResult.EMPTY);
+        assertThat(spans).hasSize(3);
+        assertThat(spans.getLast()).isLessThanOrEqualTo(Duration.ofHours(6));
+
+        var written = 0;
+        for (int i = 0; i < 5 && written == 0; i++) {
+            written = tick.tick(Instant.now()).block().written();
+        }
+        assertThat(written).isEqualTo(3);
+        assertThat(Set.copyOf(writtenTraceIds(workspaceId))).isEqualTo(Set.copyOf(traceIds));
     }
 
     @Test
@@ -1538,6 +1582,37 @@ class TopicVectorsTickTest {
                     "workspace_id", workspaceId))
                     .isZero();
             assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("arrival skips the deleted-traces check: with a check slower than topics.arrival.timeout, its rows "
+                + "are written and counted and nothing fails")
+        void slowDeletedTracesCheck() {
+            var slowCheck = spy(traceTopicsDAO);
+            doReturn(Mono.delay(Duration.ofSeconds(4)).thenReturn(0)).when(slowCheck)
+                    .deleteRowsOfDeletedTraces(any());
+            var runStore = new TopicRunStore(opikConfig.getTopics(), template, slowCheck, mock(ProjectService.class),
+                    ID_GENERATOR, TopicsMetricsReader.metrics(InMemoryMetricReader.create()),
+                    mock(WorkspaceNameService.class));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, runStore, algorithm));
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(countTraceTopicRows(workspaceId)).isEqualTo(5);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
+                    workspaceId)
+                    + TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "other", "workspace_id",
+                            workspaceId))
+                    .isEqualTo(5);
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+            verify(slowCheck, never()).deleteRowsOfDeletedTraces(any());
         }
 
         @Test

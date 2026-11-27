@@ -4,15 +4,18 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsConfig.ReadGuards;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
+import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import reactor.core.publisher.Flux;
@@ -26,8 +29,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -44,6 +49,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
  * <p>The deletes are {@link TraceKeyedTableDeletes}', as {@link TopicVectorsDAO}'s (same keys, same partitioning), so a
  * trace's topic goes with the trace exactly as its vector does: by retention and by the trace-delete cascade.
  */
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TraceTopicsDAO {
@@ -105,6 +111,23 @@ public class TraceTopicsDAO {
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
 
+    /**
+     * The traces of {@code :trace_ids} that still have a {@code topic_vectors} row, tombstones included: the
+     * trace-delete cascade deletes every row of a trace, and every {@code trace_topics} row comes from a vector.
+     */
+    private static final String FIND_VECTORED_TRACES = """
+            SELECT DISTINCT trace_id
+            FROM topic_vectors
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND task = :task
+            AND trace_id IN :trace_ids
+            SETTINGS max_threads = <max_threads>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    private static final String DELETE_USER = "topics";
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull TraceKeyedTableDeletes deletes;
@@ -132,6 +155,51 @@ public class TraceTopicsDAO {
                     }
                     return node;
                 });
+    }
+
+    /**
+     * Deletes {@code rows}, just inserted, of the traces deleted since the caller read them: their delete cascade ran
+     * before the insert, so nothing else would delete them. The cascade deletes {@code topic_vectors} before
+     * {@code trace_topics}, so a trace whose vectors are gone here has had its cascade, or its {@code trace_topics} step
+     * is still to come and deletes these rows too; a cascade that starts after this check deletes them then. Returns
+     * how many traces had their rows deleted. The check reads {@code topics.run.deletedCheckBatchSize} ids at a time,
+     * under the {@code topics.run.read} guards.
+     */
+    public Mono<Integer> deleteRowsOfDeletedTraces(@NonNull List<TraceTopic> rows) {
+        var traces = rows.stream().collect(Collectors.groupingBy(TraceTopic::workspaceId,
+                Collectors.groupingBy(TraceTopic::projectId,
+                        Collectors.mapping(TraceTopic::traceId, Collectors.toCollection(TreeSet::new)))));
+        return Flux.fromIterable(traces.entrySet())
+                .concatMap(workspace -> Flux.fromIterable(workspace.getValue().entrySet())
+                        .concatMap(project -> Flux.fromIterable(Lists.partition(List.copyOf(project.getValue()),
+                                config.getRun().getDeletedCheckBatchSize()))
+                                .concatMap(batch -> findVectoredTraces(workspace.getKey(), project.getKey(), batch)
+                                        .map(vectored -> batch.stream().filter(id -> !vectored.contains(id))
+                                                .collect(Collectors.toUnmodifiableSet())))
+                                .filter(deleted -> !deleted.isEmpty())
+                                .concatMap(deleted -> deleteByTraceIds(deleted, project.getKey())
+                                        .thenReturn(deleted.size())))
+                        .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, workspace.getKey())
+                                .put(RequestContext.USER_NAME, DELETE_USER)))
+                .reduce(0, Integer::sum);
+    }
+
+    private Mono<Set<UUID>> findVectoredTraces(String workspaceId, UUID projectId, List<UUID> traceIds) {
+        var read = config.getRun().getRead();
+        var template = getSTWithLogComment(FIND_VECTORED_TRACES, "topics:find_vectored_traces", workspaceId, null,
+                "project_id=%s, traces=%d".formatted(projectId, traceIds.size()))
+                .add("max_threads", read.getMaxThreads())
+                .add("max_memory_usage", read.getMaxMemoryUsage())
+                .add("max_rows_to_read", read.getMaxRowsToRead());
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
+                        .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("trace_id", String.class))))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /**

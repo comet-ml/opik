@@ -290,7 +290,7 @@ public class TopicsRunService {
     private Mono<TopicRunOutcome> afterSave(TopicRun run, List<TraceTopic> traceTopics, double otherShare,
             ObjectNode stats) {
         metrics.otherShare(run.workspace(), otherShare);
-        return store.insertTraceTopics(run.workspace(), traceTopics)
+        return store.insertTraceTopicsAndDropDeleted(run.workspace(), traceTopics)
                 .thenReturn(traceTopics.size())
                 .onErrorResume(exception -> {
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "

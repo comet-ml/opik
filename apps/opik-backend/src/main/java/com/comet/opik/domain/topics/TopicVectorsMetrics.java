@@ -52,6 +52,7 @@ class TopicVectorsMetrics {
     private final LongCounter skipped;
     private final LongCounter embedFailures;
     private final LongCounter readFailures;
+    private final LongCounter readsNarrowed;
     private final LongCounter workspacesNotRead;
     private final LongCounter discoveries;
     private final LongCounter longWindowMissed;
@@ -77,6 +78,10 @@ class TopicVectorsMetrics {
                 .setDescription("Reads that failed, by phase: find (one workspace's window read), discover (one "
                         + "workspace's project discovery) or backfill (one project's window read), workspace and error "
                         + "type")
+                .build();
+        this.readsNarrowed = meter.counterBuilder("topics.vectors.read.narrowed_total")
+                .setDescription("Fresh workspace reads over a find size guard that were read again over the first half "
+                        + "of their status span, by workspace")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read_total")
                 .setDescription("Enabled workspaces a tick's workspace read did not read, by reason and workspace: "
@@ -148,6 +153,10 @@ class TopicVectorsMetrics {
     void readFailure(@NonNull String phase, @NonNull Workspace workspace, @NonNull Throwable error) {
         readFailures.add(1, workspace.attributes().toBuilder().put(stringKey("phase"), phase)
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
+    }
+
+    void readNarrowed(@NonNull Workspace workspace) {
+        readsNarrowed.add(1, workspace.attributes());
     }
 
     void workspaceNotRead(@NonNull Workspace workspace, @NonNull NotRead reason) {

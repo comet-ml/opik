@@ -371,7 +371,7 @@ public class TopicWindowLabelService {
                             .toList();
                     long other = written.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
                     var totals = new Totals(null, rows.size(), written.size(), other, skipped, capped, false);
-                    return store.insertTraceTopics(workspace, written).thenReturn(totals);
+                    return store.insertTraceTopicsAndDropDeleted(workspace, written).thenReturn(totals);
                 });
     }
 }
