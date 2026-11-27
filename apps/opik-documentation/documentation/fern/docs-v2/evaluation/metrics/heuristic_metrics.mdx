@@ -24,6 +24,7 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 | Equals | Checks if the output exactly matches an expected string. |
 | GLEU | Estimates fluency and grammatical correctness on a 0–1 scale. |
 | IsJson | Ensures the output can be parsed as JSON. |
+| JsonSchemaMatch | Checks that the output conforms to a JSON Schema, without an LLM call. |
 | JSDivergence | Jensen–Shannon similarity between token distributions. |
 | JSDistance | Raw Jensen–Shannon divergence between token distributions. |
 | KLDivergence | Kullback–Leibler divergence between token distributions. |
@@ -116,6 +117,27 @@ metric = IsJson(name="is_json_metric")
 score = metric.score(output='{"key": "some_valid_sql"}')
 print(score)
 ```
+
+### JsonSchemaMatch
+
+The `JsonSchemaMatch` metric checks that the output conforms to a JSON Schema. Unlike `StructuredOutputCompliance`, it does not call an LLM: it validates the output with the `jsonschema` library, so the same output always gets the same score. The score is 1.0 when the output is valid and 0.0 otherwise. On failure the reason shows the first five violations with their JSON paths and counts the rest, `metadata["errors"]` holds up to 100 of them, and `metadata["truncated"]` is `True` when there were more.
+
+```python wordWrap
+from opik.evaluation.metrics import JsonSchemaMatch
+
+metric = JsonSchemaMatch(
+    schema={
+        "type": "object",
+        "properties": {"total": {"type": "number"}},
+        "required": ["total"],
+    }
+)
+
+score = metric.score(output='{"total": "42.5"}')
+print(score)  # value=0.0, reason lists "$.total: '42.5' is not of type 'number'"
+```
+
+The output can be a JSON string or an already-parsed value. The schema can be a dict, a JSON string or a pydantic model class, and a `schema` passed to `score()` (for example from a dataset item) overrides the one given to the metric. The `$schema` keyword selects the draft (Draft 2020-12 by default). The `format` keyword is checked only with `check_formats=True`; formats such as `date-time` and `uri` need `pip install "jsonschema[format-nongpl]"`, and the metric raises an error rather than skip a format that the schema's draft defines but cannot be checked. Formats the draft does not define are ignored. A missing or invalid schema raises `MetricComputationError` instead of scoring 0.0. The metric needs the `jsonschema` package (`pip install jsonschema`).
 
 ### LevenshteinRatio
 
