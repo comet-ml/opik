@@ -2,9 +2,23 @@ import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ExperimentGroupRows } from './experiment-group-rows';
+import { ExperimentsActionsPanel } from './experiments-actions-panel';
 
 export class PromptDetailPage {
-  constructor(private readonly page: Page) {}
+  /**
+   * The Compare / Manage tags / Delete group over the Experiments tab's row
+   * selection — the same component the project Experiments list hosts, which
+   * is why it is shared rather than re-modelled here (opik#9747).
+   *
+   * This tab is the only surface that can hold a dataset experiment and a
+   * test-suite experiment in one selection, so it is the only place the
+   * panel's "item source" tooltip branch is reachable.
+   */
+  readonly experimentActions: ExperimentsActionsPanel;
+
+  constructor(private readonly page: Page) {
+    this.experimentActions = new ExperimentsActionsPanel(page);
+  }
 
   /**
    * Open a prompt's detail page directly, optionally deep-linked to one of its
@@ -115,6 +129,43 @@ export class PromptDetailPage {
   /** One experiment's row, by id. Never `.first()` — callers assert the count. */
   experimentRow(experimentId: string): Locator {
     return this.page.locator(`tbody tr[data-row-id="${experimentId}"]`);
+  }
+
+  /**
+   * Tick the select checkbox on each named experiment row.
+   *
+   * By row id, never by position: this tab's order is the server's, and this
+   * page's columns are user-reorderable, so a positional pick would silently
+   * tick a different experiment the moment either changes.
+   */
+  async selectExperiments(experimentIds: string[]): Promise<void> {
+    await test.step(`select ${experimentIds.length} experiment(s)`, async () => {
+      for (const id of experimentIds) {
+        const checkbox = this.experimentRow(id).getByRole('checkbox', { name: 'Select row' });
+        await expect(checkbox, `select checkbox for experiment ${id}`).toHaveCount(1);
+        await checkbox.click();
+        await expect(checkbox, `experiment ${id} after ticking`).toBeChecked();
+      }
+    });
+  }
+
+  /**
+   * The Experiments tab's own toolbar controls, which this host keeps while
+   * rows are selected — unlike the project Experiments list, which swaps its
+   * toolbar row for a `SelectionActionBar`. Asserting they survive is how the
+   * spec pins that this host was NOT given the bar.
+   */
+  get experimentsSearchInput(): Locator {
+    return this.page.getByTestId('search-input');
+  }
+
+  get experimentsColumnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /** The `SelectionActionBar`'s count label, which this host must never render. */
+  get selectedCountLabel(): Locator {
+    return this.page.getByText(/^Selected: \d+$/);
   }
 
   async experimentRowIds(): Promise<string[]> {

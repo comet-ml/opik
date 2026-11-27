@@ -1712,7 +1712,7 @@ areas:
       #
       # 1. The START CARDS (opik#9143). A card is a prompt plus a question list,
       #    and two specs now ride here for it:
-      #    online-evaluation-decision-model-start-cards.spec.ts asserts WHICH
+      #    online-evaluation-decision-model-templates.spec.ts asserts WHICH
       #    prompt, questions and score names each of the six cards applies, and
       #    online-evaluation-start-card-validation.spec.ts asserts the two
       #    submit blocks the cards brought with them (`requirePrompt` and

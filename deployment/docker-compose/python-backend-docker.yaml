@@ -1,0 +1,5 @@
+# python-backend settings for PYTHON_CODE_EXECUTOR_STRATEGY=docker, which docker-compose.yaml extends.
+services:
+  python-backend:
+    # The Docker daemon inside python-backend, which starts the executor containers, needs privileged mode.
+    privileged: true

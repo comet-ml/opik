@@ -5,6 +5,7 @@ import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -48,6 +49,9 @@ import java.util.stream.Collectors;
  * </ul>
  * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
  * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
+ *
+ * <p>In both phases, the live traces of each read's written vectors get their topic on arrival ({@link TopicsArrivalService}), for a
+ * workspace listed at the arrival stage or a later one, read once per tick.
  *
  * <p>A workspace is read only with time left for the read and one embed call, so the tick never spends its budget
  * reading what it cannot embed. ClickHouse alone says which traces have no vector: every read is the done statuses less
@@ -102,7 +106,8 @@ public class TopicVectorsTickService {
         return Mono.fromCallable(() -> {
             var workspaceIds = workspaces.enabledWorkspaceIds();
             return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds),
-                    pass ? workspaces.vectorsLongWindowReads(workspaceIds) : Map.of());
+                    pass ? workspaces.vectorsLongWindowReads(workspaceIds) : Map.of(),
+                    arrivalWorkspaceIds());
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(enabled -> backfiller.discover(enabled.workspaceIds(), backfillLowerBound,
@@ -118,7 +123,8 @@ public class TopicVectorsTickService {
                                                     : readFrom(lowerBound, enabled.watermarks().get(workspaceId),
                                                             vectors.getWatermarkOverlap().toJavaDuration()),
                                                     start),
-                                            longWindow, longWindow ? missedBefore : null, budget);
+                                            longWindow, longWindow ? missedBefore : null, budget,
+                                            enabled.arrivalWorkspaceIds().contains(workspaceId));
                                 }, vectors.getEmbedConcurrency())
                                 .collectList()
                                 .flatMap(visits -> finish(visits).flatMap(fresh -> {
@@ -131,7 +137,20 @@ public class TopicVectorsTickService {
     }
 
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks,
-            @NonNull Map<String, Instant> longWindowReads) {
+            @NonNull Map<String, Instant> longWindowReads, @NonNull Set<String> arrivalWorkspaceIds) {
+    }
+
+    /**
+     * The workspaces listed at the arrival stage or a later one, read once per tick. None when the read fails: no
+     * arrival this tick, and the vectors go on.
+     */
+    private Set<String> arrivalWorkspaceIds() {
+        try {
+            return Set.copyOf(workspaces.enabledWorkspaceIds(TopicsStage.ARRIVAL));
+        } catch (RuntimeException exception) {
+            log.warn("Topic arrival stage read failed, no arrival this tick", exception);
+            return Set.of();
+        }
     }
 
     /** One workspace's read of the statuses written from {@code lowerBound} to the tick's start. */
@@ -157,17 +176,19 @@ public class TopicVectorsTickService {
      * that the pass read the workspace. Without time left for the read, it skips the workspace name lookup too.
      */
     private Mono<Visit> visit(String workspaceId, List<TopicBackfill> undrained, TopicVectorsFind find,
-            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget) {
+            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget, boolean arrival) {
         var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
         if (!budget.hasTimeForRead(embedTimeout)) {
-            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), longWindow, false));
+            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), longWindow, false,
+                    ArrivalSteps.OFF));
         }
+        var steps = arrival ? ArrivalSteps.STARTED : ArrivalSteps.OFF;
         return metrics.workspace(workspaceId).flatMap(workspace -> {
             var vectors = config.getVectors();
             var readableWithout = backfiller.readableWithout(workspaceId, undrained);
             if (readableWithout.isEmpty()) {
                 // Its traces are the backfill's for now; it does not hold the long-window pass.
-                return Mono.just(Visit.notRead(workspace, longWindow, true));
+                return Mono.just(Visit.notRead(workspace, longWindow, true, steps));
             }
             long readStarted = System.nanoTime();
             return WindowRead.read(dao,
@@ -176,14 +197,14 @@ public class TopicVectorsTickService {
                     vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
                     .flatMap(read -> !read.complete() && read.candidates().isEmpty()
                             // The budget ran out before the read: nothing was read, so the watermark stays.
-                            ? Mono.just(Visit.notRead(workspace, longWindow, false))
-                            : serve(workspace, read, find, longWindow, missedBefore, budget, readStarted))
+                            ? Mono.just(Visit.notRead(workspace, longWindow, false, steps))
+                            : serve(workspace, read, find, longWindow, missedBefore, budget, readStarted, steps))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
                                 workspaceId, exception);
                         return Mono.just(new Visit(workspace, longWindow, true, false, TickResult.EMPTY, List.of(),
-                                since(readStarted), Duration.ZERO));
+                                since(readStarted), Duration.ZERO, steps));
                     });
         });
     }
@@ -193,31 +214,33 @@ public class TopicVectorsTickService {
      * long-window read, that the pass read the workspace.
      */
     private Mono<Visit> serve(TopicVectorsMetrics.Workspace workspace, WindowRead read, TopicVectorsFind find,
-            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget, long readStarted) {
+            boolean longWindow, @Nullable Instant missedBefore, TickBudget budget, long readStarted,
+            ArrivalSteps steps) {
         var workspaceId = workspace.id();
         return backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start()).flatMap(served -> {
             var readTime = since(readStarted);
             long embedStarted = System.nanoTime();
-            return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore).flatMap(written -> {
-                var complete = read.complete() && !written.leftForLater(served.candidates());
-                var visit = new Visit(workspace, longWindow, true, complete, written.result(), served.started(),
-                        readTime, since(embedStarted));
-                if (longWindow) {
-                    return complete
-                            ? saveProgress(workspaceId, () -> workspaces.setVectorsLongWindowRead(workspaceId,
-                                    budget.start())).thenReturn(visit)
-                            : Mono.just(visit);
-                }
-                // The traces of the projects it started are the backfill's from now on.
-                var settled = new HashSet<>(written.settled());
-                var servedKeys = served.candidates().stream().map(VectorKey::of).collect(Collectors.toSet());
-                read.candidates().stream().map(VectorKey::of)
-                        .filter(key -> !servedKeys.contains(key))
-                        .forEach(settled::add);
-                var watermark = watermark(read.candidates(), settled, find.limit(), find.upperBound());
-                return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark))
-                        .thenReturn(visit);
-            });
+            return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, steps)
+                    .flatMap(written -> {
+                        var complete = read.complete() && !written.leftForLater(served.candidates());
+                        var visit = new Visit(workspace, longWindow, true, complete, written.result(), served.started(),
+                                readTime, since(embedStarted), written.arrival());
+                        if (longWindow) {
+                            return complete
+                                    ? saveProgress(workspaceId, () -> workspaces.setVectorsLongWindowRead(workspaceId,
+                                            budget.start())).thenReturn(visit)
+                                    : Mono.just(visit);
+                        }
+                        // The traces of the projects it started are the backfill's from now on.
+                        var settled = new HashSet<>(written.settled());
+                        var servedKeys = served.candidates().stream().map(VectorKey::of).collect(Collectors.toSet());
+                        read.candidates().stream().map(VectorKey::of)
+                                .filter(key -> !servedKeys.contains(key))
+                                .forEach(settled::add);
+                        var watermark = watermark(read.candidates(), settled, find.limit(), find.upperBound());
+                        return saveProgress(workspaceId, () -> workspaces.setVectorsWatermark(workspaceId, watermark))
+                                .thenReturn(visit);
+                    });
         });
     }
 
@@ -247,7 +270,7 @@ public class TopicVectorsTickService {
                     return visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
                             ? Mono.just(TickResult.EMPTY)
                             : backfiller.backfill(visit.workspace(), projects,
-                                    find(workspaceId, lowerBound, budget.start()), budget);
+                                    find(workspaceId, lowerBound, budget.start()), budget, visit.arrival());
                 }, config.getVectors().getEmbedConcurrency())
                 .reduce(TickResult.EMPTY, TickResult::plus)
                 .doOnNext(__ -> metrics.phase("backfill", since(started)));
@@ -280,21 +303,23 @@ public class TopicVectorsTickService {
      * One workspace's part of the fresh phase. {@code longWindow} when it was the long-window pass's read;
      * {@code reached} is false when the budget left no time to read it, or it has too many projects in backfill;
      * {@code complete} when its read saw its whole window and left none of its traces for a later tick, or it was left
-     * to the backfill; {@code started} the projects its read saw for the first time.
+     * to the backfill; {@code started} the projects its read saw for the first time; {@code arrival} its topic on
+     * arrival, which the backfill phase goes on with.
      */
     private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean reached,
             boolean complete, @NonNull TickResult result, @NonNull List<TopicBackfill> started,
             @NonNull Duration readTime,
-            @NonNull Duration embedTime) {
+            @NonNull Duration embedTime, @NonNull ArrivalSteps arrival) {
 
-        static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean complete) {
+        static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean longWindow, boolean complete,
+                ArrivalSteps arrival) {
             return new Visit(workspace, longWindow, false, complete, TickResult.EMPTY, List.of(), Duration.ZERO,
-                    Duration.ZERO);
+                    Duration.ZERO, arrival);
         }
     }
 
     /** The long-window pass's and the backfill's window: {@code backfillWindow} when set, else {@code longWindow}. */
-    static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
+    public static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 

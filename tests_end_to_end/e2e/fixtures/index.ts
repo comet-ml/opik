@@ -1,4 +1,4 @@
-export { test, expect } from './duplicate-trace-id-projects.fixture';
+export { test, expect } from './prompt-mixed-source-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -866,3 +866,13 @@ export type {
   DuplicateTraceIdProjectsRef,
   DuplicateTraceIdProjectsFixtures,
 } from './duplicate-trace-id-projects.fixture';
+export type {
+  MixedSuiteExperimentRef,
+  MixedSuiteExperimentsRef,
+  MixedSuiteExperimentsFixtures,
+} from './mixed-suite-experiments.fixture';
+export type {
+  PromptMixedSourceExperimentRef,
+  PromptMixedSourceExperimentsRef,
+  PromptMixedSourceExperimentsFixtures,
+} from './prompt-mixed-source-experiments.fixture';

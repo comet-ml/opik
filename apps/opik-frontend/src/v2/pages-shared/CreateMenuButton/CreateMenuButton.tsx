@@ -17,6 +17,8 @@ type CreateMenuButtonProps<T extends string> = {
   label: string;
   options: CreateMenuOption<T>[];
   onSelect: (value: T) => void;
+  size?: "xs" | "sm";
+  align?: "start" | "center" | "end";
   "data-testid"?: string;
 };
 
@@ -24,6 +26,8 @@ const CreateMenuButton = <T extends string>({
   label,
   options,
   onSelect,
+  size = "xs",
+  align = "end",
   "data-testid": dataTestId,
 }: CreateMenuButtonProps<T>) => {
   const hasMenu = options.length > 1;
@@ -31,7 +35,7 @@ const CreateMenuButton = <T extends string>({
   const button = (
     <Button
       variant="default"
-      size="xs"
+      size={size}
       data-testid={dataTestId}
       onClick={hasMenu ? undefined : () => onSelect(options[0].value)}
     >
@@ -45,7 +49,7 @@ const CreateMenuButton = <T extends string>({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60 p-1.5">
+      <DropdownMenuContent align={align} className="w-60 p-1.5">
         <MenuOptionItems options={options} onSelect={onSelect} />
       </DropdownMenuContent>
     </DropdownMenu>

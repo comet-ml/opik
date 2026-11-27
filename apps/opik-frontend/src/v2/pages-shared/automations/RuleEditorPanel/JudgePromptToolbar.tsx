@@ -10,9 +10,6 @@ import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
-import { LLMPromptTemplate } from "@/types/llm";
-import JudgeTemplateMenu from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateMenu";
-import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import { parseComposedProviderType } from "@/lib/provider";
@@ -25,15 +22,9 @@ import { useCalculateRuleDefaultModel } from "@/v2/pages-shared/automations/Rule
 
 type JudgePromptToolbarProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
-  onSelectTemplate?: (template: LLMPromptTemplate, label: string) => void;
-  onAfterSelectTemplate?: () => void;
 };
 
-const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
-  form,
-  onSelectTemplate,
-  onAfterSelectTemplate,
-}) => {
+const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({ form }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
   const { calculateModelProvider } = useLLMProviderModelsData();
@@ -172,15 +163,6 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
             }
           />
         </>
-      )}
-      {onSelectTemplate && (
-        <div className="ml-auto">
-          <JudgeTemplateMenu
-            options={getJudgeTemplateOptions(form.watch("scope"))}
-            onSelect={onSelectTemplate}
-            onAfterSelect={onAfterSelectTemplate}
-          />
-        </div>
       )}
     </>
   );

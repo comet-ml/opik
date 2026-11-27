@@ -1,0 +1,172 @@
+---
+title: Querying traces and spans in ClickHouse
+headline: Querying traces and spans in ClickHouse | Opik Documentation
+og:title: Querying traces and spans in ClickHouse — Opik
+og:description: How the traces and spans tables store missing values, timestamps and root spans, and how to write
+  ad-hoc SQL, dashboards and BI queries that stay correct.
+og:site_name: Opik Documentation
+subtitle: Missing values, timestamp precision, root spans and aggregates on the traces and spans tables
+---
+
+The ClickHouse `traces` and `spans` tables each have a storage cutover. After it, the table no longer
+uses `Nullable` columns for `end_time`, `duration` and `ttft`. A missing value is stored as a sentinel
+instead, and timestamps are stored at microsecond precision. The `spans` cutover also changes how root
+spans are stored and which columns identify a span's row versions.
+
+<Warning>
+  **This page applies to a table only once its cutover has run on your installation.** The cutovers
+  are not tied to an Opik release: your installation's operators run each one separately, following its
+  runbook, so one table can be cut over while the other is not. Until then the table's columns are still
+  `Nullable` and the usual `NULL` patterns are correct. To see where each table stands, check the column
+  types:
+
+  ```sql wordWrap
+  SELECT table, name, type FROM system.columns
+  WHERE database = 'opik' AND table IN ('traces', 'spans') AND name IN ('end_time', 'duration', 'ttft')
+  ORDER BY table, name
+  ```
+
+  `Nullable(...)` means that table's cutover has not run yet. For the cutovers themselves, see the
+  [traces cutover runbook](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/data-migrations/traces-local-v2-cutover/README.md),
+  the [spans cutover runbook](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/data-migrations/spans-local-v2-cutover/README.md)
+  and the `clickhouse-traces-topology` / `clickhouse-spans-topology` entry in
+  [troubleshooting](/self-host/troubleshooting).
+</Warning>
+
+<Note>
+  The REST API, the SDKs and the Opik UI are unaffected: a missing value is still returned as JSON
+  `null`, and so is the parent of a root span. This page is for anyone who queries the analytics
+  database **directly with SQL**: dashboards, BI tools, notebooks or saved queries.
+</Note>
+
+## Event timestamps are stored at microsecond precision
+
+On both tables, `start_time`, `end_time` and `created_at` are `DateTime64(6, 'UTC')`; they were
+`DateTime64(9)`. `last_updated_at` was already `DateTime64(6, 'UTC')`. The internal `id_at` partitioning
+column is derived from the trace or span id and holds whole seconds (`DateTime64(0, 'UTC')`); don't use
+it as an event time. Digits beyond the microsecond are dropped on write. No Opik SDK sends sub-microsecond
+timestamps, so this only matters if you send ISO-8601 timestamps with nanosecond precision yourself:
+they come back truncated to microseconds.
+
+## Missing values are sentinels, not `NULL`
+
+A trace or span that has not ended, or has no time-to-first-token, stores a sentinel value. The columns
+and sentinels are the same on both tables:
+
+| Column | Missing value is stored as | Old filter | New filter |
+|---|---|---|---|
+| `end_time` | the epoch, `1970-01-01 00:00:00` UTC | `end_time IS NULL` | `end_time = toDateTime64(0, 6)` |
+| `duration` | `NaN` | `duration IS NULL` | `isNaN(duration)` |
+| `ttft` | `NaN` | `ttft IS NULL` | `isNaN(ttft)` |
+
+For "value present", use `end_time != toDateTime64(0, 6)` and `NOT isNaN(x)`.
+
+`duration` is computed from both timestamps, so it is `NaN` whenever either `start_time` or `end_time`
+is the epoch. To select traces or spans with a duration, filter on `NOT isNaN(duration)` rather than on
+`end_time` alone.
+
+<Warning>
+  **Old queries don't fail; they return wrong results.** On these columns `IS NULL` matches
+  nothing, `IS NOT NULL` matches everything, and `coalesce(x, ...)` / `ifNull(x, ...)` never
+  substitute. Review every saved query that uses them.
+</Warning>
+
+### Write the epoch as a number
+
+Compare `end_time` with `toDateTime64(0, 6)`, not with the string
+`toDateTime64('1970-01-01 00:00:00', 6)`. ClickHouse reads a timezone-less string in the session's
+timezone, so on a server that does not run in UTC the string names a different instant and matches
+nothing. The number `0` is the epoch in every timezone.
+
+### Run ClickHouse in UTC
+
+Opik expects the ClickHouse server's default timezone to be UTC. The Helm chart
+(`conf.d/timezone.xml`) and the Docker Compose configuration set `<timezone>UTC</timezone>`. If you
+run your own ClickHouse, set it there too, and check it with `SELECT timezone()`. On a server with
+another timezone, Opik misreads traces and spans that have not ended: they can show a 1970 end time or
+a large negative duration.
+
+This is only a default. Your own queries can still use another timezone, with
+`SETTINGS session_timezone = '...'` or a timezone argument such as
+`toTimezone(start_time, 'Europe/Berlin')`.
+
+## Root spans and `parent_span_id`
+
+On `spans`, `parent_span_id` is `FixedString(36)`; it was `String`. A root span still stores an empty
+value, but the fixed width pads it to 36 zero bytes:
+
+- `parent_span_id = ''` and `empty(parent_span_id)` still select root spans, and
+  `parent_span_id != ''` and `notEmpty(parent_span_id)` still select child spans. Use these.
+- `length(parent_span_id)` is now always 36, so `length(parent_span_id) = 0` matches nothing and
+  `length(parent_span_id) > 0` matches every span. If you'd rather keep a `length` check, use
+  `length(toString(parent_span_id))`, which is still 0 for a root span.
+- Selecting the column returns the padding for a root span, which exports and BI tools show as 36 NUL
+  characters (`\u0000` in JSON) rather than an empty value. Select `toString(parent_span_id)` instead,
+  which drops the padding.
+
+## Deduplicating span versions
+
+`spans` is a `ReplacingMergeTree` table: updating a span writes a new version of its row, and
+background merges keep only the newest version for each sort key. Until a merge runs, a query can see
+several versions of a span. To collapse them at query time, use `FINAL` or `LIMIT 1 BY` on the sort
+key.
+
+After the cutover, that key is `(workspace_id, project_id, trace_id, id)`; `parent_span_id` is no longer
+part of it. Deduplicate on the four columns, keeping the newest version:
+
+```sql wordWrap
+SELECT id, trace_id, name, start_time, end_time, duration
+FROM opik.spans
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+ORDER BY last_updated_at DESC
+LIMIT 1 BY workspace_id, project_id, trace_id, id
+```
+
+Before the cutover, a span whose parent changed kept one version per parent even under `FINAL`. After
+it, `FINAL` returns a single row per span.
+
+## Other column types on `spans`
+
+`usage` values are `Int64`; they were `Int32`. `model`, `provider` and `total_estimated_cost_version`
+are `LowCardinality(String)`; they were `String`. Query results are unchanged, but update any typed
+schema you export these columns into.
+
+## Aggregates on `duration` and `ttft`
+
+ClickHouse aggregates skip `NULL`, but they treat `NaN` differently depending on the function. This
+applies to both tables:
+
+| Aggregate | Behavior with `NaN` | What to do |
+|---|---|---|
+| `quantile`, `quantiles`, `median`, `min`, `max` | `NaN` is skipped | Nothing; results are unchanged |
+| `avg`, `sum` | the result becomes `nan` | Use `avgIf(x, NOT isNaN(x))` / `sumIf(x, NOT isNaN(x))` |
+| `count(x)` | `NaN` rows are counted | Use `countIf(NOT isNaN(x))` |
+
+For example, the average duration of finished traces per day. Replace `opik` with your
+`ANALYTICS_DB_DATABASE_NAME` if you changed it:
+
+```sql wordWrap
+SELECT toDate(start_time) AS day,
+       avgIf(duration, NOT isNaN(duration)) AS avg_duration_ms,
+       countIf(NOT isNaN(duration))         AS finished_traces
+FROM opik.traces
+GROUP BY day
+ORDER BY day
+```
+
+And the average duration of finished LLM spans per model and day:
+
+```sql wordWrap
+SELECT toDate(start_time) AS day,
+       model,
+       avgIf(duration, NOT isNaN(duration)) AS avg_duration_ms,
+       countIf(NOT isNaN(duration))         AS finished_spans
+FROM opik.spans
+WHERE type = 'llm'
+GROUP BY day, model
+ORDER BY day, model
+```
+
+The `If` forms are also correct on deployments that still have the `Nullable` columns, since
+`isNaN(NULL)` is `NULL` and those rows are excluded too. A query written this way works before and
+after the change.

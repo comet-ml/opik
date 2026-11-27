@@ -23,7 +23,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.redis.testcontainers.RedisContainer;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -73,6 +75,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -188,7 +191,8 @@ class TopicsRunServiceTest {
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, 250_000).block();
+        var outcome = service.discover(runId, projectId, NIGHT, 250_000)
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("window_traces").asLong()).isEqualTo(250_000);
@@ -222,7 +226,8 @@ class TopicsRunServiceTest {
         stubAnswer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_BAD_ANSWER);
@@ -242,7 +247,8 @@ class TopicsRunServiceTest {
                 .withBody("{\"error\":{\"code\":\"quota_exceeded\",\"message\":\"over quota\",\"retryable\":true}}")));
         var runId = start();
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("llm_error");
         assertFailedWithNothingSaved(runId, TopicProject.RunError.LLM_ERROR);
@@ -259,7 +265,8 @@ class TopicsRunServiceTest {
         try {
             var runId = start();
 
-            var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+            var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                    .contextWrite(TopicsTestData.context(workspace())).block();
 
             assertThat(outcome.errorCode()).isEqualTo("window_read");
             assertFailedWithNothingSaved(runId, TopicProject.RunError.WINDOW_READ);
@@ -283,7 +290,8 @@ class TopicsRunServiceTest {
                 new PrototypeVectors(List.of(TopicsTestData.unit(1))), TopicEmbedding.MODEL));
         var before = data.topics(projectId);
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(data.topics(projectId)).usingRecursiveFieldByFieldElementComparator()
@@ -304,7 +312,8 @@ class TopicsRunServiceTest {
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM projects WHERE id = ?",
                 projectId.toString()));
 
-        var outcome = service.discover(runId, workspace(), projectId, NIGHT, FIXTURE.size()).block();
+        var outcome = service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
@@ -322,6 +331,83 @@ class TopicsRunServiceTest {
 
         assertThat(data.topicProject(projectId).runErrorCode()).isEqualTo(TopicProject.RunError.TIMEOUT);
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a saved nightly update records the Other share it logged in its stats, and its live topics and churn, "
+            + "with the workspace")
+    void nightlyUpdateIsCounted() {
+        var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
+        discovered(workspace);
+        double discoveryShare = sum(metricReader, "topics.run.other_share");
+
+        var outcome = service.nightlyUpdate(start(TopicProject.RunMode.UPDATE), projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace)).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var stats = outcome.stats();
+        assertThat(stats.path("mode").asText()).isEqualTo("update");
+        assertThat(stats.get("window_traces").asLong()).isEqualTo(FIXTURE.size());
+        assertThat(stats.get("sample_traces").asLong()).isEqualTo(FIXTURE.size());
+        // The discovery run's share, then the nightly update's: the value it logged, not computed again.
+        assertThat(sum(metricReader, "topics.run.other_share"))
+                .isCloseTo(discoveryShare + stats.get("other_share").asDouble(), within(1e-9));
+        var attributes = workspaceAttributes(workspace);
+        assertThat(points(metricReader, "topics.topics.live"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("topics").asDouble(), attributes));
+        assertThat(points(metricReader, "topics.run.churn"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("churn").asDouble(), attributes));
+        assertThat(points(metricReader, "topics.run.churn_any"))
+                .containsExactly(new TopicsMetricsReader.Point(stats.get("churn_any").asDouble(), attributes));
+        assertThat(sum(metricReader, "topics.runs", "status", "saved", "workspace_id", workspaceId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
+    void lifecycleMetricsHaveTheWorkspace() {
+        var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
+        var attributes = workspaceAttributes(workspace);
+
+        metrics.topics(workspace, 7, 2);
+        metrics.topics(workspace, 7, 0);
+        metrics.retired(workspace, NightState.RetiredReason.LOW_SHARE);
+        metrics.churn(workspace, new TopicChurn.Churn(0.04, 0.1));
+
+        assertThat(points(metricReader, "topics.topics.born"))
+                .containsExactly(new TopicsMetricsReader.Point(2, attributes));
+        assertThat(points(metricReader, "topics.topics.live"))
+                .containsExactly(new TopicsMetricsReader.Point(14, attributes));
+        assertThat(points(metricReader, "topics.topics.retired")).containsExactly(new TopicsMetricsReader.Point(1,
+                attributes.toBuilder().put("reason", "low_share").build()));
+        assertThat(points(metricReader, "topics.run.churn"))
+                .containsExactly(new TopicsMetricsReader.Point(0.04, attributes));
+        assertThat(points(metricReader, "topics.run.churn_any"))
+                .containsExactly(new TopicsMetricsReader.Point(0.1, attributes));
+    }
+
+    /** The project's discovery run, saved; then every naming answer changes nothing. Returns its run id. */
+    private UUID discovered(TopicsMetrics.Workspace workspace) {
+        stubAnswer(FIXTURE.discoveryAnswer);
+        var runId = start();
+        assertThat(service.discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace)).block().status())
+                .isEqualTo(TopicProject.RunStatus.SAVED);
+        stubAnswer(emptyNaming());
+        return runId;
+    }
+
+    private static Attributes workspaceAttributes(TopicsMetrics.Workspace workspace) {
+        return Attributes.builder().put("workspace_id", workspace.id()).put("workspace_name", workspace.name())
+                .build();
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     /**
@@ -368,7 +454,7 @@ class TopicsRunServiceTest {
         var runId = start();
 
         var outcome = serviceWith(TopicsTestAlgorithm.algorithm())
-                .discover(runId, workspace(), projectId, NIGHT, count).block();
+                .discover(runId, projectId, NIGHT, count).contextWrite(TopicsTestData.context(workspace())).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
@@ -460,7 +546,8 @@ class TopicsRunServiceTest {
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();
 
-        var outcome = serviceWith(stub).discover(runId, workspace(), projectId, NIGHT, FIXTURE.size())
+        var outcome = serviceWith(stub).discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace()))
                 .block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
@@ -528,9 +615,13 @@ class TopicsRunServiceTest {
 
     /** Queues and claims a discovery run, as the planner and a pod's subscriber do. */
     private UUID start() {
-        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.DISCOVERY).block();
+        return start(TopicProject.RunMode.DISCOVERY);
+    }
+
+    private UUID start(TopicProject.RunMode mode) {
+        var runId = store.queue(workspaceId, projectId, mode).block();
         var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicProject.RunMode.DISCOVERY).night(NIGHT).windowTraces(FIXTURE.size()).build();
+                .mode(mode).night(NIGHT).windowTraces(FIXTURE.size()).build();
         assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
         return runId;
     }

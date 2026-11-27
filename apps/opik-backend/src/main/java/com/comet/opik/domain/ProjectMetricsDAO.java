@@ -9,6 +9,7 @@ import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -145,6 +146,12 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getThreadCost(UUID projectId, ProjectMetricRequest request);
 
     Mono<List<String>> getProjectTokenUsageNames(String workspaceId, UUID projectId);
+
+    /** Whether the metric reads {@code trace_filters}: thread and span metrics read only their own filters. */
+    static boolean readsTraceFilters(@NonNull MetricType metricType) {
+        return !ProjectMetricsDAOImpl.THREAD_METRICS.contains(metricType)
+                && !ProjectMetricsDAOImpl.SPAN_TIME_METRICS.contains(metricType);
+    }
 }
 
 @Slf4j
@@ -289,6 +296,31 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
+                    <if(topic_no_match)> AND 0 <endif>
+                    <if(topic_filters)>
+                    AND id IN (
+                        SELECT trace_id
+                        FROM (
+                            SELECT trace_id, if(topic_id IN :topic_live_ids, topic_id, :topic_other_id) AS topic
+                            FROM (
+                                SELECT trace_id, topic_id, is_deleted
+                                FROM trace_topics
+                                WHERE workspace_id = :workspace_id
+                                AND project_id = :topic_project_id
+                                AND trace_id >= :uuid_from_time
+                                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
+                                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                                ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+                                LIMIT 1 BY workspace_id, project_id, trace_id
+                            )
+                            WHERE is_deleted = 0
+                        )
+                        WHERE <topic_filters>
+                    )
+                    <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
                         SELECT
@@ -522,8 +554,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_DURATION_WITH_BREAKDOWN = """
             %s
@@ -547,8 +580,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
               GROUP BY bucket, group_name
             )
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_COUNT = """
             %s
@@ -561,8 +595,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_COUNT_WITH_BREAKDOWN = """
             %s
@@ -572,8 +607,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces_filtered t
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST = """
             %s, spans_dedup AS (
@@ -611,7 +647,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
             """
             .formatted(TRACE_FILTERED_PREFIX);
 
@@ -649,7 +685,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans_dedup
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
             """
             .formatted(TRACE_FILTERED_PREFIX);
 
@@ -693,7 +729,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
             """
             .formatted(TRACE_FILTERED_PREFIX);
 
@@ -735,7 +771,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans_dedup
             GROUP BY group_name, bucket
             ORDER BY group_name, bucket
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
             """
             .formatted(TRACE_FILTERED_PREFIX);
 
@@ -757,8 +793,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES_WITH_BREAKDOWN = """
             %s, feedback_scores_deduplication AS (
@@ -776,8 +813,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM feedback_scores_deduplication
             GROUP BY group_name, bucket
             ORDER BY group_name, bucket
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
             %s
@@ -792,8 +830,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT_WITH_BREAKDOWN = """
             %s
@@ -805,8 +844,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE g.result = 'failed'
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_SPAN_FEEDBACK_SCORES = """
             %s, span_feedback_scores AS (
@@ -1180,8 +1220,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_ERROR_RATE = """
             %s
@@ -1194,8 +1235,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM <fill_from>
                 TO <fill_to>
                 STEP <step><endif>
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(TRACE_FILTERED_PREFIX);
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>;
+            """
+            .formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_SPAN_AVERAGE_DURATION = """
             %s
@@ -1773,6 +1815,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 Optional.ofNullable(request.traceFilters())
                         .ifPresent(filters -> {
                             addTraceFilters(template, filters);
+                            FilterUtils.addTopicFilters(template, filters, request.topicScope());
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("trace_feedback_scores_filters",
@@ -1841,6 +1884,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                             filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                            FilterUtils.bindTopicFilters(statement, filters, projectId, request.topicScope());
                         });
             }
 
@@ -1868,7 +1912,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded();
     }
 
-    private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(
+    static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(
             MetricType.SPAN_COUNT,
             MetricType.SPAN_DURATION,
             MetricType.SPAN_TOKEN_USAGE,
@@ -1877,7 +1921,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_COST,
             MetricType.SPAN_ERROR_RATE);
 
-    private static final Set<MetricType> THREAD_METRICS = EnumSet.of(
+    static final Set<MetricType> THREAD_METRICS = EnumSet.of(
             MetricType.THREAD_COUNT,
             MetricType.THREAD_DURATION,
             MetricType.THREAD_FEEDBACK_SCORES,

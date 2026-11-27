@@ -1,15 +1,22 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -29,8 +36,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * The topics read API: a project's topics over the window, the last {@code topics.run.windowDays} UTC days, today
  * included, in one of four states.
  * <ul>
- * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
- * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
+ * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels, or listed
+ * below the {@code ui} stage); no topics are read and ClickHouse is not called, also when the project still has
+ * topics from before an opt-out.</li>
  * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has
  * ({@link #vectorCounts}, cached) and how many the discovery run needs, and, as {@code attempt}, whether the project's current or last attempt is running or
  * failed.</li>
@@ -129,6 +137,38 @@ public class TopicReadService {
                 .timeout(clientTimeout());
     }
 
+    /**
+     * The scope of a trace query filtered by topic. Empty, with no read, without a {@code topic_id} filter. Also empty
+     * when the filter can match no trace: topics off, a workspace not opted in to topics or to ai-labels or listed
+     * below the {@code ui} stage, a project with no live topic. Reads MySQL at most twice on a bounded elastic thread,
+     * with the workspace id from the Reactor context.
+     */
+    public Mono<TopicFilterScope> filterScope(@Nullable List<? extends Filter> filters, @NonNull UUID projectId) {
+        if (filters == null || FilterQueryBuilder.hasField(filters, TraceField.TOPIC_ID).isEmpty()) {
+            return Mono.empty();
+        }
+        return Mono.deferContextual(ctx -> Mono.fromCallable(
+                () -> readFilterScope(ctx.get(RequestContext.WORKSPACE_ID), projectId))
+                .subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(Mono::justOrEmpty);
+    }
+
+    private Optional<TopicFilterScope> readFilterScope(String workspaceId, UUID projectId) {
+        if (!workspaces.reaches(workspaceId, TopicsStage.UI)) {
+            return Optional.empty();
+        }
+        var live = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findByProject(workspaceId, projectId));
+        if (live.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(TopicFilterScope.builder()
+                .liveIds(live.stream().map(Topic::id).toList())
+                .maxExecutionSeconds(config.getFilter().getMaxExecutionTime().toSeconds())
+                .maxMemoryUsage(config.getFilter().getMaxMemoryUsage())
+                .build());
+    }
+
     private ProjectTopics read(String workspaceId, UUID projectId) {
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, ZoneOffset.UTC);
@@ -168,7 +208,7 @@ public class TopicReadService {
 
     /** Empty when the workspace is not eligible for topics. */
     private Optional<TopicReadScope> readScope(String workspaceId, UUID projectId) {
-        if (!workspaces.isEnabled(workspaceId)) {
+        if (!workspaces.reaches(workspaceId, TopicsStage.UI)) {
             return Optional.empty();
         }
         return Optional.of(template.inTransaction(READ_ONLY, handle -> {

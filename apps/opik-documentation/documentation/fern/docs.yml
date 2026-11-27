@@ -1138,9 +1138,9 @@ navigation:
           - page: ClickHouse tiered-storage TTL and backfill
             path: ./docs-v2/self-host/clickhouse-tiered-storage-ttl.mdx
             slug: clickhouse-tiered-storage-ttl
-          - page: Querying trace data in ClickHouse
-            path: ./docs-v2/self-host/configure/traces-storage.mdx
-            slug: traces-storage
+          - page: Querying traces and spans in ClickHouse
+            path: ./docs-v2/self-host/configure/querying-traces-and-spans.mdx
+            slug: querying-traces-and-spans
           - page: Troubleshooting
             path: ./docs-v2/self-host/troubleshooting.mdx
             slug: troubleshooting
@@ -1709,7 +1709,10 @@ redirects:
     destination: "/docs/opik/self-host/backup"
     permanent: true
   - source: "/docs/opik/self-host/configure/traces-storage"
-    destination: "/docs/opik/self-host/traces-storage"
+    destination: "/docs/opik/self-host/querying-traces-and-spans"
+    permanent: true
+  - source: "/docs/opik/self-host/traces-storage"
+    destination: "/docs/opik/self-host/querying-traces-and-spans"
     permanent: true
   - source: "/docs/opik/self-host/configure/dataset_versioning_migration"
     destination: "/docs/opik/self-host/dataset_versioning_migration"
