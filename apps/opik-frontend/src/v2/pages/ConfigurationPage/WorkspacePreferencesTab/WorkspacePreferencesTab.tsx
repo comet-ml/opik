@@ -160,6 +160,9 @@ const WorkspacePreferencesTab: React.FC = () => {
 
   return (
     <>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="comet-title-xs">Workspace preferences</h2>
+      </div>
       {isPending ? (
         <Loader />
       ) : (
