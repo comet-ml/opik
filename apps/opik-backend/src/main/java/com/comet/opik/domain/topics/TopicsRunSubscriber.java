@@ -107,7 +107,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             // Only the pod's stop cancels a run from outside: give it back to the queue.
                             .doOnCancel(() -> requeueOnStop(message))
                             // Its slot is free: fill it now rather than at the next interval.
-                            .doOnSuccess(__ -> planner.planAfterRun().subscribe());
+                            .then(Mono.defer(planner::planAfterRun));
                 })
                 .onErrorResume(error -> {
                     log.error("Topics run '{}' ended with an error, project '{}'; the planner settles its row",
