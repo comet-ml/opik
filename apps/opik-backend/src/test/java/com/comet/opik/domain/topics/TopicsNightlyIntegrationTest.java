@@ -428,6 +428,9 @@ class TopicsNightlyIntegrationTest {
         var notReachedBefore = data.topicProject(notReached);
         var lookedBefore = data.topicProject(looked);
         opikConfig.getTopics().getNightly().setBudget(Duration.milliseconds(1));
+        // Redis is shared with other test classes, whose own plans after the budget may have ended this night already.
+        var night = TopicsNight.current(opikConfig.getTopics().getNightly().getSchedule(), Instant.now()).orElseThrow();
+        lockService.unlockUsingToken(new LockService.Lock("topics:nightly:end:" + night.date())).block();
         var reader = InMemoryMetricReader.create();
         var pass = pass(reader);
 
