@@ -1177,6 +1177,8 @@ topics:
     planInterval: 5m
     leaseSlack: 1m
     requeueWait: 5s
+    # Off, unlike config.yml: a test's plans are the ones it makes. A test of the plan after a run turns it on.
+    planAfterRun: false
   filter:
     maxExecutionTime: 30s
     maxMemoryUsage: 4294967296

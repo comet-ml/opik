@@ -3090,7 +3090,8 @@ topics:
     #  Description: A run queued this long ago and not claimed is published again: its message was lost. At most 1h
     republishAfter: ${TOPICS_RUNS_REPUBLISH_AFTER:-10m}
     #  Default: 2m
-    #  Description: The planner stops counting discovery candidates after this and queues what it found. At most 30m
+    #  Description: One plan's deadline, for its nightly and discovery phases together: past it, the planner cuts the
+    #  count still running and queues nothing more. At most 30m
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
     #  Default: 5m
     #  Description: How often the leader plans: the discovery job fires on every pod this often, and one of them
@@ -3103,6 +3104,10 @@ topics:
     #  Default: 5s
     #  Description: How long a stopping pod waits for each of its runs to be put back to queued. At most 1m
     requeueWait: ${TOPICS_RUNS_REQUEUE_WAIT:-5s}
+    #  Default: true
+    #  Description: Whether a run that ends starts a plan at once, under the leader lock, so its slot is filled before
+    #  the next planInterval. When false, a freed slot waits for the next interval's plan
+    planAfterRun: ${TOPICS_RUNS_PLAN_AFTER_RUN:-true}
   # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
   # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
   filter:

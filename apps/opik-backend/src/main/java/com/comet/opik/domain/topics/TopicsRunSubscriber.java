@@ -12,6 +12,8 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -40,6 +42,12 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private final TopicWindowLabelService labelService;
     private final TopicsRunPlanner planner;
     private final TopicsRunPublisher publisher;
+    /**
+     * The heartbeats' own timer, apart from {@code parallel()}: a run's CPU steps there cannot hold back a beat, so a
+     * healthy run is never recorded abandoned. Created with the subscriber, so it is there for any run, and disposed on
+     * stop; its thread starts with the first beat.
+     */
+    private final Scheduler heartbeats = Schedulers.newSingle("topics-heartbeat", true);
 
     @Inject
     TopicsRunSubscriber(@NonNull @Config("topics") TopicsConfig config, @NonNull RedissonReactiveClient redisson,
@@ -68,6 +76,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
         if (config.isEnabled()) {
             super.stop();
         }
+        heartbeats.dispose();
     }
 
     @Override
@@ -98,7 +107,9 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             .doOnNext(code -> log.info("Topics run '{}' stopped, project '{}', code '{}'",
                                     message.runId(), message.projectId(), code.getValue()))
                             // Only the pod's stop cancels a run from outside: give it back to the queue.
-                            .doOnCancel(() -> requeueOnStop(message));
+                            .doOnCancel(() -> requeueOnStop(message))
+                            // Its slot is free: fill it now rather than at the next interval.
+                            .then(Mono.defer(planner::planAfterRun));
                 })
                 .onErrorResume(error -> {
                     log.error("Topics run '{}' ended with an error, project '{}'; the planner settles its row",
@@ -184,7 +195,7 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 // A run saved after its project was deleted is discarded: nothing is left to label. When the check
                 // fails, the labelling run is queued, and the planner cancels it if the project is gone.
                 .filterWhen(outcome -> store.projectExists(message.projectId()).onErrorReturn(true))
-                .flatMap(outcome -> planner.queueOne(TopicsRunPlanner.Planned.builder()
+                .flatMap(outcome -> planner.queueOne(PlannedRun.builder()
                         .workspaceId(message.workspaceId()).projectId(message.projectId()).mode(RunMode.LABELS)
                         .build()))
                 .then();
@@ -221,7 +232,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
     private Mono<Beat> stopped(TopicsRunMessage message) {
         var interval = config.getRuns().getHeartbeatInterval().toJavaDuration();
         var abandonGrace = config.getRuns().getAbandonGrace().toJavaDuration();
-        return Flux.interval(interval, interval)
+        // On its own timer, never behind the CPU steps on parallel(): a beat held back would get the run abandoned.
+        return Flux.interval(interval, interval, heartbeats)
                 .onBackpressureDrop()
                 .concatMap(tick -> store.heartbeat(message)
                         .map(alive -> new Beat(alive, Instant.now()))

@@ -5,10 +5,10 @@ import com.comet.opik.domain.topics.TopicProject.RunMode;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -42,6 +43,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRunPlanner {
 
+    /** Held by the plan in flight, on any pod: two plans never overlap. */
+    public static final LockService.Lock LEADER_LOCK = new LockService.Lock("topics:discovery:leader");
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
     private final @NonNull TopicWorkspaceService workspaceService;
@@ -51,20 +55,47 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull TopicsNightPass nightPass;
+    private final @NonNull LockService lockService;
 
-    /** A run to queue: its message once queued, which gives it its id. */
-    @Builder(toBuilder = true)
-    record Planned(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull RunMode mode, LocalDate night,
-            long windowTraces) {
-
-        TopicsRunMessage message(UUID runId) {
-            return new TopicsRunMessage(runId, workspaceId, projectId, mode, night, windowTraces);
-        }
+    /**
+     * How long the leader lock lasts, and the plan with it: the plan's one deadline, {@code topics.runs.planBudget},
+     * cuts its counts and stops its queueing, {@code topics.run.countTimeout} covers the reconcile's counts before it,
+     * and {@code topics.runs.leaseSlack} the queue write and publish in flight at it.
+     */
+    public static Duration leaderLease(@NonNull TopicsConfig config) {
+        return config.getRuns().getPlanBudget().toJavaDuration()
+                .plus(config.getRun().getCountTimeout().toJavaDuration())
+                .plus(config.getRuns().getLeaseSlack().toJavaDuration());
     }
 
-    /** One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. */
+    /**
+     * Plans now, under the leader lock, once a run ended and freed its slot, so the slot does not stay free until the
+     * next interval. Best effort: nothing when another plan holds the lock, and a failure is logged. It does not take
+     * the interval's plan lock, so the interval's plans go on as before.
+     */
+    public Mono<Void> planAfterRun() {
+        if (!config.getRuns().isPlanAfterRun()) {
+            return Mono.empty();
+        }
+        var lease = leaderLease(config);
+        return lockService.bestEffortLock(LEADER_LOCK,
+                Mono.defer(() -> plan(Instant.now())).then(),
+                Mono.fromRunnable(() -> log.debug("Topics plan after a run skipped, another plan holds the lock")),
+                lease, Duration.ZERO)
+                .timeout(lease)
+                .onErrorResume(error -> {
+                    log.warn("Topics plan after a run failed; the next interval plans", error);
+                    return Mono.empty();
+                });
+    }
+
+    /**
+     * One plan at {@code start}: the window ends at tomorrow's start (UTC), so it holds today's traces so far. The plan
+     * has one deadline, {@code topics.runs.planBudget} from now, for all its phases.
+     */
     public Mono<Integer> plan(@NonNull Instant start) {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
+        var deadline = PlanDeadline.after(config.getRuns().getPlanBudget().toJavaDuration());
         return Mono.fromCallable(() -> workspaceService.enabledWorkspaceIds(TopicsStage.BUILD))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(workspaceIds -> store.findInFlight()
@@ -72,16 +103,16 @@ public class TopicsRunPlanner {
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
                             // The night pass runs with no free slot too: its skips and its end need none.
-                            return nightPass.plan(start, free, this::queueOne)
+                            return nightPass.plan(start, deadline, free, this::queueOne)
                                     .flatMap(nightly -> {
                                         int left = free - nightly;
                                         if (left <= 0 || workspaceIds.isEmpty()) {
                                             return Mono.just(nightly);
                                         }
                                         return labelsDue(workspaceIds, start)
-                                                .zipWith(candidates.find(workspaceIds, night, start))
-                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
-                                                        left))
+                                                .zipWith(candidates.find(workspaceIds, night, start, deadline))
+                                                .flatMap(due -> queue(inTurn(due.getT1(), due.getT2(), night),
+                                                        left, deadline))
                                                 .map(queued -> nightly + queued);
                                     });
                         }))
@@ -118,7 +149,7 @@ public class TopicsRunPlanner {
                                 "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'"
                                         .formatted(projectId, vectors, night, config.getRun().getMinVectors())));
                     }
-                    return queueByHand(Planned.builder().workspaceId(workspaceId).projectId(projectId)
+                    return queueByHand(PlannedRun.builder().workspaceId(workspaceId).projectId(projectId)
                             .mode(RunMode.DISCOVERY).night(night).windowTraces(vectors).build())
                             .switchIfEmpty(Mono.error(() -> new ConflictException(
                                     "A topics run of project '%s' is in flight".formatted(projectId))));
@@ -193,7 +224,7 @@ public class TopicsRunPlanner {
      * Queues the run and publishes it; empty when the project has a run in flight. A failed publish leaves the run
      * queued: the next plans publish it again.
      */
-    Mono<UUID> queueOne(@NonNull Planned run) {
+    Mono<UUID> queueOne(@NonNull PlannedRun run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run queued but not published, a later plan publishes it, run '{}', project '{}'",
                     runId, run.projectId(), error);
@@ -208,7 +239,7 @@ public class TopicsRunPlanner {
      * stream took it, so the caller gets its id. The drop is one compare-and-set on "never claimed", and a requeue
      * keeps the claim, so a pod that stops meanwhile cannot turn a claimed run into a 503.
      */
-    private Mono<UUID> queueByHand(Planned run) {
+    private Mono<UUID> queueByHand(PlannedRun run) {
         return queueAndPublish(run, (runId, error) -> {
             log.warn("Topics run by hand not published, dropping it, run '{}', project '{}'", runId,
                     run.projectId(), error);
@@ -237,7 +268,7 @@ public class TopicsRunPlanner {
     }
 
     /** Queues the run and publishes it; empty when the project has a run in flight. */
-    private Mono<UUID> queueAndPublish(Planned run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
+    private Mono<UUID> queueAndPublish(PlannedRun run, BiFunction<UUID, Throwable, Mono<UUID>> onPublishError) {
         return store.queue(run.workspaceId(), run.projectId(), run.mode())
                 .flatMap(runId -> publisher.publish(run.message(runId))
                         .thenReturn(runId)
@@ -251,24 +282,44 @@ public class TopicsRunPlanner {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** One labelling pass, then one discovery run, in turn. */
-    private static List<Planned> interleave(List<TopicProjectKey> labels,
-            List<TopicsDiscoveryCandidates.Candidate> builds, LocalDate night) {
-        return TopicsDiscoveryCandidates.roundRobin(List.of(
-                labels.stream().map(project -> Planned.builder().workspaceId(project.workspaceId())
-                        .projectId(project.projectId()).mode(RunMode.LABELS).build()).toList(),
-                builds.stream().map(build -> Planned.builder().workspaceId(build.workspaceId())
-                        .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
-                        .windowTraces(build.vectors()).build()).toList()));
+    /**
+     * One labelling pass, then one discovery run, in turn. Each is taken only once the one before it is queued or
+     * skipped, so a discovery run's workspace is counted only when its turn comes ({@link
+     * TopicsDiscoveryCandidates.Due#next}).
+     */
+    private static Flux<PlannedRun> inTurn(List<TopicProjectKey> labels, TopicsDiscoveryCandidates.Due builds,
+            LocalDate night) {
+        var rest = labels.isEmpty() ? labels : labels.subList(1, labels.size());
+        return Flux.just(true, false).concatMap(labelTurn -> labelTurn
+                ? Flux.fromIterable(labels).take(1).map(TopicsRunPlanner::labels)
+                : builds.next()
+                        .flatMapMany(next -> Flux.just(discovery(next.candidate(), night))
+                                .concatWith(Flux.defer(() -> inTurn(rest, next.rest(), night))))
+                        .switchIfEmpty(Flux.defer(() -> Flux.fromIterable(rest).map(TopicsRunPlanner::labels))),
+                0);
     }
 
-    /** Queues the runs in order until {@code free} are queued; a project that got a run meanwhile is skipped. */
-    private Mono<Integer> queue(List<Planned> runs, int free) {
-        return Flux.fromIterable(runs)
+    private static PlannedRun discovery(TopicsDiscoveryCandidates.Candidate build, LocalDate night) {
+        return PlannedRun.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
+                .mode(RunMode.DISCOVERY).night(night).windowTraces(build.vectors()).build();
+    }
+
+    private static PlannedRun labels(TopicProjectKey project) {
+        return PlannedRun.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
+                .mode(RunMode.LABELS).build();
+    }
+
+    /**
+     * Queues the runs in order until {@code free} are queued or the deadline passes; a project that got a run meanwhile
+     * is skipped. It takes the next run only once this one is queued or skipped.
+     */
+    private Mono<Integer> queue(Flux<PlannedRun> runs, int free, PlanDeadline deadline) {
+        return runs
+                .takeWhile(run -> !deadline.passed())
                 .concatMap(run -> queueOne(run).onErrorResume(error -> {
                     log.warn("Topics run not queued, project '{}'", run.projectId(), error);
                     return Mono.empty();
-                }))
+                }), 0)
                 .take(free)
                 .count()
                 .map(Long::intValue);

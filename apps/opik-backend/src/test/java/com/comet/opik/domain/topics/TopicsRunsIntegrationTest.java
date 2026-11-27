@@ -20,6 +20,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -43,6 +44,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
@@ -53,9 +55,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
@@ -69,6 +75,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
 /**
@@ -172,6 +179,7 @@ class TopicsRunsIntegrationTest {
         opikConfig.getTopics().setEnabledWorkspaces("");
         endRunsInFlight();
         opikConfig.getTopics().getRuns().setMaxInFlight(2);
+        opikConfig.getTopics().getRuns().setPlanAfterRun(false);
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(FIXTURE.discoveryAnswer,
                 0)));
@@ -241,6 +249,54 @@ class TopicsRunsIntegrationTest {
                 var project = data.topicProject(projectId);
                 assertThat(project).isNotNull();
                 assertThat(project.listRunId()).isNotNull();
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("the discovery phase counts a workspace only when its turn comes: with five workspaces of two "
+            + "projects and two free slots, a plan counts two of them and queues one run in each")
+    void discoveryCountsLazily() {
+        var workspaces = IntStream.range(0, 5).mapToObj(i -> enabledWorkspace()).toList();
+        var projects = new HashMap<UUID, String>();
+        for (var workspaceId : workspaces) {
+            for (int i = 0; i < 2; i++) {
+                var projectId = UUID.randomUUID();
+                data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+                projects.put(projectId, workspaceId);
+            }
+        }
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(2);
+
+        assertThat(data.finishedQueries("topics:count_window", workspaces)).isEqualTo(2);
+        assertThat(projects.entrySet().stream()
+                .filter(project -> {
+                    var row = data.topicProject(project.getKey());
+                    return row != null && row.runId() != null;
+                })
+                .map(Map.Entry::getValue)
+                .toList()).hasSize(2).doesNotHaveDuplicates();
+    }
+
+    @Test
+    @DisplayName("a run that ends frees its slot at once: with one slot, one plan builds the first project, and the "
+            + "plan its end starts builds the second, well within one interval")
+    void endedRunPlansAgain() {
+        opikConfig.getTopics().getRuns().setMaxInFlight(1);
+        opikConfig.getTopics().getRuns().setPlanAfterRun(true);
+        var workspaceId = enabledWorkspace();
+        var projects = List.of(UUID.randomUUID(), UUID.randomUUID());
+        for (var projectId : projects) {
+            data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        }
+
+        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+
+        // No plan by hand from here: each run's end plans the next, its build's labelling pass, then the other build.
+        Awaitility.await().atMost(WAIT).untilAsserted(() -> {
+            for (var projectId : projects) {
+                assertThat(data.topicProject(projectId)).isNotNull().extracting(TopicProject::listRunId).isNotNull();
             }
         });
     }
@@ -379,7 +435,7 @@ class TopicsRunsIntegrationTest {
             }
         };
         return new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
-                new TopicsBackfillGate(config), nightPass);
+                new TopicsBackfillGate(config), nightPass, mock(LockService.class));
     }
 
     @Test
@@ -416,6 +472,49 @@ class TopicsRunsIntegrationTest {
                 .isInstanceOf(ConflictException.class);
 
         assertThat(awaitBuilt(waiting)).isEqualTo(runId);
+    }
+
+    @Test
+    @DisplayName("a run whose CPU steps wait behind busy parallel() threads for twice topics.runs.abandonGrace keeps "
+            + "its heartbeat: the plans meanwhile do not record it abandoned, and it saves once the threads are free")
+    void heartbeatWhileTheCpuThreadsAreBusy() throws InterruptedException {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        var abandonGrace = opikConfig.getTopics().getRuns().getAbandonGrace().toJavaDuration();
+        var release = new CountDownLatch(1);
+        // One task per parallel() thread: the scheduler hands its tasks to its threads in turn.
+        var held = new CountDownLatch(Schedulers.DEFAULT_POOL_SIZE);
+        for (int i = 0; i < Schedulers.DEFAULT_POOL_SIZE; i++) {
+            Schedulers.parallel().schedule(() -> {
+                held.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        try {
+            assertThat(held.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+            Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                    .isEqualTo(TopicProject.RunStatus.RUNNING));
+            var started = data.topicProject(projectId).runStartedAt();
+            // A plan every second, as the leader's would settle the run.
+            var heldUntil = Instant.now().plus(abandonGrace.multipliedBy(2));
+            while (Instant.now().isBefore(heldUntil)) {
+                planner.plan(Instant.now()).block();
+                Thread.sleep(1_000);
+            }
+            var running = data.topicProject(projectId);
+            assertThat(running.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+            assertThat(running.heartbeatAt()).isAfter(started.plus(abandonGrace));
+        } finally {
+            release.countDown();
+        }
+        awaitBuilt(projectId);
+        assertThat(data.topicProject(projectId).failedRuns()).isZero();
     }
 
     @Test

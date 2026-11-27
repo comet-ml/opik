@@ -46,12 +46,14 @@ import static org.mockito.Mockito.when;
 
 /**
  * The night pass's faults that real containers cannot produce, with every store mocked: a failed count, a failed read,
- * one workspace's failed check, a count that ends past the budget, a failed decision write, a failed night count. Also
+ * a count that ends past the budget, a failed decision write, a failed night count. Also
  * the night the schedule gives. The decisions on real storage are in
  * {@link TopicsNightlyIntegrationTest}.
  */
 @DisplayName("topics night pass")
 class TopicsNightPassTest {
+
+    private static final Duration PLAN_BUDGET = Duration.ofMinutes(2);
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
     private static final String WORKSPACE_ID = ID_GENERATOR.generateId().toString();
@@ -63,8 +65,8 @@ class TopicsNightPassTest {
     /** Each project's row; its window count in {@link #vectors}, or a failed count when absent. */
     private final Map<UUID, TopicProject> rows = new HashMap<>();
     private final Map<UUID, Long> vectors = new HashMap<>();
-    private final List<TopicsRunPlanner.Planned> queued = new ArrayList<>();
-    private Function<TopicsRunPlanner.Planned, Mono<UUID>> queue;
+    private final List<PlannedRun> queued = new ArrayList<>();
+    private Function<PlannedRun, Mono<UUID>> queue;
 
     private InMemoryMetricReader reader;
     private TopicsConfig config;
@@ -86,11 +88,12 @@ class TopicsNightPassTest {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
 
-        // As the query: a saved list, not looked at on the night, no run in flight.
+        // As the query: a saved list, not looked at on the night, no run in flight; every project exists.
         when(projectDAO.findNightDue(anyCollection(), any(), any())).thenAnswer(invocation -> rows.values().stream()
                 .filter(row -> row.listRunId() != null)
                 .filter(row -> row.lastNight() == null || row.lastNight().isBefore(invocation.getArgument(1)))
                 .filter(row -> row.runStatus() == null || !row.runStatus().inFlight())
+                .map(row -> new TopicProjectDAO.NightDue(row, false))
                 .toList());
         when(projectDAO.findProjects(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation
                 .<Collection<UUID>>getArgument(1).stream().map(rows::get).toList());
@@ -135,7 +138,7 @@ class TopicsNightPassTest {
     }
 
     private int plan(Instant now, int free) {
-        return pass.plan(now, free, queue).block();
+        return pass.plan(now, PlanDeadline.after(PLAN_BUDGET), free, queue).block();
     }
 
     private double decisions(String decision, String reason) {
@@ -184,26 +187,6 @@ class TopicsNightPassTest {
         when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of());
         assertThat(plan(IN_BUDGET, 2)).isZero();
         verify(projectDAO).findNightDue(anyCollection(), any(), any());
-    }
-
-    @Test
-    @DisplayName("a workspace whose projects cannot be checked is left out and counted as a failed night once; the "
-            + "other workspace's project is queued")
-    void oneWorkspaceFails() {
-        var built = listed(500L);
-        var brokenWorkspace = ID_GENERATOR.generateId().toString();
-        var elsewhere = ID_GENERATOR.generateId();
-        rows.put(elsewhere, row(elsewhere).workspaceId(brokenWorkspace).build());
-        when(workspaceService.enabledWorkspaceIds(TopicsStage.NIGHTLY)).thenReturn(List.of(WORKSPACE_ID,
-                brokenWorkspace));
-        when(projectService.findByIds(eq(brokenWorkspace), any())).thenThrow(new IllegalStateException("MySQL down"));
-
-        assertThat(plan(IN_BUDGET, 2)).isEqualTo(1);
-
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(WORKSPACE_ID, built,
-                TopicProject.RunMode.UPDATE, NIGHT, 500));
-        assertThat(sum(reader, "topics.nightly.nights", "outcome", "failed")).isEqualTo(1);
-        verify(projectDAO, never()).markLooked(eq(brokenWorkspace), any(), any());
     }
 
     @Test

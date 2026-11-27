@@ -1134,18 +1134,20 @@ class TopicsDaoStorageTest {
 
     @Test
     @DisplayName("the night's candidates are the projects with a saved list that the night has not looked at and that "
-            + "have no run in flight, of the given workspaces only")
+            + "have no run in flight, of the given workspaces only, each with whether its project was deleted")
     void nightDue() {
         var workspaceId = newId().toString();
         var due = newId();
+        var deleted = newId();
         var looked = newId();
         var inFlight = newId();
         var listless = newId();
         var elsewhere = newId();
         var night = LocalDate.ofInstant(NIGHT, ZoneOffset.UTC).plusDays(1);
-        for (var projectId : List.of(due, looked, inFlight)) {
+        for (var projectId : List.of(due, deleted, looked, inFlight)) {
             data.savedList(workspaceId, projectId, NIGHT, BUILT);
         }
+        data.project(workspaceId, due);
         data.savedList(newId().toString(), elsewhere, NIGHT, BUILT);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicProjectDAO.class);
@@ -1158,7 +1160,8 @@ class TopicsDaoStorageTest {
         var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .findNightDue(List.of(workspaceId), night, TopicsNight.windowTo(night)));
 
-        assertThat(found).singleElement().isEqualTo(data.topicProject(due));
+        assertThat(found).containsExactlyInAnyOrder(new TopicProjectDAO.NightDue(data.topicProject(due), false),
+                new TopicProjectDAO.NightDue(data.topicProject(deleted), true));
     }
 
     @Test
@@ -1269,7 +1272,8 @@ class TopicsDaoStorageTest {
 
         assertThat(tonight).isEmpty();
         assertThat(notReached).isEmpty();
-        assertThat(nextNight).singleElement().isEqualTo(data.topicProject(projectId));
+        assertThat(nextNight).singleElement().extracting(TopicProjectDAO.NightDue::project)
+                .isEqualTo(data.topicProject(projectId));
     }
 
     /** Whether the night's triage pauses the project, as the night pass reads it. */

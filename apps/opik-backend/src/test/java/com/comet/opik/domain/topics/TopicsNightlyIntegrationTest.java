@@ -65,6 +65,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +75,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -90,6 +92,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 /**
  * The night pass of the planner and the nightly update as a black box, against real MySQL, ClickHouse and Redis, with
@@ -103,6 +111,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicsNightlyIntegrationTest {
+
+    private static final java.time.Duration PLAN_BUDGET = java.time.Duration.ofMinutes(2);
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
@@ -324,11 +334,12 @@ class TopicsNightlyIntegrationTest {
         });
         var untouched = Map.of(lookedAt, data.topicProject(lookedAt), running, data.topicProject(running));
         var reader = InMemoryMetricReader.create();
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
 
-        assertThat(pass(reader).plan(Instant.now(), 10, capture(queued)).block()).isEqualTo(1);
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, capture(queued)).block())
+                .isEqualTo(1);
 
-        assertThat(queued).containsExactly(new TopicsRunPlanner.Planned(workspaceId, built,
+        assertThat(queued).containsExactly(new PlannedRun(workspaceId, built,
                 TopicProject.RunMode.UPDATE, today(), FIXTURE.size()));
         for (var reason : List.of("deleted", "already_saved", "paused", "small")) {
             assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "skip", "reason",
@@ -362,12 +373,13 @@ class TopicsNightlyIntegrationTest {
         assertThat(failed.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
         assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_BAD_ANSWER);
         assertThat(failed.failedRuns()).isEqualTo(failures);
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
         int from = logEvents().size();
 
         // Tomorrow's night, within its budget: a failed update queued tonight waits for it.
         var tomorrowNight = todayStart().plusSeconds(86_400 + 2 * 3_600 + 60);
-        pass(InMemoryMetricReader.create()).plan(tomorrowNight, 10, capture(queued)).block();
+        pass(InMemoryMetricReader.create()).plan(tomorrowNight, PlanDeadline.after(PLAN_BUDGET), 10, capture(queued))
+                .block();
 
         assertThat(queued).noneMatch(planned -> planned.projectId().equals(projectId));
         var events = logEvents();
@@ -400,17 +412,21 @@ class TopicsNightlyIntegrationTest {
         data.savedList(workspaceId, older, yesterdayStart().minusSeconds(2 * 86_400), FIXTURE.size());
         var newer = seededList(workspaceId, FIXTURE.size());
         var reader = InMemoryMetricReader.create();
-        var queued = new ArrayList<TopicsRunPlanner.Planned>();
+        var queued = new ArrayList<PlannedRun>();
 
-        assertThat(pass(reader).plan(Instant.now(), 0, capture(queued)).block()).isZero();
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 0, capture(queued)).block())
+                .isZero();
         assertThat(data.topicProject(gone).lastNight()).isEqualTo(today());
         assertThat(queued).isEmpty();
 
-        assertThat(pass(reader).plan(Instant.now(), 1, planned -> Mono.empty()).block()).isZero();
+        assertThat(
+                pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 1, planned -> Mono.empty()).block())
+                .isZero();
         assertThat(data.topicProject(older).lastNight()).isNull();
 
-        assertThat(pass(reader).plan(Instant.now(), 1, capture(queued)).block()).isEqualTo(1);
-        assertThat(queued).extracting(TopicsRunPlanner.Planned::projectId).containsExactly(older);
+        assertThat(pass(reader).plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 1, capture(queued)).block())
+                .isEqualTo(1);
+        assertThat(queued).extracting(PlannedRun::projectId).containsExactly(older);
         assertThat(data.topicProject(newer).lastNight()).isNull();
     }
 
@@ -437,13 +453,124 @@ class TopicsNightlyIntegrationTest {
         var reader = InMemoryMetricReader.create();
         var pass = pass(reader);
 
-        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
-        assertThat(pass.plan(Instant.now(), 10, planned -> Mono.empty()).block()).isZero();
+        assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, planned -> Mono.empty()).block())
+                .isZero();
+        assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, planned -> Mono.empty()).block())
+                .isZero();
 
         assertThat(data.topicProject(notReached))
                 .isEqualTo(notReachedBefore.toBuilder().notReachedNights(1).build());
         assertThat(data.topicProject(looked)).isEqualTo(lookedBefore);
         assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.nights", "outcome", "finished")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("the night queues one workspace at a time in turn, stalest first within each: a workspace with three "
+            + "stale projects does not take both free slots from one with a fresher project")
+    void nightSharesTheSlotsAcrossWorkspaces() {
+        var crowded = enabledWorkspace();
+        var stalest = seededList(crowded, FIXTURE.size(), 5);
+        seededList(crowded, FIXTURE.size(), 4);
+        seededList(crowded, FIXTURE.size(), 3);
+        var other = enabledWorkspace();
+        var fresher = seededList(other, FIXTURE.size(), 1);
+        var queued = new ArrayList<PlannedRun>();
+
+        assertThat(pass(InMemoryMetricReader.create())
+                .plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 2, capture(queued)).block()).isEqualTo(2);
+
+        assertThat(queued).extracting(PlannedRun::projectId).containsExactly(stalest, fresher);
+    }
+
+    @Test
+    @DisplayName("the night counts a workspace only when its turn comes: with five workspaces of two projects and two "
+            + "free slots it counts two workspaces, queues one project in each, and records nothing on a project it "
+            + "counted but did not queue")
+    void nightCountsLazily() {
+        var workspaces = IntStream.range(0, 5).mapToObj(i -> enabledWorkspace()).toList();
+        var projects = workspaces.stream()
+                .flatMap(workspaceId -> Stream.of(seededList(workspaceId, FIXTURE.size()),
+                        seededList(workspaceId, FIXTURE.size())))
+                .toList();
+        var queued = new ArrayList<PlannedRun>();
+
+        assertThat(pass(InMemoryMetricReader.create())
+                .plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 2, capture(queued)).block()).isEqualTo(2);
+
+        assertThat(queued).extracting(PlannedRun::workspaceId).doesNotHaveDuplicates();
+        assertThat(data.finishedQueries("topics:count_window", workspaces)).isEqualTo(2);
+        var queuedIds = queued.stream().map(PlannedRun::projectId).toList();
+        for (var projectId : projects) {
+            assertThat(data.topicProject(projectId).lastNight()).as(projectId.toString())
+                    .isEqualTo(queuedIds.contains(projectId) ? today() : null);
+        }
+    }
+
+    @Test
+    @DisplayName("the night records a workspace's small projects skipped as small and its projects whose count fails "
+            + "as count_failed, and queues none of them")
+    void nightRecordsSmallAndCountFailed() {
+        var workspaceId = enabledWorkspace();
+        var small = List.of(seededList(workspaceId, SMALL), seededList(workspaceId, SMALL),
+                seededList(workspaceId, SMALL));
+        var failed = Set.of(seededList(workspaceId, FIXTURE.size()), seededList(workspaceId, FIXTURE.size()));
+        // A real count cannot be made to fail on demand: these projects' counts fail as a guard trip makes them.
+        var failing = spy(windowDAO);
+        doAnswer(invocation -> invocation.<Collection<UUID>>getArgument(1).stream().anyMatch(failed::contains)
+                ? Mono.error(new IllegalStateException("count failed"))
+                : invocation.callRealMethod())
+                .when(failing).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
+        var config = opikConfig.getTopics();
+        var reader = InMemoryMetricReader.create();
+        var pass = pass(new TopicsDiscoveryCandidates(config, template, failing, new TopicsBackfillGate(config)),
+                reader);
+        var queued = new ArrayList<PlannedRun>();
+
+        assertThat(pass.plan(Instant.now(), PlanDeadline.after(PLAN_BUDGET), 10, capture(queued)).block()).isZero();
+
+        assertThat(queued).isEmpty();
+        assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "skip", "reason", "small"))
+                .isEqualTo(3);
+        assertThat(TopicsMetricsReader.sum(reader, "topics.nightly.decisions", "decision", "count_failed"))
+                .isEqualTo(2);
+        for (var projectId : Stream.concat(small.stream(), failed.stream()).toList()) {
+            assertThat(data.topicProject(projectId).lastNight()).as(projectId.toString()).isEqualTo(today());
+        }
+    }
+
+    @Test
+    @DisplayName("one deadline covers the night pass and the discovery phase: with counts that take 30 s and a 1 s "
+            + "plan budget, the plan cuts them, ends within 1.8 s and queues nothing")
+    void oneDeadlinePerPlan(@Jit TopicsRunReconciler reconciler, @Jit TopicsRunPublisher publisher) {
+        var workspaceId = enabledWorkspace();
+        var listed = seededList(workspaceId, FIXTURE.size());
+        var listless = ID_GENERATOR.generateId();
+        data.seed(workspaceId, listless, 0, FIXTURE.size(), todayStart());
+        var listedBefore = data.topicProject(listed);
+        // A real count cannot be made slow on demand.
+        var slow = spy(windowDAO);
+        doAnswer(invocation -> Mono.delay(java.time.Duration.ofSeconds(30)).thenReturn(Map.<UUID, Long>of()))
+                .when(slow).countByProject(anyString(), anyCollection(), any(), any(), anyLong());
+        var config = opikConfig.getTopics();
+        var slowCandidates = new TopicsDiscoveryCandidates(config, template, slow, new TopicsBackfillGate(config));
+        var slowPass = pass(slowCandidates, InMemoryMetricReader.create());
+        var slowPlanner = new TopicsRunPlanner(config, template, workspaceService, store, reconciler, slowCandidates,
+                publisher, new TopicsBackfillGate(config), slowPass, lockService);
+        var budget = config.getRuns().getPlanBudget();
+        config.getRuns().setPlanBudget(Duration.seconds(1));
+        try {
+            long started = System.nanoTime();
+
+            assertThat(slowPlanner.plan(Instant.now()).block()).isZero();
+
+            assertThat(java.time.Duration.ofNanos(System.nanoTime() - started))
+                    .isLessThan(java.time.Duration.ofMillis(1_800));
+        } finally {
+            config.getRuns().setPlanBudget(budget);
+        }
+        assertThat(data.topicProject(listed)).isEqualTo(listedBefore);
+        var listlessRow = data.topicProject(listless);
+        assertThat(listlessRow == null ? null : listlessRow.runId()).isNull();
     }
 
     @Test
@@ -1106,12 +1233,16 @@ class TopicsNightlyIntegrationTest {
 
     /** A pass of its own, to read its metrics; its queue is the caller's, the night's end key in Redis the app's. */
     private TopicsNightPass pass(InMemoryMetricReader reader) {
+        return pass(candidates, reader);
+    }
+
+    private TopicsNightPass pass(TopicsDiscoveryCandidates candidates, InMemoryMetricReader reader) {
         return new TopicsNightPass(opikConfig.getTopics(), template, workspaceService, candidates,
                 TopicsMetricsReader.metrics(reader), workspaceNames, projectService, lockService);
     }
 
     /** A queue that records what it is given and returns a new run id. */
-    private static Function<TopicsRunPlanner.Planned, Mono<UUID>> capture(List<TopicsRunPlanner.Planned> queued) {
+    private static Function<PlannedRun, Mono<UUID>> capture(List<PlannedRun> queued) {
         return planned -> {
             queued.add(planned);
             return Mono.just(ID_GENERATOR.generateId());
@@ -1120,9 +1251,14 @@ class TopicsNightlyIntegrationTest {
 
     /** A project with {@code traces} vectors in tonight's window and a list saved for the night before. */
     private UUID seededList(String workspaceId, int traces) {
+        return seededList(workspaceId, traces, 1);
+    }
+
+    /** As {@link #seededList(String, int)}, with a list saved {@code nightsAgo} nights before tonight. */
+    private UUID seededList(String workspaceId, int traces, int nightsAgo) {
         var projectId = ID_GENERATOR.generateId();
         data.seed(workspaceId, projectId, 0, traces, todayStart());
-        listedYesterday(workspaceId, projectId);
+        listed(workspaceId, projectId, nightsAgo);
         return projectId;
     }
 
@@ -1177,7 +1313,12 @@ class TopicsNightlyIntegrationTest {
 
     /** A saved list with its window until yesterday's start, its labels complete: no run of its own is due. */
     private void listedYesterday(String workspaceId, UUID projectId) {
-        data.savedList(workspaceId, projectId, yesterdayStart(), FIXTURE.size());
+        listed(workspaceId, projectId, 1);
+    }
+
+    /** A saved list with its window until {@code nightsAgo} nights before tonight's start, its labels complete. */
+    private void listed(String workspaceId, UUID projectId, int nightsAgo) {
+        data.savedList(workspaceId, projectId, todayStart().minusSeconds(86_400L * nightsAgo), FIXTURE.size());
         store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId(), "test").block();
     }
 
