@@ -18,6 +18,7 @@ class ValueEntryPublic(UniversalBaseModel):
     span_id: typing.Optional[str] = None
     source_queue_id: typing.Optional[str] = None
     author: typing.Optional[str] = None
+    evaluator_revision: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

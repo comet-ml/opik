@@ -425,7 +425,9 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         message: messages.AddSpanFeedbackScoresBatchMessage,
     ) -> None:
         scores = [
-            feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
+            feedback_score_batch_item.FeedbackScoreBatchItem(
+                **score_message.as_payload_dict()
+            )
             for score_message in message.batch
         ]
 
@@ -441,7 +443,9 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         message: messages.AddTraceFeedbackScoresBatchMessage,
     ) -> None:
         scores = [
-            feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
+            feedback_score_batch_item.FeedbackScoreBatchItem(
+                **score_message.as_payload_dict()
+            )
             for score_message in message.batch
         ]
 
