@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.NonNull;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,13 +18,22 @@ import static java.util.stream.Collectors.toUnmodifiableList;
 
 /**
  * The LLM's author answer: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}, both keys required,
- * {@code topic} the topic's index or -1 for Other. Read as topics with cluster lists: each assignment's cluster goes to
- * its topic's list, the first mention of a cluster wins. A cluster assigned -1 or an index off the list claims nothing:
- * the applier sends every unclaimed group to Other. Unknown keys are ignored; anything else off the schema, text
- * included, is {@code llm_bad_answer}.
+ * {@code topic} the topic's name or "-1" for Other. A name, not an index: the model miscounted indexes and moved the
+ * last topics' names one cluster over. Read as topics with cluster lists: each assignment's cluster goes to the first
+ * topic of that name, compared as written, then by {@link AuthorApplier#nameKey}; the first mention of a cluster wins.
+ * A cluster assigned "-1" or a name off the list claims nothing: the applier sends every unclaimed group to Other.
+ * {@code unmatched} counts the clusters given a name off the list. Unknown keys are ignored; anything else off the
+ * schema, text included, is {@code llm_bad_answer}.
  */
 @Builder(toBuilder = true)
-public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
+public record AuthorAnswer(@NonNull List<AuthorTopic> topics, int unmatched) {
+
+    /** The {@code topic} of a cluster that has no topic. */
+    static final String OTHER = "-1";
+
+    public AuthorAnswer(@NonNull List<AuthorTopic> topics) {
+        this(topics, 0);
+    }
 
     /**
      * The {@code output} of a generate call with the author task's schema ({@code topics/tasks/author.yaml}):
@@ -40,12 +50,28 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
             throw bad("the answer needs the arrays 'topics' and 'assignment'", null);
         }
         var named = topicsNode.valueStream().map(AuthorAnswer::named).toList();
-        Map<Integer, Integer> firstMention = assignmentNode.valueStream().map(AuthorAnswer::assignment)
+        var byName = new HashMap<String, Integer>();
+        var byKey = new HashMap<String, Integer>();
+        for (int t = 0; t < named.size(); t++) {
+            byName.putIfAbsent(named.get(t).name(), t);
+            byKey.putIfAbsent(AuthorApplier.nameKey(named.get(t).name()), t);
+        }
+        Map<Integer, String> firstMention = assignmentNode.valueStream().map(AuthorAnswer::assignment)
                 .collect(toMap(Assignment::cluster, Assignment::topic, (first, later) -> first, LinkedHashMap::new));
-        Map<Integer, List<Integer>> claimed = firstMention.entrySet().stream()
-                .filter(entry -> entry.getValue() >= 0 && entry.getValue() < named.size())
+        var topicOf = new LinkedHashMap<Integer, Integer>();
+        int unmatched = 0;
+        for (var entry : firstMention.entrySet()) {
+            var topic = byName.getOrDefault(entry.getValue(), byKey.get(AuthorApplier.nameKey(entry.getValue())));
+            if (topic != null) {
+                topicOf.put(entry.getKey(), topic);
+            } else if (!OTHER.equals(entry.getValue().strip())) {
+                unmatched++;
+            }
+        }
+        Map<Integer, List<Integer>> claimed = topicOf.entrySet().stream()
                 .collect(groupingBy(Map.Entry::getValue, mapping(Map.Entry::getKey, toUnmodifiableList())));
         return AuthorAnswer.builder()
+                .unmatched(unmatched)
                 .topics(IntStream.range(0, named.size())
                         .mapToObj(t -> AuthorTopic.builder()
                                 .name(named.get(t).name())
@@ -59,7 +85,7 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
     private record Named(String name, String definition) {
     }
 
-    private record Assignment(int cluster, int topic) {
+    private record Assignment(int cluster, String topic) {
     }
 
     private static Named named(JsonNode topic) {
@@ -75,10 +101,10 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
         var cluster = entry.get("cluster");
         var topic = entry.get("topic");
         if (!entry.isObject() || cluster == null || !cluster.isIntegralNumber() || !cluster.canConvertToInt()
-                || topic == null || !topic.isIntegralNumber() || !topic.canConvertToInt()) {
-            throw bad("every assignment needs an integer 'cluster' and an integer 'topic'", null);
+                || topic == null || !topic.isTextual()) {
+            throw bad("every assignment needs an integer 'cluster' and a string 'topic'", null);
         }
-        return new Assignment(cluster.intValue(), topic.intValue());
+        return new Assignment(cluster.intValue(), topic.asText());
     }
 
     private static TopicsRunException bad(String message, Throwable cause) {

@@ -121,6 +121,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             var assigner = assigner(topicPrototypes, owners, otherPrototypes);
             var finishStats = JsonUtils.createObjectNode();
             finishStats.put("other_groups", applied.other().size());
+            finishStats.put("author_unmatched", answer.unmatched());
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
             // near it is saved, so it would assign no trace.

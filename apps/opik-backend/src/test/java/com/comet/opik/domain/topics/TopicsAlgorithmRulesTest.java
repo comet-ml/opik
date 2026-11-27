@@ -114,16 +114,21 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
-        @DisplayName("each cluster goes to the topic of its first mention; -1 and an index off the list end in Other")
+        @DisplayName("each cluster goes to the topic of its name at its first mention; \"-1\" and a name off the list end "
+                + "in Other, and only the name off the list counts as unmatched")
         void perCluster() throws IOException {
-            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"A\", "
-                    + "\"definition\": \"a\"}, {\"name\": \"B\", \"definition\": \"b\"}], \"assignment\": ["
-                    + "{\"cluster\": 0, \"topic\": 1}, {\"cluster\": 1, \"topic\": 0}, {\"cluster\": 0, \"topic\": 0}, "
-                    + "{\"cluster\": 2, \"topic\": -1}, {\"cluster\": 3, \"topic\": 7}]}"));
+            var answer = AuthorAnswer
+                    .parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"Alpha Requests\", "
+                            + "\"definition\": \"a\"}, {\"name\": \"Beta Requests\", \"definition\": \"b\"}], \"assignment\": ["
+                            + "{\"cluster\": 0, \"topic\": \"Beta Requests\"}, {\"cluster\": 1, \"topic\": \"alpha  requests\"}, "
+                            + "{\"cluster\": 0, \"topic\": \"Alpha Requests\"}, {\"cluster\": 2, \"topic\": \"-1\"}, "
+                            + "{\"cluster\": 3, \"topic\": \"Gamma Requests\"}]}"));
 
-            assertThat(answer.topics()).extracting(AuthorTopic::name).containsExactly("A", "B");
+            assertThat(answer.topics()).extracting(AuthorTopic::name).containsExactly("Alpha Requests",
+                    "Beta Requests");
             assertThat(answer.topics().get(0).clusters()).containsExactly(1);
             assertThat(answer.topics().get(1).clusters()).containsExactly(0);
+            assertThat(answer.unmatched()).isEqualTo(1);
             var groups = IntStream.range(0, 4).mapToObj(j -> GroupSummary.builder().group(j).size(10).build())
                     .toList();
             assertThat(AuthorApplier.apply(answer, groups, 10).other()).containsExactly(2, 3);
@@ -134,7 +139,8 @@ class TopicsAlgorithmRulesTest {
                 "{\"topics\": []}",
                 "{\"assignment\": []}",
                 "{\"topics\": [{\"name\": \"A\"}], \"assignment\": []}",
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1.5, \"topic\": 0}]}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1.5, \"topic\": \"A\"}]}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1, \"topic\": 0}]}",
                 "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1}]}",
                 "{\"topics\": [{\"name\": 3, \"definition\": \"d\"}], \"assignment\": []}",
                 "[1, 2]"})
