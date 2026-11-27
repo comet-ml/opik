@@ -164,6 +164,7 @@ public class TopicReadService {
                 .liveIds(live.stream().map(Topic::id).toList())
                 .maxExecutionSeconds(config.getFilter().getMaxExecutionTime().toSeconds())
                 .maxMemoryUsage(config.getFilter().getMaxMemoryUsage())
+                .firstPageWindow(config.getFilter().getFirstPageWindow().toJavaDuration())
                 .build());
     }
 

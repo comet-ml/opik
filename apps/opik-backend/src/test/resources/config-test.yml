@@ -1178,6 +1178,7 @@ topics:
   filter:
     maxExecutionTime: 30s
     maxMemoryUsage: 4294967296
+    firstPageWindow: 1h
   algorithm:
     minGroups: 30
     maxGroups: 50

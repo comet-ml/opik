@@ -4608,13 +4608,31 @@ class TraceDAOImpl implements TraceDAO {
             int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, @NonNull Connection connection) {
         return countTotal(traceSearchCriteria, connection)
                 .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> row.get("count", Long.class))))
-                .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
-                        .flatMapMany(result1 -> mapToDto(result1, traceSearchCriteria.exclude()))
-                        .collectList()
+                .flatMap(total -> findPage(size, page, traceSearchCriteria, //Get count then pagination
+                        TopicPageWindows.lowerBounds(traceSearchCriteria, size, page, total, Instant.now()), connection)
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())))
                 .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e,
                         TracePage.empty(page, sortingFactory.getSortableFields())));
+    }
+
+    /**
+     * The page, read in the spans of {@link TopicPageWindows} newest first: the first span read that fills the page is
+     * the page, else the whole range is read. The reads run one after another on the connection.
+     */
+    private Mono<List<Trace>> findPage(int size, int page, TraceSearchCriteria criteria, List<Instant> lowerBounds,
+            Connection connection) {
+        var whole = getTracesByProjectId(size, page, criteria, connection)
+                .flatMapMany(result -> mapToDto(result, criteria.exclude()))
+                .collectList();
+        return Flux.fromIterable(lowerBounds)
+                .concatMap(lower -> getTracesByProjectId(size, page,
+                        criteria.toBuilder().uuidFromTime(instantToUUIDMapper.toLowerBound(lower)).build(), connection)
+                        .flatMapMany(result -> mapToDto(result, criteria.exclude()))
+                        .collectList())
+                .filter(traces -> traces.size() == size)
+                .next()
+                .switchIfEmpty(Mono.defer(() -> whole));
     }
 
     @Override

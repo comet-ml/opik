@@ -50,6 +50,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Result;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -69,6 +70,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -458,6 +461,118 @@ class TracesFilterByTopicResourceTest {
      * written after them, so they are the latest rows of their traces. The project's row names only the first run;
      * the later run's rows still count.
      */
+    @Test
+    @DisplayName("the list filtered by topic, read in spans newest first, gives the page and count the whole range "
+            + "gives: every page of sizes 1, 4 and 10, for =, != and Other, with and without from_time and a second "
+            + "filter, on traces spread from minutes to weeks back")
+    void spansGiveTheWholeRangesPages() {
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
+        var today = LocalDate.now(ZoneOffset.UTC);
+        var first = topic(caller.workspaceId(), projectId, today.minusDays(10));
+        var second = topic(caller.workspaceId(), projectId, today.minusDays(10));
+        var saved = ID_GENERATOR.generateId();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertTopics(List.of(first, second));
+            saveRun(handle, caller.workspaceId(), projectId, saved, Instant.now().truncatedTo(ChronoUnit.MICROS));
+            return null;
+        });
+        // 2 minutes to about 39 days back, denser towards now: pages fill in spans of every length.
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var traces = new ArrayList<TraceRow>();
+        var rows = new ArrayList<TraceTopic>();
+        for (int i = 0; i < 120; i++) {
+            var createdAt = now.minusSeconds((long) (120 * Math.pow(1.09, i)));
+            var trace = i % 6 == 5
+                    ? new TraceRow(caller.workspaceId(), projectId, ID_GENERATOR.generateId(createdAt), createdAt,
+                            Source.EXPERIMENT.getValue(), VisibilityMode.DEFAULT.getValue())
+                    : TraceRow.shown(caller.workspaceId(), projectId, ID_GENERATOR.generateId(createdAt), createdAt);
+            traces.add(trace);
+            var topicId = switch (i % 5) {
+                case 0, 1 -> first.id();
+                case 2 -> second.id();
+                case 3 -> TraceTopic.OTHER;
+                default -> null;
+            };
+            if (topicId != null) {
+                rows.add(row(caller, projectId, trace.id(), createdAt, topicId, saved));
+            }
+            if (i % 7 == 0) {
+                rows.add(row(caller, projectId, trace.id(), createdAt, second.id(), null));
+            }
+        }
+        PostCutoverTraces.insertTraces(connectionFactory, traces);
+        traceTopicsDAO.insert(rows).block();
+
+        var fromTime = Map.of("from_time", now.minus(Duration.ofDays(10)).toString());
+        var sdk = filter(TraceField.SOURCE, Operator.EQUAL, Source.SDK.getValue());
+        var cases = new ArrayList<Map.Entry<List<TraceFilter>, Map<String, String>>>();
+        for (var topicFilter : List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, first.id().toString()),
+                filter(TraceField.TOPIC_ID, Operator.EQUAL, second.id().toString()),
+                filter(TraceField.TOPIC_ID, Operator.EQUAL, OTHER),
+                filter(TraceField.TOPIC_ID, Operator.NOT_EQUAL, first.id().toString()))) {
+            cases.add(Map.entry(List.of(topicFilter), Map.of()));
+            cases.add(Map.entry(List.of(topicFilter), fromTime));
+            cases.add(Map.entry(List.of(topicFilter, sdk), Map.of()));
+        }
+        var spans = opikConfig.getTopics().getFilter().getFirstPageWindow();
+        for (var listCase : cases) {
+            for (int size : List.of(1, 4, 10)) {
+                // Size 1 up to page 12 only: every later page is a whole-range read, as size 4's tail already is.
+                for (int page = 1; page <= (size == 1 ? 12 : 120 / size + 1); page++) {
+                    var params = new HashMap<>(listCase.getValue());
+                    params.put("page", String.valueOf(page));
+                    var inSpans = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
+                            listCase.getKey(), List.of(), size, params);
+                    opikConfig.getTopics().getFilter().setFirstPageWindow(io.dropwizard.util.Duration.seconds(0));
+                    try {
+                        var whole = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
+                                listCase.getKey(), List.of(), size, params);
+                        assertThat(inSpans).as("%s, size %d, page %d", listCase, size, page).isEqualTo(whole);
+                        if (whole.content().isEmpty()) {
+                            break;
+                        }
+                    } finally {
+                        opikConfig.getTopics().getFilter().setFirstPageWindow(spans);
+                    }
+                }
+            }
+            if (listCase == cases.getFirst()) {
+                // The spans were read: with no from_time, only a span read has a lower bound in its log comment.
+                assertThat(spanReads(projectId)).isPositive();
+            }
+        }
+    }
+
+    private long spanReads(UUID projectId) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> Flux.from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                        .flatMap(Result::getRowsUpdated)
+                        .thenMany(Flux.from(connection.createStatement("""
+                                SELECT count() AS reads FROM system.query_log
+                                WHERE type = 'QueryFinish' AND is_initial_query
+                                AND log_comment LIKE '%find_traces_by_project_id%'
+                                AND position(log_comment, :project_id) > 0
+                                AND log_comment NOT LIKE '%uuidFromTime=null%'
+                                """).bind("project_id", projectId.toString()).execute()))
+                        .flatMap(result -> result.map((row, metadata) -> row.get("reads", Long.class))))
+                .blockLast();
+    }
+
+    private static TraceTopic row(Caller caller, UUID projectId, UUID traceId, Instant createdAt, UUID topicId,
+            UUID runId) {
+        return TraceTopic.builder()
+                .workspaceId(caller.workspaceId())
+                .projectId(projectId)
+                .traceId(traceId)
+                .traceCreatedAt(createdAt)
+                .topicId(topicId)
+                .source(runId == null ? TraceTopic.Source.ARRIVAL : TraceTopic.Source.RUN)
+                .runId(runId)
+                .build();
+    }
+
     private Seed seed() {
         var caller = topics.caller();
         var projectId = topics.project(caller);

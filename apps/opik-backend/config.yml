@@ -3093,6 +3093,10 @@ topics:
     #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together.
     #  At most 68719476736 (64 GiB)
     maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
+    #  Default: 1h
+    #  Description: The trace list filtered by topic, in its default order, first reads the newest traces of this span,
+    #  then of spans 8 times longer, until a read fills the page; then the whole range. 0s reads the whole range at once
+    firstPageWindow: ${TOPICS_FILTER_FIRST_PAGE_WINDOW:-1h}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After

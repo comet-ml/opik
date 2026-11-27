@@ -487,6 +487,16 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
+        /**
+         * The trace list filtered by topic, in its default order, first reads the newest traces of this span, then of
+         * spans 8 times longer, until a read fills the page; then the whole range. Each read reads only its span of
+         * {@code trace_topics} and {@code traces}. Zero reads the whole range at once.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.DAYS)
+        private Duration firstPageWindow;
+
         @JsonIgnore
         @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
             return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
