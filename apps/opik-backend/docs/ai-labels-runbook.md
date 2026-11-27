@@ -484,8 +484,8 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 
 | `run_error_code` | Meaning |
 |---|---|
-| `llm_timeout` | The LLM call ran out of `TOPICS_RUN_LLM_DEADLINE`. |
-| `llm_error` | The LLM call failed after its retries, or with a 4xx. The run's `failed` log line has the code and HTTP status. |
+| `llm_timeout` | The LLM call ran out of `TOPICS_RUN_LLM_DEADLINE`. A nightly update's calls do not fail it: see "What a nightly update does". |
+| `llm_error` | The LLM call failed after its retries, or with a 4xx. The run's `failed` log line has the code and HTTP status. A nightly update's calls do not fail it. |
 | `llm_bad_answer` | The answer has no JSON object, or breaks the schema. The run logs the answer's length and SHA-256, not its text. |
 | `window_read` | The ClickHouse window read failed (it stops after `TOPICS_RUN_READ_TIMEOUT`), or the window had no usable vector. |
 | `invariant` | The check before the save failed: a prototype without 384 values or not of unit length. |
@@ -904,6 +904,7 @@ example `<workspace_id>:arrival` (a deploy). Its saved list stays as it is.
 |---|---|
 | `topics.nightly.decisions` by `decision`, `reason` | Projects the night decided on: `update`, `skip` (with `reason`), `not_reached`, `count_failed`. |
 | `topics.nightly.nights` by `outcome` | `finished` once per night, after its budget; `failed` for each plan whose read failed, for every workspace or for one. |
+| `topics.nightly.degraded_calls` by `call`, `error_code` | LLM calls of a saved nightly update that failed: `call` is `naming` or `verify`, `error_code` is `llm_timeout` or `llm_error`. Their candidates stay in Other until a later night. Growing across many projects means opik-inference is slow or down; the lists stop changing but the nights still save. |
 
 ### What a nightly update does
 
@@ -920,9 +921,15 @@ does) and the saved list, then:
    new topic, or sends them to Other. Candidates given to a topic are checked by one `verify_naming` call
    (`verify.yaml`); the rejected ones go to one `naming_new` call (`naming_new.yaml`), which offers a new topic or
    Other only. A new topic is born only at the big share; on a full list (`TOPICS_ALGORITHM_MAX_TOPICS`, 10) it replaces
-   the topic with the lowest share, if that share is below its own. An answer that is not a JSON object leaves its
-   candidates in Other and the run goes on. A call that fails or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
-   `TOPICS_RUN_VERIFY_DEADLINE` fails the run, and the list stays as it was.
+   the topic with the lowest share, if that share is below its own. A naming answer that is not a JSON object leaves
+   its candidates in Other and the run goes on; a verify answer that is not one is handled as a failed verify call. A
+   call that errors or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
+   `TOPICS_RUN_VERIFY_DEADLINE` does not fail the run either: the candidates it was deciding stay in Other tonight
+   (`forced.other_failed`), and a failed verify does not send its candidates to `naming_new`. They are not kept as
+   known Other, so the next night offers them again. The run goes on to step 4 and saves, so it does not count toward
+   the pause. It logs a WARN (`Topics run '<run_id>' call '<call>' failed`), lists the call and its error code in
+   `stats.degraded_calls`, and counts it in `topics.nightly.degraded_calls`. An answer that breaks the schema still
+   fails the run with `llm_bad_answer`, and the list stays as it was.
 4. Assigns every trace again. A topic with no trace retires that night; a topic under `TOPICS_ALGORITHM_RETIRE_SHARE`
    (0.5%) for `TOPICS_ALGORITHM_RETIRE_NIGHTS` (3) saved nights in a row retires (`low_share`). A topic replaced on a
    full list retires as `replaced`. A retired topic does not come back: its theme is born again with a new id.
@@ -933,8 +940,8 @@ trace text and are never logged. When every topic retires, the save clears the l
 plans give the project a discovery run.
 
 The run's `saved` or `failed` line holds its `stats`: `mode`, `saved_runs_before`, `topics_before`, `unassigned`,
-`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`, and the
-churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
+`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`,
+`degraded_calls` (each failed call's `call` and `error_code`, only on a night that had one), and the churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
 the same over the traces in a topic both before and after. Prompts and answers are logged only as length and SHA-256;
 each call's request id is `<run_id>:<call>` in opik-inference's logs.
 
