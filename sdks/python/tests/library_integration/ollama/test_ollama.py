@@ -1,4 +1,7 @@
 import asyncio
+import gc
+import time
+import weakref
 
 import ollama
 import pytest
@@ -227,6 +230,42 @@ def test_ollama_chat__stream__aggregated_into_one_span(fake_backend, monkeypatch
     assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
     assert span.usage["prompt_tokens"] == 10
     _assert_durations_in_metadata_not_usage(span)
+
+
+def test_ollama_chat__stream__never_read_then_dropped__span_still_ends(
+    fake_backend, monkeypatch
+):
+    """A stream the caller never iterates must still end its span.
+
+    The wrapper is a generator, and a generator's body, including its
+    ``finally``, does not run until the first ``next()``. The span is already
+    popped from the decorator by then, so without a finalizer it would stay
+    open for good.
+    """
+    client = ollama.Client()
+    wrapped = track_ollama(client)
+    monkeypatch.setattr(
+        client, "_request", lambda *a, **kw: iter([_chunk(content="", done=True)])
+    )
+
+    stream = wrapped.chat(
+        model=MODEL,
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+        stream=True,
+    )
+    stream_ref = weakref.ref(stream)
+    del stream
+    for _ in range(5):
+        gc.collect()
+        if stream_ref() is None:
+            break
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.end_time is not None
+    assert span.error_info is None
+    assert fake_backend.trace_trees[0].end_time is not None
 
 
 def test_ollama_chat__stream__two_tracked_clients__each_keeps_its_own_provider(
@@ -641,3 +680,212 @@ def test_ollama_chat__unconvertible_tool__logged_by_name(fake_backend, monkeypat
     opik.flush_tracker()
 
     assert fake_backend.trace_trees[0].spans[0].input["tools"] == ["broken_tool"]
+
+
+async def _settled_finalizations(calls, timeout=5.0, settle=0.1):
+    """Wait for a finalization to land, then keep giving the loop turns.
+
+    The asyncgen finalizer hook schedules ``aclose()`` on the loop, so how many
+    turns the generator's own ``finally`` needs is up to the scheduler. Poll for
+    the first call rather than sleeping a fixed number of times, then go on
+    pumping the loop: a duplicate report would arrive on a later turn, and that
+    is what these tests are checking for.
+    """
+    deadline = time.monotonic() + timeout
+    while not calls:
+        gc.collect()
+        await asyncio.sleep(0.005)
+        if time.monotonic() > deadline:
+            raise AssertionError(f"no finalization within {timeout}s")
+    settle_until = time.monotonic() + settle
+    while time.monotonic() < settle_until:
+        gc.collect()
+        await asyncio.sleep(0.005)
+    return calls
+
+
+def _collect_finalizations(wrap, advance):
+    """Drive an async stream through `wrap`, optionally advancing it, then drop it.
+
+    Returns every ``finally_callback`` invocation. Two of them means a span was
+    ingested twice.
+    """
+    calls = []
+
+    def finally_callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        calls.append(
+            {
+                "output": output,
+                "error_info": error_info,
+                "capture_output": capture_output,
+                "span": generators_span_to_end,
+                "trace": generators_trace_to_end,
+            }
+        )
+
+    async def source():
+        for item in ("a", "b"):
+            yield item
+
+    async def drive():
+        generator = wrap(
+            source(),
+            "SPAN",
+            None,
+            lambda items: {"items": list(items)},
+            finally_callback,
+        )
+        if advance:
+            await generator.__anext__()
+        del generator
+        return await _settled_finalizations(calls)
+
+    return asyncio.run(drive())
+
+
+def test_wrap_async_stream__advanced_then_dropped__finalizes_exactly_once():
+    """A stream dropped part-way is reported once, and as terminated early.
+
+    CPython clears a generator's weakrefs before running its close, so the
+    weakref finalizer reports first and the body's `finally` finds the one-shot
+    flag already set. Both used to report: once with output=None and once with
+    the aggregate, which looked like a complete response.
+    """
+    calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=True)
+
+    assert len(calls) == 1
+    assert calls[0]["output"] is None
+    assert calls[0]["error_info"]["exception_type"] == "GeneratorExit"
+    assert calls[0]["capture_output"] is True
+    assert calls[0]["span"] == "SPAN"
+    assert calls[0]["trace"] is None
+
+
+def test_wrap_async_stream__never_advanced__still_finalizes_once():
+    """A stream that never produced anything is an empty span, not an error."""
+    calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=False)
+
+    assert len(calls) == 1
+    assert calls[0]["output"] is None
+    assert calls[0]["error_info"] is None
+
+
+def _finalizations_after_loop_closed(wrap):
+    """Advance an async stream, then close the loop without shutdown_asyncgens().
+
+    ``asyncio.run()`` always calls ``loop.shutdown_asyncgens()``, which gives
+    the generator's ``finally`` a turn. A loop closed by hand does not, so the
+    weakref finalizer is the only thing left that can end the span.
+    """
+    calls = []
+
+    def finally_callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        calls.append(
+            {
+                "output": output,
+                "error_info": error_info,
+                "span": generators_span_to_end,
+            }
+        )
+
+    async def source():
+        for item in ("a", "b"):
+            yield item
+
+    holder = {}
+
+    async def drive():
+        generator = wrap(
+            source(),
+            "SPAN",
+            None,
+            lambda items: {"items": list(items)},
+            finally_callback,
+        )
+        await generator.__anext__()
+        holder["generator"] = generator
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(drive())
+    finally:
+        loop.close()
+
+    holder.clear()
+    for _ in range(5):
+        gc.collect()
+    return calls
+
+
+def test_wrap_async_stream__loop_closed_without_shutdown__still_ends_span():
+    """A started generator whose `finally` never runs must still end its span.
+
+    Skipping the finalizer once the body had started left this case with
+    nothing to close the span, because the loop went away before it could
+    await aclose().
+    """
+    calls = _finalizations_after_loop_closed(stream_wrappers.wrap_async_stream)
+
+    assert len(calls) == 1
+    assert calls[0]["span"] == "SPAN"
+    assert calls[0]["error_info"]["exception_type"] == "GeneratorExit"
+
+
+def _finalizations_through_reference_cycle(wrap):
+    """Drop a half-read async stream into a reference cycle.
+
+    The cycle collector frees it rather than refcounting, which is the path
+    where the finalizer and the generator's own cleanup are most likely to
+    disagree about what happened.
+    """
+    calls = []
+
+    def finally_callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        calls.append({"output": output, "error_info": error_info})
+
+    async def source():
+        for item in ("a", "b"):
+            yield item
+
+    async def drive():
+        generator = wrap(
+            source(),
+            "SPAN",
+            None,
+            lambda items: {"items": list(items)},
+            finally_callback,
+        )
+        await generator.__anext__()
+        cycle = {}
+        cycle["self"] = cycle
+        cycle["generator"] = generator
+        del generator, cycle
+        return await _settled_finalizations(calls)
+
+    return asyncio.run(drive())
+
+
+def test_wrap_async_stream__dropped_in_reference_cycle__reports_early_termination():
+    calls = _finalizations_through_reference_cycle(stream_wrappers.wrap_async_stream)
+
+    assert len(calls) == 1
+    assert calls[0]["output"] is None
+    assert calls[0]["error_info"]["exception_type"] == "GeneratorExit"
