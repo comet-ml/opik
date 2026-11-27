@@ -23,7 +23,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -224,13 +223,15 @@ class TopicsNightPass implements Managed {
                     var byWorkspace = due.stream().collect(Collectors.groupingBy(
                             NightTriage.NightCandidate::workspaceId, LinkedHashMap::new,
                             Collectors.mapping(NightTriage.NightCandidate::projectId, Collectors.toList())));
-                    var counted = new HashMap<String, Map<UUID, Long>>();
+                    // Each workspace's count runs once, on its first candidate's turn.
+                    Map<String, Mono<Map<UUID, Long>>> counts = byWorkspace.entrySet().stream()
+                            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Mono
+                                    .defer(() -> counts(night, entry.getKey(), entry.getValue(), deadline)).cache()));
                     // No prefetch: the next candidate, and its workspace's count, only once this one is decided.
                     return Flux.fromIterable(NightTriage.inTurn(due))
                             .takeWhile(candidate -> !deadline.passed())
-                            .concatMap(candidate -> counts(night, candidate.workspaceId(),
-                                    byWorkspace.get(candidate.workspaceId()), counted, deadline)
-                                    .flatMap(counts -> decideOne(candidate, counts.get(candidate.projectId()), night,
+                            .concatMap(candidate -> counts.get(candidate.workspaceId())
+                                    .flatMap(found -> decideOne(candidate, found.get(candidate.projectId()), night,
                                             deadline, queue)),
                                     0)
                             .filter(Boolean::booleanValue)
@@ -259,20 +260,15 @@ class TopicsNightPass implements Managed {
     }
 
     /**
-     * The workspace's window counts, counted once per plan, when it is first asked for. The projects it skips go with
+     * The workspace's window counts; the plan asks once per workspace. The projects it skips go with
      * the count, one write per decision for the workspace: one whose count failed is decided {@code count_failed}, one
      * under {@code topics.run.minVectors} skipped as {@code small}. Empty when the deadline cut the count: a later plan
      * counts the workspace, or the night's end records its projects not reached.
      */
     private Mono<Map<UUID, Long>> counts(TopicsNight night, String workspaceId, List<UUID> projectIds,
-            Map<String, Map<UUID, Long>> counted, PlanDeadline deadline) {
-        var known = counted.get(workspaceId);
-        if (known != null) {
-            return Mono.just(known);
-        }
+            PlanDeadline deadline) {
         return deadline.cut(candidates.windowVectors(workspaceId, projectIds, night.date()))
                 .flatMap(counts -> jdbi(() -> {
-                    counted.put(workspaceId, counts);
                     int min = config.getRun().getMinVectors();
                     var failed = projectIds.stream().filter(projectId -> !counts.containsKey(projectId))
                             .map(projectId -> new TopicProjectKey(workspaceId, projectId)).toList();
