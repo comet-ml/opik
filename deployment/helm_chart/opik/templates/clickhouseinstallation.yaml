@@ -48,7 +48,7 @@ spec:
       {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
       {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ .secretname | default $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
       {{- else }}
-      {{ .username }}/password: {{ required (printf "clickhouse.additionalUsers %s needs a password when clickhouse.adminUser.useSecret.enabled is false" .username) .password | quote }}
+      {{ .username }}/password: {{ with .password }}{{ . | quote }}{{ end }}
       {{- end }}
       {{- if .profile }}
       {{ .username }}/profile: {{ .profile }}

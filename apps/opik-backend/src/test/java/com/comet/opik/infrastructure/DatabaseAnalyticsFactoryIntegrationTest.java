@@ -429,11 +429,20 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
-    @Test
-    @DisplayName("a password with URL-reserved characters connects through both the R2DBC and the v2 client")
-    void passwordWithUrlReservedCharactersConnects() {
-        // In a URL's user-info part these characters cut the host off, and the driver falls back to localhost:8123.
-        var password = "a/b?c#d@e:f%%g=h+i%s".formatted(RandomStringUtils.secure().nextAlphanumeric(8));
+    // Alphanumeric is what existing installs use. Reserved characters cut the host off a URL's user-info part, so the
+    // driver fell back to localhost:8123. A percent-escape or '+' was decoded in the URL, so it must now stay literal.
+    Stream<Arguments> passwordScenarios() {
+        return Stream.of(
+                Arguments.of("alphanumeric", ""),
+                Arguments.of("URL-reserved characters", "a/b?c#d@e:f%g=h+i"),
+                Arguments.of("percent-escapes and plus", "p%40ss+word%2F"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("passwordScenarios")
+    @DisplayName("the password connects as-is through both the R2DBC and the v2 client")
+    void passwordConnects(String name, String passwordPrefix) {
+        var password = passwordPrefix + RandomStringUtils.secure().nextAlphanumeric(8);
         try (var container = ClickHouseContainerUtils.newClickHouseContainer(false).withPassword(password)) {
             container.start();
             var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(container, "default");
@@ -454,6 +463,16 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                 assertThat(v2User).isEqualTo(container.getUsername());
             }
         }
+    }
+
+    @Test
+    @DisplayName("toString leaves the password out")
+    void toStringLeavesPasswordOut() {
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setPassword(password);
+
+        assertThat(factory.toString()).doesNotContain(password);
     }
 
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {
