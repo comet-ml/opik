@@ -301,48 +301,25 @@ public interface TopicProjectDAO {
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
 
     /**
-     * The discovery save's own list fields: the author task version that built the list, and the end of a rebuild
-     * without the cache. Only while the row still names {@code runId}.
-     */
-    @SqlUpdate("""
-            UPDATE topic_projects SET rebuild_uncached = FALSE, list_author_version = :authorVersion
-            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id = :runId
-            """)
-    int recordDiscovery(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
-            @Bind("runId") UUID runId, @Nullable @Bind("authorVersion") Integer authorVersion);
-
-    /** Whether the project's next discovery run skips opik-inference's cache; empty when it has no row. */
-    @SqlQuery("""
-            SELECT rebuild_uncached FROM topic_projects WHERE workspace_id = :workspaceId AND project_id = :projectId
-            """)
-    Optional<Boolean> findRebuildUncached(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId);
-
-    /**
-     * The workspace's projects with a saved list, those built with an author task version below
-     * {@code authorVersionBelow} when it is set; a list whose version was not recorded counts as below. Locks the rows
-     * until the transaction ends, so a project delete cannot remove one before its reset.
+     * The workspace's projects with a saved list. Locks the rows until the transaction ends, so a project delete cannot
+     * remove one before its reset.
      */
     @SqlQuery("""
             SELECT workspace_id, project_id FROM topic_projects
             WHERE workspace_id = :workspaceId AND list_run_id IS NOT NULL
-            AND (:authorVersionBelow IS NULL OR list_author_version IS NULL
-                OR list_author_version < :authorVersionBelow)
             ORDER BY project_id
             FOR UPDATE
             """)
-    List<TopicProjectKey> findLists(@Bind("workspaceId") String workspaceId,
-            @Nullable @Bind("authorVersionBelow") Integer authorVersionBelow);
+    List<TopicProjectKey> findLists(@Bind("workspaceId") String workspaceId);
 
     /**
-     * Forgets the project's saved list, so its next discovery run builds a new one, without opik-inference's cache.
-     * The run and backfill fields stay. 0 when the project has no row, or its run is not in one of {@code ended}: a run
-     * in flight keeps the list.
+     * Forgets the project's saved list, so its next discovery run builds a new one. The run and backfill fields stay.
+     * 0 when the project has no row, or its run is not in one of {@code ended}: a run in flight keeps the list.
      */
     @SqlUpdate("""
             UPDATE topic_projects
             SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, other_vectors = NULL,
-                embed_model = NULL, rebuild_uncached = TRUE, list_author_version = NULL
+                embed_model = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             AND (run_status IS NULL OR run_status IN (<ended>))
             """)
@@ -356,7 +333,7 @@ public interface TopicProjectDAO {
     @SqlUpdate("""
             UPDATE topic_projects
             SET saved_runs = saved_runs + 1, last_success_at = :savedAt, list_run_id = NULL, window_until = NULL,
-                labels_complete = FALSE, other_vectors = NULL, embed_model = NULL, list_author_version = NULL
+                labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
             """)
     int clearList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,

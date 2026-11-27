@@ -72,19 +72,11 @@ public class TopicsRunService {
      * caller counted as {@code windowTraces} traces, in the workspace of the Reactor context. The save leaves the
      * labels incomplete. Never errors: a failure is recorded on the run and returned. A run that outlasts {@code
      * topics.run.projectTimeout} before its commit fails with {@code timeout}; one cancelled by its subscriber is
-     * failed with {@code timeout} too. The rebuild of a list reset by hand makes its LLM calls without the cache.
+     * failed with {@code timeout} too.
      */
     Mono<TopicRunOutcome> discover(@NonNull UUID runId, @NonNull UUID projectId, @NonNull LocalDate night,
             long windowTraces) {
-        return asRun(runId, projectId, night, run -> store.rebuildsUncached(run)
-                .doOnNext(uncached -> {
-                    if (uncached) {
-                        log.info("Topics run '{}' rebuilds a reset list without the inference cache, project '{}'",
-                                run.runId(), run.projectId());
-                    }
-                })
-                .flatMap(uncached -> run(run.withUncached(uncached), windowTraces))
-                .onErrorResume(error -> outcomes.failed(run, error)));
+        return asRun(runId, projectId, night, run -> run(run, windowTraces));
     }
 
     /**
@@ -124,8 +116,7 @@ public class TopicsRunService {
                                         () -> assign(run, window, clustering, answer)))
                                 .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
                         .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
-                .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors(),
-                        rows.authorVersion()))
+                .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
                 .timeout(timeout, Mono.error(this::timedOut))

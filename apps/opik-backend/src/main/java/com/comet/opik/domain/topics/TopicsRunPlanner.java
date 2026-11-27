@@ -142,8 +142,8 @@ public class TopicsRunPlanner {
     }
 
     /**
-     * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one
-     * without opik-inference's cache. The workspace comes from the Reactor context.
+     * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
+     * workspace comes from the Reactor context.
      *
      * @throws ConflictException when the workspace is not opted in at stage {@code build} or later, or the project has
      *                           no topics row or a run in flight
@@ -166,17 +166,15 @@ public class TopicsRunPlanner {
     }
 
     /**
-     * Forgets the saved lists of the workspace's projects by hand, as {@link #resetByHand} does one project's: all of
-     * them, or with {@code authorVersionBelow} only those built with an older author task version (or an unrecorded
-     * one). A project with a run in flight keeps its list and is returned as skipped.
+     * Forgets the saved lists of the workspace's projects by hand, as {@link #resetByHand} does one project's. A project
+     * with a run in flight keeps its list and is returned as skipped.
      *
      * @throws ConflictException when the workspace is not opted in at stage {@code build} or later
      */
-    public Mono<WorkspaceReset> resetWorkspaceByHand(@NonNull String workspaceId, Integer authorVersionBelow) {
-        return optedIn(workspaceId, TopicsStage.BUILD, () -> store.resetLists(workspaceId, authorVersionBelow))
-                .doOnNext(reset -> log.info("Topics lists reset by hand, workspace '{}', author version below '{}', "
-                        + "reset '{}', skipped in flight '{}'", workspaceId, authorVersionBelow,
-                        reset.reset().size(), reset.inFlight().size()));
+    public Mono<WorkspaceReset> resetWorkspaceByHand(@NonNull String workspaceId) {
+        return optedIn(workspaceId, TopicsStage.BUILD, () -> store.resetLists(workspaceId))
+                .doOnNext(reset -> log.info("Topics lists reset by hand, workspace '{}', reset '{}', skipped in "
+                        + "flight '{}'", workspaceId, reset.reset().size(), reset.inFlight().size()));
     }
 
     /**

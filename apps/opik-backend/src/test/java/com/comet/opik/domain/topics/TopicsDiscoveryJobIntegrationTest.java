@@ -20,7 +20,6 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.lock.LockService.Lock;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
@@ -66,7 +65,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -135,7 +133,6 @@ class TopicsDiscoveryJobIntegrationTest {
     private TopicsRunPlanner planner;
     private LockService lockService;
     private TopicProjectsDeletedListener projectDeletedListener;
-    private TopicTasks tasks;
     private ClientSupport client;
     private String baseUrl;
 
@@ -144,7 +141,7 @@ class TopicsDiscoveryJobIntegrationTest {
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
             @Jit TopicsDiscoveryJob job, @Jit TopicsSweepJob sweepJob, @Jit TopicsRunPlanner planner,
             @Jit TopicProjectsDeletedListener projectDeletedListener,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicTasks tasks) {
+            @Jit TopicVectorsDAO vectorsDAO) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.opikConfig = opikConfig;
@@ -155,7 +152,6 @@ class TopicsDiscoveryJobIntegrationTest {
         this.planner = planner;
         this.lockService = lockService;
         this.projectDeletedListener = projectDeletedListener;
-        this.tasks = tasks;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
                 FIXTURE.traceIds, FIXTURE.createdAt, FIXTURE.intents, FIXTURE.vectors, FIXTURE.night));
     }
@@ -282,9 +278,8 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("the internal reset forgets a saved list and deletes its topics, so a new discovery run builds one "
-            + "without the inference cache, and the runs after it use the cache again; with a run in flight it is "
-            + "refused (409) and changes nothing")
+    @DisplayName("the internal reset forgets a saved list and deletes its topics, so a new discovery run builds one; with "
+            + "a run in flight it is refused (409) and changes nothing")
     void resetByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = TopicsTestData.newId();
@@ -294,28 +289,16 @@ class TopicsDiscoveryJobIntegrationTest {
         }
         var firstRun = awaitSaved(projectId);
         assertThat(data.topics(projectId)).isNotEmpty();
-        assertThat(authorRequest(firstRun).path("cache").asBoolean(false)).isTrue();
-        assertThat(data.topicProject(projectId).listAuthorVersion()).isEqualTo(tasks.author().version());
 
         try (var response = resetProject(workspaceId, projectId)) {
             assertThat(response.getStatus()).isEqualTo(204);
         }
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.listRunId()).isNull();
-            assertThat(project.rebuildUncached()).isTrue();
-            assertThat(project.listAuthorVersion()).isNull();
-        });
+        assertThat(data.topicProject(projectId).listRunId()).isNull();
         try (var response = runProject(workspaceId, projectId, tomorrow().toString())) {
             assertThat(response.getStatus()).isEqualTo(202);
         }
-        var rebuild = awaitSaved(projectId);
-        assertThat(rebuild).isNotEqualTo(firstRun);
-        assertThat(authorRequest(rebuild).path("cache").asBoolean(true)).isFalse();
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.rebuildUncached()).isFalse();
-            assertThat(project.listAuthorVersion()).isEqualTo(tasks.author().version());
-        });
+        assertThat(awaitSaved(projectId)).isNotEqualTo(firstRun);
 
         var inFlight = TopicsTestData.newId();
         data.savedList(workspaceId, inFlight, tomorrowStart(), FIXTURE.size());
@@ -335,25 +318,24 @@ class TopicsDiscoveryJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("the internal workspace reset forgets the lists built with an author version below the given one, or "
-            + "an unrecorded one, skips and lists the projects with a run in flight, and without a version resets "
-            + "every list; a workspace not opted in is refused (409), a version below 1 too (400)")
+    @DisplayName("the internal workspace reset forgets every saved list of the workspace and deletes its topics, skips "
+            + "and lists the projects with a run in flight, and keeps another workspace's lists; a workspace not opted "
+            + "in is refused (409)")
     void resetWorkspaceByHand() {
         var workspaceId = enabledWorkspace();
-        var older = TopicsTestData.newId();
-        var newer = TopicsTestData.newId();
-        var unrecorded = TopicsTestData.newId();
+        var first = TopicsTestData.newId();
+        var second = TopicsTestData.newId();
         var inFlight = TopicsTestData.newId();
-        for (var projectId : List.of(older, newer, unrecorded, inFlight)) {
+        for (var projectId : List.of(first, second, inFlight)) {
             data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
         }
-        authorVersion(workspaceId, older, 1);
-        authorVersion(workspaceId, newer, 5);
-        authorVersion(workspaceId, inFlight, 1);
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class).queue(workspaceId, inFlight,
                 TopicsTestData.newId(), TopicProject.RunMode.UPDATE, Instant.now()));
+        var otherWorkspace = enabledWorkspace();
+        var otherProject = TopicsTestData.newId();
+        data.savedList(otherWorkspace, otherProject, tomorrowStart(), FIXTURE.size());
 
-        try (var response = resetWorkspace(workspaceId, 5)) {
+        try (var response = resetWorkspace(workspaceId)) {
             assertThat(response.getStatus()).isEqualTo(200);
             var body = response.readEntity(JsonNode.class);
             assertThat(body.path("reset").asInt()).isEqualTo(2);
@@ -361,33 +343,18 @@ class TopicsDiscoveryJobIntegrationTest {
             assertThat(body.path("in_flight_project_ids")).singleElement()
                     .satisfies(id -> assertThat(id.asText()).isEqualTo(inFlight.toString()));
         }
-        for (var projectId : List.of(older, unrecorded)) {
+        for (var projectId : List.of(first, second)) {
             assertThat(data.topics(projectId)).isEmpty();
-            assertThat(data.topicProject(projectId)).satisfies(project -> {
-                assertThat(project.listRunId()).isNull();
-                assertThat(project.rebuildUncached()).isTrue();
-            });
+            assertThat(data.topicProject(projectId).listRunId()).isNull();
         }
-        for (var projectId : List.of(newer, inFlight)) {
+        for (var projectId : List.of(inFlight, otherProject)) {
             assertThat(data.topics(projectId)).hasSize(1);
             assertThat(data.topicProject(projectId).listRunId()).isNotNull();
         }
 
-        try (var response = resetWorkspace(workspaceId, null)) {
-            assertThat(response.getStatus()).isEqualTo(200);
-            var body = response.readEntity(JsonNode.class);
-            assertThat(body.path("reset").asInt()).isEqualTo(1);
-            assertThat(body.path("skipped_in_flight").asInt()).isEqualTo(1);
-        }
-        assertThat(data.topics(newer)).isEmpty();
-        assertThat(data.topics(inFlight)).hasSize(1);
-
-        try (var response = resetWorkspace(aiLabelsOnlyWorkspace(), null)) {
+        try (var response = resetWorkspace(aiLabelsOnlyWorkspace())) {
             assertThat(response.getStatus()).isEqualTo(409);
             assertThat(response.readEntity(String.class)).contains("not opted in");
-        }
-        try (var response = resetWorkspace(workspaceId, 0)) {
-            assertThat(response.getStatus()).isEqualTo(400);
         }
     }
 
@@ -412,7 +379,7 @@ class TopicsDiscoveryJobIntegrationTest {
         }));
         assertThat(deleting.await(30, TimeUnit.SECONDS)).isTrue();
 
-        try (var response = resetWorkspace(workspaceId, null)) {
+        try (var response = resetWorkspace(workspaceId)) {
             assertThat(response.getStatus()).isEqualTo(200);
             var body = response.readEntity(JsonNode.class);
             assertThat(body.path("reset").asInt()).isZero();
@@ -520,31 +487,11 @@ class TopicsDiscoveryJobIntegrationTest {
                 .post(Entity.json(""));
     }
 
-    private Response resetWorkspace(String workspaceId, Integer authorVersionBelow) {
-        var target = client.target("%s/v1/internal/topics/reset".formatted(baseUrl))
-                .queryParam("workspace_id", workspaceId);
-        if (authorVersionBelow != null) {
-            target = target.queryParam("author_version_below", authorVersionBelow);
-        }
-        return target.request(MediaType.APPLICATION_JSON_TYPE).post(Entity.json(""));
-    }
-
-    /** The author generate request of the run, as WireMock got it. */
-    private JsonNode authorRequest(UUID runId) {
-        return wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))).stream()
-                .map(request -> JsonUtils.getJsonNodeFromString(request.getBodyAsString()))
-                .filter(request -> request.path("request_id").asText().equals(runId + ":author"))
-                .findFirst()
-                .orElseThrow();
-    }
-
-    private void authorVersion(String workspaceId, UUID projectId, int version) {
-        template.inTransaction(WRITE, handle -> handle.createUpdate("UPDATE topic_projects SET list_author_version = "
-                + ":version WHERE workspace_id = :workspaceId AND project_id = :projectId")
-                .bind("version", version)
-                .bind("workspaceId", workspaceId)
-                .bind("projectId", projectId.toString())
-                .execute());
+    private Response resetWorkspace(String workspaceId) {
+        return client.target("%s/v1/internal/topics/reset".formatted(baseUrl))
+                .queryParam("workspace_id", workspaceId)
+                .request(MediaType.APPLICATION_JSON_TYPE)
+                .post(Entity.json(""));
     }
 
     /** The planner's window end: tomorrow (UTC). */

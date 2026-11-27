@@ -17,7 +17,7 @@ import java.util.UUID;
  * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a discovery
  * run when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
- * {@code failedRuns}, {@code firstFailedAt}, {@code lastFailedAt}), the save the list fields ({@code savedRuns} to {@code listAuthorVersion}; a reset by hand clears them),
+ * {@code failedRuns}, {@code firstFailedAt}, {@code lastFailedAt}), the save the list fields ({@code savedRuns} to {@code embedModel}),
  * the night {@code lastNight} and {@code notReachedNights}. For the backfill, ClickHouse stays the only source of
  * which traces have no vector.
  *
@@ -43,10 +43,6 @@ import java.util.UUID;
  * @param otherVectors the known-Other prototype vectors, null when the run kept none
  * @param embedModel the model of the saved vectors, the topics' and {@code otherVectors}; their size is
  *        {@link TopicEmbedding#DIMENSIONS}
- * @param rebuildUncached set by a reset by hand: the project's next discovery run sends its LLM calls without
- *        opik-inference's cache, so a rebuild of the same window does not get the old answer back. Its save clears it
- * @param listAuthorVersion the author task version of the discovery run that built the saved list, kept by the nightly
- *        updates; null without a list, or for a list built before it was recorded
  * @param runQueuedAt when the attempt was queued: by the planner, a run by hand, or a pod that stopped while it ran
  * @param deadlineAt the claim's time plus the run's limit; past it the planner cancels a run still running
  * @param heartbeatAt the last time the pod running the attempt wrote it; stale past {@code topics.runs.abandonGrace},
@@ -76,8 +72,6 @@ public record TopicProject(
         boolean labelsComplete,
         @Nullable PrototypeVectors otherVectors,
         @Nullable String embedModel,
-        boolean rebuildUncached,
-        @Nullable Integer listAuthorVersion,
         @Nullable UUID runId,
         @Nullable RunMode runMode,
         @Nullable RunStatus runStatus,
