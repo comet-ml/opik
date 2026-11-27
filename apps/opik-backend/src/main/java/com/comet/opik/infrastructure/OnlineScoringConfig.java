@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -16,6 +18,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Data
@@ -160,12 +164,28 @@ public class OnlineScoringConfig {
     private Duration attachmentFetchRetryDelay = Duration.milliseconds(300);
 
     /**
-     * How long the UI can read why a rule has not scored an experiment trace yet. It has to outlast the stream's
-     * retries, roughly {@code maxRetries × pendingMessageDuration}; after it the rule's logs remain the record.
+     * How long the UI can read why a rule has not scored an experiment trace yet; after it the rule's logs remain the
+     * record. Every status written renews it, so it only has to outlast the wait for a message's next delivery: see
+     * {@link #isScoringStatusTtlLongEnough()}.
      */
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
-    private Duration scoringStatusTtl = Duration.days(1);
+    private Duration scoringStatusTtl;
+
+    /**
+     * A failed message is redelivered once it has been pending for {@code pendingMessageDuration}, plus up to one
+     * claim interval. Twice that duration leaves room for the claim, so a retrying status never expires in between.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "onlineScoring.scoringStatusTtl must be at least twice the pendingMessageDuration of every stream") public boolean isScoringStatusTtlLongEnough() {
+        if (scoringStatusTtl == null || pendingMessageDuration == null || streams == null) {
+            return true;
+        }
+        return streams.stream()
+                .filter(Objects::nonNull)
+                .map(stream -> Optional.ofNullable(stream.getPendingMessageDuration()).orElse(pendingMessageDuration))
+                .allMatch(pending -> scoringStatusTtl.toMilliseconds() >= 2 * pending.toMilliseconds());
+    }
 
     @Data
     @Builder(toBuilder = true)

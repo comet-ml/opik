@@ -30,8 +30,8 @@ import java.util.UUID;
 
 /**
  * Why each rule has not scored a trace yet, for the UI waiting on those scores. Kept in Redis for
- * {@link OnlineScoringConfig#getScoringStatusTtl()}: long enough to outlast the stream's retries, after which the rule's
- * logs remain the record.
+ * {@link OnlineScoringConfig#getScoringStatusTtl()} after its latest write, after which the rule's logs remain the
+ * record.
  */
 @Singleton
 @Slf4j

@@ -213,7 +213,8 @@ class OnlineScoringStatusServiceTest {
                 .thenReturn(Mono.error(new RedisException(randomMessage())));
         when(statuses.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
         when(statuses.fastRemove(anyString())).thenReturn(Mono.error(new RedisException(randomMessage())));
-        var service = new OnlineScoringStatusService(failingClient, new OnlineScoringConfig());
+        var service = new OnlineScoringStatusService(failingClient,
+                OnlineScoringConfig.builder().scoringStatusTtl(Duration.days(1)).build());
         var trace = experimentTrace();
         var workspaceId = UUID.randomUUID().toString();
         var ruleId = UUID.randomUUID();
@@ -229,7 +230,8 @@ class OnlineScoringStatusServiceTest {
         RMapReactive<String, String> statuses = mock(RMapReactive.class);
         when(failingClient.<String, String>getMap(anyString(), any(Codec.class))).thenReturn(statuses);
         when(statuses.readAllValues()).thenReturn(Mono.error(new RedisException(randomMessage())));
-        var service = new OnlineScoringStatusService(failingClient, new OnlineScoringConfig());
+        var service = new OnlineScoringStatusService(failingClient,
+                OnlineScoringConfig.builder().scoringStatusTtl(Duration.days(1)).build());
 
         StepVerifier.create(service.find(UUID.randomUUID().toString(), UUID.randomUUID()))
                 .expectNext(List.of())

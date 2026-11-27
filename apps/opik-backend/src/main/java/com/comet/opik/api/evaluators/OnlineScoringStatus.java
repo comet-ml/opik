@@ -27,8 +27,8 @@ public record OnlineScoringStatus(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Set for a test suite's assertion judge, whose rule id is not stable") boolean suiteAssertion,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) State state,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Reason reason,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "The failed delivery, set while retrying") int attempt,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Deliveries before giving up, set while retrying") int maxAttempts,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "The failed delivery while retrying; 0 otherwise") int attempt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Deliveries before giving up while retrying; 0 otherwise") int maxAttempts,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant updatedAt) {
 
     @Getter
