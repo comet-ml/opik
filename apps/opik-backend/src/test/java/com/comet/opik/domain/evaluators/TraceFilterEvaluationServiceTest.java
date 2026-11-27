@@ -85,6 +85,14 @@ class TraceFilterEvaluationServiceTest {
                     arguments(TraceField.NAME, "Test Trace", Operator.CONTAINS, "Missing", false),
                     arguments(TraceField.NAME, "Test Trace", Operator.NOT_CONTAINS, "Missing", true),
                     arguments(TraceField.NAME, "Test Trace", Operator.NOT_CONTAINS, "Test", false),
+                    arguments(TraceField.NAME, "alpha", Operator.STARTS_WITH, "alp", true),
+                    arguments(TraceField.NAME, "Alpha", Operator.STARTS_WITH, "aLP", true), // case insensitive
+                    arguments(TraceField.NAME, "alpha", Operator.STARTS_WITH, "pha", false),
+                    arguments(TraceField.NAME, "beta", Operator.STARTS_WITH, "alp", false),
+                    arguments(TraceField.NAME, "alpha", Operator.ENDS_WITH, "pha", true),
+                    arguments(TraceField.NAME, "AlPHA", Operator.ENDS_WITH, "Pha", true), // case insensitive
+                    arguments(TraceField.NAME, "alpha", Operator.ENDS_WITH, "alp", false),
+                    arguments(TraceField.NAME, "beta", Operator.ENDS_WITH, "pha", false),
                     arguments(TraceField.NAME, "", Operator.IS_EMPTY, "", true),
                     arguments(TraceField.NAME, "Test Trace", Operator.IS_EMPTY, "", false),
                     arguments(TraceField.NAME, "Test Trace", Operator.IS_NOT_EMPTY, "", true),
@@ -323,6 +331,34 @@ class TraceFilterEvaluationServiceTest {
             assertThat(result).isTrue();
         }
 
+        static Stream<Arguments> tagsStartsOrEndsWithTestCases() {
+            return Stream.of(
+                    arguments(Operator.STARTS_WITH, "PROD", true),
+                    arguments(Operator.STARTS_WITH, "priority", false),
+                    arguments(Operator.ENDS_WITH, "PRIORITY", true),
+                    arguments(Operator.ENDS_WITH, "high", false));
+        }
+
+        @ParameterizedTest
+        @MethodSource("tagsStartsOrEndsWithTestCases")
+        void matchesFilterWithTagsStartsOrEndsWith(Operator operator, String filterValue, boolean expectedResult) {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .tags(Set.of("production", "high-priority"))
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.TAGS)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isEqualTo(expectedResult);
+        }
+
         @Test
         void matchesFilterWhenTagsIsEmpty() {
             // Given
@@ -490,6 +526,39 @@ class TraceFilterEvaluationServiceTest {
 
             // Then
             assertThat(result).isTrue();
+        }
+
+        static Stream<Arguments> metadataStartsOrEndsWithTestCases() {
+            return Stream.of(
+                    arguments(Operator.STARTS_WITH, "prod", true),
+                    arguments(Operator.STARTS_WITH, "duction", false),
+                    arguments(Operator.ENDS_WITH, "TION", true),
+                    arguments(Operator.ENDS_WITH, "prod", false));
+        }
+
+        @ParameterizedTest
+        @MethodSource("metadataStartsOrEndsWithTestCases")
+        void matchesFilterWithMetadataStartsOrEndsWith(Operator operator, String filterValue,
+                boolean expectedResult) {
+            // Given
+            ObjectNode metadata = JsonUtils.createObjectNode();
+            metadata.put("environment", "Production");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .metadata(metadata)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .key("environment")
+                    .operator(operator)
+                    .value(filterValue)
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isEqualTo(expectedResult);
         }
 
         @Test
