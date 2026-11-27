@@ -56,6 +56,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
+            model=kwargs.get("model", None),
             provider=self.provider,
         )
 
