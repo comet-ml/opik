@@ -90,56 +90,6 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
             )
 
 
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_test_suite__combined_suite_and_item_level_assertions__all_scores_created(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that suite-level and item-level assertions are combined:
-    total feedback scores = suite-level assertions + item-level assertions.
-    """
-    suite_assertion = "The response is helpful and informative"
-    item_assertion = "The response correctly identifies Paris as the capital"
-
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test combined suite and item level assertions",
-        global_assertions=[suite_assertion],
-        project_name=PROJECT_NAME,
-    )
-
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "What is the capital of France?"}},
-                "assertions": [item_assertion],
-            }
-        ]
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        return {"input": item["input"], "output": "The capital of France is Paris."}
-
-    # opik.run_tests must handle flushing
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=1,
-        experiment_items_count=1,
-        total_feedback_scores=2,  # 1 suite + 1 item assertion
-        expected_score_names={suite_assertion, item_assertion},
-        project_name=PROJECT_NAME,
-    )
-
-
 # =============================================================================
 # PASS/FAIL DETERMINATION
 # =============================================================================

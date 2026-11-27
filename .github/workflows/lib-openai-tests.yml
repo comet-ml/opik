@@ -12,7 +12,7 @@ env:
   PIP_DEFAULT_TIMEOUT: 30
   UV_HTTP_TIMEOUT: 30
   UV_HTTP_RETRIES: 8
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_PYTHON_SDK_TESTS }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
@@ -25,7 +25,7 @@ on:
   workflow_call:
     inputs:
       run_expensive_tests:
-        description: "Run expensive tests (e.g., video generation)"
+        description: "Run expensive tests (e.g., text-to-speech)"
         required: false
         type: boolean
         default: false
@@ -79,7 +79,7 @@ jobs:
 
       - name: Run tests
         env:
-          # Video/TTS output does not depend on the Python version, so the
+          # TTS output does not depend on the Python version, so the
           # expensive tests run on one matrix entry only.
           OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests && matrix.python_version == '3.14' }}
         run: |

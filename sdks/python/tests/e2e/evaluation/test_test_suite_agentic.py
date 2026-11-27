@@ -8,16 +8,16 @@ These tests craft assertions that are decidable ONLY from the
 intermediate span state, so a passing verdict is direct evidence the
 agentic judge ran:
 
-1. A span-structure assertion ("the agent called the `fetch_user_data`
-   helper") — verifiable only by looking at span names in the trace.
-2. A span-error assertion ("no errors occurred without errors") on a
+1. A span-error assertion ("no errors occurred without errors") on a
    trace whose inner span recorded an error caught by the task —
    verifiable only by looking at span `error_info`.
-3. A buried-keyword assertion — the marker sits past the overview's
+2. A buried-keyword assertion — the marker sits past the overview's
    floor-tier 500-char truncation, so the judge must call at least one
    of `read` / `scan` / `search` to recover it. The test pins the
    overview sizer's ladder to the floor entry to guarantee truncation
-   regardless of the judge model's context budget.
+   regardless of the judge model's context budget. The same judge call
+   also checks a span-structure assertion ("the agent called a step
+   named `noop_step`"), verifiable only by looking at span names.
 
 **Judge-model choice.** These tests deliberately override the SDK's
 default judge model (`gpt-5-nano`) with a stronger one. `gpt-5-nano`
@@ -43,81 +43,11 @@ from ...testlib import environment, generate_project_name
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
 
-# Stronger than the SDK default (`gpt-5-nano`) and known to engage the
-# tool loop — backend `SupportedJudgeProvider.java` lists it as the
-# OpenAI allow-list entry. If you change this, re-run all three tests:
-# nano will pass the first two (structural assertions) but reliably
-# fail the third (it never calls `read` on truncated content).
-AGENTIC_JUDGE_MODEL = "gpt-5-mini"  #
-
-
-@pytest.fixture(autouse=True)
-def _fast_llm_judge_reasoning_effort():
-    """Keeps the judge's production reasoning effort ("low") instead of the
-    e2e suite's "minimal". These tests depend on the judge choosing to call
-    its tools, and at minimal effort it sometimes answers from the truncated
-    overview without calling any (CI log: "Agentic loop finished: rounds=0,
-    tool_calls=[]")."""
-
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_test_suite_agentic__assertion_about_span_name__passes(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """The agentic judge must inspect the trace's span tree to verify
-    that a specifically-named tool span was actually called. The task
-    output deliberately omits the helper's name, so a one-shot judge
-    has no way to verify the assertion from input/output alone.
-    """
-    span_assertion = "The agent called a step named `fetch_user_data`"
-
-    @opik.track(name="fetch_user_data", project_name=PROJECT_NAME)
-    def fetch_user_data(user_id: str) -> Dict[str, Any]:
-        return {"id": user_id, "name": "alice"}
-
-    @opik.track(name="task", project_name=PROJECT_NAME)
-    def run_task(item: Dict[str, Any]) -> Dict[str, Any]:
-        fetch_user_data("u-1")
-        # Output deliberately doesn't mention `fetch_user_data` — the
-        # only evidence the helper was called lives in the span tree.
-        return {"input": item["input"], "output": "ok"}
-
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Agentic judge — span-name assertion",
-        project_name=PROJECT_NAME,
-    )
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "fetch user u-1"}},
-                "assertions": [span_assertion],
-            }
-        ]
-    )
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=run_task,
-        experiment_name=experiment_name,
-        verbose=0,
-        model=AGENTIC_JUDGE_MODEL,
-        scoring_tool_strategy="auto",
-    )
-
-    # The one assertion must surface in the feedback scores.
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=1,
-        items_passed=1,
-        experiment_items_count=1,
-        total_feedback_scores=1,
-        expected_score_names={span_assertion},
-        project_name=PROJECT_NAME,
-    )
+# The SDK default (`gpt-5-nano`) answers from the overview without
+# calling `read` on truncated content. `gpt-4o-mini` engages the tool
+# loop (the agentic loop forces a tool call every turn) and is the
+# backend's OpenAI judge in `SupportedJudgeProvider.java`.
+AGENTIC_JUDGE_MODEL = "gpt-4o-mini"
 
 
 @pytest.mark.skipif(
@@ -255,6 +185,9 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
         f"At least one intermediate step processed a payload containing "
         f"the literal token '{secret_marker}'"
     )
+    # The task output never names `noop_step`, so only the span tree can
+    # confirm it was called.
+    span_assertion = "The agent called a step named `noop_step`"
 
     @opik.track(name="process_step", project_name=PROJECT_NAME)
     def process_step(payload: str) -> str:
@@ -293,7 +226,7 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
         [
             {
                 "data": {"input": {"question": "process the payload"}},
-                "assertions": [keyword_assertion],
+                "assertions": [keyword_assertion, span_assertion],
             }
         ]
     )
@@ -317,7 +250,7 @@ def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
         items_total=1,
         items_passed=1,
         experiment_items_count=1,
-        total_feedback_scores=1,
-        expected_score_names={keyword_assertion},
+        total_feedback_scores=2,
+        expected_score_names={keyword_assertion, span_assertion},
         project_name=PROJECT_NAME,
     )

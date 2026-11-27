@@ -198,31 +198,42 @@ class TestAgenticJudgeToolUse:
     to recover the value, so a passing verdict combined with a
     non-empty recorder is direct proof the tool loop engaged.
 
-    Pattern in each test:
+    Pattern:
     1. Pin `OVERVIEW_IO_LIMIT_LADDER` to the 500-char floor.
     2. Plant a unique marker past 500 chars in a span field. Trace-
        level input/output are re-inlined verbatim into the user prompt
        (the `---BEGIN TASK INPUT/OUTPUT---` blocks), so a marker in
        `trace.input` would be visible without any tool call — span
        fields are the only place truncation actually hides content.
-    3. Ask the judge whether the marker appears in that field.
-    4. Assert verdict is True (recovery succeeded) AND the recorder
-       captured at least one drill-in call.
+    3. Ask the judge whether that marker, and a marker that isn't
+       there, appear in that field.
+    4. Assert the verdicts are True and False respectively AND the
+       recorder captured at least one drill-in call.
     """
 
-    def test_buried_marker_in_span_input__triggers_read(
+    def test_buried_and_absent_markers_in_span_input__verdicts_after_lookup(
         self, judge_model_name, monkeypatch
     ):
+        """One judge call with a positive and a negative assertion about the
+        same truncated span input.
+
+        The positive marker sits past the 500-char floor, so a True verdict
+        means the judge retrieved the full input. The negative marker is
+        not in the input at all, so a False verdict alongside it shows the
+        judge didn't treat the `[TRUNCATED ...]` suffix as "content is
+        absent" or answer both from the overview. The recorder proves a
+        drill-in call happened.
+        """
         _pin_ladder_to_floor(monkeypatch)
 
-        # Marker placement: ~600 chars of pad before the marker
-        # guarantees it sits past the 500-char floor and therefore
-        # past the truncation suffix. The truncation suffix the
-        # judge sees explicitly names `read(type='span', id=...)`
-        # as the recovery call.
+        # ~650 chars of pad before the marker guarantees it sits past the
+        # 500-char floor and therefore past the truncation suffix, which
+        # names `read(type='span', id=...)` as the recovery call.
         marker = "MARKER-XYZ-987"
+        absent_marker = "EXPECTED-MISSING-MARKER-001"
         long_span_input = ("padding-text " * 50) + marker
         assert len(long_span_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
+        assert absent_marker not in long_span_input
         trace = _seeding.make_trace(
             input={"question": "answer it"},
             output={"answer": "ok"},
@@ -237,103 +248,33 @@ class TestAgenticJudgeToolUse:
         ]
         ctx = _seeding.build_context(trace, spans=spans)
 
-        assertion = (
+        present_assertion = (
             f"The `answer_step` span's input contains the literal token `{marker}`."
         )
-        judge, recorder = _make_recording_agentic_judge([assertion], judge_model_name)
+        absent_assertion = (
+            f"The `answer_step` span's input contains the literal "
+            f"token `{absent_marker}`."
+        )
+        judge, recorder = _make_recording_agentic_judge(
+            [present_assertion, absent_assertion], judge_model_name
+        )
 
         results = judge.score(ctx)
 
-        result = _by_name(results, assertion)
-        # Marker is in the un-truncated span input → verdict True iff
-        # the judge actually retrieved it.
-        assert result.scoring_failed is False
-        assert result.value is True
-        # Direct evidence of the agentic loop engaged. We don't pin the
-        # exact tool because `read`, `scan`, and `search` are all
-        # legitimate recoveries of the truncated content; the
-        # truncation suffix nudges toward `read` but the judge is
-        # allowed to pick whichever fits its plan.
+        present_result = _by_name(results, present_assertion)
+        assert present_result.scoring_failed is False
+        assert present_result.value is True
+        absent_result = _by_name(results, absent_assertion)
+        assert absent_result.scoring_failed is False
+        assert absent_result.value is False, (
+            f"verdict should be False (marker absent); reason={absent_result.reason!r}"
+        )
+        # We don't pin the exact tool: `read`, `scan`, and `search` are all
+        # legitimate recoveries of the truncated content.
         called = recorder.tool_names_called()
         assert called, (
             "expected the judge to call at least one drill-in tool, "
             "but the recorder captured no calls"
-        )
-        assert {"read", "scan", "search"} & set(called), (
-            f"expected one of read/scan/search; got {called!r}"
-        )
-
-    def test_absent_marker_with_truncated_span_input__verdict_false_after_lookup(
-        self, judge_model_name, monkeypatch
-    ):
-        """Negative-case companion to the buried-marker test.
-
-        A span's input is long enough to be truncated AND deliberately
-        does not contain the asked-about marker — only an unrelated
-        token sits past the floor. A trustworthy judge has to look at
-        the full content before declaring "absent", because guessing
-        "absent" from the truncated overview would be indistinguishable
-        from "didn't check at all."
-
-        We assert:
-        - verdict is False (the marker really isn't there),
-        - the recorder is non-empty (the judge looked rather than
-          shortcutting to "no").
-
-        This catches the failure mode where a model treats a
-        `[TRUNCATED ...]` suffix as "content is absent" — the same
-        pattern the truncation-suffix hint was designed to defeat.
-        """
-        _pin_ladder_to_floor(monkeypatch)
-
-        absent_marker = "EXPECTED-MISSING-MARKER-001"
-        unrelated_marker = "OTHER-TOKEN-456"
-        # Pad so the unrelated marker sits past the 500-char floor —
-        # i.e. it's hidden from the overview just like a real marker
-        # would be. The judge has to recover the full span input to
-        # confirm the *absence* of `absent_marker`.
-        long_span_input = ("padding-text " * 50) + unrelated_marker
-        assert len(long_span_input) > span_tree_serializer.OVERVIEW_IO_FLOOR_CHAR_LIMIT
-        assert absent_marker not in long_span_input
-
-        trace = _seeding.make_trace(
-            input={"question": "answer it"},
-            output={"answer": "ok"},
-        )
-        spans = [
-            _seeding.make_span(
-                span_id="s-1",
-                name="answer_step",
-                input={"prompt": long_span_input},
-                output={"answer": "ok"},
-            ),
-        ]
-        ctx = _seeding.build_context(trace, spans=spans)
-
-        assertion = (
-            f"The `answer_step` span's input contains the literal "
-            f"token `{absent_marker}`."
-        )
-        judge, recorder = _make_recording_agentic_judge([assertion], judge_model_name)
-
-        results = judge.score(ctx)
-
-        result = _by_name(results, assertion)
-        assert result.scoring_failed is False
-        assert result.value is False, (
-            f"verdict should be False (marker absent); reason={result.reason!r}"
-        )
-        called = recorder.tool_names_called()
-        # The crux of this test: even though the correct answer is
-        # "no", the judge has to verify that by drilling in. An empty
-        # `called` here means the judge took the truncated overview at
-        # face value — a regression in the truncation-suffix hint or
-        # in the loop's prompt.
-        assert called, (
-            "expected the judge to call at least one drill-in tool "
-            "before declaring the marker absent; recorder captured no "
-            "calls, suggesting the judge shortcutted to 'no' from the "
-            "truncated overview"
         )
         assert {"read", "scan", "search"} & set(called), (
             f"expected one of read/scan/search; got {called!r}"

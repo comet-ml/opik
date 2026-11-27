@@ -12,24 +12,16 @@ from ...testlib import assert_helpers
 
 @pytest.fixture
 def real_model_conversation():
+    # A single user goal keeps the metric at three calls: goal extraction,
+    # one goal verdict, and the reason.
     return [
         {
             "role": "user",
-            "content": "I need to book a flight to New York and find a hotel.",
+            "content": "I need to book a flight to New York next Friday.",
         },
         {
             "role": "assistant",
-            "content": "I can help you with that. For flights to New York, what dates are you looking to travel?",
-        },
-        {"role": "user", "content": "Next weekend, from Friday to Sunday."},
-        {
-            "role": "assistant",
-            "content": "Great! I recommend checking airlines like Delta, United, or JetBlue for flights to New York next weekend. For hotels, what's your budget range and preferred location in New York?",
-        },
-        {"role": "user", "content": "Around $200 per night, preferably in Manhattan."},
-        {
-            "role": "assistant",
-            "content": "For Manhattan hotels around $200/night, you might want to look at options like Hotel Beacon, Pod 51, or CitizenM Times Square. These are well-rated options in that price range. Would you like more specific recommendations for any of these?",
+            "content": "Done. You're booked on a Delta flight to New York departing next Friday at 9 AM.",
         },
     ]
 
