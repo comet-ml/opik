@@ -25,6 +25,7 @@ import {
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import PlaygroundNavBadge from "@/v2/layout/SideBar/MenuItem/PlaygroundNavBadge";
 import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
+import DashboardsNavBadge from "@/v2/layout/SideBar/MenuItem/DashboardsNavBadge";
 const getMenuItems = ({
   projectId,
   canViewExperiments,
@@ -125,6 +126,7 @@ const getMenuItems = ({
                 icon: ChartLine,
                 label: "Dashboards",
                 disabled: !projectPrefix,
+                badge: DashboardsNavBadge,
               },
             ]
           : []),
@@ -317,6 +319,7 @@ export const getWorkspaceSidebarMenuItems = ({
                 type: MENU_ITEM_TYPE.router as const,
                 icon: ChartLine,
                 label: "Dashboards",
+                badge: DashboardsNavBadge,
               },
             ]
           : []),
