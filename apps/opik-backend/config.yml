@@ -2904,7 +2904,8 @@ topics:
     #  service's limit: checked at startup
     nightlyVerifyTokensPerPair: ${TOPICS_ALGORITHM_NIGHTLY_VERIFY_TOKENS_PER_PAIR:-25}
     #  Default: 4
-    #  Description: Nightly: member texts a live topic shows in the naming prompt
+    #  Description: Member texts a topic shows in a prompt: a live topic in the nightly naming prompt, a merged topic in
+    #  the rename prompt of a first build or a night
     nightlyTopicExamples: ${TOPICS_ALGORITHM_NIGHTLY_TOPIC_EXAMPLES:-4}
     #  Default: 3
     #  Description: Nightly: how many of a live topic's nightlyTopicExamples texts the verify prompt shows per pair

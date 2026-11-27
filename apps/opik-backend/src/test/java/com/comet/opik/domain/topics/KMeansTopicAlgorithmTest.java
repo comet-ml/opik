@@ -45,6 +45,16 @@ class KMeansTopicAlgorithmTest {
     }
 
     @Test
+    @DisplayName("a discovery run keeps each trace's cosine to the group centres while the group sums stay under half "
+            + "as many as the traces, and keeps the vectors when one tight theme needs a sum per trace")
+    void cosineTableOrVectors() {
+        assertThat(algorithm.cluster(randomWindow(1068), 10).stats().get("assign_input").asText())
+                .isEqualTo("cosines");
+        assertThat(algorithm.cluster(tightWindow(3_000), 10).stats().get("assign_input").asText())
+                .isEqualTo("vectors");
+    }
+
+    @Test
     @DisplayName("a verify budget above the inference service's max_tokens limit stops the start")
     void verifyBudgetAboveTheLimit() {
         // The verify task's 60 + 25 per pair x 200 groups is 5060, above the 4096 the service takes.
@@ -157,6 +167,28 @@ class KMeansTopicAlgorithmTest {
     }
 
     /** {@code unique} distinct texts, each with a random unit vector. */
+    /** Unique texts around one point: every group centre is within otherGate of the others, so no sum is shared. */
+    private static TopicWindow tightWindow(int unique) {
+        var random = new SplittableRandom(unique);
+        var base = new float[D];
+        for (int t = 0; t < D; t++) {
+            base[t] = (float) random.nextGaussian();
+        }
+        var vectors = new float[unique * D];
+        for (int i = 0; i < unique; i++) {
+            double norm = 0;
+            for (int t = 0; t < D; t++) {
+                vectors[i * D + t] = base[t] + (float) (random.nextGaussian() * 0.3);
+                norm += (double) vectors[i * D + t] * vectors[i * D + t];
+            }
+            for (int t = 0; t < D; t++) {
+                vectors[i * D + t] /= (float) Math.sqrt(norm);
+            }
+        }
+        var texts = IntStream.range(0, unique).mapToObj(i -> "text " + i).toArray(String[]::new);
+        return TopicWindow.builder().texts(texts).vectors(vectors).build();
+    }
+
     private static TopicWindow randomWindow(int unique) {
         var random = new SplittableRandom(unique);
         var vectors = new float[unique * D];

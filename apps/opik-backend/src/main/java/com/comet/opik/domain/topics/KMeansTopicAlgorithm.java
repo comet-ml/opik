@@ -37,10 +37,6 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /** The k-means seed: fixed, so the same window always gives the same groups. */
     static final long SEED = 0;
-    /** The rename prompt's examples of a merged topic: the first few of each of its groups', up to a cap. */
-    private static final int MERGE_EXAMPLES_PER_GROUP = 4;
-    private static final int MERGE_EXAMPLES = 16;
-
     /** Part of {@link #labellerFingerprint}: a new version relabels every saved list's window once. */
     static final int LABELLER_VERSION = 1;
 
@@ -110,15 +106,18 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 .build();
         // The assignment after the author call compares each trace with group centres only. With fewer groups than
         // COSINE_TABLE_BELOW_GROUPS, those cosines take less memory than the vectors, so the clustering keeps them,
-        // with the vectors summed for the overlap check, and the window can go while the call runs.
-        AssignmentInput traces;
+        // with the vectors summed for the overlap check, and the window can go while the call runs. A sum is as big as
+        // two vectors, so past half as many sums as traces the clustering keeps the vectors instead.
+        AssignmentInput traces = AssignmentInput.vectors(window.vectors());
         if (k < COSINE_TABLE_BELOW_GROUPS) {
             var table = PrototypeAssigner.cosines(window.vectors(), fit.centres(), k, TopicEmbedding.DIMENSIONS);
-            traces = AssignmentInput.table(table, k, GroupVectorSums.of(window.vectors(), table, fit.centres(), k,
-                    TopicEmbedding.DIMENSIONS, config.getAssignMinCosine(), config.getOtherGate()));
-        } else {
-            traces = AssignmentInput.vectors(window.vectors());
+            var sums = GroupVectorSums.of(window.vectors(), table, fit.centres(), k, TopicEmbedding.DIMENSIONS,
+                    config.getAssignMinCosine(), config.getOtherGate());
+            if (2L * sums.sums() <= window.size()) {
+                traces = AssignmentInput.table(table, k, sums);
+            }
         }
+        stats.put("assign_input", traces.vectors() != null ? "vectors" : "cosines");
         return new KMeansClustering(traces, maxTopics, groups, examples, fit.centres(), author, stats);
     }
 
@@ -246,8 +245,25 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                     members.stream().map(t -> applied.get(t).name()).toList(),
                     members.stream().map(t -> applied.get(t).definition()).toList(),
                     groupsOf.stream().mapToDouble(group -> byGroup.get(group).share()).sum(),
-                    groupsOf.stream().flatMap(group -> examples.get(group).stream().limit(MERGE_EXAMPLES_PER_GROUP))
-                            .limit(MERGE_EXAMPLES).toList());
+                    mergeExamples(groupsOf.stream().map(examples::get).toList(),
+                            config.getNightlyTopicExamples()));
+        }
+
+        /** Up to {@code max} examples, one from each group in turn, so every former topic shows in the prompt. */
+        private static List<String> mergeExamples(List<List<String>> byGroup, int max) {
+            var out = new ArrayList<String>();
+            for (int at = 0; out.size() < max; at++) {
+                int before = out.size();
+                for (var group : byGroup) {
+                    if (at < group.size() && out.size() < max) {
+                        out.add(group.get(at));
+                    }
+                }
+                if (out.size() == before) {
+                    break;
+                }
+            }
+            return out;
         }
 
         /** @param topicGroups per topic, the groups whose centres are its prototypes, in prototype order */

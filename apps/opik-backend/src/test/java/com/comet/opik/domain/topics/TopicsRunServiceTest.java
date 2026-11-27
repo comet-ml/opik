@@ -87,6 +87,8 @@ class TopicsRunServiceTest {
     private static final TopicAlgorithm FIXTURE_ALGORITHM = TopicsTestAlgorithm.algorithm(
             TopicsTestAlgorithm.fixedGroups(15));
     private static final LocalDate NIGHT = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
+    private static final String MERGED_NAME = "Everything Asked";
+    private static final String MERGED_DEFINITION = "Every request of the window.";
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -377,6 +379,81 @@ class TopicsRunServiceTest {
                 .containsExactly(new TopicsMetricsReader.Point(0.1, attributes));
     }
 
+    @Test
+    @DisplayName("a nightly update that merges its topics keeps the larger one's id and birth with the rename call's "
+            + "name, deletes the others as merged, and counts every non-Other trace of the window for the kept one")
+    void nightMerges() {
+        var workspace = new TopicsMetrics.Workspace(workspaceId, RandomStringUtils.secure().nextAlphanumeric(10));
+        discovered(workspace);
+        var before = data.topics(projectId);
+        stubRename(renamed());
+
+        var outcome = serviceWith(merging()).nightlyUpdate(start(TopicProject.RunMode.UPDATE), projectId, NIGHT,
+                FIXTURE.size()).contextWrite(TopicsTestData.context(workspace)).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var kept = data.topics(projectId);
+        assertThat(kept).singleElement().satisfies(topic -> {
+            var was = before.stream().filter(old -> old.id().equals(topic.id())).findFirst().orElseThrow();
+            assertThat(topic.born()).isEqualTo(was.born());
+            assertThat(topic.name()).isEqualTo(MERGED_NAME);
+            assertThat(topic.definition()).isEqualTo(MERGED_DEFINITION);
+            assertThat(topic.size()).isEqualTo((int) Math.round(
+                    (1 - outcome.stats().get("other_share").asDouble()) * FIXTURE.size()));
+        });
+        double merged = sum(metricReader, "topics.topics.retired", "reason", "merged");
+        assertThat(merged).isPositive();
+        assertThat(merged + sum(metricReader, "topics.topics.retired", "reason", "low_share"))
+                .isEqualTo(before.size() - 1);
+        assertThat(renameCalls()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a discovery run that merges its topics saves one topic with the rename call's name and gives it "
+            + "every trace that is not Other")
+    void discoveryMerges() {
+        stubAnswer(FIXTURE.discoveryAnswer);
+        stubRename(renamed());
+        var runId = start();
+
+        var outcome = serviceWith(merging()).discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(outcome.stats().get("merged").asInt()).isPositive();
+        var kept = data.topics(projectId);
+        assertThat(kept).singleElement().satisfies(topic -> {
+            assertThat(topic.name()).isEqualTo(MERGED_NAME);
+            assertThat(topic.definition()).isEqualTo(MERGED_DEFINITION);
+        });
+        var labels = data.traceTopics(workspaceId, projectId);
+        assertThat(labels).hasSize(FIXTURE.size()).allSatisfy(label -> assertThat(label.topicId())
+                .isIn(kept.getFirst().id(), TraceTopic.OTHER));
+        assertThat(labels.stream().filter(label -> label.topicId().equals(kept.getFirst().id())))
+                .hasSize(kept.getFirst().size());
+        assertThat(renameCalls()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a rename call that fails does not fail the run: the merged topic keeps the larger topic's name")
+    void failedRenameKeepsTheName() {
+        stubAnswer(FIXTURE.discoveryAnswer);
+        wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
+                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))
+                .willReturn(aResponse().withStatus(500).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"code\":\"internal\",\"message\":\"down\",\"retryable\":false}}")));
+        var runId = start();
+
+        var outcome = serviceWith(merging()).discover(runId, projectId, NIGHT, FIXTURE.size())
+                .contextWrite(TopicsTestData.context(workspace())).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(data.topics(projectId)).singleElement()
+                .satisfies(topic -> assertThat(expectedTopics(FIXTURE.expected.get("discovery")))
+                        .contains(tuple(topic.name(), topic.definition())));
+        assertThat(renameCalls()).isEqualTo(1);
+    }
+
     /** The project's discovery run, saved; then every naming answer changes nothing. Returns its run id. */
     private UUID discovered(TopicsMetrics.Workspace workspace) {
         stubAnswer(FIXTURE.discoveryAnswer);
@@ -386,6 +463,32 @@ class TopicsRunServiceTest {
                 .isEqualTo(TopicProject.RunStatus.SAVED);
         stubAnswer(emptyNaming());
         return runId;
+    }
+
+    /** The fixture's algorithm with every pair of topics merging. */
+    private static TopicAlgorithm merging() {
+        var config = TopicsTestAlgorithm.fixedGroups(15);
+        config.setMergeCosine(-1);
+        return TopicsTestAlgorithm.algorithm(config);
+    }
+
+    private void stubRename(JsonNode output) {
+        wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
+                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))
+                .willReturn(answer(output, 0)));
+    }
+
+    private int renameCalls() {
+        return wireMock.server().findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))
+                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))).size();
+    }
+
+    /** A rename answer for the one merged topic. */
+    private static JsonNode renamed() {
+        var answer = InferenceJson.MAPPER.createObjectNode();
+        answer.putArray("topics").addObject().put("id", 0).put("name", MERGED_NAME)
+                .put("definition", MERGED_DEFINITION);
+        return answer;
     }
 
     private static Attributes workspaceAttributes(TopicsMetrics.Workspace workspace) {

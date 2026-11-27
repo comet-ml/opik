@@ -4,6 +4,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -262,10 +263,20 @@ public class TopicsRunService {
         return switch (step) {
             case NightStep.Done<T> done -> Mono.just(new Driven<>(done.result(), calls));
             case NightStep.Ask<T> ask ->
-                timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
+                answer(run, ask)
                         .flatMap(answer -> cpu(run, phase, () -> ask.next().apply(answer.value()))
                                 .flatMap(next -> drive(run, next, plus(calls, answer.stats()), phase)));
         };
+    }
+
+    /** The call's answer; for an optional call that fails, an answer with no output and no stats. */
+    private Mono<TopicsLlm.Answer<JsonNode>> answer(TopicRun run, NightStep.Ask<?> ask) {
+        var call = timed(run, "llm", llm.generate(run, ask.request(), NightJson::object));
+        return !ask.optional() ? call : call.onErrorResume(error -> {
+            log.warn("Topics run '{}' optional LLM call failed, going on without its answer, project '{}', tag '{}'",
+                    run.runId(), run.projectId(), ask.request().tag(), error);
+            return Mono.just(new TopicsLlm.Answer<>(null, JsonUtils.createObjectNode()));
+        });
     }
 
     private record Driven<T>(T result, ObjectNode calls) {

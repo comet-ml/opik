@@ -150,7 +150,8 @@ class TopicMerger {
                 .schema(task.schema())
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
-        return NightStep.ask(request, answer -> NightStep.done(names(answer, merged, taken)));
+        // The rename is cosmetic: a failed call keeps each merged topic's first former name, as a bad answer does.
+        return NightStep.optional(request, answer -> NightStep.done(names(answer, merged, taken)));
     }
 
     private static List<Name> names(JsonNode answer, List<Merged> merged, Set<String> taken) {
@@ -214,17 +215,14 @@ class TopicMerger {
         return members;
     }
 
-    /**
-     * {@link #merges(float[], int[], int, int[], int, double)} from the member sums: the sums are changed, as each
-     * merge folds one sum into another.
-     */
+    /** {@link #merges(float[], int[], int, int[], int, double)} from the member sums, which it leaves as they are. */
     static List<Merge> merges(@NonNull Members members, @NonNull int[] candidates, double mergeCosine) {
         var out = new ArrayList<Merge>();
         if (mergeCosine > 1 || candidates.length < 2) {
             return out;
         }
-        var sums = members.sums();
-        var counts = members.counts();
+        var sums = Arrays.stream(members.sums()).map(sum -> sum == null ? null : sum.clone()).toArray(double[][]::new);
+        var counts = members.counts().clone();
         int dimensions = members.dimensions();
         var open = new boolean[counts.length];
         for (int t : candidates) {

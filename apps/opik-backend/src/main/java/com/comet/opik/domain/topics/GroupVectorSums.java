@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.IntUnaryOperator;
 import java.util.stream.IntStream;
 
@@ -132,6 +133,11 @@ final class GroupVectorSums {
             }
         }
         return members;
+    }
+
+    /** How many sums it holds: one per group with a trace summed, and one per ranking. */
+    long sums() {
+        return Arrays.stream(byGroup).filter(Objects::nonNull).count() + byRanking.size();
     }
 
     /** How many traces were summed under a ranking rather than per group. */

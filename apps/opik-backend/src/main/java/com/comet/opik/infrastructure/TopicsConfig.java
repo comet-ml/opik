@@ -108,6 +108,10 @@ public class TopicsConfig {
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
 
+        /**
+         * Two topics whose centres have at least this cosine are one theme: a first build and every night merge them.
+         * Above 1 turns merging off.
+         */
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("2.0") private double mergeCosine;
 

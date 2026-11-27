@@ -1331,7 +1331,7 @@ class TopicsNightlyRulesTest {
 
     /** Answers each ask of {@code step} with {@code llm}, as the run service does, until the step is done. */
     private static <T> T drive(NightStep<T> step, NightLlm llm) {
-        while (step instanceof NightStep.Ask<T>(var request, var next)) {
+        while (step instanceof NightStep.Ask<T>(var request, var next, var optional)) {
             step = next.apply(llm.generate(request.tag(), request.prompt(), request.schema(), request.maxTokens()));
         }
         return ((NightStep.Done<T>) step).result();
