@@ -62,12 +62,12 @@ describe("LLMJudge", () => {
       expect(judge.name).toBe("llm_judge");
     });
 
-    it("should set default model to 'gpt-5-nano'", () => {
+    it("should set default model to 'gpt-5.6-luna'", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
         track: false,
       });
-      expect(judge.modelName).toBe("gpt-5-nano");
+      expect(judge.modelName).toBe("gpt-5.6-luna");
     });
 
     it("should default reasoningEffort to 'low'", () => {

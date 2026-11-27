@@ -21,20 +21,20 @@ export type VercelAIChatModelOptions = {
  * Supports:
  * - Direct LanguageModel instances for maximum flexibility
  * - Typed model IDs with automatic provider detection:
- *   - OpenAI: `"gpt-5-nano"`, `"gpt-5"`, `"o1"`, etc.
+ *   - OpenAI: `"gpt-5.6-luna"`, `"gpt-5"`, `"o1"`, etc.
  *   - Anthropic: `"claude-3-5-sonnet-latest"`, `"claude-3-opus"`, etc.
  *   - Google Gemini: `"gemini-2.0-flash"`, `"gemini-1.5-pro"`, etc.
  *
  * @example
  * ```typescript
  * // Using typed model ID
- * const model1 = new VercelAIChatModel("gpt-5-nano", {
+ * const model1 = new VercelAIChatModel("gpt-5.6-luna", {
  *   apiKey: "sk-...",
  *   organization: "org-123"
  * });
  *
  * // Using LanguageModel instance directly
- * const customModel = openai("gpt-5-nano");
+ * const customModel = openai("gpt-5.6-luna");
  * const model2 = new VercelAIChatModel(customModel);
  * ```
  */
@@ -61,7 +61,7 @@ export class VercelAIChatModel extends OpikBaseModel {
   /**
    * Creates a new VercelAIChatModel instance with a typed model ID.
    *
-   * @param modelId - The model ID (e.g., 'gpt-5-nano', 'claude-3-5-sonnet-latest', 'gemini-2.0-flash')
+   * @param modelId - The model ID (e.g., 'gpt-5.6-luna', 'claude-3-5-sonnet-latest', 'gemini-2.0-flash')
    * @param options - Provider-specific configuration options
    */
   constructor(modelId: SupportedModelId, options?: VercelAIChatModelOptions);
@@ -122,7 +122,7 @@ export class VercelAIChatModel extends OpikBaseModel {
    *
    * @example
    * ```typescript
-   * const model = new VercelAIChatModel("gpt-5-nano");
+   * const model = new VercelAIChatModel("gpt-5.6-luna");
    *
    * // Simple text generation
    * const response = await model.generateString("What is 2+2?");
@@ -206,7 +206,7 @@ export class VercelAIChatModel extends OpikBaseModel {
    *
    * @example
    * ```typescript
-   * const model = new VercelAIChatModel("gpt-5-nano");
+   * const model = new VercelAIChatModel("gpt-5.6-luna");
    * const response = await model.generateProviderResponse([
    *   { role: 'user', content: 'Hello!' }
    * ]);

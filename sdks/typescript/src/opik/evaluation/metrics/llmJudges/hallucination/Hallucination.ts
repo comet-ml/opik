@@ -48,7 +48,7 @@ const responseSchema = z.object({
  * ```typescript
  * import { Hallucination } from 'opik/evaluation/metrics';
  *
- * // Using default model (gpt-5-nano)
+ * // Using default model (gpt-5.6-luna)
  * const metric = new Hallucination();
  *
  * // With context
@@ -101,7 +101,7 @@ export class Hallucination extends BaseLLMJudgeMetric {
    * Creates a new Hallucination metric.
    *
    * @param options - Configuration options
-   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5-nano'.
+   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5.6-luna'.
    * @param options.name - The name of the metric. Defaults to "hallucination_metric".
    * @param options.fewShotExamples - Optional few-shot examples to guide the model
    * @param options.trackMetric - Whether to track the metric. Defaults to true.

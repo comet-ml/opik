@@ -80,6 +80,20 @@ class TestHeuristicSelector:
             is strategy_selector.ScoringToolStrategy.ONE_SHOT
         )
 
+    def test_context_present__default_judge_model__returns_one_shot(self):
+        from opik.evaluation.suite_evaluators.llm_judge import config as judge_config
+
+        sel = strategy_selector.HeuristicSelector()
+        ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
+        assert (
+            sel.select(
+                trace_tool_context=ctx,
+                model_name=judge_config.DEFAULT_MODEL_NAME,
+                assertions=[],
+            )
+            is strategy_selector.ScoringToolStrategy.ONE_SHOT
+        )
+
     def test_context_present__unknown_model__returns_one_shot(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})

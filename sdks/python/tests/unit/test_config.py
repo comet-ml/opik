@@ -79,6 +79,11 @@ def test_save_to_file_without_api_key(mock_expanduser, mock_open_file):
     assert "api_key" not in parsed_config["opik"]
 
 
+def test_default_llm__not_set__is_gpt_5_6_luna(monkeypatch):
+    monkeypatch.delenv("OPIK_DEFAULT_LLM", raising=False)
+    assert OpikConfig().default_llm == "openai/gpt-5.6-luna"
+
+
 def test_default_llm_loaded_from_env(monkeypatch):
     monkeypatch.setenv("OPIK_DEFAULT_LLM", "gpt-4.1-mini")
 

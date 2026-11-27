@@ -3,6 +3,7 @@ import {
   createModel,
   VercelAIChatModel,
   OpikBaseModel,
+  resolveModel,
 } from "@/evaluation/models";
 
 describe("modelsFactory", () => {
@@ -19,6 +20,14 @@ describe("modelsFactory", () => {
     } else {
       delete process.env.OPENAI_API_KEY;
     }
+  });
+
+  describe("default model", () => {
+    it("resolveModel without a model uses gpt-5.6-luna", () => {
+      const model = resolveModel(undefined);
+
+      expect(model.modelName).toBe("gpt-5.6-luna");
+    });
   });
 
   describe("createModel", () => {
