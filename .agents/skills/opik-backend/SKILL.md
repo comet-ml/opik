@@ -127,6 +127,11 @@ interface MyService {
 
 ## Critical Gotchas
 
+### Reactive Threading
+
+After a Redis or ClickHouse call, code runs on the client's I/O thread. Blocking calls and heavy CPU must move off
+it: follow the [reactive-threading](../reactive-threading/SKILL.md) skill.
+
 ### StringTemplate Memory Leak
 
 ```java
@@ -313,3 +318,4 @@ throw new DestinationGuardException("destination '%s' has no valid host".formatt
 - [migrations.md](migrations.md) - Liquibase format for MySQL/ClickHouse
 - [permissions.md](permissions.md) - `@RequiredPermissions` annotation guidance for endpoints
 - [streaming.md](streaming.md) - Cursor-stream endpoints: request record, resource, DAO ordering and cursor, tests
+- [reactive-threading](../reactive-threading/SKILL.md) skill - Which thread each step runs on; `Offload.blocking/cpu/blockingEach` for blocking calls, CPU steps and streams

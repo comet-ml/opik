@@ -35,6 +35,7 @@ public class AsyncUtils {
                 .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
+        context = Offload.originalOn(context, Offload.virtualThreads());
         return requestContext.getCometCredentials() == null
                 ? context
                 : context.put(RequestContext.COMET_CREDENTIALS, requestContext.getCometCredentials());

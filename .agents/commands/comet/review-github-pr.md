@@ -126,6 +126,7 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - API: RESTful conventions, proper HTTP status codes, input validation
 - Migrations: Backward-compatible schema changes, proper rollback support
 - Logging: Appropriate log levels, no sensitive data in logs
+- Reactive threading: apply the "Review" section of `.agents/skills/reactive-threading/SKILL.md`. Every shape in its "Critical" list is a blocker
 
 #### Frontend (`apps/opik-frontend/**`)
 
