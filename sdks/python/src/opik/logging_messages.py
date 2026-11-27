@@ -23,6 +23,8 @@ UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION = "Unexpected excepti
 
 UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION = "Unexpected exception happened when tried to finalize span.\nOutput: %s\nError message: %s"
 
+UNEXPECTED_EXCEPTION_ON_START_MESSAGE = "Unexpected exception happened when tried to log the start of %s.\nError message: %s"
+
 FAILED_TO_AGGREGATE_GENERATORS_YIELDED_VALUES_WITH_PROVIDED_AGGREGATOR_IN_TRACKED_FUNCTION = "Failed to aggregate generators yielded values with provided aggregator. Values: %s, generator %s"
 
 FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. %s"
