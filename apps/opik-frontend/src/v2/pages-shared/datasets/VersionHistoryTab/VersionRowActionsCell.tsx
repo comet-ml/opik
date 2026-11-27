@@ -1,14 +1,7 @@
 import React, { useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Eye, MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { Eye, Pencil, RotateCcw } from "lucide-react";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
 import EditVersionDialog from "./EditVersionDialog";
@@ -35,13 +28,45 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
 
   const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
 
+  const openDialog = (dialog: number) => {
+    setOpen(dialog);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  };
+  const rowActions: RowAction[] = [
+    ...(!isLatestVersion
+      ? [
+          {
+            id: "view",
+            label: "View records",
+            icon: Eye,
+            onClick: () => onViewVersion(version),
+          },
+        ]
+      : []),
+    ...(canEdit
+      ? [
+          {
+            id: "edit",
+            label: "Edit",
+            icon: Pencil,
+            onClick: () => openDialog(EDIT_KEY),
+          },
+        ]
+      : []),
+    ...(canEdit && !isLatestVersion
+      ? [
+          {
+            id: "restore",
+            label: "Restore",
+            icon: RotateCcw,
+            onClick: () => openDialog(RESTORE_KEY),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       {canEdit && (
         <>
           <EditVersionDialog
@@ -60,47 +85,8 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
           />
         </>
       )}
-      {(canEdit || !isLatestVersion) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="minimal" size="icon" className="-mr-2.5">
-              <span className="sr-only">Actions menu</span>
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            {!isLatestVersion && (
-              <DropdownMenuItem onClick={() => onViewVersion(version)}>
-                <Eye className="mr-2 size-4" />
-                View records
-              </DropdownMenuItem>
-            )}
-            {canEdit && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(EDIT_KEY);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-              >
-                <Pencil className="mr-2 size-4" />
-                Edit
-              </DropdownMenuItem>
-            )}
-            {canEdit && !isLatestVersion && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(RESTORE_KEY);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-              >
-                <RotateCcw className="mr-2 size-4" />
-                Restore
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

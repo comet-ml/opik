@@ -8,7 +8,6 @@ import {
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
-  ColumnDef,
   ColumnPinningState,
   ColumnSort,
   RowSelectionState,
@@ -49,8 +48,6 @@ import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleE
 import CreateRuleMenu from "@/v2/pages-shared/automations/CreateRuleMenu";
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
-import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
-import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
 import { EvaluationTracesSidebar } from "@/v2/pages-shared/automations/EvaluationTracesSidebar";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import {
@@ -305,37 +302,16 @@ export const OnlineEvaluationPage: React.FC = () => {
           sortableColumns: sortableBy,
         },
       ),
-      {
-        accessorKey: "rule_traces",
-        header: "",
-        cell: RuleTracesCell,
-        size: 100,
-        enableResizing: false,
-        enableHiding: false,
-        enableSorting: false,
-      } as ColumnDef<EvaluatorsRule>,
-      {
-        accessorKey: "rule_logs",
-        header: "",
-        cell: RuleLogsCell,
-        size: 150,
-        enableResizing: false,
-        enableHiding: false,
-        enableSorting: false,
-      } as ColumnDef<EvaluatorsRule>,
-      ...(canUpdateOnlineEvaluationRules
-        ? [
-            generateActionsColumDef<EvaluatorsRule>({
-              cell: (props) => (
-                <RuleRowActionsCell
-                  {...props}
-                  openEditDialog={handleOpenEditDialog}
-                  openCloneDialog={handleOpenCloneDialog}
-                />
-              ),
-            }),
-          ]
-        : []),
+      generateActionsColumDef<EvaluatorsRule>({
+        cell: (props) => (
+          <RuleRowActionsCell
+            {...props}
+            canEdit={canUpdateOnlineEvaluationRules}
+            openEditDialog={handleOpenEditDialog}
+            openCloneDialog={handleOpenCloneDialog}
+          />
+        ),
+      }),
     ];
   }, [
     columnsOrder,

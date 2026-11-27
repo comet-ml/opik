@@ -999,6 +999,20 @@
     border-right: none;
   }
 
+  // The table's outer border already closes the row before a zero-width
+  // overlay column.
+  td:has(+ .comet-overlay-cell),
+  th:has(+ .comet-overlay-cell) {
+    border-right: none;
+  }
+
+  // The last data column carries the row-actions gutter: keep its content
+  // clear of the "..." that sits there.
+  td:has(+ .comet-overlay-cell) [data-cell-wrapper="true"],
+  th:has(+ .comet-overlay-cell) [data-header-wrapper="true"] {
+    padding-right: var(--row-actions-gutter);
+  }
+
   // An inset shadow paints beneath the cell's children, so a compare sub-row
   // with a hover background would hide the border unless it draws its own.
   .comet-pinned-last-left,
@@ -1012,6 +1026,38 @@
   // line right next to it. Suppress only that one neighbour's border-right.
   .comet-grouped-cell + td {
     border-right: none;
+  }
+
+  // While a row's actions show, a strip in the row's own colour fades in
+  // behind them, so content scrolled under the gutter doesn't run into the
+  // "...". At rest nothing is painted and that content stays visible.
+  td.comet-overlay-cell::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: var(--row-actions-gutter);
+    background-color: inherit;
+    mask-image: linear-gradient(to right, transparent, black 8px);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  td.comet-overlay-cell:focus-within::before {
+    opacity: 1;
+  }
+
+  td.comet-overlay-cell:has([data-open="true"])::before {
+    opacity: 1;
+  }
+
+  tr:hover > td.comet-overlay-cell::before {
+    opacity: 1;
+  }
+
+  // Keep the row highlighted while its expanded actions are open.
+  tr:has(> td.comet-overlay-cell [data-open="true"]) > td {
+    background-color: hsl(var(--row-selected));
   }
 }
 

@@ -3,6 +3,7 @@ import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ItemReturnNav } from './item-return-nav.page';
 import { VersionRecordsSidebarPage } from './version-records-sidebar.page';
+import { clickRowAction } from './row-actions';
 
 export class DatasetItemsPage {
   constructor(
@@ -339,8 +340,7 @@ export class DatasetItemsPage {
   async deleteItemByIndex(index: number): Promise<void> {
     return test.step(`Delete dataset item at index ${index}`, async () => {
       const row = this.itemRow(index);
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
       const dialog = this.page.getByRole('dialog', { name: 'Remove suite items' });
       await dialog.waitFor({ state: 'visible' });
       await dialog.getByRole('button', { name: 'Remove suite items' }).click();

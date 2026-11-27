@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
+import { clickRowAction } from './row-actions';
 
 /**
  * Column ids from the frontend's own definitions — `AUTOMATION_COLUMN_ID` in
@@ -83,8 +84,7 @@ export class AnnotationQueuesPage {
     return test.step(`delete annotation queue ${queueId} via row actions`, async () => {
       const row = this.queueRow(queueId);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
 
       const confirm = this.deleteQueueConfirmDialog;
       await confirm.waitFor({ state: 'visible' });
@@ -148,10 +148,10 @@ export class AnnotationQueuesPage {
   }
 
   /**
-   * Open one queue's edit sheet through the row's kebab menu.
+   * Open one queue's edit sheet through the row's actions.
    *
    * The same route a user takes, and the only one: the row click opens the
-   * queue's detail page, not the form. The menu items carry no testids — the
+   * queue's detail page, not the form. The actions carry no testids — the
    * accessible names come from `AnnotationQueueRowActionsCell`, the same place
    * {@link deleteQueue} takes "Delete" from.
    */
@@ -159,16 +159,14 @@ export class AnnotationQueuesPage {
     return test.step(`open the edit sheet for queue ${queueId}`, async () => {
       const row = this.queueRow(queueId);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
       const sampled = this.page.waitForResponse(
         (response) => AnnotationQueueFormSheet.isAnnotatorSampleQuery(response.request()),
         { timeout: 30_000 },
       );
-      await this.page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
-      // Gone from the DOM, not merely hidden: the menu animates out over the
-      // sheet and clicks land on it until it is really gone — the same wait
-      // `OnlineEvaluationPage.openCreateRulePanel` makes, for the same reason.
-      await expect(this.page.getByRole('menu')).toHaveCount(0);
+      await clickRowAction(row, 'Edit');
+      // Gone from the DOM, not merely hidden: the expanded actions would sit
+      // over the sheet and take its clicks until they are really gone.
+      await expect(this.page.getByTestId('row-actions-menu')).toHaveCount(0);
       const sheet = new AnnotationQueueFormSheet(this.page, 'edit');
       await sheet.waitForOpen();
       // Same settling wait as the create sheet, and for the same reason — see

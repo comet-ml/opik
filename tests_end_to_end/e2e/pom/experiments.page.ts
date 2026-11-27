@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ExperimentDetailPage } from './experiment-detail.page';
+import { clickRowAction } from './row-actions';
 
 export class ExperimentsPage {
   private projectId: string | null = null;
@@ -83,8 +84,7 @@ export class ExperimentsPage {
     return test.step(`delete experiment ${experimentId} via row actions`, async () => {
       const row = this.rowById(experimentId);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
 
       const confirm = this.deleteExperimentConfirmDialog;
       await confirm.waitFor({ state: 'visible' });

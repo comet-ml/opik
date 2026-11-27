@@ -1,20 +1,12 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Download, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Download, Pencil, Trash } from "lucide-react";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { useToast } from "@/ui/use-toast";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import useIsDatasetExportEnabled from "@/hooks/useIsDatasetExportEnabled";
 import {
   useAddExportJob,
@@ -90,13 +82,48 @@ export const createDatasetRowActionsCell = ({
       toast,
     ]);
 
+    const openDialog = (dialog: number) => {
+      setOpen(dialog);
+      resetKeyRef.current = resetKeyRef.current + 1;
+    };
+    const rowActions: RowAction[] = [
+      ...(canEditDatasets
+        ? [
+            {
+              id: "edit",
+              label: "Edit",
+              icon: Pencil,
+              onClick: () => openDialog(2),
+            },
+          ]
+        : []),
+      ...(isDatasetExportEnabled
+        ? [
+            {
+              id: "download",
+              label: "Download",
+              icon: Download,
+              onClick: downloadDatasetHandler,
+              disabled: isExportStarting,
+              disabledReason: "Export in progress",
+            },
+          ]
+        : []),
+      ...(canDeleteDatasets
+        ? [
+            {
+              id: "delete",
+              label: "Delete",
+              icon: Trash,
+              onClick: () => openDialog(1),
+              destructive: true,
+            },
+          ]
+        : []),
+    ];
+
     return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-        className="justify-end p-0"
-        stopClickPropagation
-      >
+      <>
         <EditDialog
           key={`edit-${dataset.id}`}
           open={open === 2}
@@ -115,53 +142,8 @@ export const createDatasetRowActionsCell = ({
             confirmButtonVariant="destructive"
           />
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="minimal" size="icon" className="-mr-2.5">
-              <span className="sr-only">Actions menu</span>
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            {canEditDatasets && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(2);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-              >
-                <Pencil className="mr-2 size-4" />
-                Edit
-              </DropdownMenuItem>
-            )}
-            {isDatasetExportEnabled && (
-              <DropdownMenuItem
-                onClick={downloadDatasetHandler}
-                disabled={isExportStarting}
-              >
-                <Download className="mr-2 size-4" />
-                Download
-              </DropdownMenuItem>
-            )}
-            {canDeleteDatasets &&
-              (canEditDatasets || isDatasetExportEnabled) && (
-                <DropdownMenuSeparator />
-              )}
-            {canDeleteDatasets && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(1);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-                variant="destructive"
-              >
-                <Trash className="mr-2 size-4" />
-                Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CellWrapper>
+        <RowActions actions={rowActions} />
+      </>
     );
   };
 
