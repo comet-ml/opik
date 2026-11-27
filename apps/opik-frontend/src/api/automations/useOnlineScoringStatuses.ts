@@ -19,11 +19,8 @@ export const getOnlineScoringStatuses = async (
   { traceId }: UseOnlineScoringStatusesParams,
 ) => {
   const { data } = await api.get<UseOnlineScoringStatusesResponse>(
-    `${AUTOMATIONS_REST_ENDPOINT}evaluators/scoring-statuses`,
-    {
-      signal,
-      params: { trace_id: traceId },
-    },
+    `${AUTOMATIONS_REST_ENDPOINT}evaluators/traces/${traceId}/scoring-statuses`,
+    { signal },
   );
 
   return data;

@@ -90,7 +90,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -174,7 +173,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
         lenient()
-                .when(scoringStatusService.recordRetrying(any(), any(), any(), anyBoolean(), any(), anyLong(),
+                .when(scoringStatusService.recordRetrying(any(), any(), any(), anyBoolean(), any(), anyInt(),
                         anyInt()))
                 .thenReturn(Mono.empty());
         lenient().when(scoringStatusService.recordFailed(any(), any(), any(), anyBoolean(), any()))
@@ -1434,7 +1433,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
             when(feedbackScoreService.scoreBatchOfTraces(scoresCaptor.capture())).thenReturn(Mono.empty());
             when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
 
-            var failure = new ClientErrorException("Incorrect API key provided", 401);
+            var failureMessage = RandomStringUtils.secure().nextAlphanumeric(20);
+            var failure = new ClientErrorException(failureMessage, 401);
 
             scorer.onRetired(message, failure).block();
 
@@ -1449,7 +1449,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 assertThat(item.categoryName()).isEqualTo(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY);
                 assertThat(item.reason())
                         .contains("judge-a, judge-b")
-                        .contains("Incorrect API key provided");
+                        .contains(failureMessage);
             });
             verify(testSuiteAssertionCounterService, times(1))
                     .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
@@ -1458,7 +1458,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         @Test
         void retiredOnlineScoringRuleMessageOnlyRecordsTheFailure() {
             var message = suiteMessage(null).toBuilder().categoryName(null).build();
-            var failure = new ClientErrorException("invalid x-api-key", 401);
+            var failure = new ClientErrorException(RandomStringUtils.secure().nextAlphanumeric(20), 401);
 
             scorer.onRetired(message, failure).block();
 
@@ -1470,12 +1470,14 @@ class OnlineScoringLlmAsJudgeScorerTest {
         @Test
         void aFailedDeliveryTheStreamWillRetryIsRecordedAsRetrying() {
             var message = suiteMessage(null);
-            var failure = new ServerErrorException("upstream unavailable", 503);
+            var failure = new ServerErrorException(RandomStringUtils.secure().nextAlphanumeric(20), 503);
+            var maxDeliveries = RandomUtils.secure().randomInt(2, 11);
+            var deliveryCount = RandomUtils.secure().randomInt(1, maxDeliveries);
 
-            scorer.onRetrying(message, failure, 1, 3).block();
+            scorer.onRetrying(message, failure, deliveryCount, maxDeliveries).block();
 
             verify(scoringStatusService).recordRetrying(message.trace(), message.workspaceId(), message.ruleId(), true,
-                    Reason.SERVER_ERROR, 1, 3);
+                    Reason.SERVER_ERROR, deliveryCount, maxDeliveries);
             verifyNoInteractions(feedbackScoreService, testSuiteAssertionCounterService);
         }
 

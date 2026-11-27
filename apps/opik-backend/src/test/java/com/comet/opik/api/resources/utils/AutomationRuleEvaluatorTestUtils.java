@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 
 /**
  * Utility methods for automation rule evaluator tests.
@@ -61,9 +61,9 @@ public class AutomationRuleEvaluatorTestUtils {
      * waiting for a score.
      */
     public static void answerEveryJudgeCall(LlmProviderFactory llmProviderFactory, Answer<ChatResponse> answer) {
-        when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
-                .thenAnswer(answer);
-        when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
-                .thenAnswer(answer);
+        var languageModel = llmProviderFactory.getLanguageModel(anyString(), any());
+        var toolCallingLanguageModel = llmProviderFactory.getToolCallingLanguageModel(anyString(), any());
+        doAnswer(answer).when(languageModel).chat(any(ChatRequest.class));
+        doAnswer(answer).when(toolCallingLanguageModel).chat(any(ChatRequest.class));
     }
 }

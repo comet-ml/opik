@@ -66,7 +66,7 @@ class ChatCompletionsHeaderTimeoutResourceTest {
     private static final String CUSTOM_PROVIDER_NAME = "header-timeout";
     private static final String MODEL = "custom-llm/%s/gpt-4o".formatted(CUSTOM_PROVIDER_NAME);
     private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
-    private static final ErrorMessage TIMED_OUT = new ErrorMessage(HttpStatus.SC_REQUEST_TIMEOUT,
+    private static final ErrorMessage TIMED_OUT = new ErrorMessage(HttpStatus.SC_GATEWAY_TIMEOUT,
             UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -201,7 +201,7 @@ class ChatCompletionsHeaderTimeoutResourceTest {
                         .withBody("{}")));
 
         var actualError = chatCompletionsClient.create(apiKey, workspaceName, request(false),
-                HttpStatus.SC_REQUEST_TIMEOUT);
+                HttpStatus.SC_GATEWAY_TIMEOUT);
 
         assertThat(actualError).isEqualTo(TIMED_OUT);
     }

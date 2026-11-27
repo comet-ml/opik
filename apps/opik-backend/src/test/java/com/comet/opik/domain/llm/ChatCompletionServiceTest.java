@@ -65,6 +65,7 @@ import java.net.NoRouteToHostException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.net.http.HttpTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
@@ -693,7 +694,7 @@ class ChatCompletionServiceTest {
                     Arguments.of(
                             "bare TimeoutException",
                             new TimeoutException("provider timed out"),
-                            408,
+                            504,
                             UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "typed exception wrapping an HttpException",
@@ -876,6 +877,7 @@ class ChatCompletionServiceTest {
                     Arguments.of("closed channel", new ClosedChannelException(), 502),
                     Arguments.of("read timeout", new SocketTimeoutException("Read timed out"), 504),
                     Arguments.of("call timeout", new InterruptedIOException("timeout"), 504),
+                    Arguments.of("http timeout", new HttpTimeoutException("request timed out"), 504),
                     Arguments.of("host refused by the destination guard",
                             new RefusedHostException("refused"), 500),
                     Arguments.of("anything else", new IllegalStateException("unexpected"), 500));

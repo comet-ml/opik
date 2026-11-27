@@ -136,10 +136,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .then(Mono.empty());
     }
 
-    // A metric's failure comes from the metric or the Python backend, never a provider, so the reasons that describe
-    // a provider's answer don't apply.
+    /**
+     * A metric's failure comes from the metric or the Python backend, never a provider, so the reasons that describe
+     * a provider's answer don't apply.
+     */
     @Override
-    protected Mono<Void> onRetrying(TraceToScoreUserDefinedMetricPython message, Throwable error, long deliveryCount,
+    protected Mono<Void> onRetrying(TraceToScoreUserDefinedMetricPython message, Throwable error, int deliveryCount,
             int maxDeliveries) {
         return scoringStatusService.recordRetrying(message.trace(), message.workspaceId(), message.ruleId(), false,
                 Reason.OTHER, deliveryCount, maxDeliveries);

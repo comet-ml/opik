@@ -220,17 +220,22 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public List<OnlineScoringStatus> getScoringStatuses(UUID traceId, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = callGetScoringStatuses(traceId.toString(), workspaceName, apiKey)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(OnlineScoringStatus.OnlineScoringStatusList.class).content();
+        }
+    }
+
+    public Response callGetScoringStatuses(String traceId, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("traces")
+                .path(traceId)
                 .path("scoring-statuses")
-                .queryParam("trace_id", traceId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-            return actualResponse.readEntity(OnlineScoringStatus.OnlineScoringStatusList.class).content();
-        }
+                .get();
     }
 
     // Session token authentication methods

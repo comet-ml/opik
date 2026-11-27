@@ -31,7 +31,7 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     @Getter
     private final List<RetryingDelivery> retryingDeliveries = new CopyOnWriteArrayList<>();
 
-    public record RetryingDelivery(String message, long deliveryCount, int maxDeliveries) {
+    public record RetryingDelivery(String message, int deliveryCount, int maxDeliveries) {
     }
 
     private final Function<String, Mono<Void>> processor;
@@ -57,7 +57,7 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     }
 
     @Override
-    protected Mono<Void> onRetrying(String message, Throwable error, long deliveryCount, int maxDeliveries) {
+    protected Mono<Void> onRetrying(String message, Throwable error, int deliveryCount, int maxDeliveries) {
         return Mono.fromRunnable(() -> retryingDeliveries.add(new RetryingDelivery(message, deliveryCount,
                 maxDeliveries)));
     }

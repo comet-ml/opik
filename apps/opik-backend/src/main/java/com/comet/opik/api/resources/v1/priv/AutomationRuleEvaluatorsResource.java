@@ -271,13 +271,13 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @GET
-    @Path("/scoring-statuses")
+    @Path("/traces/{trace_id}/scoring-statuses")
     @Operation(operationId = "getOnlineScoringStatuses", summary = "Get why rules have not scored a trace", description = "Get, per rule, why an experiment trace has no score from it yet: retrying, failed or skipped. A rule with no entry has scored the trace or not reported on it", responses = {
             @ApiResponse(responseCode = "200", description = "Online scoring statuses", content = @Content(schema = @Schema(implementation = OnlineScoringStatusList.class)))
     })
-    public Response getScoringStatuses(@QueryParam("trace_id") @NotNull UUID traceId) {
+    public Response getScoringStatuses(@PathParam("trace_id") UUID traceId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         var statuses = scoringStatusService.find(workspaceId, traceId).block();
-        return Response.ok(new OnlineScoringStatusList(statuses)).build();
+        return Response.ok(OnlineScoringStatusList.builder().content(statuses).build()).build();
     }
 }

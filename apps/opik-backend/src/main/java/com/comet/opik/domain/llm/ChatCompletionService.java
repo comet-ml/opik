@@ -521,7 +521,7 @@ public class ChatCompletionService {
             case InvalidRequestException ignored -> Optional.of(Response.Status.BAD_REQUEST.getStatusCode());
             case AuthenticationException ignored -> Optional.of(Response.Status.UNAUTHORIZED.getStatusCode());
             case ModelNotFoundException ignored -> Optional.of(Response.Status.NOT_FOUND.getStatusCode());
-            case TimeoutException ignored -> Optional.of(Response.Status.REQUEST_TIMEOUT.getStatusCode());
+            case TimeoutException ignored -> Optional.of(Response.Status.GATEWAY_TIMEOUT.getStatusCode());
             case RateLimitException ignored -> Optional.of(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
             case InternalServerException ignored -> Optional.of(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
             case OpenAIServiceException responsesException -> Optional.of(responsesException.statusCode());

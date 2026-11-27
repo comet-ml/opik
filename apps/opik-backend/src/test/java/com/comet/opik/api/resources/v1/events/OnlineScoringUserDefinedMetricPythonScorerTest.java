@@ -19,6 +19,7 @@ import io.dropwizard.util.Duration;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ServerErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -51,7 +52,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -137,7 +137,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 pythonEvaluatorService,
                 scoringStatusService);
         lenient()
-                .when(scoringStatusService.recordRetrying(any(), any(), any(), anyBoolean(), any(), anyLong(),
+                .when(scoringStatusService.recordRetrying(any(), any(), any(), anyBoolean(), any(), anyInt(),
                         anyInt()))
                 .thenReturn(Mono.empty());
         lenient().when(scoringStatusService.recordFailed(any(), any(), any(), anyBoolean(), any()))
@@ -484,19 +484,21 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         @Test
         void aFailedDeliveryTheStreamWillRetryIsRecordedAsRetrying() {
             var message = sampleMessage();
-            var failure = new ServerErrorException("Python BE unavailable", 503);
+            var failure = new ServerErrorException(RandomStringUtils.secure().nextAlphanumeric(20), 503);
+            var maxDeliveries = RandomUtils.secure().randomInt(2, 11);
+            var deliveryCount = RandomUtils.secure().randomInt(1, maxDeliveries);
 
-            scorer.onRetrying(message, failure, 2, 3).block();
+            scorer.onRetrying(message, failure, deliveryCount, maxDeliveries).block();
 
             verify(scoringStatusService).recordRetrying(message.trace(), message.workspaceId(), message.ruleId(), false,
-                    Reason.OTHER, 2, 3);
+                    Reason.OTHER, deliveryCount, maxDeliveries);
         }
 
         @Test
         void aMetricThatFailsIsRecordedAsFailedWithoutAProviderReason() {
             var message = sampleMessage();
             // A 400 from the Python backend would read as "the provider rejected the request" for a judge
-            var failure = new BadRequestException("The metric raised an error");
+            var failure = new BadRequestException(RandomStringUtils.secure().nextAlphanumeric(20));
 
             scorer.onRetired(message, failure).block();
 

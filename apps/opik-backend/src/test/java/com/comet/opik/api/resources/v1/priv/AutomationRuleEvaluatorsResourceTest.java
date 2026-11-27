@@ -1,8 +1,16 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ManualEvaluationEntityType;
+import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Source;
+import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
@@ -47,6 +55,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ManualEvaluationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorRequest;
@@ -81,6 +91,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -101,6 +112,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -126,6 +138,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
+import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -134,6 +147,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1659,15 +1673,255 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetScoringStatuses {
 
-        // The next test re-stubs the judge through this same mock, calling it with a null request while it does;
-        // answering that call with the failure would break its stubbing.
-        private Answer<ChatResponse> failingWith(int status, String message) {
+        private DatasetResourceClient datasetResourceClient;
+        private ManualEvaluationResourceClient manualEvaluationResourceClient;
+
+        @BeforeAll
+        void setUpAll() {
+            datasetResourceClient = new DatasetResourceClient(client, baseURI);
+            manualEvaluationResourceClient = new ManualEvaluationResourceClient(client, baseURI);
+        }
+
+        Stream<Arguments> judgeOutcomes() {
+            return Stream.of(
+                    Arguments.of(Named.of("a rejected key fails at once", failingWith(401)),
+                            OnlineScoringStatus.builder()
+                                    .state(OnlineScoringStatus.State.FAILED)
+                                    .reason(OnlineScoringStatus.Reason.AUTHENTICATION)
+                                    .build()),
+                    Arguments.of(Named.of("a provider error the stream will retry", failingWith(503)),
+                            OnlineScoringStatus.builder()
+                                    .state(OnlineScoringStatus.State.RETRYING)
+                                    .reason(OnlineScoringStatus.Reason.SERVER_ERROR)
+                                    .attempt(1)
+                                    .maxAttempts(3)
+                                    .build()),
+                    Arguments.of(Named.of("an answer without a readable score", answering("{}")),
+                            OnlineScoringStatus.builder()
+                                    .state(OnlineScoringStatus.State.SKIPPED)
+                                    .reason(OnlineScoringStatus.Reason.NO_SCORE)
+                                    .build()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("judgeOutcomes")
+        void anExperimentTraceShowsWhyItsJudgeHasNotScored(Answer<ChatResponse> judge, OnlineScoringStatus expected,
+                LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, judge);
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+
+            awaitStatuses(trace.id(), expected.toBuilder().ruleId(ruleId).build());
+        }
+
+        @Test
+        void aProductionTraceGetsNoStatus(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(401));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+
+            var trace = createTrace(projectId, projectName, Source.SDK);
+
+            // By the time the rule logs the trace's failure, an experiment trace would have its status.
+            Awaitility.await().untilAsserted(() -> assertThat(
+                    evaluatorsResourceClient.getLogs(ruleId, WORKSPACE_NAME, API_KEY).content())
+                    .anySatisfy(log -> assertThat(log.markers()).containsEntry("trace_id", trace.id().toString())));
+            assertThat(evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY)).isEmpty();
+        }
+
+        @Test
+        void aJudgeThatScoresLeavesNoStatus(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, answering(VALID_AI_MSG_TXT));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+
+            Awaitility.await().untilAsserted(() -> assertThat(
+                    evaluatorsResourceClient.getLogs(ruleId, WORKSPACE_NAME, API_KEY).content())
+                    .anySatisfy(log -> assertThat(log.message()).contains("stored successfully")));
+            assertThat(evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY)).isEmpty();
+        }
+
+        // The stream redelivers a failed message only after pendingMessageDuration (10 minutes here), so the trace
+        // is scored again through manual evaluation, which goes through the same scorer.
+        @Test
+        void aRetryingJudgeThatThenScoresClearsItsStatus(LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(503));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+            awaitStatuses(trace.id(), retrying(ruleId));
+
+            answerEveryJudgeCall(llmProviderFactory, answering(VALID_AI_MSG_TXT));
+            scoreAgain(projectId, trace.id(), ruleId);
+
+            Awaitility.await().untilAsserted(() -> assertThat(
+                    evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY)).isEmpty());
+        }
+
+        @Test
+        void aRetryingJudgeThatThenFailsShowsAsFailed(LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(503));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+            awaitStatuses(trace.id(), retrying(ruleId));
+
+            answerEveryJudgeCall(llmProviderFactory, failingWith(401));
+            scoreAgain(projectId, trace.id(), ruleId);
+
+            awaitStatuses(trace.id(), failed(ruleId));
+        }
+
+        @Test
+        void everyRuleThatHasNotScoredHasItsOwnStatus(LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(401));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var firstRuleId = createJudge(projectId);
+            var secondRuleId = createJudge(projectId);
+
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+
+            awaitStatuses(trace.id(), failed(firstRuleId), failed(secondRuleId));
+        }
+
+        @Test
+        void aStatusIsOnlyVisibleInItsWorkspace(LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(401));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createJudge(projectId);
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+            awaitStatuses(trace.id(), failed(ruleId));
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherApiKey, otherWorkspaceName,
+                    UUID.randomUUID().toString(), USER);
+
+            assertThat(evaluatorsResourceClient.getScoringStatuses(trace.id(), otherWorkspaceName, otherApiKey))
+                    .isEmpty();
+        }
+
+        @Test
+        void aTestSuiteJudgeIsMarkedAsASuiteAssertion(LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            answerEveryJudgeCall(llmProviderFactory, failingWith(401));
+            var datasetId = datasetResourceClient.createDataset(
+                    DatasetResourceClient.buildDataset(factory).toBuilder().id(null).build(), API_KEY, WORKSPACE_NAME);
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(DatasetItem.builder()
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("input", OBJECT_MAPPER.readTree(INPUT)))
+                            .evaluators(List.of(EvaluatorItem.builder()
+                                    .name(RandomStringUtils.secure().nextAlphanumeric(20))
+                                    .type(EvaluatorType.LLM_JUDGE)
+                                    .config(OBJECT_MAPPER.readTree(LLM_AS_A_JUDGE_EVALUATOR))
+                                    .build()))
+                            .build()))
+                    .build(), WORKSPACE_NAME, API_KEY);
+            var itemId = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "latest", API_KEY, WORKSPACE_NAME)
+                    .content().getFirst().id();
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .source(Source.EXPERIMENT)
+                    .threadId(null)
+                    .input(OBJECT_MAPPER.readTree(INPUT))
+                    .output(OBJECT_MAPPER.readTree(OUTPUT))
+                    .metadata(OBJECT_MAPPER.valueToTree(Map.of(
+                            TestSuiteMetadataKeys.DATASET_ID, datasetId.toString(),
+                            TestSuiteMetadataKeys.DATASET_ITEM_ID, itemId.toString(),
+                            TestSuiteMetadataKeys.MODEL, "gpt-4o-mini")))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // A suite assertion's rule id is generated for each run, so only its presence is checked.
+            Awaitility.await().untilAsserted(() -> assertThat(
+                    evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY))
+                    .singleElement()
+                    .satisfies(status -> {
+                        assertThat(status.ruleId()).isNotNull();
+                        assertThat(status).usingRecursiveComparison()
+                                .ignoringFields("ruleId", "updatedAt")
+                                .isEqualTo(OnlineScoringStatus.builder()
+                                        .suiteAssertion(true)
+                                        .state(OnlineScoringStatus.State.FAILED)
+                                        .reason(OnlineScoringStatus.Reason.AUTHENTICATION)
+                                        .build());
+                    }));
+        }
+
+        @Test
+        void aPythonMetricWhoseArgumentsDoNotResolveIsSkipped() throws JsonProcessingException {
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createPythonMetric(projectId,
+                    Map.of("output", "output." + RandomStringUtils.secure().nextAlphabetic(20)));
+
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+
+            awaitStatuses(trace.id(), skipped(ruleId, OnlineScoringStatus.Reason.UNRESOLVED_ARGUMENTS));
+        }
+
+        @Test
+        void aPythonMetricThatReturnsNoUsableScoreIsSkipped() throws JsonProcessingException {
+            var reference = RandomStringUtils.secure().nextAlphanumeric(36);
+            var response = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            wireMock.server().stubFor(post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
+                    .withRequestBody(containing(reference))
+                    .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(response.toBuilder()
+                            .scores(response.scores().stream()
+                                    .map(score -> score.toBuilder().scoringFailed(true).build())
+                                    .toList())
+                            .build()))));
+            var projectName = randomProjectName();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var ruleId = createPythonMetric(projectId, Map.of("reference", reference));
+
+            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
+
+            awaitStatuses(trace.id(), skipped(ruleId, OnlineScoringStatus.Reason.NO_SCORE));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"not-a-uuid", "0"})
+        void aTraceIdThatIsNotAUuidIsNotFound(String traceId) {
+            try (var response = evaluatorsResourceClient.callGetScoringStatuses(traceId, WORKSPACE_NAME, API_KEY)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        private Answer<ChatResponse> failingWith(int status) {
+            var message = RandomStringUtils.secure().nextAlphanumeric(20);
             return invocation -> {
-                if (invocation.getArgument(0) == null) {
-                    return null;
-                }
                 throw new HttpException(status, message);
             };
+        }
+
+        private Answer<ChatResponse> answering(String text) {
+            var response = ChatResponse.builder().aiMessage(AiMessage.from(text)).build();
+            return invocation -> response;
+        }
+
+        private String randomProjectName() {
+            return "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
         }
 
         private UUID createJudge(UUID projectId) throws JsonProcessingException {
@@ -1675,6 +1929,20 @@ class AutomationRuleEvaluatorsResourceTest {
                     .triggerScope(EvalTriggerScope.BOTH)
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            return evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+        }
+
+        private UUID createPythonMetric(UUID projectId, Map<String, String> arguments) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.BOTH)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(arguments)
+                            .build())
                     .samplingRate(1f)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
@@ -1695,97 +1963,53 @@ class AutomationRuleEvaluatorsResourceTest {
             return trace;
         }
 
-        @Test
-        void aJudgeThatRejectsTheKeyFailsTheExperimentTraceAtOnceAndLeavesProductionTracesUntracked(
-                LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
-            answerEveryJudgeCall(llmProviderFactory, failingWith(401, "Incorrect API key provided"));
-            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            var ruleId = createJudge(projectId);
-
-            var experimentTrace = createTrace(projectId, projectName, Source.EXPERIMENT);
-            var productionTrace = createTrace(projectId, projectName, Source.SDK);
-
-            Awaitility.await().untilAsserted(() -> assertThat(
-                    evaluatorsResourceClient.getScoringStatuses(experimentTrace.id(), WORKSPACE_NAME, API_KEY))
-                    .singleElement()
-                    .usingRecursiveComparison()
-                    .ignoringFields("updatedAt")
-                    .isEqualTo(OnlineScoringStatus.builder()
-                            .ruleId(ruleId)
-                            .state(OnlineScoringStatus.State.FAILED)
-                            .reason(OnlineScoringStatus.Reason.AUTHENTICATION)
-                            .build()));
-            // The production trace failed the same way, by then: its rule log has the error.
-            Awaitility.await().untilAsserted(() -> assertThat(
-                    evaluatorsResourceClient.getLogs(ruleId, WORKSPACE_NAME, API_KEY).content())
-                    .anySatisfy(log -> assertThat(log.markers())
-                            .containsEntry("trace_id", productionTrace.id().toString())));
-            assertThat(evaluatorsResourceClient.getScoringStatuses(productionTrace.id(), WORKSPACE_NAME, API_KEY))
-                    .isEmpty();
+        private void scoreAgain(UUID projectId, UUID traceId, UUID ruleId) {
+            manualEvaluationResourceClient.evaluateTraces(projectId, ManualEvaluationRequest.builder()
+                    .projectId(projectId)
+                    .entityIds(List.of(traceId))
+                    .ruleIds(List.of(ruleId))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build(), API_KEY, WORKSPACE_NAME);
         }
 
-        @Test
-        void aJudgeTheStreamWillRetryShowsAsRetryingAfterItsFirstFailedDelivery(
-                LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
-            answerEveryJudgeCall(llmProviderFactory, failingWith(503, "Service Unavailable"));
-            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            var ruleId = createJudge(projectId);
-
-            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
-
-            Awaitility.await().untilAsserted(() -> assertThat(
-                    evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY))
-                    .singleElement()
-                    .usingRecursiveComparison()
-                    .ignoringFields("updatedAt")
-                    .isEqualTo(OnlineScoringStatus.builder()
-                            .ruleId(ruleId)
-                            .state(OnlineScoringStatus.State.RETRYING)
-                            .reason(OnlineScoringStatus.Reason.SERVER_ERROR)
-                            .attempt(1L)
-                            .maxAttempts(3)
-                            .build()));
+        private OnlineScoringStatus retrying(UUID ruleId) {
+            return OnlineScoringStatus.builder()
+                    .ruleId(ruleId)
+                    .state(OnlineScoringStatus.State.RETRYING)
+                    .reason(OnlineScoringStatus.Reason.SERVER_ERROR)
+                    .attempt(1)
+                    .maxAttempts(3)
+                    .build();
         }
 
-        @Test
-        void aJudgeThatAnswersWithoutAReadableScoreIsSkipped(LlmProviderFactory llmProviderFactory)
-                throws JsonProcessingException {
-            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
-            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            var ruleId = createJudge(projectId);
-
-            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
-
-            Awaitility.await().untilAsserted(() -> assertThat(
-                    evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY))
-                    .singleElement()
-                    .usingRecursiveComparison()
-                    .ignoringFields("updatedAt")
-                    .isEqualTo(OnlineScoringStatus.builder()
-                            .ruleId(ruleId)
-                            .state(OnlineScoringStatus.State.SKIPPED)
-                            .reason(OnlineScoringStatus.Reason.NO_SCORE)
-                            .build()));
+        private OnlineScoringStatus failed(UUID ruleId) {
+            return OnlineScoringStatus.builder()
+                    .ruleId(ruleId)
+                    .state(OnlineScoringStatus.State.FAILED)
+                    .reason(OnlineScoringStatus.Reason.AUTHENTICATION)
+                    .build();
         }
 
-        @Test
-        void aJudgeThatScoresLeavesNoStatus(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
-            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            var ruleId = createJudge(projectId);
+        private OnlineScoringStatus skipped(UUID ruleId, OnlineScoringStatus.Reason reason) {
+            return OnlineScoringStatus.builder()
+                    .ruleId(ruleId)
+                    .state(OnlineScoringStatus.State.SKIPPED)
+                    .reason(reason)
+                    .build();
+        }
 
-            var trace = createTrace(projectId, projectName, Source.EXPERIMENT);
-
-            Awaitility.await().untilAsserted(() -> assertThat(
-                    evaluatorsResourceClient.getLogs(ruleId, WORKSPACE_NAME, API_KEY).content())
-                    .anySatisfy(log -> assertThat(log.message()).contains("stored successfully")));
-            assertThat(evaluatorsResourceClient.getScoringStatuses(trace.id(), WORKSPACE_NAME, API_KEY)).isEmpty();
+        /** Waits for exactly these statuses, oldest first, each written within the last minute. */
+        private void awaitStatuses(UUID traceId, OnlineScoringStatus... expected) {
+            Awaitility.await().untilAsserted(() -> {
+                var statuses = evaluatorsResourceClient.getScoringStatuses(traceId, WORKSPACE_NAME, API_KEY);
+                assertThat(statuses)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields("updatedAt")
+                        .containsExactlyInAnyOrder(expected);
+                assertThat(statuses)
+                        .isSortedAccordingTo(Comparator.comparing(OnlineScoringStatus::updatedAt))
+                        .allSatisfy(status -> assertThat(status.updatedAt())
+                                .isCloseTo(Instant.now(), within(1, ChronoUnit.MINUTES)));
+            });
         }
     }
 

@@ -27,8 +27,8 @@ public record OnlineScoringStatus(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Set for a test suite's assertion judge, whose rule id is not stable") boolean suiteAssertion,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) State state,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Reason reason,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "The failed delivery, set while retrying") Long attempt,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Deliveries before giving up, set while retrying") Integer maxAttempts,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "The failed delivery, set while retrying") int attempt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Deliveries before giving up, set while retrying") int maxAttempts,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant updatedAt) {
 
     @Getter
@@ -45,7 +45,7 @@ public record OnlineScoringStatus(
         @JsonCreator
         public static State fromString(String value) {
             return Arrays.stream(values())
-                    .filter(state -> state.value.equals(value))
+                    .filter(state -> state.value.equalsIgnoreCase(value))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown state '%s'".formatted(value)));
         }
@@ -73,7 +73,7 @@ public record OnlineScoringStatus(
         @JsonCreator
         public static Reason fromString(String value) {
             return Arrays.stream(values())
-                    .filter(reason -> reason.value.equals(value))
+                    .filter(reason -> reason.value.equalsIgnoreCase(value))
                     .findFirst()
                     .orElse(OTHER);
         }

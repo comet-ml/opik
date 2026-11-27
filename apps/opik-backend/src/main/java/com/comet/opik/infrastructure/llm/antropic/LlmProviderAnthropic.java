@@ -90,7 +90,7 @@ public class LlmProviderAnthropic implements LlmProviderService {
         return switch (throwable) {
             case InternalServerException ignored -> Optional.of(500);
             case ModelNotFoundException ignored -> Optional.of(404);
-            case TimeoutException ignored -> Optional.of(408);
+            case TimeoutException ignored -> Optional.of(504);
             case RateLimitException ignored -> Optional.of(429);
             case InvalidRequestException ignored -> Optional.of(400);
             case AuthenticationException ignored -> Optional.of(401);

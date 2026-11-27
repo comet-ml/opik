@@ -159,6 +159,14 @@ public class OnlineScoringConfig {
     @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
     private Duration attachmentFetchRetryDelay = Duration.milliseconds(300);
 
+    /**
+     * How long the UI can read why a rule has not scored an experiment trace yet. It has to outlast the stream's
+     * retries, roughly {@code maxRetries × pendingMessageDuration}; after it the rule's logs remain the record.
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration scoringStatusTtl = Duration.days(1);
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

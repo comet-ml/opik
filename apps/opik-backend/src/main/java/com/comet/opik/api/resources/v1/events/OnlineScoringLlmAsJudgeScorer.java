@@ -221,7 +221,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     @Override
-    protected Mono<Void> onRetrying(TraceToScoreLlmAsJudge message, Throwable error, long deliveryCount,
+    protected Mono<Void> onRetrying(TraceToScoreLlmAsJudge message, Throwable error, int deliveryCount,
             int maxDeliveries) {
         return scoringStatusService.recordRetrying(message.trace(), message.workspaceId(), message.ruleId(),
                 isSuiteAssertion(message), OnlineScoringStatusService.reasonOf(error), deliveryCount, maxDeliveries);
@@ -256,7 +256,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return recordFailed.then(storeUnevaluated).then(finishAssertion(message));
     }
 
-    // Whatever the judge left unscored, a retry would leave unscored too, so the rule is done with the trace.
+    /** Whatever the judge left unscored, a retry would leave unscored too, so the rule is done with the trace. */
     private Mono<Void> recordScoredOrSkipped(TraceToScoreLlmAsJudge message, List<FeedbackScoreBatchItem> scores) {
         var stored = scores.stream().map(FeedbackScoreBatchItem::name).collect(Collectors.toSet());
         boolean allScored = Optional.ofNullable(message.llmAsJudgeCode().schema()).orElse(List.of()).stream()
