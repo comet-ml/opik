@@ -17,7 +17,6 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -57,7 +56,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -136,11 +135,14 @@ class TopicsRunsIntegrationTest {
     private TopicsTestData data;
     private ProjectResourceClient projects;
 
+    private TopicsNightPass nightPass;
+
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicsRunPlanner planner,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicWindowDAO windowDAO,
-            @Jit TopicAlgorithm algorithm, ClientSupport client) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit TopicRunStore store, @Jit TopicsNightPass nightPass,
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm, ClientSupport client) {
+        this.nightPass = nightPass;
         this.windowDAO = windowDAO;
         this.algorithm = algorithm;
         ClientSupportUtils.config(client);
@@ -208,7 +210,7 @@ class TopicsRunsIntegrationTest {
                 .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
-        assertArrivalEqualsTheRun(workspaceId, built, buildRun);
+        data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, built, buildRun, tomorrowStart());
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
         }
@@ -342,7 +344,7 @@ class TopicsRunsIntegrationTest {
             }
         };
         return new TopicsRunPlanner(config, template, workspaceService, store, reconciler, candidates, publisher,
-                new TopicsBackfillGate(config));
+                new TopicsBackfillGate(config), nightPass);
     }
 
     @Test
@@ -459,7 +461,8 @@ class TopicsRunsIntegrationTest {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
-        assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+        // A list of the night before the update's: a pod skips an update whose night the list already covers.
+        planner.runByHand(workspaceId, projectId, tomorrow().minusDays(1), false).block();
         awaitBuilt(projectId);
         awaitLabelsComplete(projectId);
         var before = data.topics(projectId);
@@ -487,7 +490,9 @@ class TopicsRunsIntegrationTest {
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         // One topic whose only vector is far from every trace: no trace tonight, so it retires.
-        data.savedList(workspaceId, projectId, tomorrowStart(), FIXTURE.size());
+        // A list of the night before the update's: a pod skips an update whose night the list already covers.
+        data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
+        var listRows = insertListRows(workspaceId, projectId);
         store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
 
@@ -500,10 +505,40 @@ class TopicsRunsIntegrationTest {
         assertThat(project.listRunId()).isNull();
         assertThat(project.savedRuns()).isEqualTo(2);
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
+        assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(listRows);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
         assertThat(data.topicProject(projectId).runMode()).isEqualTo(TopicProject.RunMode.DISCOVERY);
+    }
+
+    @Test
+    @DisplayName("a stale queued nightly update on a day the schedule did not fire is dropped, not published again")
+    void staleNightlyUpdateWithNoCurrentNightIsDropped(@Jit TopicsRunReconciler reconciler) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+        data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.UPDATE).block();
+        var nightly = opikConfig.getTopics().getNightly();
+        var schedule = nightly.getSchedule();
+        // Only the weekday after tomorrow: neither today nor yesterday is a night.
+        nightly.setSchedule("0 0 2 ? * " + LocalDate.now(ZoneOffset.UTC).plusDays(2).getDayOfWeek().name()
+                .substring(0, 3));
+        try {
+            var later = Instant.now().plus(opikConfig.getTopics().getRuns().getRepublishAfter().toJavaDuration())
+                    .plusSeconds(60);
+            var inFlight = reconciler.reconcile(store.findInFlight().block(), List.of(workspaceId), tomorrow(), later)
+                    .block();
+
+            assertThat(inFlight).extracting(InFlightRun::runId).doesNotContain(runId);
+        } finally {
+            nightly.setSchedule(schedule);
+        }
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(runId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+            assertThat(project.cancelReason()).isEqualTo(TopicProject.CancelReason.DEADLINE);
+        });
     }
 
     /** Queues and publishes the project's nightly update for tomorrow's window, as the nightly job will. */
@@ -581,34 +616,6 @@ class TopicsRunsIntegrationTest {
      * workspace opted in, each plan cancels them as the planner does for an opt-out, and the pods or the planner end
      * the cancelled ones.
      */
-    /**
-     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
-     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
-     * {@code trace_topics}.
-     */
-    private void assertArrivalEqualsTheRun(String workspaceId, UUID projectId, UUID runId) {
-        var labels = data.traceTopics(workspaceId, projectId).stream()
-                .filter(row -> runId.equals(row.runId()))
-                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
-        // Wider than the test's window: only the run's traces are compared.
-        var from = tomorrowStart().minus(Duration.ofDays(90));
-        var to = tomorrowStart().plus(Duration.ofDays(1));
-        var window = windowDAO.readWindow(projectId, from, to, 100_000, 120)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, "test"))
-                .collectList().block()
-                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
-        assertThat(window).hasSize(labels.size()).isNotEmpty();
-
-        var project = data.topicProject(projectId);
-        var arrived = algorithm.labeller(data.topics(projectId), project.otherVectors())
-                .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
-        for (int i = 0; i < window.size(); i++) {
-            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
-                    .isEqualTo(labels.get(window.get(i).traceId()));
-        }
-    }
-
     private void endRunsInFlight() {
         Awaitility.await().atMost(WAIT).pollInterval(Duration.ofMillis(500)).until(() -> {
             planner.plan(Instant.now()).block();
@@ -619,6 +626,29 @@ class TopicsRunsIntegrationTest {
     /** The planner's window end: tomorrow (UTC). */
     private static LocalDate tomorrow() {
         return LocalDate.now(ZoneOffset.UTC).plusDays(1);
+    }
+
+    /**
+     * The rows the saved list's run left: every trace seeded for {@link #tomorrowStart()} on the list's first topic,
+     * as that run's.
+     */
+    private List<TraceTopic> insertListRows(String workspaceId, UUID projectId) {
+        var listRunId = data.topicProject(projectId).listRunId();
+        var topicId = data.topics(projectId).getFirst().id();
+        var shift = Duration.between(FIXTURE.night, tomorrowStart());
+        var rows = IntStream.range(0, FIXTURE.size())
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(FIXTURE.traceIds.get(i))
+                        .traceCreatedAt(FIXTURE.createdAt.get(i).plus(shift))
+                        .topicId(topicId)
+                        .source(TraceTopic.Source.RUN)
+                        .runId(listRunId)
+                        .build())
+                .toList();
+        store.insertTraceTopics(new TopicsMetrics.Workspace(workspaceId, workspaceId), rows).block();
+        return rows;
     }
 
     private static Instant tomorrowStart() {

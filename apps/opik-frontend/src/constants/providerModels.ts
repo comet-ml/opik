@@ -598,6 +598,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.2-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LINGSANTE_3_1_AIR_VL,
+      label: "inclusionai/lingsante-3.1-air-vl",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INFERENCE_NET_SCHEMATRON_V2_SMALL,
       label: "inference-net/schematron-v2-small",
     },
@@ -788,6 +792,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONDREAM_MOONDREAM3_1_9B_A2B,
       label: "moondream/moondream3.1-9b-a2b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
+      label: "moonshotai/kimi-k2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_0905,
+      label: "moonshotai/kimi-k2-0905",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_5,
@@ -1657,6 +1669,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_TERRA_LATEST,
       label: "~openai/gpt-terra-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_LATEST,
+      label: "~unbiased/pareto-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,

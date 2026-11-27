@@ -22,7 +22,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * The topic runs' and the topics read API's metrics, on the global meter. Every metric of one workspace's work
  * carries {@code workspace_id} and {@code workspace_name}: the caller resolves the name once, at its boundary, so
  * recording never blocks. {@code topics.api.duration_seconds} has neither, where every caller's workspace would add
- * series.
+ * series; nor has {@code topics.nightly.nights}, a whole night's.
  */
 @Singleton
 public class TopicsMetrics {
@@ -50,6 +50,10 @@ public class TopicsMetrics {
     private static final AttributeKey<String> TABLE = stringKey("table");
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
     private static final AttributeKey<String> REASON = stringKey("reason");
+    private static final AttributeKey<String> DECISION = stringKey("decision");
+
+    private static final String NIGHTLY_DECISIONS = "topics.nightly.decisions";
+    private static final String NIGHTLY_NIGHTS = "topics.nightly.nights";
 
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
@@ -64,6 +68,8 @@ public class TopicsMetrics {
     private final LongCounter born;
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
+    private final LongCounter nightlyDecisions;
+    private final LongCounter nights;
 
     public TopicsMetrics() {
         this(GlobalOpenTelemetry.get().getMeter("opik.topics"));
@@ -109,6 +115,18 @@ public class TopicsMetrics {
         this.churnAny = meter.histogramBuilder("topics.run.churn_any")
                 .setDescription("Of the window traces labelled on both the last and this saved night, the share "
                         + "whose label changed, Other included")
+                .build();
+        this.nightlyDecisions = meter.counterBuilder(NIGHTLY_DECISIONS)
+                .setDescription("Projects the night decided on, by decision (update: queued, skip, "
+                        + "not_reached, count_failed) and, for a skip, reason (small, deleted, paused, already_saved, "
+                        + "no_list). A queued run whose claim finds its night saved or no list is counted again, as a "
+                        + "skip. Every series of a workspace listed at startup starts at 0; one listed later starts "
+                        + "at its first decision")
+                .build();
+        this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
+                .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, counted by "
+                        + "the one plan that ends the night, or failed once for each plan whose read of the night's "
+                        + "projects failed, for every workspace or for one")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -170,6 +188,20 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull Workspace workspace, double share) {
         otherShare.record(share, attributes(workspace).build());
+    }
+
+    /** {@code reason} is null for a decision other than skip. */
+    void nightlyDecision(@NonNull Workspace workspace, @NonNull NightDecision decision,
+            @Nullable NightSkipReason reason, long projects) {
+        var attributes = attributes(workspace).put(DECISION, decision.getValue());
+        if (reason != null) {
+            attributes.put(REASON, reason.getValue());
+        }
+        nightlyDecisions.add(projects, attributes.build());
+    }
+
+    void night(@NonNull NightOutcome outcome, long nights) {
+        this.nights.add(nights, Attributes.of(OUTCOME, outcome.getValue()));
     }
 
     private static AttributesBuilder attributes(Workspace workspace) {

@@ -97,6 +97,43 @@ class TopicsClient:
         )
         return _response.data
 
+    def run_project_topics_night(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.topics.run_project_topics_night(project_id='projectId', workspace_id='workspace_id', )
+        """
+        _response = self._raw_client.run_project_topics_night(
+            project_id, workspace_id=workspace_id, night=night, request_options=request_options
+        )
+        return _response.data
+
     def get_project_topics(
         self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
     ) -> ProjectTopics:
@@ -217,6 +254,46 @@ class AsyncTopicsClient:
             night=night,
             ignore_backfill=ignore_backfill,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def run_project_topics_night(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.topics.run_project_topics_night(project_id='projectId', workspace_id='workspace_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.run_project_topics_night(
+            project_id, workspace_id=workspace_id, night=night, request_options=request_options
         )
         return _response.data
 

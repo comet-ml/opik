@@ -23,6 +23,22 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   Saved queries, dashboards and BI tools that query these tables directly don't fail; they return wrong results. See [Querying traces and spans in ClickHouse](/self-host/querying-traces-and-spans) for how to check each table and what to change. The REST API, the SDKs and the Opik UI are unaffected.
 </Warning>
 
+## Release 2.3.5, 2026-11-26
+
+### Security Change
+
+The Python backend container now runs in privileged mode only with the `docker` code executor strategy, whose
+in-container Docker daemon needs it. With the default `process` strategy it runs unprivileged.
+
+- **Helm:** no change needed. The chart adds `privileged: true` when `component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY`
+  is `docker`. If you set the strategy through `envFrom` or `secretRefs` instead, set
+  `component.python-backend.securityContext.privileged: true`. The Python backend container also runs with the
+  `RuntimeDefault` seccomp profile now; set `component.python-backend.securityContext.seccompProfile: null` to drop it.
+- **Docker Compose:** no change needed. `PYTHON_CODE_EXECUTOR_STRATEGY` also sets privileged mode, through the
+  `python-backend-<strategy>.yaml` file that the Python backend service extends.
+
+The Python backend also logs a warning at startup naming the strategy in use and its trade-off.
+
 ## Release 2.3.0, 2026-11-23
 
 ### Security Change

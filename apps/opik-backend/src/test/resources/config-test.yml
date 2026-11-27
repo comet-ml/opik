@@ -471,8 +471,9 @@ authentication:
   requestRetryMaxBackoff: 1s
   # Default: 10m
   # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
-  #   Used for organization settings such as custom model prices. A workspace moved to another organization picks
-  #   up the new one within this time. Between 1m and 60m.
+  #   Used for organization settings such as custom model prices. After this time, requests still get the old
+  #   answer at once while Comet is asked again in the background, so a workspace moved to another organization
+  #   picks up the new one shortly after this time. Between 1m and 60m.
   organizationCacheTTL: 10m
   # Default: 60m
   # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
@@ -481,8 +482,10 @@ authentication:
   organizationCacheStaleTTL: 60m
   # Default: 30s
   # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
-  #   Each attempt already retries per requestMaxRetries with backoff, so this is the pause between those rounds:
-  #   shorter notices recovery sooner but sends more calls to a failing Comet. Between 1s and 5m.
+  #   When Comet itself fails (a 5xx, or no answer in time), a workspace with no known organization gets none for
+  #   this time, without asking Comet. Each attempt already retries per requestMaxRetries with backoff, so this is
+  #   the pause between those rounds: shorter notices recovery sooner but sends more calls to a failing Comet.
+  #   Between 1s and 5m; a value above organizationCacheStaleTTL is capped at it.
   organizationCacheRetryAfterFailure: 30s
 
 sharedHttpClientHealthCheck:
@@ -1109,6 +1112,10 @@ topics:
     embedConcurrency: 1
     embedTimeout: 10s
     leaseSlack: 5s
+    maxExcludedProjects: 2000
+    maxDiscoveriesPerTick: 5
+    discoveryMinShare: 0.5
+    oneSliceMaxTraces: 250000
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
@@ -1144,6 +1151,11 @@ topics:
     backfillMaxWait: 72h
     timedOutShare: 0.99
     retryDelays: 1h,6h,1d
+  nightly:
+    schedule: "0 0 2 * * ?"
+    budget: 2h
+    pauseFailures: 3
+    pauseNights: 7
   runs:
     streamName: topics-runs
     consumerGroupName: topics-runs-consumers

@@ -45,6 +45,9 @@ public class RetryUtils {
      * each after {@link #backoff}, and none whose wait would end at or past {@code deadline}. Running out of retries
      * or of time fails with the last error. {@code onRetry} gets the failure and the number of the attempt about to
      * be made.
+     * <p>
+     * The policy ends with {@code onErrorStop()}: a subscriber downstream may use {@code onErrorContinue} (the Redis
+     * stream consumers do), which would otherwise skip that last error and leave the call waiting for its deadline.
      */
     public static Retry untilDeadline(int maxRetries, @NonNull Duration baseBackoff, @NonNull Instant deadline,
             @NonNull Predicate<Throwable> retryable, @NonNull Function<Throwable, Duration> retryAfter,
@@ -61,7 +64,7 @@ public class RetryUtils {
             }
             onRetry.accept(failure, signal.totalRetries() + 1);
             return Mono.delay(wait);
-        }));
+        }).onErrorStop());
     }
 
     public static RetryBackoffSpec handleConnectionError() {

@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -531,6 +532,21 @@ class LlmModelCatalogTest {
                     Arguments.of("gemini", "gemini-4-argon"),
                     Arguments.of("vertex-ai", "gemini-4-argon"),
                     Arguments.of("vertex-ai", "gemini-4-argon-cyber-permissive"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"gemini", "vertex-ai"})
+        void gemini31FlashLiteTakesTemperatureAtGooglesDefaultButNoOtherSampling(String provider) {
+            var params = registry.get(provider).stream()
+                    .filter(model -> model.id().equals("gemini-3.1-flash-lite"))
+                    .findFirst()
+                    .orElseThrow()
+                    .params();
+
+            assertThat(params.temperature())
+                    .isEqualTo(new NumberParam(true, BigDecimal.ZERO, BigDecimal.TWO, BigDecimal.ONE));
+            assertThat(Stream.of(params.topP(), params.frequencyPenalty(), params.presencePenalty()))
+                    .allSatisfy(param -> assertThat(param.accepted()).isFalse());
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {

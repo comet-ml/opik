@@ -25,14 +25,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
  * Plans the Topics runs of the workspaces listed at stage {@code build} or later. One plan, on the leader only:
  * settle the runs in flight ({@link TopicsRunReconciler}), then fill the free slots of {@code topics.runs.maxInFlight},
- * across the cluster, with labelling passes that did not finish and discovery runs ({@link TopicsDiscoveryCandidates}),
- * one of each in turn. Each run is written
+ * across the cluster: first with the night's nightly updates while the night's budget lasts ({@link TopicsNightPass},
+ * for the workspaces at stage {@code nightly} or later), then with labelling passes that did not finish and discovery
+ * runs ({@link TopicsDiscoveryCandidates}), one of each in turn. Each run is written
  * {@code queued} on its project's row first, then published on the stream, where any pod claims it.
  */
 @Slf4j
@@ -48,6 +50,7 @@ public class TopicsRunPlanner {
     private final @NonNull TopicsDiscoveryCandidates candidates;
     private final @NonNull TopicsRunPublisher publisher;
     private final @NonNull TopicsBackfillGate backfillGate;
+    private final @NonNull TopicsNightPass nightPass;
 
     /** A run to queue: its message once queued, which gives it its id. */
     @Builder(toBuilder = true)
@@ -68,12 +71,19 @@ public class TopicsRunPlanner {
                         .flatMap(runs -> reconciler.reconcile(runs, workspaceIds, night, start))
                         .flatMap(inFlight -> {
                             int free = config.getRuns().getMaxInFlight() - inFlight.size();
-                            if (free <= 0 || workspaceIds.isEmpty()) {
-                                return Mono.just(0);
-                            }
-                            return labelsDue(workspaceIds, start)
-                                    .zipWith(candidates.find(workspaceIds, night, start))
-                                    .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night), free));
+                            // The night pass runs with no free slot too: its skips and its end need none.
+                            return nightPass.plan(start, free, this::queueOne)
+                                    .flatMap(nightly -> {
+                                        int left = free - nightly;
+                                        if (left <= 0 || workspaceIds.isEmpty()) {
+                                            return Mono.just(nightly);
+                                        }
+                                        return labelsDue(workspaceIds, start)
+                                                .zipWith(candidates.find(workspaceIds, night, start))
+                                                .flatMap(due -> queue(interleave(due.getT1(), due.getT2(), night),
+                                                        left))
+                                                .map(queued -> nightly + queued);
+                                    });
                         }))
                 .doOnNext(queued -> log.info("Topics plan done, window until '{}', runs queued '{}'", night, queued));
     }
@@ -90,11 +100,7 @@ public class TopicsRunPlanner {
     public Mono<UUID> runByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
             boolean ignoreBackfill) {
         var now = Instant.now();
-        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(enabled -> enabled
-                        ? candidates.findListless(workspaceId, projectId, night)
-                        : Mono.error(notOptedIn(workspaceId)))
+        return optedIn(workspaceId, TopicsStage.BUILD, () -> candidates.findListless(workspaceId, projectId, night))
                 .switchIfEmpty(Mono.error(() -> new ConflictException(("Project '%s' has a topic list, a run in "
                         + "flight, or no trace in the window until '%s'").formatted(projectId, night))))
                 .flatMap(project -> {
@@ -122,6 +128,20 @@ public class TopicsRunPlanner {
     }
 
     /**
+     * Queues the project's nightly update for {@code night} now, by hand, and returns its run id
+     * ({@link TopicsNightPass#byHand}).
+     *
+     * @throws ConflictException           when the workspace is not opted in at stage {@code nightly} or later, the
+     *                                     night would skip the project (the pause aside), or it has a run in flight
+     * @throws ServiceUnavailableException when the run could not be published: it is dropped, and the caller tries
+     *                                     again
+     */
+    public Mono<UUID> nightByHand(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
+        return optedIn(workspaceId, TopicsStage.NIGHTLY,
+                () -> nightPass.byHand(workspaceId, projectId, night, this::queueByHand));
+    }
+
+    /**
      * Forgets the project's saved list by hand, so its next discovery run, planned or by hand, builds a new one. The
      * workspace comes from the Reactor context.
      *
@@ -131,9 +151,7 @@ public class TopicsRunPlanner {
     public Mono<Void> resetByHand(@NonNull UUID projectId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, TopicsStage.BUILD))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(enabled -> enabled ? store.resetList(projectId) : Mono.error(notOptedIn(workspaceId)))
+            return optedIn(workspaceId, TopicsStage.BUILD, () -> store.resetList(projectId))
                     .filter(Boolean::booleanValue)
                     .switchIfEmpty(Mono.error(() -> new ConflictException(
                             "Project '%s' has no topics row or a run in flight".formatted(projectId))))
@@ -143,10 +161,20 @@ public class TopicsRunPlanner {
         });
     }
 
-    private static ConflictException notOptedIn(String workspaceId) {
-        return new ConflictException(("Workspace '%s' is not opted in to topics runs: it needs to be in "
-                + "topics.enabledWorkspaces at stage build or later, and enabled in ai_label_workspaces")
-                .formatted(workspaceId));
+    /**
+     * {@code then} once the workspace reaches {@code stage}, checked on a bounded-elastic thread (a config and MySQL
+     * read); a {@link ConflictException} otherwise.
+     */
+    private <T> Mono<T> optedIn(String workspaceId, TopicsStage stage, Supplier<Mono<T>> then) {
+        return Mono.fromCallable(() -> workspaceService.reaches(workspaceId, stage))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(enabled -> enabled ? then.get() : Mono.error(notOptedIn(workspaceId, stage)));
+    }
+
+    private static ConflictException notOptedIn(String workspaceId, TopicsStage stage) {
+        return new ConflictException(("Workspace is not opted in to topics runs: it needs to be in "
+                + "topics.enabledWorkspaces at the stage or later, and enabled in ai_label_workspaces, workspace "
+                + "'%s', stage '%s'").formatted(workspaceId, stage.configName()));
     }
 
     /**
