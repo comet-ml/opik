@@ -1132,8 +1132,18 @@ class TopicsLabellingPassTest {
         copyVectorLater(workspaceId, projectId, source, traceId).block();
     }
 
+    private Mono<Long> copyVectorLater(String workspaceId, UUID projectId, UUID source, UUID traceId) {
+        return writeVectorLater(workspaceId, projectId, source, traceId, createdAt(source));
+    }
+
     /** A newer vector row for trace {@code traceId}, with the vector of {@code source}: same time, new vector. */
     private Mono<Long> revectorLater(String workspaceId, UUID projectId, UUID traceId, UUID source) {
+        return writeVectorLater(workspaceId, projectId, source, traceId, createdAt(traceId));
+    }
+
+    /** A vector row for trace {@code traceId}, created at {@code createdAt}, with the text and vector of {@code source}. */
+    private Mono<Long> writeVectorLater(String workspaceId, UUID projectId, UUID source, UUID traceId,
+            Instant createdAt) {
         return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
                 INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     embed_model, embed_dimensions, text, vector)
@@ -1141,31 +1151,13 @@ class TopicsLabellingPassTest {
                     task_version, embed_model, embed_dimensions, text, vector
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :source
-                SETTINGS log_comment = 'topics_test:revector'
+                SETTINGS log_comment = 'topics_test:write_vector'
                 """)
                 .bind("workspace_id", workspaceId)
                 .bind("project_id", projectId.toString())
                 .bind("source", source.toString())
                 .bind("trace_id", traceId.toString())
-                .bind("created_at", createdAt(traceId).toString())
-                .execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated())));
-    }
-
-    private Mono<Long> copyVectorLater(String workspaceId, UUID projectId, UUID source, UUID traceId) {
-        return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
-                    embed_model, embed_dimensions, text, vector)
-                SELECT workspace_id, project_id, task, :trace_id, trace_created_at, task_version, embed_model,
-                    embed_dimensions, text, vector
-                FROM topic_vectors
-                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :source
-                SETTINGS log_comment = 'topics_test:copy_vector'
-                """)
-                .bind("workspace_id", workspaceId)
-                .bind("project_id", projectId.toString())
-                .bind("source", source.toString())
-                .bind("trace_id", traceId.toString())
+                .bind("created_at", createdAt.toString())
                 .execute())
                 .flatMap(result -> Mono.from(result.getRowsUpdated())));
     }
