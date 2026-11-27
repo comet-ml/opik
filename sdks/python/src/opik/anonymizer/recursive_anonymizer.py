@@ -55,13 +55,17 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         if isinstance(data, str):
             return self.anonymize_text(data, field_name=field_name, **kwargs)
         elif isinstance(data, dict):
+            # Keys live at the same level as their values, so they follow the
+            # same depth limit: once values are no longer anonymized, keys
+            # are left untouched too.
+            anonymize_keys = self.anonymize_dict_keys and depth + 1 < self.max_depth
             result = {}
             for key, value in data.items():
                 new_value = self._recursive_anonymize(
                     value, depth + 1, field_name=f"{field_name}.{key}", **kwargs
                 )
                 new_key = key
-                if self.anonymize_dict_keys and isinstance(key, str):
+                if anonymize_keys and isinstance(key, str):
                     new_key = _unique_key(
                         self.anonymize_text(
                             key, field_name=f"{field_name}.{key}", **kwargs

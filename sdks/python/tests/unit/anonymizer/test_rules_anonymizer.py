@@ -368,6 +368,26 @@ class TestRulesAnonymizerDictKeys:
 
         assert result == {"[EMAIL]": "kept", "[EMAIL] (2)": "also kept"}
 
+    def test_anonymize__keys_at_max_depth_boundary__keys_and_values_unchanged(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], max_depth=1, anonymize_dict_keys=True
+        )
+
+        data = {"jane@example.com": "contact jane@example.com"}
+
+        assert anonymizer.anonymize(data) == data
+
+    def test_anonymize__nested_keys_past_max_depth__only_outer_keys_redacted(self):
+        anonymizer = rules_anonymizer.RulesAnonymizer(
+            [self.EMAIL], max_depth=2, anonymize_dict_keys=True
+        )
+
+        result = anonymizer.anonymize(
+            {"a@example.com": {"b@example.com": "c@example.com"}}
+        )
+
+        assert result == {"[EMAIL]": {"b@example.com": "c@example.com"}}
+
     def test_anonymize__email_dict_key_keys_disabled__key_unchanged(self):
         anonymizer = rules_anonymizer.RulesAnonymizer([self.EMAIL])
 
