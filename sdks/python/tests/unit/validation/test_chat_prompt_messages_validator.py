@@ -274,6 +274,46 @@ def test_chat_prompt_messages_validator_error_messages():
     assert any("messages[1]" in reason for reason in result.failure_reasons)
 
 
+@pytest.mark.parametrize(
+    argnames="message, expected_reason",
+    argvalues=[
+        # Missing key is reported as missing, not as unexpected
+        (
+            {"role": "user"},
+            "messages[0]: missing required keys: ['content']",
+        ),
+        (
+            {"content": "hello"},
+            "messages[0]: missing required keys: ['role']",
+        ),
+        # Extra key is reported as unexpected, not as missing
+        (
+            {"role": "user", "content": "hello", "extra": "key"},
+            "messages[0]: unexpected keys: ['extra']",
+        ),
+        # Both at once: each named under the right heading
+        (
+            {"role": "invalid", "extra": "key"},
+            "messages[0]: missing required keys: ['content']",
+        ),
+        (
+            {"role": "invalid", "extra": "key"},
+            "messages[0]: unexpected keys: ['extra']",
+        ),
+    ],
+)
+def test_chat_prompt_messages_validator_structure_error_messages(
+    message, expected_reason
+):
+    """Missing and unexpected message keys are each reported under the right heading."""
+    validator = chat_prompt_messages.ChatPromptMessagesValidator([message])
+    result = validator.validate()
+    assert result.failed() is True
+    assert any(expected_reason in reason for reason in result.failure_reasons), (
+        f"Expected {expected_reason!r}, got {result.failure_reasons!r}"
+    )
+
+
 def test_chat_prompt_messages_validator_raise_validation_error():
     """Test that raise_if_validation_failed raises ValidationError."""
     import opik.exceptions

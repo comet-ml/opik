@@ -81,11 +81,11 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         expected_keys = {"role", "content"}
 
         if message_keys != expected_keys:
-            if not message_keys.issubset(expected_keys):
+            if not expected_keys.issubset(message_keys):
                 missing_keys = expected_keys - message_keys
                 msg = f"{prefix}: missing required keys: {sorted(missing_keys)}"
                 failure_reasons.append(msg)
-            if not expected_keys.issubset(message_keys):
+            if not message_keys.issubset(expected_keys):
                 extra_keys = message_keys - expected_keys
                 msg = (
                     f"{prefix}: unexpected keys: {sorted(extra_keys)}. "
