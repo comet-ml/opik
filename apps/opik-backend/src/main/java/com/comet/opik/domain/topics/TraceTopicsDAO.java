@@ -35,8 +35,9 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 /**
  * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins, a run row over an
  * arrival row stamped at the same time. Writes are plain batched inserts; {@code last_updated_at} is stamped by
- * ClickHouse. A reader takes each trace's latest row first and then drops it when that row is a tombstone
- * ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. The
+ * ClickHouse, except on the labelling pass's rows ({@link TraceTopic#lastUpdatedAt}). A reader takes each trace's
+ * latest row first and then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of
+ * {@code traces_local_v2} do. The
  * discovery run writes the table, and reads it once per run for the run's trace counts; the read API and topic on
  * arrival read it too.
  *
@@ -126,6 +127,9 @@ public class TraceTopicsDAO {
                     node.put("topic_id", row.topicId().toString());
                     node.put("source", row.source().getValue());
                     node.put("run_id", row.runId() == null ? null : row.runId().toString());
+                    if (row.lastUpdatedAt() != null) {
+                        node.put("last_updated_at", row.lastUpdatedAt().toString());
+                    }
                     return node;
                 });
     }

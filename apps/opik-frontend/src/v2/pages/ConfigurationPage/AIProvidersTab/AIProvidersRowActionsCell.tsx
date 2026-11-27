@@ -23,9 +23,6 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
-  // Check if this provider is read-only (system-managed)
-  const isReadOnly = providerKey.read_only === true;
-
   const { mutate: deleteProviderKey } = useProviderKeysDeleteMutation();
 
   const deleteProviderKeyHandler = useCallback(() => {
@@ -34,19 +31,13 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
     });
   }, [providerKey.id, deleteProviderKey]);
 
-  // Don't show actions menu for read-only providers
-  if (isReadOnly) {
+  if (providerKey.read_only) {
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
-        className="justify-end p-0"
-        stopClickPropagation
-      >
-        <span className="pr-2 text-xs text-muted-foreground">
-          Read-only provider
-        </span>
-      </CellWrapper>
+        className="p-0"
+      />
     );
   }
 

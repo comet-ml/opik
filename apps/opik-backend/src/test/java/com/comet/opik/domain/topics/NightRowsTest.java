@@ -31,8 +31,8 @@ class NightRowsTest {
     private static final UUID BORN = new UUID(7, 3);
 
     @Test
-    @DisplayName("a stored live topic is updated, a topic born tonight inserted and a stored retired one deleted; each "
-            + "trace gets a row with its topic or Other; the stats count the births, the retired by reason, the live "
+    @DisplayName("a stored live topic is updated, a topic born tonight inserted and a stored retired one deleted; the "
+            + "stats count the births, the retired by reason, the live "
             + "topics, the Other share and the churn")
     void rows() {
         var state = state(true);
@@ -47,12 +47,6 @@ class NightRowsTest {
         assertThat(rows.save().retired()).containsExactly(RETIRED);
         assertThat(rows.retired()).extracting(NightTopic::getId).containsExactly(RETIRED);
         assertThat(rows.save().otherVectors()).isEqualTo(new PrototypeVectors(List.of(TopicsTestData.unit(5))));
-        assertThat(rows.traceTopics()).extracting(TraceTopic::traceId, TraceTopic::topicId, TraceTopic::runId)
-                .containsExactly(
-                        tuple(new UUID(1, 0), KEPT, RUN.runId()),
-                        tuple(new UUID(1, 1), BORN, RUN.runId()),
-                        tuple(new UUID(1, 2), TraceTopic.OTHER, RUN.runId()),
-                        tuple(new UUID(1, 3), KEPT, RUN.runId()));
         assertThat(rows.born()).isEqualTo(1);
         assertThat(rows.live()).isEqualTo(2);
         assertThat(rows.otherShare()).isEqualTo(0.25);
@@ -63,12 +57,10 @@ class NightRowsTest {
         assertThat(stats.get("born").asInt()).isEqualTo(1);
         assertThat(stats.get("topics").asInt()).isEqualTo(2);
         assertThat(stats.get("retired").get("low_share").asInt()).isEqualTo(1);
-        assertThat(rows.discarded().traceTopics()).isEmpty();
-        assertThat(rows.discarded().save()).isEqualTo(rows.save());
     }
 
     @Test
-    @DisplayName("a night that leaves no live topic clears the list: no trace rows and no Other vectors")
+    @DisplayName("a night that leaves no live topic clears the list: no Other vectors")
     void noLiveTopicClearsTheList() {
         var state = state(false);
         var list = new NightList(state, new UUID(8, 1), Set.of(KEPT, RETIRED));
@@ -80,7 +72,6 @@ class NightRowsTest {
         assertThat(rows.save().retired()).containsExactlyInAnyOrder(KEPT, RETIRED);
         assertThat(rows.save().updated()).isEmpty();
         assertThat(rows.save().otherVectors()).isNull();
-        assertThat(rows.traceTopics()).isEmpty();
         assertThat(rows.live()).isZero();
     }
 
