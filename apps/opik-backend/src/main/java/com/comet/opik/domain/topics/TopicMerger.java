@@ -151,7 +151,8 @@ class TopicMerger {
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
         // The rename is cosmetic: a failed call keeps each merged topic's first former name, as a bad answer does.
-        return NightStep.optional(request, answer -> NightStep.done(names(answer, merged, taken)));
+        return NightStep.ask(request, answer -> NightStep.done(names(answer, merged, taken)),
+                () -> NightStep.done(names(null, merged, taken)));
     }
 
     private static List<Name> names(JsonNode answer, List<Merged> merged, Set<String> taken) {

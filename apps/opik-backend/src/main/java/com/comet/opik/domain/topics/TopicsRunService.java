@@ -4,7 +4,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -240,8 +239,11 @@ public class TopicsRunService {
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
-     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
-     * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An
+     * answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null. A call that
+     * times out or errors takes the step's {@link NightStep.Ask#failed} path: the night goes on without it, and the
+     * stats list it under {@code degraded_calls}. An answer that breaks the schema errors with its code and ends the
+     * night. The result's stats are the night's with its calls' added.
      */
     Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
         return cpu(run, "update", () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
@@ -264,25 +266,26 @@ public class TopicsRunService {
         return switch (step) {
             case NightStep.Done<T> done -> Mono.just(new Driven<>(done.result(), calls));
             case NightStep.Ask<T> ask ->
-                answer(run, ask)
-                        .flatMap(answer -> cpu(run, phase, () -> ask.next().apply(answer.value()))
-                                .flatMap(next -> drive(run, next, plus(calls, answer.stats()), phase)));
+                timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
+                        .map(answer -> Called.<T>builder()
+                                .next(() -> ask.next().apply(answer.value()))
+                                .calls(plus(calls, answer.stats()))
+                                .build())
+                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(Called.<T>builder()
+                                .next(ask.failed())
+                                .calls(degraded(run, ask.request(), (TopicsRunException) error, calls))
+                                .build()))
+                        .flatMap(called -> cpu(run, phase, called.next()::get)
+                                .flatMap(next -> drive(run, next, called.calls(), phase)));
         };
     }
 
-    /** The call's answer; for an optional call that fails, an answer with no output and no stats. */
-    private Mono<TopicsLlm.Answer<JsonNode>> answer(TopicRun run, NightStep.Ask<?> ask) {
-        var call = timed(run, "llm", llm.generate(run, ask.request(), NightJson::object));
-        return !ask.optional() ? call : call.onErrorResume(error -> {
-            // The error types, not the exception: its causes can quote the answer.
-            log.warn("Topics run '{}' optional LLM call failed, going on without its answer, project '{}', tag '{}', "
-                    + "errors '{}'", run.runId(), run.projectId(), ask.request().tag(),
-                    ExceptionUtils.getThrowableList(error).stream().map(TopicsErrors::formatError).toList());
-            return Mono.just(new TopicsLlm.Answer<>(null, JsonUtils.createObjectNode()));
-        });
+    private record Driven<T>(T result, ObjectNode calls) {
     }
 
-    private record Driven<T>(T result, ObjectNode calls) {
+    /** After one call: the step's next step, and the calls' stats so far. */
+    @Builder(toBuilder = true)
+    private record Called<T>(@NonNull Supplier<NightStep<T>> next, @NonNull ObjectNode calls) {
     }
 
     /** {@code step}'s result; an {@link IllegalArgumentException} breaks an invariant and fails the run as one. */
@@ -292,6 +295,26 @@ public class TopicsRunService {
         } catch (IllegalArgumentException exception) {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
+    }
+
+    /** A call that timed out or errored; a bad answer and any other failure still end the run. */
+    private static boolean isFailedCall(Throwable error) {
+        return error instanceof TopicsRunException failure
+                && (failure.getCode() == RunError.LLM_TIMEOUT || failure.getCode() == RunError.LLM_ERROR);
+    }
+
+    /** The calls' stats with one more entry under {@code degraded_calls}, after its WARN and its metric. */
+    private ObjectNode degraded(TopicRun run, LlmRequest call, TopicsRunException failure, ObjectNode calls) {
+        // The error types, not the exception: its causes can quote the answer, as for a failed run.
+        log.warn("Topics run '{}' call '{}' failed, project '{}', error code '{}', message '{}', errors '{}': the "
+                + "run goes on without it", run.runId(), call.tag(), run.projectId(), failure.getCode().getValue(),
+                failure.getMessage(),
+                ExceptionUtils.getThrowableList(failure).stream().map(TopicsErrors::formatError).toList());
+        metrics.degradedCall(run.workspace(), call.call(), failure.getCode());
+        var stats = calls.deepCopy();
+        stats.withArray("degraded_calls").addObject().put("call", call.tag()).put("error_code",
+                failure.getCode().getValue());
+        return stats;
     }
 
     /**

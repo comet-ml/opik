@@ -31,7 +31,7 @@ import java.util.stream.IntStream;
  * stay Other;</li>
  * <li>decisions become prototypes: the centre of every group given to a live topic is appended to its prototypes. The
  * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
- * in Other (not a loose one), unless one kept is within {@code nightlySameMemory} of it;</li>
+ * in Other (not a loose one, nor one whose call failed), unless one kept is within {@code nightlySameMemory} of it;</li>
  * <li>the final assignment, as the discovery run's ({@link PrototypeAssigner}, with the {@code otherGate} Other
  * gate);</li>
  * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
@@ -197,8 +197,8 @@ class NightlyUpdate {
 
     /**
      * Step d's memory: the prototypes most of whose held traces are not in a placed group, then the centre of every
-     * group the naming left in Other (not a loose one; a new topic under {@code nightlyBigShare} included) that is not
-     * within {@code sameMemory} of one kept.
+     * group the naming left in Other (not a loose one, nor one whose call failed; a new topic under
+     * {@code nightlyBigShare} included) that is not within {@code sameMemory} of one kept.
      */
     private static List<float[]> memory(List<float[]> memory, int[] owners, int[] grouped,
             CandidateGrouper.Grouping grouping, Set<Integer> placed, List<ForcedBirth.Outcome> forced, int d,

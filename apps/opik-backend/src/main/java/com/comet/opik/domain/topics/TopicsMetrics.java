@@ -69,6 +69,7 @@ public class TopicsMetrics {
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
     private final LongCounter nightlyDecisions;
+    private final LongCounter degradedCalls;
     private final LongCounter nights;
 
     public TopicsMetrics() {
@@ -124,6 +125,11 @@ public class TopicsMetrics {
                         + "skip. Every series of a workspace listed at startup starts at 0; one listed later starts "
                         + "at its first decision")
                 .build();
+        this.degradedCalls = meter.counterBuilder("topics.nightly.degraded_calls")
+                .setDescription("LLM calls of a nightly update that failed while the update went on without them, "
+                        + "by call (naming, verify) and error code (llm_timeout, llm_error): their groups stay in "
+                        + "Other until the next night")
+                .build();
         this.nights = meter.counterBuilder(NIGHTLY_NIGHTS)
                 .setDescription("Nights of the nightly job, by outcome: finished once its budget ended, counted by "
                         + "the one plan that ends the night, or failed once for each plan whose read of the night's "
@@ -154,6 +160,11 @@ public class TopicsMetrics {
 
     void llm(@NonNull Workspace workspace, @NonNull LlmCall call, @NonNull String outcome) {
         llmCalls.add(1, attributes(workspace).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
+    }
+
+    void degradedCall(@NonNull Workspace workspace, @NonNull LlmCall call, @NonNull TopicProject.RunError code) {
+        degradedCalls.add(1, attributes(workspace).put(CALL, call.getValue()).put(ERROR_CODE, code.getValue())
+                .build());
     }
 
     /** A saved nightly update's live topics and the topics it gave birth to. */

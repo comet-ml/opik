@@ -29,6 +29,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -347,7 +348,8 @@ class TopicsNightlyIntegrationTest {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
         plant(workspaceId, projectId);
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
+        // A failed call no longer fails the night; an answer that breaks the schema still does.
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(schemaViolation()));
         int failures = opikConfig.getTopics().getNightly().getPauseFailures();
         // A failed update saves nothing, so the same night can be asked for again.
         for (int i = 0; i < failures; i++) {
@@ -358,7 +360,7 @@ class TopicsNightlyIntegrationTest {
         }
         var failed = data.topicProject(projectId);
         assertThat(failed.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
-        assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_ERROR);
+        assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_BAD_ANSWER);
         assertThat(failed.failedRuns()).isEqualTo(failures);
         var queued = new ArrayList<TopicsRunPlanner.Planned>();
         int from = logEvents().size();
@@ -633,8 +635,8 @@ class TopicsNightlyIntegrationTest {
     }
 
     @Test
-    @DisplayName("a failing verify call fails the run with llm_error, asks nothing more and leaves the previous "
-            + "night's list")
+    @DisplayName("a failing verify call leaves the groups it checked in Other and the night saves: no second naming "
+            + "call, no new topic, the failure in degraded_calls, and failed_runs does not grow")
     void verifyFails() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
@@ -643,40 +645,56 @@ class TopicsNightlyIntegrationTest {
         plant(workspaceId, projectId);
         stubNightly(assignAll(), null);
 
-        var result = runNight(Instant.now());
+        assertThat(runNight(Instant.now()).saved()).isEqualTo(1);
 
-        // Read as "no pair verified", a failed verify would turn the naming's assigns into new topics.
-        assertThat(result.failed()).isEqualTo(1);
         var update = nightlyRun(projectId);
-        // The client may retry the failed call: the night asks nothing after it.
         assertThat(requests()).extracting(request -> request.path("request_id").asText())
-                .startsWith(update.runId() + ":naming", update.runId() + ":verify_naming")
+                .contains(update.runId() + ":naming", update.runId() + ":verify_naming")
                 .doesNotContain(update.runId() + ":naming_new");
-        assertFailedNight(projectId, row, update.runId(), TopicProject.RunError.LLM_ERROR);
-        assertThat(data.topics(projectId)).isEqualTo(topics);
+        assertDegraded(update, "verify_naming", TopicProject.RunError.LLM_ERROR);
+        assertThat(update.stats().path("forced").path("other_failed").asInt()).isPositive();
+        assertThat(data.topics(projectId)).extracting(Topic::id)
+                .containsExactlyElementsOf(topics.stream().map(Topic::id).toList());
+        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
     }
 
     @Test
-    @DisplayName("a failing naming call fails the run and leaves the previous night's list, its prototypes and labels")
+    @DisplayName("a failing naming call leaves the planted groups in Other and the night saves, so failed_runs does "
+            + "not grow; the next night, with the naming back, births the planted theme")
     void namingFails() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
         var topics = data.topics(projectId);
         var row = data.topicProject(projectId);
-        var labels = data.traceTopics(workspaceId, projectId);
         plant(workspaceId, projectId);
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
 
-        var result = runNight(Instant.now());
+        assertThat(runNight(Instant.now()).saved()).isEqualTo(1);
 
-        assertThat(result.failed()).isEqualTo(1);
-        assertFailedNight(projectId, row, nightlyRun(projectId).runId(), TopicProject.RunError.LLM_ERROR);
-        assertThat(data.topics(projectId)).isEqualTo(topics);
-        assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(labels);
+        var update = nightlyRun(projectId);
+        assertDegraded(update, "naming", TopicProject.RunError.LLM_ERROR);
+        assertThat(update.stats().path("born").asInt()).isZero();
+        assertThat(data.topics(projectId)).extracting(Topic::id)
+                .containsExactlyElementsOf(topics.stream().map(Topic::id).toList());
+        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
+
+        var tomorrow = today().plusDays(1);
+        var saved = data.topicProject(projectId);
+        stubNightly(NAMED, sameAnswers());
+
+        assertThat(runNight(tomorrow.atStartOfDay(ZoneOffset.UTC).toInstant().plusSeconds(60)).saved()).isEqualTo(1);
+
+        var next = nightlyRun(projectId);
+        assertThat(next.stats().has("degraded_calls")).isFalse();
+        assertThat(data.topics(projectId)).filteredOn(topic -> topic.name().equals(NEW_THEME)).singleElement()
+                .satisfies(topic -> assertThat(topic.born()).isEqualTo(tomorrow));
+        assertSavedNight(projectId, saved, next.runId(), tomorrow.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                tomorrow);
     }
 
     @Test
-    @DisplayName("a naming call past its deadline fails the run with llm_timeout and leaves the previous night's list")
+    @DisplayName("a naming call past its deadline leaves the groups in Other and the night saves with llm_timeout in "
+            + "degraded_calls")
     void namingTimesOut() {
         var workspaceId = enabledWorkspace();
         var projectId = discovered(workspaceId);
@@ -694,9 +712,12 @@ class TopicsNightlyIntegrationTest {
             run.setNamingDeadline(namingDeadline);
         }
 
-        assertThat(result.failed()).isEqualTo(1);
-        assertFailedNight(projectId, row, nightlyRun(projectId).runId(), TopicProject.RunError.LLM_TIMEOUT);
-        assertThat(data.topics(projectId)).isEqualTo(topics);
+        assertThat(result.saved()).isEqualTo(1);
+        var update = nightlyRun(projectId);
+        assertDegraded(update, "naming", TopicProject.RunError.LLM_TIMEOUT);
+        assertThat(data.topics(projectId)).extracting(Topic::id)
+                .containsExactlyElementsOf(topics.stream().map(Topic::id).toList());
+        assertSavedNight(projectId, row, update.runId(), todayStart(), today());
     }
 
     @Test
@@ -1184,6 +1205,22 @@ class TopicsNightlyIntegrationTest {
                 data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(RUN_FIELDS)
                 .isEqualTo(expected));
         assertThat(data.topicProject(projectId).listRunId()).isEqualTo(runId);
+    }
+
+    /** The night saved with one failed call, {@code call}, and it says so in its stats and its WARN line. */
+    private void assertDegraded(NightlyRun update, String call, TopicProject.RunError code) {
+        assertThat(update.stats().path("degraded_calls")).singleElement().satisfies(entry -> {
+            assertThat(entry.path("call").asText()).isEqualTo(call);
+            assertThat(entry.path("error_code").asText()).isEqualTo(code.getValue());
+        });
+        assertThat(runLog(update.runId())).anyMatch(line -> line.contains("call '" + call + "' failed")
+                && line.contains("error code '" + code.getValue() + "'"));
+    }
+
+    /** opik-inference's answer that breaks the schema: the call fails with {@code llm_bad_answer}. */
+    private static ResponseDefinitionBuilder schemaViolation() {
+        return aResponse().withStatus(500).withHeader("Content-Type", "application/json")
+                .withBody("{\"error\":{\"code\":\"schema_violation\",\"message\":\"m\",\"retryable\":true}}");
     }
 
     /** The project's row is {@code before} after tonight's nightly update {@code runId} failed with {@code code}. */
