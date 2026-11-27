@@ -43,6 +43,7 @@ final class TopicsTestAlgorithm {
         config.setRecentDays(7);
         config.setRetireShare(0.005);
         config.setRetireNights(3);
+        // Not config.yml's 0.77 and 0.01: the rule fixtures put loose and small groups just under these two bars.
         config.setNightlyMinTightness(0.80);
         config.setNightlyBigShare(0.02);
         config.setNightlySameMemory(0.95);
