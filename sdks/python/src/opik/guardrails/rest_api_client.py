@@ -35,6 +35,26 @@ def validate_on_opik(
     return schemas.ValidationResponse(**response.json())
 
 
+def error_reason(error: Exception) -> str:
+    """
+    Why a call failed, worded for error messages and traces: the server's own message
+    for an error response, never the API error's text, which carries every response
+    header, cookies included.
+    """
+    if not isinstance(error, rest_api_core.ApiError):
+        return str(error)
+
+    if isinstance(error.body, dict):
+        # Opik answers {"message": ...}, or {"errors": [...]} for a request it refuses.
+        message = error.body.get("message") or "; ".join(
+            map(str, error.body.get("errors") or [])
+        )
+        if message:
+            return str(message)
+
+    return f"status code {error.status_code}"
+
+
 def error_body(response: httpx.Response) -> Any:
     try:
         return response.json()

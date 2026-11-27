@@ -1,0 +1,156 @@
+---
+headline: Fetching a test case's history
+og:description: Fetch one dataset or test suite item's results across every experiment with the Opik Python
+  SDK, to see how a single test case scored over time.
+og:site_name: Opik Documentation
+og:title: Fetching a Test Case's History - Opik
+subtitle: Get one test case's results across every experiment with the Python SDK
+title: Fetching a test case's history
+---
+
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Pass a `project_name` when you get the dataset or test
+  suite so it resolves in the right project.
+</Note>
+
+To see how one test case has scored over time, fetch its results from every experiment that ran it. Opik reads
+them server-side, so you don't need to list experiments or download whole experiments and filter them yourself.
+Each result says which experiment it came from, so you can chart a test case's scores in your own dashboards.
+
+## One dataset item across every experiment
+
+Get the dataset, then pass the item's id. You get one result per experiment that ran the item, across every
+version of the dataset.
+
+```python title="Python"
+import opik
+
+client = opik.Opik()
+dataset = client.get_dataset("support-eval", project_name="my-project")
+
+results = dataset.get_item_experiment_results(
+    item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
+)
+
+for result in results:
+    scores = {score["name"]: score["value"] for score in result.feedback_scores}
+    print(result.experiment_id, scores)
+```
+
+The item id is the `id` of each item returned by `dataset.get_items()`. A dataset item keeps its id when you edit
+it, so the results cover every version of the item.
+
+## One test suite item across every experiment
+
+A test suite has the same method, with the same parameters. When a suite runs each item more than once
+(`runs_per_item` above 1), you get one result per run, each with its own trace and assertion results.
+
+```python title="Python"
+suite = client.get_test_suite("refund-policy-tests", project_name="my-project")
+
+results = suite.get_item_experiment_results(
+    item_id="01a20cbd-39a1-7154-b6cf-8b20a01920dd",
+)
+
+for result in results:
+    passed = [assertion["passed"] for assertion in result.assertion_results]
+    print(result.experiment_id, passed)
+```
+
+## Narrowing to dataset versions
+
+Without `dataset_versions`, results span every version of the item, including runs from before it was edited.
+To compare only experiments that ran against particular versions, pass their hashes or tags:
+
+```python title="Python"
+results = dataset.get_item_experiment_results(
+    item_id="01a20c8b-6f0c-7649-9945-393585ae103c",
+    dataset_versions=["b888a6df", "baseline"],
+)
+```
+
+A version that doesn't exist raises `opik.exceptions.DatasetVersionNotFound`. Version names such as `v3` aren't
+accepted yet; use the version's hash or a tag. A test suite takes the same `dataset_versions` parameter for its
+versions.
+
+## Labeling results with experiment names
+
+Results carry the experiment's id. To label them with experiment names, look the experiments up once:
+
+```python title="Python"
+experiment_names = {
+    experiment.id: experiment.name
+    for experiment in client.get_dataset_experiments(
+        dataset_name="support-eval", project_name="my-project"
+    )
+}
+
+for result in results:
+    print(experiment_names.get(result.experiment_id), result.feedback_scores)
+```
+
+Use `get_test_suite_experiments(name=...)` for a test suite. An experiment's creation date is available from
+`experiment.get_experiment_data().created_at`.
+
+## Several test cases at once
+
+To read a slice of test cases in one call, for example every item with a team's tag, use the experiments client
+with a filter on the dataset items. It returns the same result objects, grouped by item:
+
+```python title="Python"
+results = client.get_experiments_client().find_experiment_items_for_dataset(
+    dataset_name="support-eval",
+    filter_string='tags contains "team-search"',
+    project_name="my-project",
+)
+```
+
+`tags` matches the item's own tags, which you set in the Opik UI or with the REST client. A `"tags"` key passed to
+`dataset.insert()` is stored as an ordinary data field, not as item tags. To tag items from code:
+
+```python title="Python"
+from opik.rest_api.types.dataset_item_update import DatasetItemUpdate
+
+client.rest_client.datasets.batch_update_dataset_items(
+    ids=["01a20c8b-6f0c-7649-9945-393585ae103c", "01a20c8b-6f0d-7a2e-8c41-2b7f9e0d1a55"],
+    update=DatasetItemUpdate(tags_to_add=["team-search"]),
+    merge_tags=True,
+)
+```
+
+Tagging creates a new dataset version, and the filter matches each item as of the newest version among the
+experiments read. Tags added after the last experiment don't match anything yet; once an experiment runs on the
+tagged version, the item's earlier results match too.
+
+The filter accepts dataset item fields: `id`, `data`, `full_data`, `source`, `trace_id`, `span_id`, `tags`,
+`created_at`, `last_updated_at`, `created_by` and `last_updated_by`. Other fields, such as feedback scores, raise a
+`ValueError` before any request is sent. This call also takes `dataset_versions`.
+
+## What each result carries
+
+| Field | Description |
+| --- | --- |
+| `experiment_id` | The experiment that produced this result |
+| `id` | The experiment item id |
+| `dataset_item_id` | The dataset or test suite item, the same in every result |
+| `trace_id` | The trace produced by the evaluation task |
+| `dataset_item_data` | The item's fields, as of the newest version among the experiments read |
+| `evaluation_task_output` | What the evaluated application returned |
+| `feedback_scores` | Scores on the result, each with a `name`, `value` and optional `reason` |
+| `assertion_results` | Assertion outcomes, for test suites and other experiments that define assertions |
+
+To see the input an experiment actually ran with, before a later edit, fetch its trace by `trace_id`.
+
+## Limits
+
+- Optimizer trial, mini-batch and mutation experiments aren't included; only regular experiments are.
+- `max_results` defaults to 1,000. Results are read experiment by experiment, so a read that stops at
+  `max_results` can miss later experiments entirely. The SDK logs a warning when that happens; raise
+  `max_results` or narrow the read.
+
+## Next steps
+
+- [Exporting experiment results](/evaluation/advanced/export_experiment_results): export one experiment's full
+  result set to CSV.
+- [Building test suites](/evaluation/advanced/building-test-suites): create test suites and run them.
+- [Manage datasets](/evaluation/advanced/manage_datasets): dataset items, versions and tags.

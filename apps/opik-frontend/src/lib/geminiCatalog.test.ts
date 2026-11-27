@@ -109,6 +109,15 @@ const CASES = MODELS.flatMap(([provider, model]) =>
   CONFIGS.map((config, index) => [model, index, provider, config] as const),
 );
 
+// Google still honors temperature on 3.1 Flash-Lite, so the catalog lets it through while the tables
+// refuse every Gemini 3 id.
+const TEMPERATURE_ON_THE_CATALOG_ONLY: ReadonlySet<string> = new Set([
+  "gemini-3.1-flash-lite",
+  "vertex_ai/gemini-3.1-flash-lite",
+]);
+const takesTemperatureOnTheCatalogOnly = (model: string) =>
+  TEMPERATURE_ON_THE_CATALOG_ONLY.has(model);
+
 const limitOf = (model: PROVIDER_MODEL_TYPE): number | undefined =>
   LISTED.some(([, listed]) => listed === model)
     ? PROVIDERS.flatMap((provider) => REGISTRY[provider]).find(
@@ -121,7 +130,7 @@ describe("the Gemini and Vertex AI catalog against today's tables", () => {
     resetModelRegistryStoreForTesting();
   });
 
-  it.each(CASES)(
+  it.each(CASES.filter(([model]) => !takesTemperatureOnTheCatalogOnly(model)))(
     "sends the same body for %s, config #%s",
     (model, _, __, config) => {
       const [fromTables, fromCatalog] = bothWays(() =>
@@ -141,7 +150,9 @@ describe("the Gemini and Vertex AI catalog against today's tables", () => {
     },
   );
 
-  it.each(MODELS)(
+  it.each(
+    MODELS.filter(([, model]) => !takesTemperatureOnTheCatalogOnly(model)),
+  )(
     "offers the same thinking levels, sampling and defaults for %s %s",
     (provider, model) => {
       const [fromTables, fromCatalog] = bothWays(() => ({
@@ -166,4 +177,105 @@ describe("the Gemini and Vertex AI catalog against today's tables", () => {
       expect(fromCatalog).toBe(limitOf(model) ?? 10_000_000);
     },
   );
+});
+
+describe("Gemini 3.1 Flash-Lite takes temperature on the catalog only", () => {
+  const MODELS_TAKING_TEMPERATURE = MODELS.filter(([, model]) =>
+    takesTemperatureOnTheCatalogOnly(model),
+  );
+
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("covers both providers", () => {
+    expect(MODELS_TAKING_TEMPERATURE.map(([provider]) => provider)).toEqual([
+      PROVIDER_TYPE.GEMINI,
+      PROVIDER_TYPE.VERTEX_AI,
+    ]);
+  });
+
+  it.each(CASES.filter(([model]) => takesTemperatureOnTheCatalogOnly(model)))(
+    "sends the tables' body plus the temperature for %s, config #%s",
+    (model, _, __, config) => {
+      const [fromTables, fromCatalog] = bothWays(() =>
+        sanitizeConfigForRequest(model, config),
+      );
+      expect(fromCatalog).toEqual(
+        config.temperature === undefined
+          ? fromTables
+          : { ...fromTables, temperature: config.temperature },
+      );
+    },
+  );
+
+  it.each(MODELS_TAKING_TEMPERATURE)(
+    "offers sampling and starts at temperature 1 for %s %s",
+    (provider, model) => {
+      const [fromTables, fromCatalog] = bothWays(() => ({
+        levels: getThinkingLevelOptions(model),
+        sampling: supportsGeminiSamplingParams(model),
+        defaults: getDefaultConfigByProvider(provider, model),
+      }));
+      expect(fromCatalog).toEqual({
+        levels: fromTables.levels,
+        sampling: true,
+        defaults: { ...fromTables.defaults, temperature: 1 },
+      });
+      expect(fromTables.sampling).toBe(false);
+    },
+  );
+});
+
+describe("the temperature on a switch between Gemini models", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    seedTablesOnly();
+    seedCatalog();
+  });
+
+  const switchModel = (
+    temperature: number,
+    previousModel: string | undefined,
+    model: string,
+  ) =>
+    updateProviderConfig(
+      { temperature },
+      {
+        model: model as PROVIDER_MODEL_TYPE,
+        provider: model.startsWith("vertex_ai/")
+          ? PROVIDER_TYPE.VERTEX_AI
+          : PROVIDER_TYPE.GEMINI,
+        previousModel: previousModel as PROVIDER_MODEL_TYPE | undefined,
+      },
+    )?.temperature;
+
+  it.each([
+    ["gemini-3.8-flash", 0, "gemini-3.1-flash-lite", 1],
+    ["gemini-2.5-flash", 0, "gemini-3.1-flash-lite", 1],
+    ["gemini-3.1-flash-lite", 1, "gemini-2.5-flash", 0],
+    ["gemini-3.1-flash-lite", 1, "gemini-3.8-flash", 0],
+    ["vertex_ai/gemini-2.5-flash", 0, "vertex_ai/gemini-3.1-flash-lite", 1],
+  ])(
+    "follows the next model's default from %s at %s to %s",
+    (previousModel, temperature, model, expected) => {
+      expect(switchModel(temperature, previousModel, model)).toBe(expected);
+    },
+  );
+
+  it.each([
+    ["gemini-2.5-flash", 0.4, "gemini-3.1-flash-lite"],
+    ["gemini-3.1-flash-lite", 0.7, "gemini-3.8-flash"],
+    ["gemini-3.8-flash", 0.7, "gemini-3.1-flash-lite"],
+    ["vertex_ai/gemini-2.5-flash", 0.4, "vertex_ai/gemini-3.1-flash-lite"],
+  ])(
+    "keeps a value the user picked from %s at %s to %s",
+    (previousModel, temperature, model) => {
+      expect(switchModel(temperature, previousModel, model)).toBe(temperature);
+    },
+  );
+
+  it("leaves a loaded config alone", () => {
+    expect(switchModel(0, undefined, "gemini-3.1-flash-lite")).toBe(0);
+  });
 });

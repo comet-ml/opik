@@ -12,6 +12,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -21,6 +22,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
@@ -59,6 +61,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private RunsConfig runs;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
     private ArrivalConfig arrival;
@@ -590,6 +595,37 @@ public class TopicsConfig {
     }
 
     /**
+     * The nightly update of each project that has a topic list: each plan of the leader queues the night's updates as
+     * runs of mode {@code update}, for the workspaces listed at stage {@code nightly} or later.
+     */
+    @Data
+    public static class NightlyConfig {
+
+        /** Quartz cron, UTC. The night is the UTC date it fires on and starts at its first fire that day. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project is queued after this much of the night, from its start; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+
+        /** A project whose last this many discovery runs or nightly updates failed in a row is paused. */
+        @JsonProperty
+        @Min(1) @Max(100) private int pauseFailures;
+
+        /** A paused project waits this many nights from the night its last failed run started. */
+        @JsonProperty
+        @Min(1) @Max(90) private int pauseNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
+            return schedule == null || CronExpression.isValidExpression(schedule);
+        }
+    }
+
+    /**
      * Topics runs across pods. The leader's planner queues runs on {@code topic_projects}, capped at
      * {@code maxInFlight} across the cluster, and publishes each on this stream; any pod claims one with a
      * compare-and-set on the row and runs it, {@code consumerBatchSize} at a time.
@@ -748,7 +784,7 @@ public class TopicsConfig {
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow;
 
-        /** How often the daily long-window pass starts, and the tick discovers each workspace's projects. */
+        /** How often each workspace's daily long-window pass is due, and the tick discovers its projects. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
@@ -786,8 +822,40 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration leaseSlack;
 
+        /**
+         * The most undrained projects a workspace read leaves out by id: the ids go into the query text, about 40 bytes
+         * each. A workspace with more is not read by the workspace read until its backfill brings it under.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int maxExcludedProjects;
+
+        /** The most workspaces whose projects one tick discovers, so a new leader's first ticks still serve traces. */
+        @JsonProperty
+        @Min(1) @Max(1_000) private int maxDiscoveriesPerTick;
+
+        /**
+         * The share of {@code tickBudget} the fresh phase leaves to project discovery on a tick with a workspace due
+         * for it. Discovery runs after the fresh phase and never takes more than half the budget, so at most 0.5.
+         */
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("0.5") private double discoveryMinShare;
+
+        /**
+         * A project with at most this many traces in the backfill window, as discovered, is read in one query over the
+         * whole window; a larger one in {@code find.sliceSize} slices. One read of a project costs about 0.45 KB of
+         * memory and 6 rows read per trace, so at 250,000 one read stays near 110 MB and 1.5M rows, an eighth of the
+         * default {@code find.maxMemoryUsage}, which leaves room for the count being approximate.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000_000) private long oneSliceMaxTraces;
+
         @Valid @NotNull @JsonProperty
         private FindConfig find;
+
+        /** The long-window pass's and the backfill's window: {@code backfillWindow} when above zero, else {@code longWindow}. */
+        public java.time.Duration backfillOrLongWindow() {
+            return (backfillWindow.toMilliseconds() > 0 ? backfillWindow : longWindow).toJavaDuration();
+        }
 
         @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be shorter than topics.vectors.tickInterval") public boolean isTickBudgetValid() {

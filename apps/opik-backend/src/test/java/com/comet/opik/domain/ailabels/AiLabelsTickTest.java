@@ -12,10 +12,15 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.v1.jobs.AiLabelsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.topics.TopicVector;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopic;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -94,12 +99,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -210,6 +219,8 @@ class AiLabelsTickTest {
     private AiLabelResultMapper resultMapper;
     private AiLabelStatusDAO statusDAO;
     private AiLabelsDAO labelsDAO;
+    private TopicVectorsDAO topicVectorsDAO;
+    private TraceTopicsDAO traceTopicsDAO;
     private Connection clickHouseConnection;
 
     private Instant lastTick = Instant.EPOCH;
@@ -231,7 +242,8 @@ class AiLabelsTickTest {
             GuiceJobManager jobManager, @Jit AiLabelsTickService tickService, @Jit InferenceClient client,
             @Jit AiLabelSweepService sweepService, @Jit AiLabelTaskRegistry registry, @Jit AiLabelRenderer renderer,
             @Jit AiLabelItemBuilder itemBuilder, @Jit AiLabelResultMapper resultMapper,
-            @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO) throws SQLException {
+            @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO, @Jit TopicVectorsDAO topicVectorsDAO,
+            @Jit TraceTopicsDAO traceTopicsDAO) throws SQLException {
         this.opikConfig = opikConfig;
         this.template = template;
         this.lockService = lockService;
@@ -245,6 +257,8 @@ class AiLabelsTickTest {
         this.resultMapper = resultMapper;
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
+        this.topicVectorsDAO = topicVectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.clickHouseConnection = clickHouse.createConnection("");
         this.defaultBudget = config().getBudgetBytes();
         this.defaultChunkTraces = config().getChunkTraces();
@@ -581,7 +595,7 @@ class AiLabelsTickTest {
         when(clock.instant()).thenAnswer(invocation -> now.get());
         var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
                 sweepService, registry,
-                renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, clock);
+                renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO, clock);
 
         tick(service);
         var throttledAt = now.get();
@@ -761,6 +775,44 @@ class AiLabelsTickTest {
         }
 
         @Test
+        @DisplayName("a trace that failed render_over_budget under an older renderer is rendered again and submitted")
+        void renderOverBudgetUnderAnOlderRendererIsSubmitted() {
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var embedding = IntStream.range(0, 10_000).mapToObj(i -> "0.%04d".formatted(i))
+                    .collect(Collectors.joining(",", "{\"embedding\":[", "]}"));
+            var traceId = trace(workspaceId, projectId, 0, "", ID_GENERATOR.generateId(), embedding);
+            statusDAO.insert(TASKS.stream()
+                    .map(task -> AiLabelStatus.builder()
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .task(task)
+                            .traceId(traceId)
+                            .traceCreatedAt(Instant.now().minusSeconds(60))
+                            .taskVersion(registry.get(task).version())
+                            .rendererVersion(AiLabelRenderer.RENDERER_VERSION - 1)
+                            .status(AiLabelStatus.Status.FAILED)
+                            .retryable(false)
+                            .attempt(1)
+                            .errorCode(AiLabelsTickService.RENDER_OVER_BUDGET)
+                            .jobId("")
+                            .compactionLevel(AiLabelsTickService.OVER_BUDGET_LEVEL)
+                            .build())
+                    .toList()).block();
+
+            tick();
+
+            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
+            assertThat(inFlight(workspaceId)).hasSize(TASKS.size()).allSatisfy(item -> {
+                assertThat(item.traceId()).isEqualTo(traceId);
+                assertThat(item.attempt()).isOne();
+                assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
+                assertThat(item.compactionLevel()).isEqualTo("full");
+            });
+        }
+
+        @Test
         @DisplayName("items too large for any job are terminal item_too_large, and never submitted")
         void itemTooLargeForAnyJob() {
             config().setMaxJobBytes(4_096 + 100);
@@ -857,7 +909,7 @@ class AiLabelsTickTest {
             }).when(slowRenderer).render(anyString(), anyList(), anyCollection());
             var service = new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService,
                     sweepService, registry,
-                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO);
+                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
 
             tick(service);
             var took = Duration.between(lastTick, Instant.now());
@@ -981,6 +1033,176 @@ class AiLabelsTickTest {
 
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a trace deleted while its jobs are in flight keeps no rows; the same id in another project does")
+        void traceDeletedWhileInFlight() {
+            var workspaceId = enabledWorkspace();
+            var deletedProject = ID_GENERATOR.generateId();
+            var keptProject = ID_GENERATOR.generateId();
+            // One id in two projects: the kept project's copy is labeled first, as a tick takes one copy at a time.
+            var traceId = trace(workspaceId, keptProject, 1);
+            tick();
+            completeJobs(workspaceId);
+            tick();
+            trace(workspaceId, deletedProject, 1, "", traceId);
+            var live = trace(workspaceId, deletedProject, 0);
+
+            tick();
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::projectId).containsOnly(deletedProject)
+                    .hasSize(4);
+            completeJobs(workspaceId);
+            // The user deletes the trace after its answers are read and before they are written: the cascade runs
+            // first and finds nothing, then the tick inserts.
+            var deleting = spy(labelsDAO);
+            doAnswer(invocation -> {
+                execute("DELETE FROM %s.%s WHERE workspace_id = '%s' AND project_id = '%s' AND id = '%s'"
+                        .formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, deletedProject, traceId));
+                labelsDAO.deleteByTraceIds(Set.of(traceId), deletedProject)
+                        .then(statusDAO.deleteByTraceIds(Set.of(traceId), deletedProject))
+                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                                .put(RequestContext.USER_NAME, "test"))
+                        .block();
+                // The vectors tick embeds the done status before the check: a status its own check would trust.
+                topicVectorsDAO.insert(List.of(TopicVector.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(deletedProject)
+                        .task(GENERATE_TASK)
+                        .traceId(traceId)
+                        .traceCreatedAt(Instant.now())
+                        .taskVersion(1)
+                        .embedModel("test")
+                        .embedDimensions(2)
+                        .text("summary")
+                        .vector(new float[]{1, 0})
+                        .build())).block();
+                // TopicVectorStatus is package-private to the topics domain, so the row goes in as SQL.
+                execute("""
+                        INSERT INTO %s.topic_vector_status (workspace_id, project_id, task, trace_id,
+                            trace_created_at, task_version, reason)
+                        VALUES ('%s', '%s', '%s', '%s', now64(6), 1, 'invalid_vector')
+                        """.formatted(DATABASE_NAME, workspaceId, deletedProject, GENERATE_TASK, traceId));
+                // A topic is then assigned to that vector; the other project's copy of the id has one too.
+                traceTopicsDAO.insert(Stream.of(deletedProject, keptProject)
+                        .map(projectId -> TraceTopic.builder()
+                                .workspaceId(workspaceId)
+                                .projectId(projectId)
+                                .traceId(traceId)
+                                .traceCreatedAt(Instant.now())
+                                .topicId(ID_GENERATOR.generateId())
+                                .source(TraceTopic.Source.ARRIVAL)
+                                .build())
+                        .toList()).block();
+                return invocation.callRealMethod();
+            }).when(deleting).insert(anyList());
+            tick(tickService(template, statusDAO, deleting));
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(labels(workspaceId, List.of(traceId, live)))
+                    .noneMatch(label -> label.projectId().equals(deletedProject) && label.traceId().equals(traceId))
+                    .anyMatch(label -> label.projectId().equals(keptProject))
+                    .anyMatch(label -> label.traceId().equals(live));
+            assertThat(statuses(workspaceId, List.of(traceId, live)))
+                    .noneMatch(status -> status.projectId().equals(deletedProject)
+                            && status.traceId().equals(traceId))
+                    .filteredOn(status -> !status.projectId().equals(deletedProject) || status.traceId().equals(live))
+                    .hasSize(2 * TASKS.size())
+                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            for (var table : List.of("topic_vectors", "topic_vector_status")) {
+                assertThat(count("SELECT count() FROM %s.%s WHERE workspace_id = '%s' AND trace_id = '%s'"
+                        .formatted(DATABASE_NAME, table, workspaceId, traceId))).as(table).isZero();
+            }
+            var traceTopics = "SELECT count() FROM %s.trace_topics WHERE workspace_id = '%s' AND project_id = '%s' "
+                    + "AND trace_id = '%s'";
+            assertThat(count(traceTopics.formatted(DATABASE_NAME, workspaceId, deletedProject, traceId)))
+                    .as("trace_topics").isZero();
+            assertThat(count(traceTopics.formatted(DATABASE_NAME, workspaceId, keptProject, traceId)))
+                    .as("trace_topics of the other project").isOne();
+        }
+
+        @Test
+        @DisplayName("the deleted-trace check fails: the jobs stay submitted and the next tick loads them")
+        void deletedTraceCheckFails() {
+            var workspaceId = enabledWorkspace();
+            var traceIds = List.of(trace(workspaceId, ID_GENERATOR.generateId(), 1),
+                    trace(workspaceId, ID_GENERATOR.generateId(), 0));
+
+            tick();
+            completeJobs(workspaceId);
+            var failing = spy(labelsDAO);
+            doReturn(Mono.error(new IllegalStateException("check failed"))).when(failing)
+                    .findLiveTraceIds(anyString(), any(UUID.class), anyCollection(), anyLong());
+            tick(tickService(template, statusDAO, failing));
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
+            assertThat(inFlight(workspaceId)).hasSize(4);
+
+            tick();
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(statuses(workspaceId, traceIds)).hasSize(4)
+                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            assertThat(labels(workspaceId, traceIds)).hasSize(6);
+        }
+
+        @Test
+        @DisplayName("the tick's budget ends before the deleted-trace check: the jobs stay submitted and the next tick "
+                + "loads them")
+        void deletedTraceCheckOutOfBudget() {
+            var workspaceId = enabledWorkspace();
+            var traceIds = List.of(trace(workspaceId, ID_GENERATOR.generateId(), 1),
+                    trace(workspaceId, ID_GENERATOR.generateId(), 0));
+
+            tick();
+            completeJobs(workspaceId);
+            stubStatus();
+            var checking = spy(labelsDAO);
+            var tickEnd = Instant.now();
+            tickService(template, statusDAO, checking).pollAndLoad(tickEnd.plusSeconds(30), tickEnd);
+
+            verify(checking).insert(anyList());
+            verify(checking, never()).findLiveTraceIds(anyString(), any(UUID.class), anyCollection(), anyLong());
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
+
+            tick();
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(statuses(workspaceId, traceIds)).hasSize(4)
+                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            assertThat(labels(workspaceId, traceIds)).hasSize(6);
+        }
+
+        @Test
+        @DisplayName("the deleted-trace check stops partway: the jobs it checked are loaded, the others stay "
+                + "submitted and the next tick loads them")
+        void deletedTraceCheckStopsPartway() {
+            var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
+            var traceIds = workspaceIds.stream()
+                    .collect(Collectors.toMap(Function.identity(), id -> trace(id, ID_GENERATOR.generateId(), 0)));
+
+            tick();
+            workspaceIds.forEach(AiLabelsTickTest.this::completeJobs);
+            // The first of the two workspaces is checked, the check of the second fails.
+            var checks = new AtomicInteger();
+            var stopping = spy(labelsDAO);
+            doAnswer(invocation -> !workspaceIds.contains(invocation.<String>getArgument(0))
+                    || checks.getAndIncrement() == 0
+                            ? invocation.callRealMethod()
+                            : Mono.error(new IllegalStateException("check failed")))
+                    .when(stopping).findLiveTraceIds(anyString(), any(UUID.class), anyCollection(), anyLong());
+            tick(tickService(template, statusDAO, stopping));
+
+            assertThat(workspaceIds.stream().map(id -> jobs(id).stream().map(JobRow::status).distinct().toList()))
+                    .containsExactlyInAnyOrder(List.of("loaded"), List.of("submitted"));
+
+            tick();
+
+            workspaceIds.forEach(id -> {
+                assertThat(jobs(id)).extracting(JobRow::status).containsOnly("loaded");
+                assertThat(statuses(id, List.of(traceIds.get(id)))).hasSize(TASKS.size())
+                        .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            });
         }
 
         @Test
@@ -1109,10 +1331,16 @@ class AiLabelsTickTest {
     }
 
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
+            AiLabelsDAO labelsDAO) {
+        return new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService, sweepService,
+                registry, renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
+    }
+
+    private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
             AiLabelTaskRegistry registry, AiLabelSweepService sweepService) {
         return new AiLabelsTickService(config(), opikConfig.getInference(), template, client, lockService, sweepService,
                 registry, renderer,
-                itemBuilder, resultMapper, statusDAO, labelsDAO);
+                itemBuilder, resultMapper, statusDAO, labelsDAO, topicVectorsDAO, traceTopicsDAO);
     }
 
     private static AiLabelSweepDAO countingSweeps(AiLabelSweepDAO sweepDAO, AtomicInteger sweeps) {
@@ -1194,14 +1422,19 @@ class AiLabelsTickTest {
     }
 
     private UUID trace(String workspaceId, UUID projectId, int spans, String threadId, UUID traceId) {
+        return trace(workspaceId, projectId, spans, threadId, traceId, "{\"answer\":\"it is on its way\"}");
+    }
+
+    private UUID trace(String workspaceId, UUID projectId, int spans, String threadId, UUID traceId, String output) {
         execute("""
                 INSERT INTO %s.%s (workspace_id, project_id, id, name, start_time, end_time, input, output, metadata,
                     thread_id, created_at, last_updated_at, is_deleted)
                 VALUES ('%s', '%s', '%s', 'support chat', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(2), '{"question":"where is my refund?"}',
-                    '{"answer":"it is on its way"}', '{"channel":"web"}', '%s', now64(6) - toIntervalSecond(60),
+                    '%s', '{"channel":"web"}', '%s', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(1), 0)
-                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId, threadId));
+                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId, output,
+                threadId));
         for (int i = 0; i < spans; i++) {
             execute("""
                     INSERT INTO %s.spans (id, workspace_id, project_id, trace_id, name, type, start_time, end_time,
@@ -1493,9 +1726,13 @@ class AiLabelsTickTest {
 
     /** Physical rows, before any dedup: a reload writes its labels again. */
     private long labelRowCount(String workspaceId) {
+        return count(
+                "SELECT count() FROM %s.ai_labels WHERE workspace_id = '%s'".formatted(DATABASE_NAME, workspaceId));
+    }
+
+    private long count(String sql) {
         try (var statement = clickHouseConnection.createStatement();
-                var result = statement.executeQuery("SELECT count() FROM %s.ai_labels WHERE workspace_id = '%s'"
-                        .formatted(DATABASE_NAME, workspaceId))) {
+                var result = statement.executeQuery(sql)) {
             result.next();
             return result.getLong(1);
         } catch (SQLException exception) {

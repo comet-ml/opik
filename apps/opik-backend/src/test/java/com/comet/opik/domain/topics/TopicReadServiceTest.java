@@ -28,6 +28,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -186,7 +187,7 @@ class TopicReadServiceTest {
     @DisplayName("a guard trip of the collecting count is status too_large, without the collecting fields")
     void collectingGuardTripIsTooLarge() {
         when(windowDAO.countByProject(eq(WORKSPACE_ID), any(), any(), any(), any(), anyLong()))
-                .thenReturn(Flux.error(new RuntimeException(new ClickHouseException(241, "memory limit", null))));
+                .thenReturn(Mono.error(new RuntimeException(new ClickHouseException(241, "memory limit", null))));
 
         var body = service.get(WORKSPACE_ID, projectId);
 

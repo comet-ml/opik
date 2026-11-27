@@ -67,6 +67,7 @@ experiment whose name contains the string you pass, which is why the example abo
 | Field | Description |
 | --- | --- |
 | `id` | The experiment item id |
+| `experiment_id` | The experiment the item belongs to |
 | `dataset_item_id` | The dataset item this result belongs to, stable across experiments on the same dataset |
 | `trace_id` | The trace produced by the evaluation task |
 | `dataset_item_data` | The dataset item's fields, as a dictionary |
@@ -82,3 +83,6 @@ the trace, so fetch the trace by `trace_id` when you need them.
 `max_results` defaults to 10,000, so raise it for a larger experiment. Values come back untruncated and the whole
 result set is held in memory at once, so a very large experiment is worth exporting in slices, by filtering the
 dataset down.
+
+To follow one dataset item across every experiment instead of exporting one experiment, see
+[Fetching a test case's history](/evaluation/advanced/test_case_history).

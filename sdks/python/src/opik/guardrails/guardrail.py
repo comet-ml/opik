@@ -1,6 +1,5 @@
 import logging
 from typing import (
-    Any,
     List,
     Optional,
     Sequence,
@@ -191,7 +190,8 @@ class Guardrail:
                     )
         except (httpx.HTTPError, rest_api_core.ApiError) as e:
             result.error = (
-                f"Guardrail could not be evaluated, failing closed: {_reason(e)}"
+                "Guardrail could not be evaluated, failing closed: "
+                f"{rest_api_client.error_reason(e)}"
             )
         except exceptions.GuardrailValidationError as e:
             result.error = str(e)
@@ -256,12 +256,3 @@ class Guardrail:
             )
 
         return result
-
-
-def _reason(error: Exception) -> Any:
-    """The backend's own message when it gives one, such as why guardrails are not available."""
-    if isinstance(error, rest_api_core.ApiError) and isinstance(error.body, dict):
-        message = error.body.get("message")
-        if message:
-            return message
-    return error

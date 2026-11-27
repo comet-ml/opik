@@ -18,6 +18,7 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
+  getGeminiDefaultTemperature,
   getThinkingLevelDescription,
   getThinkingLevelOptions,
   resolveSamplingParams,
@@ -58,7 +59,7 @@ const GeminiModelConfigs = ({
           min={0}
           max={2}
           step={0.01}
-          defaultValue={DEFAULT_GEMINI_CONFIGS.TEMPERATURE}
+          defaultValue={getGeminiDefaultTemperature(model)}
           label="Temperature"
           tooltip={
             <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
