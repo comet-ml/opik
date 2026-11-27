@@ -1,8 +1,8 @@
 ---
 headline: Installing Cost Intelligence
 og:description: Choose a rollout path for Cost Intelligence (Claude Code managed
-  settings, MDM-delivered configuration, or the macOS capture app), plus the
-  full inventory of data collected.
+  settings, MDM-delivered configuration, the macOS capture app, or Claude Code's
+  own telemetry export), plus the full inventory of data collected.
 og:site_name: Opik Documentation
 og:title: Installing Cost Intelligence - Opik
 title: Installation overview
@@ -11,6 +11,8 @@ title: Installation overview
 Cost Intelligence is delivered as a Claude Code plugin that runs a local proxy on each developer machine. Rolling it out means doing two things: getting the plugin enabled, and pointing it at your Opik workspace.
 
 Nothing needs to be installed on a server, and there is no per-developer manual step in any of the supported paths.
+
+Two other paths replace the plugin: the macOS app captures the traffic on the device without it, and the telemetry export installs nothing at all.
 
 ## Choose a rollout path
 
@@ -41,6 +43,8 @@ Nothing needs to be installed on a server, and there is no per-developer manual 
     those working in the Code tab of the Claude desktop app.
   </Card>
 </CardGroup>
+
+When nothing can be installed on your developers' machines, Claude Code can send its own telemetry to Opik instead. That path needs settings only, and it collects less: see [Telemetry export (no install)](/cost-intelligence/install/claude-code-telemetry).
 
 Which one fits:
 

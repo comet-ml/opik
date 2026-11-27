@@ -798,6 +798,7 @@ start_cost_api_local() {
         OPIK_DB_NAME=opik OPIK_DB_USERNAME=opik OPIK_DB_PASSWORD=opik \
         AI_COST_DB_HOST=localhost AI_COST_DB_PORT="$MYSQL_PORT" \
         AI_COST_DB_NAME=opik AI_COST_DB_USERNAME=opik AI_COST_DB_PASSWORD=opik \
+        REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}" \
         PORT="$AI_COST_BACKEND_PORT" \
         nohup uv run uvicorn cost_api.main:app --host 0.0.0.0 --port "$AI_COST_BACKEND_PORT" \
             > "$COST_API_LOG_FILE" 2>&1 &
