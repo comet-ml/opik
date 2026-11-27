@@ -545,6 +545,39 @@ def test_corpus_bleu__empty_sequences__raise_metric_error(
     assert str(exc_info.value) == expected_message
 
 
+@pytest.mark.parametrize("metric_class", [JSDivergence, JSDistance])
+@pytest.mark.parametrize("base", [float("nan"), float("inf"), float("-inf")])
+def test_js_metrics__non_finite_base__raises_value_error(metric_class, base):
+    with pytest.raises(ValueError, match="base must be"):
+        metric_class(base=base, track=False)
+
+
+@pytest.mark.parametrize("metric_class", [JSDivergence, JSDistance])
+@pytest.mark.parametrize("base", [0.0, 1.0, -2.0])
+def test_js_metrics__base_at_or_below_one__raises_value_error(metric_class, base):
+    with pytest.raises(ValueError, match="base must be"):
+        metric_class(base=base, track=False)
+
+
+@pytest.mark.parametrize("metric_class", [JSDivergence, JSDistance])
+@pytest.mark.parametrize("base", [1.5, 2.0, math.e, 10.0])
+def test_js_metrics__finite_base__preserves_scores(metric_class, base):
+    metric = metric_class(base=base, track=False)
+
+    identical = metric.score(output="apple pear", reference="apple pear")
+    disjoint = metric.score(output="apple pear", reference="zebra quokka")
+    divergence = math.log(2.0) / math.log(base)
+
+    if metric_class is JSDivergence:
+        assert identical.value == pytest.approx(1.0)
+        assert disjoint.value == pytest.approx(max(0.0, 1.0 - divergence))
+    else:
+        assert identical.value == pytest.approx(0.0)
+        assert disjoint.value == pytest.approx(divergence)
+    assert disjoint.metadata["base"] == base
+    assert disjoint.metadata["distance"] == pytest.approx(math.sqrt(divergence))
+
+
 def test_js_divergence_identical_text():
     metric = JSDivergence(track=False)
     result = metric.score(
