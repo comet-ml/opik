@@ -3,6 +3,7 @@ import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
+import { clickRowAction } from './row-actions';
 
 export type EvaluatorType = 'LLM-as-a-Judge' | 'Decision model' | 'Code evaluator';
 
@@ -109,8 +110,7 @@ export class OnlineEvaluationPage {
     return test.step(`clone rule "${name}" via row actions`, async () => {
       const row = this.ruleRow(name);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Clone' }).click();
+      await clickRowAction(row, 'Clone');
       await this.waitForPanelOpen();
       // The clone panel is pre-named after its source, and that name is how the
       // test tells the two rules apart afterwards — so a panel that opened on
@@ -126,8 +126,7 @@ export class OnlineEvaluationPage {
     return test.step(`delete rule "${name}" via row actions`, async () => {
       const row = this.ruleRow(name);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
 
       const confirm = this.deleteRuleConfirmDialog;
       await confirm.waitFor({ state: 'visible' });

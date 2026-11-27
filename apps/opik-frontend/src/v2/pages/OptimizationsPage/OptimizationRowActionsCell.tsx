@@ -1,17 +1,10 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useOptimizationBatchDeleteMutation from "@/api/optimizations/useOptimizationBatchDeleteMutation";
 import { Optimization } from "@/types/optimizations";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 
 const OptimizationRowActionsCell: React.FunctionComponent<
   CellContext<Optimization, unknown>
@@ -28,13 +21,21 @@ const OptimizationRowActionsCell: React.FunctionComponent<
     });
   }, [organisation, mutate]);
 
+  const rowActions: RowAction[] = [
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => {
+        setOpen(true);
+        resetKeyRef.current = resetKeyRef.current + 1;
+      },
+      destructive: true,
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open}
@@ -45,27 +46,8 @@ const OptimizationRowActionsCell: React.FunctionComponent<
         confirmText="Delete optimization"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(true);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

@@ -1,19 +1,11 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
 import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
@@ -49,13 +41,36 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
     );
   }, [project.id, mutate, activeProjectId, workspaceName]);
 
+  const openDialog = (dialog: number) => {
+    setOpen(dialog);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  };
+  const rowActions: RowAction[] = [
+    ...(canCreateProjects
+      ? [
+          {
+            id: "edit",
+            label: "Edit",
+            icon: Pencil,
+            onClick: () => openDialog(2),
+          },
+        ]
+      : []),
+    ...(canDelete
+      ? [
+          {
+            id: "delete",
+            label: "Delete",
+            icon: Trash,
+            onClick: () => openDialog(1),
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <AddEditProjectDialog
         key={`add-${resetKeyRef.current}`}
         project={project}
@@ -72,40 +87,7 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
         confirmText="Delete project"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {canCreateProjects && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(2);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-            >
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {canCreateProjects && canDelete && <DropdownMenuSeparator />}
-          {canDelete && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(1);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-              variant="destructive"
-            >
-              <Trash className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };

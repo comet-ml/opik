@@ -22,7 +22,10 @@ import isFunction from "lodash/isFunction";
 import isBoolean from "lodash/isBoolean";
 
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/ui/table";
-import DataTableColumnResizer from "@/shared/DataTable/DataTableColumnResizer";
+import DataTableColumnResizer, {
+  DataTableCellResizer,
+  getCanResizeHeader,
+} from "@/shared/DataTable/DataTableColumnResizer";
 import DataTableTooltipContext from "@/shared/DataTable/DataTableTooltipContext";
 import DataTableWrapper, {
   DataTableWrapperProps,
@@ -98,6 +101,7 @@ declare module "@tanstack/react-table" {
     statisticDataFormater?: (value: number) => string;
     explainer?: Explainer;
     custom?: object;
+    overlay?: boolean;
   }
 }
 
@@ -209,6 +213,30 @@ const DataTable = <TData, TValue>({
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
 
+  // Overlay columns (row actions) must be the rightmost pinned columns: they
+  // take no width, and the gutter they reserve belongs to the column before.
+  const overlayColumnIds = useMemo(
+    () =>
+      columns
+        .filter((c) => c.meta?.overlay)
+        .map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey)
+        .filter((id): id is string => Boolean(id)),
+    [columns],
+  );
+  const overlayColumnPinning = useMemo(() => {
+    if (!overlayColumnIds.length) return undefined;
+    const pinning = columnPinningState ?? columnPinning;
+    return {
+      left: pinning?.left ?? [],
+      right: [
+        ...(pinning?.right ?? []).filter(
+          (id) => !overlayColumnIds.includes(id),
+        ),
+        ...overlayColumnIds,
+      ],
+    };
+  }, [overlayColumnIds, columnPinningState, columnPinning]);
+
   const table = useReactTable({
     data,
     columns,
@@ -253,6 +281,7 @@ const DataTable = <TData, TValue>({
         columnSizing: resizeConfig.columnSizing,
       }),
       ...(columnPinningState && { columnPinning: columnPinningState }),
+      ...(overlayColumnPinning && { columnPinning: overlayColumnPinning }),
     },
     initialState: {
       ...(columnPinning && { columnPinning }),
@@ -272,14 +301,29 @@ const DataTable = <TData, TValue>({
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
+  const resizableHeaders = useMemo(() => {
+    if (!isResizable) return undefined;
+    const map = new Map<string, (typeof headers)[number]>();
+    headers.forEach((header) => {
+      if (getCanResizeHeader(header)) map.set(header.column.id, header);
+    });
+    return map;
+  }, [headers, isResizable]);
+
+  const renderCellResizer = (cell: Cell<TData, unknown>) => {
+    const header = resizableHeaders?.get(cell.column.id);
+    return header ? <DataTableCellResizer header={header} /> : null;
+  };
+
   const cols = useMemo(() => {
-    const retVal: { id: string; size: number }[] = [];
+    const retVal: { id: string; size: number; overlay?: boolean }[] = [];
     headers.forEach((header) => {
       const index = header.column.getIndex();
       if (index !== -1) {
         retVal[index] = {
           id: header.column.id,
           size: header.column.getSize(),
+          overlay: header.column.columnDef.meta?.overlay,
         };
       }
     });
@@ -292,10 +336,34 @@ const DataTable = <TData, TValue>({
     supported: !isFunction(renderCustomRow),
   });
 
-  const colWidths = useMemo(
-    () => getColumnWidths(cols, columnWindow, FIXED_WIDTH_COLUMN_IDS),
-    [cols, columnWindow],
-  );
+  // An overlay column (row actions) renders 0px wide; its size is a gutter
+  // added to the last data column instead, so that column's resize handle
+  // stays at the very end of the table.
+  const { colWidths, gutter } = useMemo(() => {
+    const overlay = cols.find((c) => c?.overlay);
+    if (!overlay) {
+      return {
+        colWidths: getColumnWidths(cols, columnWindow, FIXED_WIDTH_COLUMN_IDS),
+        gutter: 0,
+      };
+    }
+
+    const lastDataId = cols.filter((c) => c && c.id !== overlay.id).at(-1)?.id;
+    const sizedCols = cols.map((c) =>
+      c?.id === overlay.id
+        ? { ...c, size: 0 }
+        : c?.id === lastDataId
+          ? { ...c, size: c.size + overlay.size }
+          : c,
+    );
+    const fixedIds = new Set([...FIXED_WIDTH_COLUMN_IDS, overlay.id]);
+    if (lastDataId) fixedIds.delete(lastDataId);
+
+    return {
+      colWidths: getColumnWidths(sizedCols, columnWindow, fixedIds),
+      gutter: overlay.size,
+    };
+  }, [cols, columnWindow]);
 
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
@@ -421,7 +489,9 @@ const DataTable = <TData, TValue>({
             column: cell.column,
             lastLeftPinnedColumnId,
           })}
-        />
+        >
+          {renderCellResizer(cell)}
+        </TableCell>
       );
     }
 
@@ -434,8 +504,14 @@ const DataTable = <TData, TValue>({
           column: cell.column,
           lastLeftPinnedColumnId,
         })}
+        // Row actions open dialogs and popovers in portals, whose clicks still
+        // bubble through the React tree to the row; keep them from opening it.
+        {...(cell.column.columnDef.meta?.overlay && {
+          onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        })}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        {renderCellResizer(cell)}
       </TableCell>
     );
   };
@@ -466,6 +542,7 @@ const DataTable = <TData, TValue>({
             style={{
               ...(!autoWidth && { minWidth: table.getTotalSize() }),
               ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
+              ...(gutter && { "--row-actions-gutter": `${gutter}px` }),
             }}
           >
             <colgroup>

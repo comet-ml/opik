@@ -1,19 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
-import { MoreHorizontal, Copy, Trash, Pencil } from "lucide-react";
+import { Copy, Trash, Pencil, UserRoundPen } from "lucide-react";
 import { CellContext } from "@tanstack/react-table";
 import copy from "clipboard-copy";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 
 import { AnnotationQueue } from "@/types/annotation-queues";
 import useAnnotationQueueDeleteMutation from "@/api/annotation-queues/useAnnotationQueueBatchDeleteMutation";
@@ -56,13 +48,46 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
     resetKeyRef.current = resetKeyRef.current + 1;
   }, []);
 
+  const actions: RowAction[] = [
+    {
+      id: "annotators-view",
+      label: "Annotator's view",
+      icon: UserRoundPen,
+      showLabel: true,
+      link: {
+        to: "/$workspaceName/sme",
+        params: { workspaceName },
+        search: { queueId: queue.id },
+        target: "_blank",
+      },
+    },
+    {
+      id: "copy-link",
+      label: "Copy sharing link",
+      icon: Copy,
+      onClick: handleCopySMELink,
+    },
+    ...(canEditAnnotationQueues
+      ? [{ id: "edit", label: "Edit", icon: Pencil, onClick: handleEdit }]
+      : []),
+    ...(canDeleteAnnotationQueues
+      ? [
+          {
+            id: "delete",
+            label: "Delete",
+            icon: Trash,
+            destructive: true,
+            onClick: () => {
+              setOpen(1);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       {canDeleteAnnotationQueues && (
         <ConfirmDialog
           key={`delete-${resetKeyRef.current}`}
@@ -83,42 +108,8 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
         projectId={queue.project_id}
         scope={queue.scope}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={handleCopySMELink}>
-            <Copy className="mr-2 size-4" />
-            Copy sharing link
-          </DropdownMenuItem>
-          {canEditAnnotationQueues && (
-            <DropdownMenuItem onClick={handleEdit}>
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {canDeleteAnnotationQueues && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(1);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-                variant="destructive"
-              >
-                <Trash className="mr-2 size-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={actions} />
+    </>
   );
 };
 

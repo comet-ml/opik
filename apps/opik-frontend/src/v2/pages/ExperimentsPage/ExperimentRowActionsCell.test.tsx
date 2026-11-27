@@ -7,6 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
+import { TooltipProvider } from "@/ui/tooltip";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import { EXPERIMENT_TYPE, Experiment } from "@/types/datasets";
 import ExperimentRowActionsCell from "./ExperimentRowActionsCell";
@@ -54,15 +55,15 @@ const CellHost = () => {
 
 const renderCell = (canCreateExperiments: boolean) =>
   render(
-    <PermissionsTestProvider permissions={{ canCreateExperiments }}>
-      <CellHost />
-    </PermissionsTestProvider>,
+    <TooltipProvider>
+      <PermissionsTestProvider permissions={{ canCreateExperiments }}>
+        <CellHost />
+      </PermissionsTestProvider>
+    </TooltipProvider>,
   );
 
 const openMenu = () =>
-  fireEvent.keyDown(screen.getByRole("button", { name: "Actions menu" }), {
-    key: "Enter",
-  });
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
 
 describe("ExperimentRowActionsCell", () => {
   beforeEach(() => {
@@ -73,17 +74,15 @@ describe("ExperimentRowActionsCell", () => {
     renderCell(true);
     openMenu();
 
-    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Delete" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
   it("opens the edit dialog from Edit", () => {
     renderCell(true);
     openMenu();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(screen.getByTestId("edit-dialog")).toBeInTheDocument();
   });
@@ -92,15 +91,15 @@ describe("ExperimentRowActionsCell", () => {
     renderCell(true);
     openMenu();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete experiment" }));
 
     expect(mockBatchDelete).toHaveBeenCalledWith({ ids: ["exp-1"] });
   });
 
-  it("renders no actions menu without experiment create permission", () => {
+  it("renders no actions without experiment create permission", () => {
     renderCell(false);
 
-    expect(screen.queryByRole("button", { name: "Actions menu" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
   });
 });

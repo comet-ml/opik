@@ -1,30 +1,27 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import { MoreHorizontal, Pencil, Copy, Trash } from "lucide-react";
+import { Pencil, Copy, Trash, ScrollText, ListTree } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
+import useAppStore from "@/store/AppStore";
+import { COLUMN_TYPE } from "@/types/shared";
+import { useTraceLogsSidebarControls } from "@/v2/pages-shared/traces/TraceLogsSidebar/useTraceLogsSidebarControls";
 
 interface RuleRowActionsCellProps {
+  canEdit: boolean;
   openEditDialog: (ruleId: string) => void;
   openCloneDialog: (ruleId: string) => void;
 }
 
 const RuleRowActionsCell: React.FC<
   RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
-> = ({ openEditDialog, openCloneDialog, row, column, table }) => {
+> = ({ canEdit, openEditDialog, openCloneDialog, row }) => {
   const resetKeyRef = useRef(0);
   const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const { mutate } = useRulesBatchDeleteMutation();
 
@@ -34,13 +31,81 @@ const RuleRowActionsCell: React.FC<
     });
   }, [rule.id, mutate]);
 
+  const { openSidebar } = useTraceLogsSidebarControls();
+  const projectId =
+    rule.projects?.[0]?.project_id ?? rule.project_id ?? rule.project_ids?.[0];
+
+  // Opens the page-level EvaluationTracesSidebar locked to this rule's traces
+  // (same behaviour as the former Traces column).
+  const openTraces = () =>
+    openSidebar(
+      [
+        {
+          id: `rule-traces-${rule.id}`,
+          field: "metadata",
+          key: "rule_id",
+          type: COLUMN_TYPE.string,
+          operator: "=",
+          value: rule.id,
+        },
+      ],
+      { locked: true, label: rule.name },
+    );
+
+  const actions: RowAction[] = [
+    ...(projectId
+      ? [
+          {
+            id: "traces",
+            label: "Traces",
+            icon: ListTree,
+            showLabel: true,
+            onClick: openTraces,
+          },
+        ]
+      : []),
+    {
+      id: "logs",
+      label: "Execution logs",
+      icon: ScrollText,
+      showLabel: true,
+      link: {
+        to: "/$workspaceName/automation-logs",
+        params: { workspaceName },
+        search: { rule_id: rule.id },
+        target: "_blank",
+      },
+    },
+    ...(canEdit
+      ? [
+          {
+            id: "edit",
+            label: "Edit",
+            icon: Pencil,
+            onClick: () => openEditDialog(rule.id),
+          },
+          {
+            id: "clone",
+            label: "Clone",
+            icon: Copy,
+            onClick: () => openCloneDialog(rule.id),
+          },
+          {
+            id: "delete",
+            label: "Delete",
+            icon: Trash,
+            destructive: true,
+            onClick: () => {
+              setOpen(1);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={column.columnDef.meta}
-      tableMetadata={table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 1}
@@ -53,36 +118,8 @@ Tip: To pause scoring without deleting, disable the rule.`}
         confirmText="Delete evaluation rule"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={() => openEditDialog(rule.id)}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => openCloneDialog(rule.id)}>
-            <Copy className="mr-2 size-4" />
-            Clone
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={actions} />
+    </>
   );
 };
 

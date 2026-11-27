@@ -59,6 +59,7 @@ export const OpikEvent = {
   ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED:
     "opik_annotation_queue_view_ollie_clicked",
   ANNOTATION_QUEUE_VIEW_FAILED: "opik_annotation_queue_view_failed",
+  ROW_ACTION_CLICKED: "opik_row_action_clicked",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
