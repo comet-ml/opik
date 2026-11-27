@@ -7,9 +7,11 @@ means to exercise, so both branches run everywhere.
 """
 
 import datetime
+import enum
 import importlib
 import json
 import sys
+import uuid
 
 import pytest
 
@@ -144,6 +146,234 @@ def test_dumps__integer_beyond_range__falls_back_without_calling_default(acceler
 
     assert json.loads(encoded) == {"v": 2**64}
     assert calls == [], "`default` has no say in an out-of-range integer"
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+@pytest.mark.parametrize("sort_keys", [False, True])
+@pytest.mark.parametrize("number", [42, 2**64, -(2**63) - 1])
+@pytest.mark.parametrize("position", ["before", "between", "after", "converted"])
+def test_dumps__integer_fallback__preserves_each_default_occurrence(
+    mode, sort_keys, number, position, request
+):
+    request.getfixturevalue(mode)
+    calls = []
+    opaque = object()
+
+    def counting(value):
+        assert value is opaque
+        calls.append(value)
+        result = {"serial": len(calls)}
+        if position == "converted":
+            result["number"] = number
+        return result
+
+    if position == "before":
+        value = [number, opaque, opaque]
+        expected = [number, {"serial": 1}, {"serial": 2}]
+    elif position == "between":
+        value = [opaque, number, opaque]
+        expected = [{"serial": 1}, number, {"serial": 2}]
+    elif position == "after":
+        value = [opaque, opaque, number]
+        expected = [{"serial": 1}, {"serial": 2}, number]
+    else:
+        value = [opaque, opaque]
+        expected = [{"serial": 1, "number": number}, {"serial": 2, "number": number}]
+
+    encoded = json_helpers.dumps(value, default=counting, sort_keys=sort_keys)
+
+    assert json.loads(encoded) == expected
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__integer_fallback__handles_defaults_only_stdlib_visits(mode, request):
+    request.getfixturevalue(mode)
+    opaque = object()
+    identifier = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+    class Choice(enum.Enum):
+        FIRST = "first"
+
+    calls = []
+
+    def counting(value):
+        calls.append(value)
+        if value is opaque:
+            return {"serial": sum(item is opaque for item in calls)}
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, enum.Enum):
+            return value.value
+        raise TypeError("unsupported")
+
+    encoded = json_helpers.dumps(
+        [identifier, Choice.FIRST, opaque, 2**64, opaque],
+        default=counting,
+        sort_keys=False,
+    )
+
+    assert json.loads(encoded) == [
+        str(identifier),
+        "first",
+        {"serial": 1},
+        2**64,
+        {"serial": 2},
+    ]
+    assert sum(item is opaque for item in calls) == 2
+    assert sum(item is identifier for item in calls) == 1
+    assert sum(item is Choice.FIRST for item in calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__integer_fallback__preserves_later_default_exception(mode, request):
+    request.getfixturevalue(mode)
+    first, last = object(), object()
+    calls = []
+    error = ValueError("the caller's later error")
+
+    def counting(value):
+        calls.append(value)
+        if value is last:
+            raise error
+        return "first"
+
+    with pytest.raises(ValueError) as raised:
+        json_helpers.dumps([first, 2**64, last], default=counting, sort_keys=False)
+
+    assert raised.value is error
+    assert calls == [first, last]
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__nested_default_results__preserves_opaque_leaves(mode, request):
+    request.getfixturevalue(mode)
+
+    class Leaf:
+        def __deepcopy__(self, memo):
+            raise AssertionError("encoding must not invoke deepcopy hooks")
+
+    parent, leaf = object(), Leaf()
+    calls = []
+
+    def counting(value):
+        calls.append(value)
+        if value is parent:
+            return {"children": [leaf, leaf]}
+        assert value is leaf
+        return {"serial": sum(item is leaf for item in calls)}
+
+    encoded = json_helpers.dumps([parent, 2**64], default=counting, sort_keys=False)
+
+    assert json.loads(encoded) == [
+        {"children": [{"serial": 1}, {"serial": 2}]},
+        2**64,
+    ]
+    assert calls == [parent, leaf, leaf]
+
+
+@pytest.mark.parametrize("kind", ["dict", "list"])
+def test_dumps__default_returns_builtin_subclass__keeps_native_iteration(
+    kind, accelerated
+):
+    class Mapping(dict):
+        def items(self):
+            raise AssertionError("orjson does not call overridden items")
+
+    class Sequence(list):
+        def __iter__(self):
+            raise AssertionError("orjson does not call overridden iteration")
+
+    result = Mapping(answer=42) if kind == "dict" else Sequence([42])
+    encoded = json_helpers.dumps(
+        object(), default=lambda value: result, sort_keys=False
+    )
+
+    assert json.loads(encoded) == ({"answer": 42} if kind == "dict" else [42])
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__cyclic_default_result__still_rejects_cycle(mode, request):
+    request.getfixturevalue(mode)
+    cyclic = []
+    cyclic.append(cyclic)
+
+    with pytest.raises(ValueError, match="Circular reference"):
+        json_helpers.dumps(object(), default=lambda value: cyclic, sort_keys=False)
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__deep_default_result__does_not_add_recursion_limit(mode, request):
+    request.getfixturevalue(mode)
+    nested = 0
+    for _ in range(600):
+        nested = [nested]
+
+    encoded = json_helpers.dumps(
+        [object(), 2**64], default=lambda value: nested, sort_keys=False
+    )
+
+    assert encoded == b"[" + b"[" * 600 + b"0" + b"]" * 600 + b", 18446744073709551616]"
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+@pytest.mark.parametrize("depth", [1, 254, 255, 600])
+def test_dumps__deep_default_chain__converts_each_occurrence_once(mode, depth, request):
+    request.getfixturevalue(mode)
+
+    class Node:
+        def __init__(self, child):
+            self.child = child
+
+    value = 0
+    for _ in range(depth):
+        value = Node(value)
+    calls = []
+
+    def convert(node):
+        calls.append(node)
+        return node.child
+
+    assert json_helpers.dumps(value, default=convert, sort_keys=False) == b"0"
+    assert len(calls) == depth
+
+
+@pytest.mark.parametrize("number", [42, 2**64])
+@pytest.mark.parametrize("ready_after", [2, 254, 255, 256])
+def test_dumps__default_returns_same_object__can_finish_conversion(
+    number, ready_after, accelerated
+):
+    opaque = object()
+    calls = []
+
+    def convert(value):
+        calls.append(value)
+        return value if len(calls) < ready_after else {"serial": ready_after}
+
+    encoded = json_helpers.dumps([opaque, number], default=convert, sort_keys=False)
+
+    assert json.loads(encoded) == [{"serial": ready_after}, number]
+    assert len(calls) == ready_after
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__too_deep_default_result__rejects_without_repeating_default(
+    mode, request
+):
+    request.getfixturevalue(mode)
+    nested = 0
+    for _ in range(10000):
+        nested = [nested]
+    calls = []
+
+    def convert(value):
+        calls.append(value)
+        return nested
+
+    with pytest.raises(RecursionError):
+        json_helpers.dumps(object(), default=convert, sort_keys=False)
+
+    assert len(calls) == 1
 
 
 def test_dumps__default_raises__propagates_the_callers_exception(accelerated):

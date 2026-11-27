@@ -17,9 +17,16 @@ asserted here instead is that the accelerated path is self-consistent, separates
 that differs, and agrees with itself across the two callers that have to agree.
 """
 
+import dataclasses
+import datetime
+import hashlib
+import json
+
+import pydantic
 import pytest
 
 from opik import json_helpers
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import dataset_item
 
 pytestmark = pytest.mark.skipif(
@@ -122,3 +129,66 @@ def test_content_hash__integer_beyond_orjson_range__still_hashes():
 
     assert len(digest) == 64
     assert digest == dataset_item.DatasetItem(big=2**64).content_hash()
+
+
+def test_content_hash__integer_fallback__preserves_successful_model_serialization():
+    calls = []
+
+    class Model(pydantic.BaseModel):
+        @pydantic.model_serializer
+        def serialize(self):
+            calls.append(self)
+            return {"serial": len(calls), "number": 2**64}
+
+    digest = dataset_item.DatasetItem(input=Model()).content_hash()
+
+    assert (
+        digest
+        == hashlib.sha256(
+            b'{"input": {"number": 18446744073709551616, "serial": 1}}'
+        ).hexdigest()
+    )
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "kind,expected_typed",
+    [
+        ("model", {"answer": 42}),
+        ("dataclass", {"answer": 42}),
+        ("date", "2024-01-02"),
+        ("set", ["a", "b"]),
+    ],
+)
+@pytest.mark.parametrize("number", [42, 2**64])
+def test_content_hash__flexible_value__matches_json_readback(
+    kind, expected_typed, number
+):
+    class Model(pydantic.BaseModel):
+        answer: int = 42
+
+    @dataclasses.dataclass
+    class Payload:
+        answer: int = 42
+
+    values = {
+        "model": Model(),
+        "dataclass": Payload(),
+        "date": datetime.date(2024, 1, 2),
+        "set": {"a", "b"},
+    }
+    item = dataset_item.DatasetItem(input={"typed": values[kind], "number": number})
+    stored = json.loads(streaming_upload.dumps(item.get_content()))
+
+    expected_content = {"input": {"typed": expected_typed, "number": number}}
+    # JSON-native literals define the oracle without the SDK's custom conversion hook.
+    # Small integers use compact orjson output; out-of-range integers use stdlib output.
+    expected_json = json.dumps(
+        expected_content,
+        sort_keys=True,
+        separators=(",", ":") if number == 42 else None,
+    ).encode("utf-8")
+
+    assert stored == expected_content
+    assert item.content_hash() == hashlib.sha256(expected_json).hexdigest()
+    assert item.content_hash() == dataset_item.DatasetItem(**stored).content_hash()
